@@ -1,4 +1,5 @@
 // Site-19 between missions: the roster, time passing, funding, public exposure and incidents.
+import { announceHire, hirePerson, losePeople, someone, syncStaff, type Lost, type Person } from "./people";
 import { GOGGLES, NU7, canBringAmnestics, canBringResearcher, canCallNu7, nu7Troopers, otherSiteOutcome, scanOutcome, SPECIALIST, tfOf } from "./taskforces";
 import { newTf, tickTf, type TaskForce, type TfState } from "./taskforces";
 import { pickNick, withNick } from "../data/nicknames";
@@ -247,6 +248,9 @@ export interface Campaign {
   retired?: Retiree[];
   /** Anomalies destroyed by the GOC or taken by the Soviets: they never turn up again. */
   lostScps?: string[];
+  /** The researchers and engineers by name, and the ones lost. */
+  people?: Person[];
+  staffLost?: Lost[];
   /** Everything that has happened, for the History tab. */
   history?: HistEntry[];
   /** The last raid on Site-19 and the last Insurgency cell broken (raids follow strikes). */
@@ -463,6 +467,7 @@ export function advanceDay(c: Campaign) {
     c.council.tally.overdue++;
     log(c, `${s.name}'s ${routineOf(s)?.name.toLowerCase() ?? "routine"} is overdue. ${routineOf(s)?.overdue ?? ""}`, "key");
   }
+  syncStaff(c);
   tickPrisoners(c);
   tickCouncil(c);
   tickChaos(c);
@@ -650,8 +655,8 @@ export const canHireEngineer = (c: Campaign) =>
   c.funds < ENGINEER_COST ? `Needs $${ENGINEER_COST}k.` : c.engineers >= engineerCapacity(c) ? `Site-19 can house ${engineerCapacity(c)} engineers. A workshop adds room for 4 more.` : null;
 export function hireEngineer(c: Campaign) {
   if (canHireEngineer(c)) return;
-  c.funds -= ENGINEER_COST; c.engineers++;
-  log(c, "An engineer joins the site staff.");
+  c.funds -= ENGINEER_COST;
+  announceHire(c, hirePerson(c, "engineer"));
 }
 
 /** Extra people sent along: a field researcher, an amnestics specialist, Nu-7 on call. */
@@ -698,7 +703,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
   const staff = (role: "researcher" | "amnestics", name: string) => ({ opId: `spec-${role}`, name, call: role === "researcher" ? "FR" : "AS", rankShort: "Staff", specialist: role,
     hp: 5, maxHp: 5, san: 90, maxSan: 90, aim: 50, blinkFull: 0.1, armor: uniformOf(c).points, hasArmor: uniformOf(c).points > 0, items: role === "amnestics" ? [{ id: "darts" as ItemId, uses: 1 }] : [],
     perks: [], traits: [], gun: { name: "M1911 pistol", type: "smg" as const, dmg: [2, 3] as [number, number], mag: 7, ammo: 7, aim: -5 }, armorHp: 0 });
-  if (extras.researcher && !canBringResearcher(c, inc)) squad.push(staff("researcher", "Dr. " + pickName(["Harrow", "Lindqvist", "Okafor", "Petrescu", "Ibarra", "Weiss"])));
+  if (extras.researcher && !canBringResearcher(c, inc)) squad.push(staff("researcher", someone(c, "researcher") ?? "Dr. " + pickName(["Harrow", "Lindqvist", "Okafor", "Petrescu", "Ibarra", "Weiss"])));
   if (extras.amnestics && !canBringAmnestics(c, inc)) squad.push(staff("amnestics", pickName(["Hale", "Moreno", "Szabo", "Fenwick", "Adeyemi", "Kerr"])));
   const away = inc.kind === "emergency";
   const callNu7 = !!extras.nu7 && !canCallNu7(c, inc);
@@ -821,7 +826,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   c.dclass += r.dReturned;
   // breach losses among the staff: researchers, and D-Class from the block
   const other = inc?.kind === "rescue" || inc?.kind === "emergency";   // these people belong to another site
-  if (r.researchersLost && !other) { c.researchers = Math.max(0, c.researchers - r.researchersLost); lines.push(`${plural(r.researchersLost, "researcher")} didn't make it out of the wing.`); }
+  if (r.researchersLost && !other) { const who = losePeople(c, "researcher", r.researchersLost, `lost in the wing during ${name}`); lines.push(`${who.length ? who.join(" and ") : plural(r.researchersLost, "researcher")} didn't make it out of the wing.`); }
   if (inc && other) lines.push(...otherSiteOutcome(c, inc, r));
   if (r.researchersRescued && !other) {
     lines.push(`${plural(r.researchersRescued, "researcher")} brought out alive. The team takes heart (+${5 * r.researchersRescued} sanity).`);
@@ -853,7 +858,8 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   for (const n of r.known) if (!c.knownNotes.includes(n)) c.knownNotes.push(n);
   lines.push(...scanOutcome(c, r));
   for (const sp of r.specialistsLost ?? []) {
-    if (sp === "researcher") { c.researchers = Math.max(0, c.researchers - 1); lines.push("The field researcher who went with the team didn't come back."); }
+    const [role, person] = sp.split("|");
+    if (role === "researcher") { const who = losePeople(c, "researcher", 1, `killed in the field with Epsilon-11 (${name})`, person); lines.push(`${who[0] ?? "The field researcher"}, who went with the team as field researcher, didn't come back.`); }
     else lines.push("The amnestics specialist who went with the team didn't come back.");
   }
   const region = inc?.region ?? HOME, where = REGIONS[region].name;

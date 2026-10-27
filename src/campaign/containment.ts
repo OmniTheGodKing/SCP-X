@@ -1,4 +1,5 @@
 // Anomalies held at Site-19: daily breach risk, cell cleaning, breaches, and escapes.
+import { losePeople } from "./people";
 import { openInquiry, rivalTakes } from "./chaos";
 import { chronicle } from "./history";
 import { FACILITIES, damageEffect, isContainment, nameInText, neighbors, operational, powerShort, stationsOnLevel, type Facility } from "./base";
@@ -277,7 +278,7 @@ function clean(c: Campaign, s: ScpRecord, what: string) {
   if (!r) return;
   c.funds -= r.cost;
   if (r.crew === "dclass" && !has(c, "auto_cleaning") && Math.random() < CLEAN_RISK) { c.dclass--; dclassDied(c, 1); log(c, `${what} of ${s.name}'s cell went wrong: both watchers blinked at once and the D-Class cleaning was killed.`, "bad"); }
-  if (r.crew === "researcher" && Math.random() < 0.03) { c.researchers--; log(c, `During ${s.name}'s interview it decided the researcher was ill, and cured them. They are dead. It apologised.`, "bad", "site"); }
+  if (r.crew === "researcher" && Math.random() < 0.03) { const [who] = losePeople(c, "researcher", 1, `"cured" by ${s.name} during an interview`); log(c, `During ${s.name}'s interview it decided ${who ?? "the researcher"} was ill, and cured them. They are dead. It apologised.`, "bad", "site"); }
 }
 
 /** D-Class work in the cell while operatives watch. `mult` scales the danger; `breach` is an extra

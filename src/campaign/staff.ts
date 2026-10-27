@@ -1,6 +1,7 @@
 // Staff incidents: small things that go wrong (or right) among the people who run Site-19. About
 // once a month one comes up on the Command tab with two choices, each with a clear cost. Left
 // unanswered for a week, the second choice (usually letting it go) is taken for you.
+import { bringBack, losePeople, sendAway } from "./people";
 import { ITEMS, type ItemId } from "./research";
 import { RANKS, holdingCapacity, log, retire, trainerWhy, type Campaign, type Operative } from "./campaign";
 
@@ -24,10 +25,10 @@ export const STAFF_EVENTS: Record<StaffEventId, EventDef> = {
     text: () => "A researcher came out of a test session shaking and hasn't slept in three days. They say they're fine and want to keep working.",
     choices: [
       { label: `Send them to psychological services (one fewer researcher for ${LEAVE_DAYS} days)`, run: c => {
-        c.researchers--; (c.away ??= []).push({ kind: "researcher", back: c.day + LEAVE_DAYS });
-        return `The researcher is on leave for ${LEAVE_DAYS} days.`; } },
+        const p = sendAway(c, "researcher"); (c.away ??= []).push({ kind: "researcher", back: c.day + LEAVE_DAYS });
+        return `${p?.name ?? "The researcher"} is on leave for ${LEAVE_DAYS} days.`; } },
       { label: "Keep them working (30% chance they quit)", run: c => {
-        if (Math.random() < 0.3) { c.researchers = Math.max(0, c.researchers - 1); return "A week later the researcher handed in their badge and left. They didn't say goodbye."; }
+        if (Math.random() < 0.3) { const [who] = losePeople(c, "researcher", 1, "quit after a breakdown"); return `A week later ${who ?? "the researcher"} handed in their badge and left. They didn't say goodbye.`; }
         return "The researcher held together. Nobody mentions the test again."; } },
     ],
   },
@@ -47,7 +48,7 @@ export const STAFF_EVENTS: Record<StaffEventId, EventDef> = {
     text: () => "A support beam slipped during work on the lower levels and crushed an engineer's legs. The infirmary can't do much; a specialist in Baltimore can.",
     choices: [
       { label: "Pay for the specialist ($20k)", why: c => c.funds < 20 ? "Needs $20k." : null, run: c => { c.funds -= 20; return "The engineer will walk again, and is back on shift within the week."; } },
-      { label: "Pension them off (one fewer engineer)", run: c => { c.engineers = Math.max(0, c.engineers - 1); return "The engineer is pensioned off with an amnestic and a story about a car accident."; } },
+      { label: "Pension them off (one fewer engineer)", run: c => { losePeople(c, "engineer", 1, "pensioned off"); return "The engineer is pensioned off with an amnestic and a story about a car accident."; } },
     ],
   },
   mole: {
@@ -140,8 +141,8 @@ export function answerStaff(c: Campaign, i: 0 | 1, auto = false) {
 /** Every day: staff on leave come back, and an unanswered incident decides itself. */
 export function tickStaff(c: Campaign) {
   for (const a of (c.away ?? []).filter(a => a.back <= c.day)) {
-    if (a.kind === "researcher") c.researchers++; else c.engineers++;
-    log(c, `A ${a.kind} is back from leave.`);
+    const p = bringBack(c, a.kind);
+    log(c, `${p?.name ?? `A ${a.kind}`} is back from leave.`);
   }
   if (c.away) c.away = c.away.filter(a => a.back > c.day);
   if (c.staffEvent && c.staffEvent.until <= c.day) answerStaff(c, 1, true);

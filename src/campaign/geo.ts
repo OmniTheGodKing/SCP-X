@@ -1,6 +1,7 @@
 // The Geoscape: where everything on the World Map sits, what state it's in, and what the player knows about it.
 // Incidents are placed at the town they happened in (or at Site-19 for anything inside the site); independent
 // Foundation facilities are shown too, but Site-19 is the only one the player runs.
+import { bringBack, sendAway } from "./people";
 import { agentRisk, agentsFree } from "./taskforces";
 import { addThreat, reveal, scanReveals } from "./chaos";
 import { REGIONS, SITE19, type RegionId } from "../data/regions";
@@ -268,7 +269,7 @@ export function canSendTeam(c: Campaign, inc: Incident): string | null {
 export function sendAmnesticsTeam(c: Campaign, inc: Incident) {
   if (canSendTeam(c, inc)) return;
   const t = travelDays(c, inc.region), doses = inc.witnesses ?? 0;
-  c.funds -= AMNESTIC_TEAM.cost; c.amnestics -= doses; c.researchers -= AMNESTIC_TEAM.researchers;
+  c.funds -= AMNESTIC_TEAM.cost; c.amnestics -= doses; sendAway(c, "researcher");
   (c.away ??= []).push({ kind: "researcher", back: c.day + Math.max(1, t) * 2 });
   inc.dispatch = { how: "team", done: c.day + Math.max(1, t), doses };
   log(c, `An amnestics team (a researcher and ${doses} doses) is on its way to ${incidentPlace(inc).name}. They dose the witnesses ${dateText(inc.dispatch.done)}.`);
@@ -289,6 +290,7 @@ function resolveDispatch(c: Campaign, inc: Incident) {
   c.incidents = c.incidents.filter(i => i !== inc);
   if (d.how === "team") {
     c.stats.won++; addExposure(c, inc.region, -10);
+    bringBack(c, "researcher");   // the researcher who went with the doses comes home
     log(c, `The amnestics team dosed all ${d.doses} witnesses near ${incidentPlace(inc).name}. Nobody remembers anything worth repeating (−10 exposure in ${where}).`, "good", "world");
   } else if (Math.random() < BURY.chance) {
     c.stats.won++; addExposure(c, inc.region, -5);

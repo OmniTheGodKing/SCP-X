@@ -1,6 +1,7 @@
 // Site-19 Command: incidents and time, the base and its containment, and Epsilon-11's roster.
 import { STAFF_EVENTS, answerStaff } from "../campaign/staff";
 import { HIST_CATS, type HistCat } from "../campaign/history";
+import { FIELDS, FIELD_BONUS, TRADES, syncStaff, type StaffKind } from "../campaign/people";
 import { AGENT, COOP, ETA10, NU7, SPECIALIST, TF_NAMES, agentsFree, attachNu7, borrow, canAttachNu7, canBorrow, canBringAmnestics, canBringResearcher, canCallNu7, canFormEta10, canHireAgent, canSellWeapons, formEta10, hireAgent, sellWeapons, siteOf, tfOf, type TaskForce } from "../campaign/taskforces";
 import { DISRUPT_INTEL, INQUIRY, PLANS, goalText, REVEAL_INTEL, THREAT_STEPS, canDisrupt, canInvestigateBreach, canReveal, disrupt, investigateBreach, reveal } from "../campaign/chaos";
 import { parseCampaign } from "../campaign/save";
@@ -718,6 +719,15 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     </div>`;
   }
 
+  /** The people behind the counts: who they are, what they're good at, and who's away. */
+  function staffList(kind: StaffKind) {
+    syncStaff(c);
+    const ps = (c.people ?? []).filter(p => p.kind === kind);
+    if (!ps.length) return "";
+    return `<details class="archived"><summary>${kind === "researcher" ? "Researchers" : "Engineers"} · ${ps.length}</summary><ul class="memorial staff">${ps.map(p => `<li>${portraitSvg(p.look, undefined, 36)} <span><b>${esc(p.name)}</b>${p.field ? ` · ${esc(FIELDS[p.field].name)}` : ""}${p.trade ? ` · ${esc(TRADES[p.trade].name)} (${esc(TRADES[p.trade].desc.toLowerCase())})` : ""}${p.away ? ` · <span class="warn">away</span>` : ""}${p.loan ? ` · on loan from ${esc(p.loan)}` : ""} · since ${dateText(p.since)}<br><span class="muted">${esc(p.bio)}</span></span></li>`).join("")}</ul>
+      ${kind === "researcher" ? `<p class="muted">A specialist on staff speeds every project in their field by ${Math.round(FIELD_BONUS * 100)}%.</p>` : `<p class="muted">Each trade on staff sometimes gets its kind of work a day ahead.</p>`}</details>`;
+  }
+
   function workshopCard() {
     const items = unlockedItems(c), refits = pendingRefits(c), rfw = canRefit(c), atts = unlockedAttachments(c);
     return `<div class="card">
@@ -1009,10 +1019,12 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         <div class="row"><button class="act" id="dBuyBtn" type="button" ${dWhy || c.over ? `disabled title="${esc(dWhy || "")}"` : ""}>Request 2 D-Class · $${DCLASS_COST * 2}k</button>${dWhy ? `<span class="muted">${esc(dWhy)}</span>` : ""}</div>`); }
       case "workshop": { const eWhy = canHireEngineer(c); return box(`Workshop · engineers ${engineersFree(c)} of ${c.engineers} free`, `
         <div class="row"><button class="act" id="engBtn" type="button" ${eWhy || c.over ? `disabled title="${esc(eWhy || "")}"` : ""}>Hire engineer · $${ENGINEER_COST}k</button>${eWhy ? `<span class="muted">${esc(eWhy)}</span>` : ""}</div>
+        ${staffList("engineer")}
         ${workshopCard()}`); }
       case "lab": { const rw = canHireResearcher(c); return box(`Research lab · ${c.researchers} researchers, ${researchersFree(c)} unassigned, room for ${researcherCapacity(c)}`, `
         <div class="row"><button class="act" id="hireResBtn" type="button" ${rw ? `disabled title="${esc(rw)}"` : ""}>Hire researcher · $60k</button>${rw ? `<span class="muted">${esc(rw)}</span>` : ""}</div>
         <p class="muted">Working on: ${Object.entries(c.research.assigned).filter(([, n]) => n).map(([id, n]) => `${esc(PROJECTS[id]?.name ?? (TESTS[id.slice(5) as TestId]?.name || id))} (${n})`).join(", ") || "nothing"}.</p>
+        ${staffList("researcher")}
         <button class="act" type="button" data-goto="research">Open the Research tab</button>`); }
       case "amnestics": return box(`Amnestics · ${c.amnestics} of ${amnesticsCapacity(c)} doses`, `<p class="muted">Each lab brews ${has(c, "classb_amnestics") ? 2 : 1} dose every 5 days. Doses go on cover-ups and cover stories.</p>`);
       case "generator": { const t = genTierOf(f), next = GEN_TIERS[(f.genTier ?? 0) + 1], rw = canRefitGen(c, f);
@@ -1040,6 +1052,10 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     <section class="col">
       ${opDetail()}
       <p class="muted">Guards, training, therapy, D-Class, engineers and prisoners are managed from their facilities on the Site-19 tab.</p>
+      <div class="card"><div class="label">Site staff · ${plural(c.researchers, "researcher")}, ${plural(c.engineers, "engineer")}</div>
+        ${staffList("researcher")}${staffList("engineer")}
+        ${c.staffLost?.length ? `<div class="label" style="margin-top:8px">Staff lost</div><ul class="memorial">${c.staffLost.map(l => `<li><b>${esc(l.name)}</b>, ${l.kind}${l.field ? ` (${esc(FIELDS[l.field].name.toLowerCase())})` : l.trade ? ` (${esc(TRADES[l.trade].name.toLowerCase())})` : ""}: ${esc(l.how)}, ${dateText(l.day)}</li>`).join("")}</ul>` : ""}
+      </div>
       ${c.retired?.length ? `<div class="card">
         <div class="label">Retired</div>
         <ul class="memorial">${c.retired.map(r => `<li>${r.look ? portraitSvg(r.look, r.unit, 36) : ""} <b>${esc(r.name)}</b> (${esc(r.call)}), ${RANKS[r.rank]}${r.unit ? `, formerly ${esc(UNITS[r.unit].name)}` : ""} · ${plural(r.missions, "mission")}${r.kills ? `, ${plural(r.kills, "kill")}` : ""}${r.medals?.length ? ` · ${r.medals.map(m => MEDALS[m].name).join(", ")}` : ""} · ${r.trainer ? "trainer at the range" : "honourable discharge"}, ${dateText(r.day)}</li>`).join("")}</ul>
