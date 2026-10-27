@@ -63,6 +63,8 @@ export interface Operative {
   lostBonds?: string[];
   /** Which task force they serve with (unset: Epsilon-11). */
   tf?: TaskForce;
+  /** The kit they take on missions by default: armor and item slots (taken from stores when they deploy). */
+  kit?: { armor: ItemId | ""; items: (ItemId | "")[] };
   /** Given on making Corporal; the player can change it. */
   nick?: string;
   /** Part-XP banked from drills. */
