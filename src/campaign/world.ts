@@ -1,7 +1,8 @@
 // The world outside Site-19: regional exposure and Foundation fronts, travel, cover-ups,
 // Insurgency cells and amnestics.
 import { countOperational } from "./base";
-import { log, yearOf, type Campaign, type Incident } from "./campaign";
+import { dateOf, log, yearOf, type Campaign, type Incident } from "./campaign";
+import { newsActive } from "./news";
 import { has } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 
@@ -28,6 +29,7 @@ export function globalExposure(c: Campaign) {
 export function addExposure(c: Campaign, r: RegionId, n: number) {
   const st = c.regions[r];
   if (st.collapsed) return;
+  if (n > 0 && (r === "east_us" || r === "latam") && newsActive(dateOf(c.day), "cuba")) n = Math.round(n * 1.5);
   st.exposure = Math.max(0, Math.min(100, st.exposure + n));
   if (st.exposure >= 100) {
     st.collapsed = true;
@@ -38,7 +40,7 @@ export function addExposure(c: Campaign, r: RegionId, n: number) {
 
 export const collapsedCount = (c: Campaign) => REGION_IDS.filter(r => c.regions[r].collapsed).length;
 export const regionFunding = (c: Campaign, r: RegionId) =>
-  c.regions[r].collapsed ? 0 : Math.max(3, Math.round(200 / REGION_IDS.length - c.regions[r].exposure * 0.25));
+  c.regions[r].collapsed ? 0 : Math.round(Math.max(3, Math.round(200 / REGION_IDS.length - c.regions[r].exposure * 0.25)) * (r === "east_asia" && newsActive(dateOf(c.day), "armistice") ? 1.1 : 1));
 
 export const transportName = (c: Campaign) => has(c, "c130") ? "C-130 Hercules" : has(c, "c119") ? "C-119 Flying Boxcar" : "C-47 Skytrain";
 export function travelDays(c: Campaign, r: RegionId) {

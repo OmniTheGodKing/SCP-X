@@ -1,6 +1,7 @@
 // Research projects, SCP-173 tests and the equipment they unlock.
 import { countOperational, engineersFree } from "./base";
-import { log, yearOf, type Campaign } from "./campaign";
+import { dateOf, log, yearOf, type Campaign } from "./campaign";
+import { newsActive } from "./news";
 import type { Guard } from "./security";
 import { AMMO, ATTACHMENTS, WEAPON_TIERS, model, type AmmoId, type AttachmentId } from "../data/weapons";
 import { cellWork, type ScpRecord } from "./containment";
@@ -211,9 +212,12 @@ export const unlockedItems = (c: Campaign) => Object.entries(PROJECTS).filter(([
 
 /** Researcher-days a project needs: halved while inspired, or once started under an inspiration. */
 export function projectDays(c: Campaign, id: string) {
-  const i = c.research.inspired;
-  return i?.id === id ? Math.ceil(PROJECTS[id].days / 2) : PROJECTS[id].days;
+  const i = c.research.inspired, p = PROJECTS[id];
+  const days = i?.id === id ? Math.ceil(p.days / 2) : p.days;
+  return p.branch === "Weapons" && newsActive(dateOf(c.day), "tonkin") ? Math.ceil(days * 0.8) : days;
 }
+/** What a project costs to start: 10% less in the year after Sputnik. */
+export const projectCost = (c: Campaign, id: string) => Math.round(PROJECTS[id].cost * (newsActive(dateOf(c.day), "sputnik") ? 0.9 : 1));
 export const offered = (c: Campaign, id: string) => c.research.offer?.id === id || c.research.paid.includes(id);
 
 export function projectLock(c: Campaign, id: string): string | null {
@@ -240,8 +244,8 @@ export function assign(c: Campaign, id: string, delta: 1 | -1): string | null {
   if (lock) return lock;
   if (researchersFree(c) < 1) return countOperational(c, "lab") ? "No free researchers. Hire more or move one off another project." : "Build a research lab and hire researchers first.";
   if (!r.paid.includes(id)) {
-    if (c.funds < PROJECTS[id].cost) return `Needs $${PROJECTS[id].cost}k to start.`;
-    c.funds -= PROJECTS[id].cost;
+    if (c.funds < projectCost(c, id)) return `Needs $${projectCost(c, id)}k to start.`;
+    c.funds -= projectCost(c, id);
     r.paid.push(id);
     log(c, `Research started: ${PROJECTS[id].name}.`);
   }

@@ -116,9 +116,11 @@ retaliation (done); (5) doors and sirens (done).
   "Backup generators" research keeps the wings powered.
 - (Done) Emergency evacuation from a damaged or unpowered wing: into a free wing ($10k, double the risk), or to Site-17
   for 30 days ($50k) when nothing is free.
-- O5 inspections that reward an orderly site.
-- Era news in the monthly report (the Korean War armistice, Sputnik, the Cuban crisis), some with effects such as a
-  Cold War exposure spike in Europe.
+- (Done) O5 inspections about every 6 months with 14 days' warning (a live checklist on the Command tab): $20k for
+  each of 5 checks passed, $50k docked for failing 3 or more.
+- (Done) Era news: 31 real headlines from 1951 to 1970 in the monthly report. The Korean armistice (East Asia funding
+  +10% for a year), Sputnik (research 10% cheaper for a year), the Cuban crisis (exposure rises 50% faster in the
+  Eastern US and Latin America for 3 months) and the Gulf of Tonkin (weapons research 20% faster from then on).
 - Incident reports in the Foundation's style after each mission, kept in a browsable archive.
 - Personnel files: hometowns, a line of backstory, service history, medals and commendations with small bonuses.
 - Retirement: Majors and Colonels can retire as trainers (recruits arrive as Specialists, at most 2 trainers); lower
