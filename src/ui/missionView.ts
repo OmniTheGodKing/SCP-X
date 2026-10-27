@@ -1,5 +1,5 @@
 // The mission screen: map, SCP-173 status, squad, actions, containment file and incident log.
-import { L, area, inContainer } from "../core/grid";
+import { DRUM, EXIT, L, area, inContainer } from "../core/grid";
 import { activeGun, shotInfo } from "../game/combat";
 import { AMMO } from "../data/weapons";
 import { NOTES_173 } from "../game/notes";
@@ -57,19 +57,7 @@ const TEMPLATE = `
   <div class="layout">
     <section class="board" aria-label="Tactical map">
       <canvas id="cv"></canvas>
-      <div class="legend">
-        <span style="--c: var(--mtf)">MTF Epsilon-11</span>
-        <span class="sq" style="--c: #9fb3c4">Site Security</span>
-        <span style="--c: var(--subject)">D-Class</span>
-        <span class="sq" style="--c: #cfc6a8">Civilian · W witness · R researcher</span>
-        <span class="sq" style="--c: var(--raider)">Chaos Insurgency</span>
-        <span class="sq" style="--c: var(--concrete)">SCP-173</span>
-        <span style="--c: #6f7a5c">SCP-049-2</span>
-        <span class="sq" style="--c: var(--steel)">Transport container</span>
-        <span class="sq" style="--c: var(--exit)">Exit</span>
-        <span class="sq" style="--c: #57503f">Desk · half cover</span>
-        <span class="sq" style="--c: #4a5561">Pillar · full cover</span>
-      </div>
+      <div class="legend" id="legend"></div>
       <details class="rules" open>
         <summary>How this works</summary>
         <div id="objRule"><b>Objective.</b> Get SCP-173 into the transport container at the dock in the southwest staging room, with nobody else inside, then have an operative seal it.</div>
@@ -123,12 +111,36 @@ const TEMPLATE = `
   </div>
 </main>`;
 
+/** The map key for this mission: only what can actually appear on it. */
+function legendHtml() {
+  const u = S.units, any = (f: (x: Unit) => boolean) => u.some(f) || S.reinforce.some(r => r.members.some(m => f({ guard: m.guard, side: "mtf" } as Unit)));
+  const tiles = (ch: number) => L.grid.some(row => row.includes(ch));
+  const items: [string, string, string][] = [];   // [shape class, colour, text]
+  if (any(x => x.side === "mtf" && !x.guard)) items.push(["", "var(--mtf)", "MTF Epsilon-11 (number = squad slot)"]);
+  if (any(x => x.side === "mtf" && !!x.guard)) items.push(["sq", "#9fb3c4", "Site Security"]);
+  if (u.some(x => (x.side === "dclass" || x.side === "subject") && !x.rioter)) items.push(["", "var(--subject)", "D-Class (dashed ring: loose)"]);
+  if (u.some(x => x.rioter)) items.push(["ring", "var(--subject)", "Rioting D-Class"]);
+  if (u.some(x => x.side === "civilian")) items.push(["sq", "#cfc6a8", `Civilian${u.some(x => x.witness) ? " · W witness" : ""}${u.some(x => x.researcher) ? " · R researcher" : ""}`]);
+  if (u.some(x => x.side === "raider") || S.setup.insurgents) items.push(["dia", "var(--raider)", "Chaos Insurgency (paler: hasn't spotted you)"]);
+  if (S.has173) items.push(["fig", "var(--concrete)", "SCP-173 · the Sculpture"]);
+  if (S.has049) items.push(["fig", "#1d1a18", "SCP-049 · the Plague Doctor (pale mask)"], ["", "#6f7a5c", "SCP-049-2 · its reanimated dead"]);
+  if (S.has106) items.push(["fig", "#2a2118", "SCP-106 · the Old Man"], ["sq", "rgba(28,22,14,.9)", "Black rot · costs 2 to cross, 1 damage"]);
+  if (S.setup.kind === "outbreak") items.push(["", "#8c2c34", "SCP-610 instance"], ["sq", "rgba(120,24,32,.85)", "SCP-610 flesh · infects without a sealed suit"], ["", "#aa1e28", "Flesh core · only fire hurts it"]);
+  if (S.setup.kind === "outbreak" || tiles(DRUM)) items.push(["sq", "rgba(255,140,40,.8)", "Fire · 2 damage a turn"]);
+  if (tiles(DRUM)) items.push(["", "#7a3b1e", "Fuel drum · explodes when hit by fire"]);
+  if (L.contTiles.length) items.push(["sq", "var(--steel)", S.setup.kind === "raid" ? "Lift doors" : S.setup.map === "wingC" ? "Transport container" : "Truck's container"]);
+  if (tiles(EXIT)) items.push(["sq", "var(--exit)", "Exit"]);
+  items.push(["sq", "#57503f", "Desk · half cover"], ["sq", "#4a5561", "Pillar · full cover"]);
+  return items.map(([cls, col, text]) => `<span class="${cls}" style="--c: ${col}">${esc(text)}</span>`).join("");
+}
+
 /** Mounts the mission screen. Calls onDone with the result after the player reads the debrief. */
 export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (r: MissionResult) => string) {
   root.innerHTML = TEMPLATE;
   const $ = (id: string) => root.querySelector<HTMLElement>("#" + id)!;
   $("mEyebrow").textContent = `SCP Foundation · ${S.setup.title}`;
   const has173 = S.has173, kind = S.setup.kind;
+  $("legend").innerHTML = legendHtml();
   if (kind !== "breach") {
     $("mTitle").innerHTML = { raid: "Raid <small>Site-19 surface compound</small>", riot: "Riot <small>D-Class block</small>", outbreak: "SCP-610 Outbreak <small>“The Flesh that Hates” · Keter</small>", escort: "Convoy Ambush <small>Escort</small>", retaliation: "Retaliation <small>Insurgency attack</small>", manhunt: "SCP-173 Manhunt <small>Field recovery</small>", coverup: "Cover-up <small>Class-A amnestics</small>", strike: "Strike <small>Chaos Insurgency cell</small>", breach: "" }[kind];
     $("objRule").innerHTML = `<b>Objective.</b> ${esc(OBJECTIVES[kind])}`;
