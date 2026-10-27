@@ -52,7 +52,10 @@ export let L: Level;
 export function useLevel(level: Level) { L = level; }
 
 export const tileAt = (x: number, y: number): Tile => (x < 0 || y < 0 || x >= L.W || y >= L.H) ? WALL : L.grid[y][x];
-export const passable = (x: number, y: number) => { const t = tileAt(x, y); return t === FLOOR || t === EXIT || t === CONT; };
+// Breachers with Bulldozer vault desks: while planning their move, half cover counts as passable.
+let vaulting = false;
+export function setVault(on: boolean) { vaulting = on; }
+export const passable = (x: number, y: number) => { const t = tileAt(x, y); return t === FLOOR || t === EXIT || t === CONT || (vaulting && t === HALF); };
 export const opaque = (x: number, y: number) => { const t = tileAt(x, y); return t === WALL || t === FULL || t === STEEL; };
 export const inContainer = (x: number, y: number) => tileAt(x, y) === CONT;
 export const nearContainer = (x: number, y: number) =>

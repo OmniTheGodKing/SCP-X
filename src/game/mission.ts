@@ -29,7 +29,9 @@ export function createMission(def: MapDef, setup: MissionSetup) {
     taken.add(x + "," + y);
     units.push(mk({ id: "m" + (i + 1), opId: m.opId, slot: i + 1, side: "mtf", call: m.call, name: m.name, x, y,
       hp: m.hp, maxHp: m.maxHp, san: m.san, maxSan: m.maxSan, aim: m.aim, blinkFull: m.blinkFull,
-      armor: m.armor, hasArmor: m.hasArmor, items: m.items.map(it => ({ ...it })), blinkMod: setup.mods.blinkBonus }));
+      armor: m.armor + (m.perks.includes("plated") ? 1 : 0), hasArmor: m.hasArmor, blinkMod: setup.mods.blinkBonus,
+      items: m.items.map(it => ({ ...it, uses: it.uses + (m.perks.includes("grenadier") && (it.id === "flashbang" || it.id === "smoke") ? 1 : 0) })),
+      cls: m.cls, perks: [...m.perks], traits: [...m.traits], minHp: m.hp, witnessed: 0, panics: 0, streak: 0, bestStreak: 0 }));
   });
   const staging = floorTiles([1, 12, 8, 14]);
   setup.dclass.forEach((name, i) => {
@@ -44,7 +46,7 @@ export function createMission(def: MapDef, setup: MissionSetup) {
   const ciTiles = floorTiles(ciRoom);
   for (let i = 0; i < setup.insurgents; i++) {
     const [x, y] = claim(ciTiles);
-    units.push(mk({ id: "r" + (i + 1), side: "raider", name: "Insurgent", x, y, hp: 4, maxHp: 4, aim: 60, san: PROFILE.raider.maxSan }));
+    units.push(mk({ id: "r" + (i + 1), side: "raider", name: "Insurgent", x, y, hp: 4, maxHp: 4, aim: 60, san: PROFILE.raider.maxSan, armor: setup.insurgentArmor }));
   }
   const strayRooms = shuffle(def.strayRooms.filter(r => r !== ciRoom));
   for (let i = 0; i < 4; i++) {
@@ -62,14 +64,18 @@ export function createMission(def: MapDef, setup: MissionSetup) {
     vis: new Uint8Array(W * H), explored: new Uint8Array(W * H),
     lastSeen: null, raidersActive: false, mem: new Map(), checked: new Set(),
     known: new Set([...STARTING_NOTES, ...setup.known]), fresh: new Set(), log: [], effects: [],
-    stats: { mtfLost: 0, dLost: 0, escaped: 0, raidersDown: 0 }, smoke: [], throwing: null,
+    stats: { mtfLost: 0, dLost: 0, escaped: 0, raidersDown: 0 }, smoke: [], throwing: null, ability: null,
   };
   setMission(state);
   setSmoke([]);
+  if (setup.squad.some(m => m.perks.includes("first_look"))) state.explored.fill(1);
   log(`${setup.title}. SCP-173 is loose somewhere in the north rooms.`, "key");
   log(`The transport container is open at the dock in the staging room. Get SCP-173 inside and seal it.${setup.dclass.length ? ` ${setup.dclass.join(" and ")} ${setup.dclass.length > 1 ? "are" : "is"} assigned to you.` : ""}`);
   computeVis();
 }
+
+// Downed operatives come home if the mission is won or if they were stabilized; otherwise they die there.
+const survives = (u: Unit, win: boolean) => u.alive && (!u.downed || win || !!u.stabilized);
 
 export function missionResult(win: boolean, evacuated: boolean): MissionResult {
   const detail = S.units.filter(u => u.id.startsWith("d") || u.joined);
@@ -77,8 +83,10 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
     incidentId: S.setup.incidentId,
     win, evacuated,
     turns: S.turn,
-    squad: S.units.filter(u => u.opId).map(u => ({ opId: u.opId!, alive: u.alive, hp: Math.max(0, u.hp), san: u.san, kills: u.kills, sealed: !!u.sealed,
-      hasArmor: !!u.hasArmor, items: (u.items || []).map(i => ({ ...i })) })),
+    squad: S.units.filter(u => u.opId).map(u => ({ opId: u.opId!, alive: survives(u, win), hp: Math.max(1, u.hp), san: u.san, kills: u.kills, sealed: !!u.sealed,
+      hasArmor: !!u.hasArmor, items: (u.items || []).map(i => ({ ...i })),
+      witnessed: u.witnessed ?? 0, panics: u.panics ?? 0, minHp: u.minHp ?? u.hp, bestStreak: u.bestStreak ?? 0 })),
+    aftercare: S.units.some(u => u.opId && u.alive && !u.downed && u.perks?.includes("aftercare")),
     known: [...S.known],
     dSent: S.setup.dclass.length,
     dReturned: detail.filter(u => u.alive).length,

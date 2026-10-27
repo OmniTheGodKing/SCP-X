@@ -1,7 +1,9 @@
 // Player actions and the turn cycle: your move, SCP-173, the Insurgency, then loose D-Class.
-import { L, TS, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, DIRS, type Pt } from "../core/grid";
+import { HALF, L, TS, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, setVault, tileAt, DIRS, type Pt } from "../core/grid";
 import { setSmoke, sightFrom } from "../core/sight";
-import { fire, moveUnit } from "./combat";
+import { fire, kill, moveUnit } from "./combat";
+import { abilityTargets, useAbility } from "./abilities";
+import { hasPerk, rangeOf, spend, usesLeft } from "./perks";
 import { recruitStrays, subjectPhase } from "./dclass";
 import { insurgentsStare, raiderPhase } from "./insurgency";
 import { missionResult } from "./mission";
@@ -19,21 +21,26 @@ const DRAG_SANITY = 5;
 export function reachFor(u: Unit | null) {
   if (!u || u.ap < 1) return null;
   const move = prof(u).move;
+  setVault(hasPerk(u, "bulldozer"));
+  let res;
   if (u.staring) {
     const st = S.statue;
-    return bfs([[u.x, u.y]], move, (x, y) => occupied(x, y, u) || !sightFrom(x, y, st.x, st.y));
-  }
-  return bfs([[u.x, u.y]], u.ap * move, (x, y) => occupied(x, y, u));
+    res = bfs([[u.x, u.y]], move, (x, y) => occupied(x, y, u) || !sightFrom(x, y, st.x, st.y, rangeOf(u)));
+  } else res = bfs([[u.x, u.y]], u.ap * move, (x, y) => occupied(x, y, u));
+  setVault(false);
+  // nobody ends a move standing on a desk
+  for (let i = 0; i < res.dist.length; i++) if (res.dist[i] > 0 && tileAt(i % L.W, (i / L.W) | 0) === HALF) res.dist[i] = -res.dist[i] - 100;
+  return res;
 }
 export const moveCost = (u: Unit, d: number) => d <= prof(u).move ? 1 : 2;
-const dragOf = (u: Unit) => u.side === "mtf" ? S.setup.mods.mtfDrag : prof(u).drag;
+const dragOf = (u: Unit) => (u.side === "mtf" ? S.setup.mods.mtfDrag : prof(u).drag) + (hasPerk(u, "handler") ? 1 : 0);
 
 // Drag: the dragger steps up to their drag distance and SCP-173 slides into the tile they
 // just left. Every position it passes through must be in sight of someone else who is staring.
 export function dragOptions(u: Unit) {
   const out = new Map<number, Pt[]>(), st = S.statue;
   const watchers = team().filter(w => w !== u && w.staring && !isPanicked(w));
-  const watched = (x: number, y: number) => watchers.some(w => sightFrom(w.x, w.y, x, y));
+  const watched = (x: number, y: number) => watchers.some(w => canSee(w, x, y));
   const free = (x: number, y: number, ignoreStatue: boolean) =>
     !S.units.some(o => o !== u && o.alive && !o.saved && o.x === x && o.y === y && !(ignoreStatue && o === st));
   if (!watched(u.x, u.y)) return out;
@@ -46,6 +53,12 @@ export function dragOptions(u: Unit) {
       const bx = ax + ex, by = ay + ey;
       if ((bx === u.x && by === u.y) || !canStep(ax, ay, ex, ey) || !free(bx, by, true)) continue;
       if (!out.has(by * L.W + bx)) out.set(by * L.W + bx, [[ax, ay], [bx, by]]);
+      if (dragOf(u) < 3 || !watched(bx, by)) continue;
+      for (const [fx2, fy2] of DIRS) {
+        const cx = bx + fx2, cy = by + fy2;
+        if ((cx === ax && cy === ay) || (cx === u.x && cy === u.y) || !canStep(bx, by, fx2, fy2) || !free(cx, cy, true)) continue;
+        if (!out.has(cy * L.W + cx)) out.set(cy * L.W + cx, [[ax, ay], [bx, by], [cx, cy]]);
+      }
     }
   }
   return out;
@@ -94,6 +107,11 @@ export function startPlayerTurn(first: boolean) {
   S.smoke = S.smoke.filter(s => s.until >= S.turn);
   setSmoke(S.smoke.map(s => [s.x, s.y]));
   if (smokeBefore && !S.smoke.length) log("The smoke clears.");
+  for (const u of S.units) if (u.alive && u.downed && !u.stabilized && !first) {
+    u.bleed = (u.bleed ?? 3) - 1;
+    if (u.bleed <= 0) { log(`${full(u)} bled out.`, "bad"); kill(u); }
+    else log(`${full(u)} is bleeding out: ${u.bleed} turn${u.bleed > 1 ? "s" : ""} left.`, "bad");
+  }
   for (const m of team()) {
     m.overwatch = false;
     m.ap = isPanicked(m) ? 0 : m.staring ? 1 : 2;
@@ -128,13 +146,21 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
     S.pending = { x, y }; S.hover = { x, y }; hooks.update(); return false;
   };
   // while aiming a grenade, a click always picks the target, even on top of someone
+  if (S.mode === "ability" && S.ability && sel) {
+    const t = S.units.find(v => v.alive && v.x === x && v.y === y && abilityTargets(sel, S.ability!).includes(v));
+    if (!t) { flash("Not a valid target for that."); return; }
+    if (!confirm()) return;
+    useAbility(sel, S.ability, t);
+    afterAction();
+    return;
+  }
   if (S.mode === "throw" && S.throwing && sel) {
     if (!throwOptions(sel).has(y * L.W + x)) { flash("Out of range or out of sight."); return; }
     if (!confirm()) return;
     doThrow(sel, S.throwing, x, y);
     return;
   }
-  if (u && isTeam(u)) { select(u); return; }
+  if (u && isTeam(u) && !u.downed) { select(u); return; }
   if (!sel || sel.ap < 1) return;
   if (S.mode === "drag") {
     const path = dragOptions(sel).get(y * L.W + x);
@@ -152,7 +178,9 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
     if (sel.side !== "mtf") { flash("D-Class are unarmed."); return; }
     if (!canSee(sel, x, y)) { flash(`${sel.call} has no line of sight to that target.`); return; }
     if (!confirm()) return;
-    S.busy = true; S.pending = null; sel.ap = 0;
+    S.busy = true; S.pending = null;
+    if (hasPerk(sel, "double_tap") && sel.ap >= 2 && usesLeft(sel, "double_tap", 1) > 0) { spend(sel, "double_tap"); sel.ap = 1; log(`${full(sel)}: double tap.`, "key"); }
+    else sel.ap = 0;
     await fire(sel, u, false);
     S.busy = false; afterAction(); return;
   }
@@ -165,7 +193,10 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
   if (!confirm()) return;
   S.busy = true; S.pending = null;
   sel.ap -= cost;
-  await moveUnit(sel, pathTo(res, x, y) || []);
+  setVault(hasPerk(sel, "bulldozer"));
+  const path = pathTo(res, x, y) || [];
+  setVault(false);
+  await moveUnit(sel, path);
   S.busy = false; afterAction();
 }
 
@@ -180,7 +211,7 @@ function afterAction() {
 export function doOverwatch() {
   const u = S.selected;
   if (!canAct() || !u || u.side !== "mtf" || u.ap < 1) return;
-  u.overwatch = true; u.ap = 0;
+  u.overwatch = true; u.ap = 0; u.overwatchShots = hasPerk(u, "rapid_reaction") ? 2 : 1;
   log(`${full(u)} on overwatch.`);
   afterAction();
 }
@@ -255,7 +286,7 @@ export function doSeal(flash: (t: string) => void) {
   if (!canAct()) return;
   const why = sealCheck(u);
   if (why || !u) { flash(why || "Select an operative."); return; }
-  u.ap = 0; u.sealed = true; S.sealed = true;
+  u.ap = hasPerk(u, "procedure") ? u.ap - 1 : 0; u.sealed = true; S.sealed = true;
   for (const m of team()) m.staring = false;
   log(`${full(u)} swings the container door shut and locks it. SCP-173 is sealed.`, "good");
   const [cx, cy] = L.contTiles[1] || L.contTiles[0];
@@ -265,11 +296,12 @@ export function doSeal(flash: (t: string) => void) {
 
 // ---------- grenades ----------
 export const THROW_RANGE = 6;
+export const throwRange = (u: Unit) => THROW_RANGE + (hasPerk(u, "grenadier") ? 3 : 0);
 /** Tiles the unit can throw to: within range and in sight. */
 export function throwOptions(u: Unit) {
   const out = new Set<number>();
   for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++)
-    if ((x - u.x) ** 2 + (y - u.y) ** 2 <= THROW_RANGE ** 2 && passable(x, y) && sightFrom(u.x, u.y, x, y)) out.add(y * L.W + x);
+    if ((x - u.x) ** 2 + (y - u.y) ** 2 <= throwRange(u) ** 2 && passable(x, y) && canSee(u, x, y)) out.add(y * L.W + x);
   return out;
 }
 export const blastArea = (x: number, y: number): Pt[] => DIRS.concat([[0, 0]]).map(([dx, dy]) => [x + dx, y + dy] as Pt).filter(([a, b]) => passable(a, b));
@@ -304,7 +336,7 @@ function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y
     const ours = hit.filter(isTeam), theirs = hit.filter(v => v.side === "raider");
     log(`${full(u)} throws a flashbang.${theirs.length ? ` ${theirs.length} Insurgent${theirs.length > 1 ? "s" : ""} blinded.` : ""}${ours.length ? ` ${ours.map(label).join(", ")} ${ours.length > 1 ? "are" : "is"} blinded too.` : ""}`, ours.length ? "bad" : "good");
     if (ours.some(v => v.hadLos)) log("Anyone blinded can't hold SCP-173 until next turn.", "bad");
-    S.mem.set("bang-" + u.id, { x, y, turn: S.turn });   // SCP-173 hears it
+    if (!hasPerk(u, "quiet_steps")) S.mem.set("bang-" + u.id, { x, y, turn: S.turn });   // SCP-173 hears it
   } else {
     for (const [a, b] of area) S.smoke.push({ x: a, y: b, until: S.turn + 1 });
     setSmoke(S.smoke.map(s => [s.x, s.y]));
@@ -341,11 +373,12 @@ export async function endTurn() {
 
 async function anomalyPhase() {
   if (S.sealed) return;
-  for (const m of starers()) { loseSanity(m, prof(m).drain); reveal("mind"); }
+  for (const m of starers()) { loseSanity(m, prof(m).drain, "sight"); reveal("mind"); }
   insurgentsStare();
   computeVis();
   const blinked = rollBlinks();
   const ss = starers(), holders = ss.filter(m => !blinked.has(m));
+  for (const m of ss) { m.streak = blinked.has(m) ? 0 : (m.streak ?? 0) + 1; m.bestStreak = Math.max(m.bestStreak ?? 0, m.streak); }
   if (ss.length && !holders.length) {
     log(ss.length > 1 ? "Everyone staring blinked at the same moment." : `${label(ss[0])} blinked.`, "bad");
     reveal("blink");

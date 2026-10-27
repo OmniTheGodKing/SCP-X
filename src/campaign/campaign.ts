@@ -1,7 +1,8 @@
 // Site-19 between missions: the roster, time passing, funding, public exposure and incidents.
 import type { MissionResult, MissionSetup } from "../game/types";
+import { CLASSES, PERKS, TRAITS, type ClassId, type PerkId, type TraitId } from "../data/classes";
 import {
-  ENGINEER_COST, engineerCapacity, dclassCapacity, healPerDay, monthlyUpkeep, sanityPerDay, startingBase, tickConstruction,
+  ENGINEER_COST, countOperational, engineerCapacity, dclassCapacity, healPerDay, monthlyUpkeep, sanityPerDay, startingBase, tickConstruction,
   type Base,
 } from "./base";
 import { CLEAN_EVERY, resolveScp, startingScps, tickContainment, type ScpRecord } from "./containment";
@@ -16,6 +17,14 @@ export const MONTH = 30;
 
 export interface Operative {
   id: string;
+  cls?: ClassId;
+  perks: PerkId[];
+  traits: TraitId[];
+  /** Times they have broken down (shut their eyes at zero sanity), across missions. */
+  breakdowns: number;
+  /** Away from duty: in therapy or retraining. */
+  busy?: { kind: "therapy" | "retrain"; daysLeft: number; trait?: TraitId };
+  aftercareUntil?: number;
   name: string;
   call: string;
   rank: number;
@@ -46,7 +55,7 @@ export interface SiteLogEntry { day: number; text: string; kind: string; }
 export interface Loadout { opId: string; armor: boolean; items: ItemId[]; }
 
 export interface Campaign {
-  version: 3;
+  version: 4;
   day: number;
   funds: number;
   exposure: number;
@@ -75,7 +84,61 @@ export interface Campaign {
 export const aimOf = (o: Operative) => o.aimBase + o.rank * 4;
 export const maxSanOf = (o: Operative) => 100 + o.rank * 5;
 export const blinkFullOf = (o: Operative) => Math.max(0.05, 0.10 - o.rank * 0.01);
-export const deployable = (o: Operative) => o.alive && o.hp >= o.maxHp;
+export const deployable = (o: Operative) => o.alive && o.hp >= o.maxHp && !o.busy;
+/** An operative who has ranked up but not yet picked their class or perk. */
+export const promotionDue = (o: Operative) => o.alive && o.rank > 0 && o.perks.length < o.rank;
+export const perkChoices = (o: Operative): [PerkId, PerkId] | null =>
+  o.cls && o.perks.length >= 1 && o.perks.length < o.rank ? CLASSES[o.cls].choices[o.perks.length - 1] : null;
+
+export function chooseClass(c: Campaign, o: Operative, cls: ClassId) {
+  if (!promotionDue(o) || o.cls) return;
+  o.cls = cls; o.perks = [CLASSES[cls].base];
+  log(c, `${o.call} ${o.name} trains as a ${CLASSES[cls].name.toLowerCase()}: ${PERKS[CLASSES[cls].base].name}.`, "good");
+}
+export function choosePerk(c: Campaign, o: Operative, p: PerkId) {
+  const pair = perkChoices(o);
+  if (!pair || !pair.includes(p)) return;
+  o.perks.push(p);
+  log(c, `${o.call} ${o.name} learns ${PERKS[p].name}.`, "good");
+}
+function checkPromotion(c: Campaign, o: Operative, out?: string[]) {
+  const before = o.rank;
+  while (o.rank < RANKS.length - 1 && o.xp >= RANK_XP[o.rank + 1]) o.rank++;
+  if (o.rank > before) {
+    const msg = `${o.call} ${o.name} promoted to ${RANKS[o.rank]}. ${o.cls ? "Choose a new perk" : "Choose their class"} on the Personnel tab.`;
+    if (out) out.push(msg); else log(c, msg, "good");
+  }
+}
+
+export const THERAPY = { cost: 30, days: 7 }, RETRAIN = { cost: 50, days: 5 };
+export function canTherapy(c: Campaign, o: Operative): string | null {
+  if (!o.traits.some(t => TRAITS[t].bad)) return "No bad traits to treat.";
+  if (o.busy) return "Already away from duty.";
+  const slots = countOperational(c, "psych"), inUse = c.roster.filter(x => x.busy?.kind === "therapy").length;
+  if (!slots) return "Needs psychological services.";
+  if (inUse >= slots) return "Psychological services is already treating someone.";
+  if (c.funds < THERAPY.cost) return `Needs $${THERAPY.cost}k.`;
+  return null;
+}
+export function startTherapy(c: Campaign, o: Operative, t: TraitId) {
+  if (canTherapy(c, o) || !o.traits.includes(t) || !TRAITS[t].bad) return;
+  c.funds -= THERAPY.cost;
+  o.busy = { kind: "therapy", daysLeft: THERAPY.days, trait: t };
+  log(c, `${o.call} ${o.name} begins therapy for ${TRAITS[t].name.toLowerCase()}.`);
+}
+export function canRetrain(c: Campaign, o: Operative): string | null {
+  if (!o.cls) return "They haven't picked a class yet.";
+  if (o.busy) return "Already away from duty.";
+  if (!countOperational(c, "training")) return "Needs a training range.";
+  if (c.funds < RETRAIN.cost) return `Needs $${RETRAIN.cost}k.`;
+  return null;
+}
+export function startRetrain(c: Campaign, o: Operative) {
+  if (canRetrain(c, o)) return;
+  c.funds -= RETRAIN.cost;
+  o.busy = { kind: "retrain", daysLeft: RETRAIN.days };
+  log(c, `${o.call} ${o.name} starts retraining. They'll choose a class and perks again in ${RETRAIN.days} days.`);
+}
 
 const NAMES = ["Okafor", "Lindqvist", "Reyes", "Haddad", "Novak", "Tanaka", "Mbeki", "Sorensen", "Ortiz", "Kowalski", "Achterberg", "Nwosu", "Petrov", "Duarte", "Iqbal", "Varga", "Castellanos", "Whitlock", "Abara", "Morozova"];
 const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
@@ -89,14 +152,14 @@ function newOperative(c: Campaign): Operative {
   const used = new Set(c.roster.map(o => o.name));
   const name = NAMES.find(n => !used.has(n)) ?? `Recruit ${c.nextOp}`;
   const n = c.nextOp++;
-  return { id: "op" + n, name, call: `E11-${String(n).padStart(2, "0")}`, rank: 0, xp: 0, hp: 7, maxHp: 7, san: 100, aimBase: rand(64, 74), missions: 0, kills: 0, alive: true };
+  return { id: "op" + n, name, call: `E11-${String(n).padStart(2, "0")}`, rank: 0, xp: 0, hp: 7, maxHp: 7, san: 100, aimBase: rand(64, 74), missions: 0, kills: 0, alive: true, perks: [], traits: [], breakdowns: 0 };
 }
 
 export function newCampaign(): Campaign {
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
-    version: 3, day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
+    version: 4, day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
     inventory: {}, orders: [], knownNotes: [], nextD: 9101, nextOp: 1, nextIncident: 1,
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
   };
@@ -116,10 +179,22 @@ export function advanceDay(c: Campaign) {
   c.day++;
   for (const line of tickConstruction(c)) log(c, line, "good");
   tickResearch(c);
-  const heal = healPerDay(c), calm = sanityPerDay(c);
+  const heal = healPerDay(c), calm = sanityPerDay(c), drill = countOperational(c, "training") > 0 && c.day % 7 === 0;
   for (const o of c.roster) if (o.alive) {
     o.hp = Math.min(o.maxHp, o.hp + heal);
-    o.san = Math.min(maxSanOf(o), o.san + calm);
+    const rest = (o.traits.includes("hollow") ? calm / 2 : calm) + ((o.aftercareUntil ?? 0) >= c.day ? 10 : 0);
+    o.san = Math.min(maxSanOf(o), o.san + rest);
+    if (o.busy && --o.busy.daysLeft <= 0) {
+      if (o.busy.kind === "therapy" && o.busy.trait) {
+        o.traits = o.traits.filter(t => t !== o.busy!.trait);
+        log(c, `${o.call} ${o.name} finished therapy. ${TRAITS[o.busy.trait].name} is gone.`, "good");
+      } else {
+        o.cls = undefined; o.perks = [];
+        log(c, `${o.call} ${o.name} finished retraining. Choose their new class on the Personnel tab.`, "good");
+      }
+      o.busy = undefined;
+    }
+    if (drill && !o.busy) { o.xp++; checkPromotion(c, o); }
   }
   tickContainment(c);
   for (const s of c.scps) if (s.status === "contained" && c.day - s.lastCleaned === CLEAN_EVERY)
@@ -185,7 +260,16 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
       opId: o.id, name: o.name, call: o.call, hp: o.hp + bonus, maxHp: o.maxHp + bonus, san: Math.min(o.san, maxSanOf(o)),
       maxSan: maxSanOf(o), aim: aimOf(o) + (has(c, "marksmanship") ? 5 : 0), blinkFull: blinkFullOf(o),
       armor: l.armor ? ARMOR.points : 0, hasArmor: l.armor, items: l.items.map(id => ({ id, uses: ITEMS[id].uses ?? 1 })),
+      cls: o.cls, perks: [...o.perks], traits: [...o.traits],
     };
+  }).map(m => {
+    // traits and the Marksman perk adjust the numbers they deploy with
+    if (m.perks.includes("marksman")) m.aim += 10;
+    if (m.traits.includes("gunshy")) m.aim -= 10;
+    if (m.traits.includes("twitchy")) m.blinkFull += 0.03;
+    if (m.traits.includes("steady")) m.blinkFull = Math.max(0.02, m.blinkFull - 0.02);
+    if (m.traits.includes("nightmares")) m.san = Math.max(1, m.san - 15);
+    return m;
   });
   const dclass: string[] = [];
   for (let i = 0; i < dCount; i++) dclass.push("D-" + c.nextD++);
@@ -194,6 +278,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
   return {
     incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: inc.insurgents, squad, dclass,
     known: [...c.knownNotes],
+    insurgentArmor: monthOf(c.day) >= 3 ? 1 : 0,
     mods: {
       blinkBonus: has(c, "blink_cadence") ? 0.02 : 0,
       recoverBonus: has(c, "trauma_counseling") ? 3 : 0,
@@ -227,9 +312,19 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     if (s.hasArmor) c.inventory.armor = (c.inventory.armor || 0) + 1;
     for (const it of s.items) if (it.uses > 0) c.inventory[it.id] = (c.inventory[it.id] || 0) + 1;
     o.xp += 1 + (r.win ? 2 : 0) + s.kills + (s.sealed ? 1 : 0);
-    const before = o.rank;
-    while (o.rank < RANKS.length - 1 && o.xp >= RANK_XP[o.rank + 1]) o.rank++;
-    if (o.rank > before) promotions.push(`${o.call} ${o.name} promoted to ${RANKS[o.rank]}.`);
+    checkPromotion(c, o, promotions);
+    o.breakdowns += s.panics;
+    if (r.aftercare) o.aftercareUntil = c.day + 7;
+    // what happened to them may leave a mark: each trigger sticks half the time
+    const earned: TraitId[] = [];
+    const roll = (t: TraitId, hit: boolean) => { if (hit && !o.traits.includes(t) && Math.random() < 0.5) { o.traits.push(t); earned.push(t); } };
+    roll("nightmares", s.witnessed >= 2);
+    roll("twitchy", s.panics > 0);
+    roll("gunshy", s.minHp <= 2);
+    roll("hollow", o.breakdowns >= 2);
+    roll("steady", s.bestStreak >= 5);
+    roll("hardened", o.missions >= 5);
+    for (const t of earned) promotions.push(`${o.call} ${o.name} is now ${TRAITS[t].bad ? "marked by" : "known for"} ${TRAITS[t].name.toLowerCase()}: ${TRAITS[t].desc}`);
   }
 
   c.dclass += r.dReturned;

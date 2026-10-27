@@ -16,7 +16,12 @@ export function loadCampaign(): Campaign | null {
     if (c.version === 2) {
       Object.assign(c, { version: 3, researchers: 0, research: newResearch(), inventory: {}, orders: [], knownNotes: [] });
     }
-    return c.version === 3 ? (c as unknown as Campaign) : null;
+    if (c.version === 3) {
+      const old = c as unknown as Campaign;
+      for (const o of old.roster) Object.assign(o, { perks: [], traits: [], breakdowns: 0 });
+      Object.assign(c, { version: 4 });
+    }
+    return c.version === 4 ? (c as unknown as Campaign) : null;
   } catch {
     return null;
   }

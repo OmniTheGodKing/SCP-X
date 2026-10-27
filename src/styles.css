@@ -224,3 +224,18 @@ ul.why { margin: 4px 0 8px; padding-left: 18px; font-family: var(--font-mono); f
 .armorpick input { accent-color: var(--manila); }
 select { font-family: var(--font-mono); font-size: 12px; background: var(--bg); color: var(--ink); border: 1px solid var(--line); padding: 6px 8px; max-width: 100%; }
 select:focus-visible { outline: 2px solid var(--manila); outline-offset: 1px; }
+
+/* classes, perks, traits */
+.oprow { width: 100%; text-align: left; color: inherit; font: inherit; border: 1px solid transparent; cursor: pointer; }
+.oprow.sel { border-color: var(--manila); }
+.oprow:focus-visible { outline: 2px solid var(--manila); outline-offset: 1px; }
+.classpick { display: grid; gap: 6px; margin-top: 6px; }
+.classpick.two { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.classopt { display: grid; gap: 3px; text-align: left; padding: 10px; background: var(--panel-2); border: 1px solid var(--line); color: var(--ink); font: inherit; cursor: pointer; }
+.classopt:hover { border-color: var(--manila); }
+.classopt:focus-visible { outline: 2px solid var(--manila); outline-offset: 1px; }
+.classopt .muted { font-size: 13px; }
+ol.tree, ul.traits { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 5px; font-size: 13.5px; }
+ul.traits li.bad b { color: var(--alert); }
+ul.traits li.good b { color: var(--ok); }
+ul.traits button { margin-left: 6px; padding: 4px 8px; }

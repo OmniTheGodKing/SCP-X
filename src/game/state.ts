@@ -1,6 +1,7 @@
 // The running mission and the helpers everything else uses to read it.
 import { L, R } from "../core/grid";
 import { sightFrom } from "../core/sight";
+import { adjustLoss, rangeOf, type LossKind } from "./perks";
 import { maxSanOf, prof } from "./profiles";
 import type { Effect, MissionResult, MissionState, Unit } from "./types";
 
@@ -15,15 +16,16 @@ export const hooks = {
 };
 
 export const isTeam = (u: Unit) => u.side === "mtf" || u.side === "dclass";
-export const alive = (side: Unit["side"]) => S.units.filter(u => u.side === side && u.alive && !u.saved);
-export const team = () => S.units.filter(u => isTeam(u) && u.alive && !u.saved);
+// Downed operatives are alive but out of action: they don't act, see, stare or count as standing.
+export const alive = (side: Unit["side"]) => S.units.filter(u => u.side === side && u.alive && !u.saved && !u.downed);
+export const team = () => S.units.filter(u => isTeam(u) && u.alive && !u.saved && !u.downed);
 export const humans = () => S.units.filter(u => u.alive && !u.saved && u.side !== "anomaly");
 export const isPanicked = (u: Unit) => (u.side === "mtf" || u.side === "raider") && u.panicUntil >= S.turn;
 export const isBlind = (u: Unit) => (u.blindUntil ?? -1) >= S.turn;
 export const unitAt = (x: number, y: number) => S.units.find(u => u.alive && !u.saved && u.x === x && u.y === y);
 export const occupied = (x: number, y: number, except?: Unit) =>
   S.units.some(u => u !== except && u.alive && !u.saved && u.x === x && u.y === y);
-export const canSee = (u: Unit, x: number, y: number) => sightFrom(u.x, u.y, x, y);
+export const canSee = (u: Unit, x: number, y: number) => sightFrom(u.x, u.y, x, y, rangeOf(u));
 export const seen = (x: number, y: number) => S.vis[y * L.W + x] === 1;
 export const starers = () => team().filter(m => m.staring);
 export const label = (u: Unit) => u.call || u.name;
@@ -54,9 +56,10 @@ export function computeVis() {
   S.vis.fill(0);
   for (const m of team()) {
     if (isPanicked(m) || isBlind(m)) continue;
-    for (let y = Math.max(0, m.y - R); y <= Math.min(H - 1, m.y + R); y++)
-      for (let x = Math.max(0, m.x - R); x <= Math.min(W - 1, m.x + R); x++)
-        if (!S.vis[y * W + x] && sightFrom(m.x, m.y, x, y)) S.vis[y * W + x] = 1;
+    const r = rangeOf(m) + 1;
+    for (let y = Math.max(0, m.y - r); y <= Math.min(H - 1, m.y + r); y++)
+      for (let x = Math.max(0, m.x - r); x <= Math.min(W - 1, m.x + r); x++)
+        if (!S.vis[y * W + x] && canSee(m, x, y)) S.vis[y * W + x] = 1;
   }
   for (let i = 0; i < W * H; i++) if (S.vis[i]) S.explored[i] = 1;
   const st = S.statue;
@@ -81,7 +84,7 @@ function updateStares() {
       if (S.phase === "player") m.ap = Math.min(Math.max(0, m.ap - 1), 1);
       if (!m.seen173) {
         m.seen173 = true;
-        const hit = prof(m).firstSight;
+        const hit = adjustLoss(m, prof(m).firstSight, "sight", team());
         m.san = Math.max(0, m.san - hit);
         m.lostSanTurn = S.turn;
         log(`${full(m)} comes face to face with SCP-173 (−${hit} sanity) and locks eyes on it.`, "key");
@@ -92,11 +95,13 @@ function updateStares() {
   }
 }
 
-export function loseSanity(u: Unit, n: number) {
-  u.san = Math.max(0, u.san - n);
+export function loseSanity(u: Unit, n: number, kind: LossKind = "other") {
+  u.san = Math.max(0, u.san - adjustLoss(u, n, kind, team()));
   u.lostSanTurn = S.turn;
   if (u.san > 0) return;
+  if (u.side === "dclass" && team().some(a => a.perks?.includes("wrangler") && Math.max(Math.abs(a.x - u.x), Math.abs(a.y - u.y)) <= 3)) { u.san = 1; return; }
   if (u.side === "mtf") {
+    u.panics = (u.panics ?? 0) + 1;
     u.panicUntil = S.turn + 1; u.san = Math.round(maxSanOf(u) * 0.4); u.staring = false; u.overwatch = false;
     log(`${full(u)} can't take any more and shuts their eyes.`, "bad");
   } else if (u.side === "dclass") {

@@ -30,7 +30,7 @@ export async function subjectPhase() {
 export function recruitStrays() {
   for (const s of alive("subject")) {
     if (s.fled) continue;
-    const by = alive("mtf").find(m => cheb(m.x, m.y, s.x, s.y) <= 1);
+    const by = alive("mtf").find(m => cheb(m.x, m.y, s.x, s.y) <= (m.perks?.includes("shepherd") ? 3 : 1));
     if (!by) continue;
     s.side = "dclass"; s.ap = 0; s.hadLos = false; s.joined = true;
     log(`${by.call} grabs ${s.name}, who joins the work detail.`, "good");
