@@ -196,6 +196,7 @@ export function startRetrain(c: Campaign, o: Operative) {
 }
 
 const NAMES = ["Okafor", "Lindqvist", "Reyes", "Haddad", "Novak", "Tanaka", "Mbeki", "Sorensen", "Ortiz", "Kowalski", "Achterberg", "Nwosu", "Petrov", "Duarte", "Iqbal", "Varga", "Castellanos", "Whitlock", "Abara", "Morozova"];
+const plural = (n: number, w: string) => `${n} ${w}${n === 1 || w.endsWith("Class") ? "" : "s"}`;
 const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
 
 export type HubTab = "command" | "world" | "site" | "research" | "personnel";
@@ -420,7 +421,9 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
   const sec = kind === "breach" ? breachGuards(c, inc) : { first: [], late: [] };
   const amnestics = kind === "coverup" ? c.amnestics : 0;
   return {
-    kind, scp: (inc.scpId || "173") as ScpId, map: inc.map, amnestics, guards: sec.first, lateGuards: sec.late, mtfTurn: mtfArrival(c, inc), witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
+    kind, scp: (inc.scpId || "173") as ScpId, map: inc.map, amnestics,
+    // a breach at Site-19 catches researchers in the wing and opens the D-Class block
+    researchers: kind === "breach" ? Math.min(c.researchers, rand(1, 3)) : 0, strayPool: kind === "breach" ? c.dclass : 0, guards: sec.first, lateGuards: sec.late, mtfTurn: mtfArrival(c, inc), witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
     incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: Math.max(0, inc.insurgents - (inc.weakened ?? 0)), squad, dclass,
     year: yearOf(c.day),
     known: [...c.knownNotes],
@@ -499,6 +502,17 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   }
 
   c.dclass += r.dReturned;
+  // breach losses among the staff: researchers, and D-Class from the block
+  if (r.researchersLost) { c.researchers = Math.max(0, c.researchers - r.researchersLost); lines.push(`${plural(r.researchersLost, "researcher")} didn't make it out of the wing.`); }
+  if (r.researchersRescued) {
+    lines.push(`${plural(r.researchersRescued, "researcher")} brought out alive. The team takes heart (+${5 * r.researchersRescued} sanity).`);
+    for (const s of r.squad) { const o = c.roster.find(x => x.id === s.opId); if (o && s.alive && !s.absent) o.san = Math.min(maxSanOf(o), o.san + 5 * r.researchersRescued); }
+  }
+  if (r.straysLost || r.straysEscaped) {
+    c.dclass = Math.max(0, c.dclass - r.straysLost - r.straysEscaped);
+    if (r.straysLost) lines.push(`${plural(r.straysLost, "D-Class")} from the block ${r.straysLost > 1 ? "were" : "was"} lost in the breach.`);
+    if (r.straysEscaped) { addExposure(c, HOME, 3 * r.straysEscaped); lines.push(`${plural(r.straysEscaped, "D-Class")} got out of Site-19 and will talk (+${3 * r.straysEscaped} exposure in the Eastern US).`); }
+  }
   // material for studies, brought home from a won mission
   if (r.win) { addMaterial(c, "ciWeapons", r.insurgentsDown); addMaterial(c, "tissue", r.zombiesKilled); }
   addMaterial(c, "survivors", r.pocketReturned);
@@ -525,8 +539,8 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     const cut = kind === "coverup" ? 10 : 5;
     addExposure(c, region, -cut);
     c.funds += bonus;
-    const name = scpName(inc?.scpId || "173");
-    const what = kind === "coverup" ? "The witnesses remember nothing worth repeating." : kind === "strike" ? "The Insurgency cell is broken up." : inc?.first ? `${name} is in Foundation hands.` : `${name} is back in its cell.`;
+    const anomaly = scpName(inc?.scpId || "173");
+    const what = kind === "coverup" ? "The witnesses remember nothing worth repeating." : kind === "strike" ? "The Insurgency cell is broken up." : inc?.first ? `${anomaly} is in Foundation hands.` : `${anomaly} is back in its cell.`;
     lines.unshift(`${name} closed. ${what}${bonus ? ` The O5 Council approves a $${bonus}k bonus;` : ""} exposure in ${where} −${cut}.`);
   } else {
     c.stats.lost++;

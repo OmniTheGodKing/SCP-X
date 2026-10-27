@@ -41,7 +41,7 @@ const TEMPLATE = `
     <div class="turnbox">
       <span class="pill" id="turnPill">Turn 1</span>
       <span class="pill" id="phasePill">Your move</span>
-      <button class="act" id="evacBtn" type="button">Evacuate</button>
+      <button class="act" id="evacBtn" type="button" title="Ends the mission. Anyone who hasn't left through an exit is left behind.">Abort mission</button>
     </div>
   </header>
 
@@ -52,7 +52,7 @@ const TEMPLATE = `
         <span style="--c: var(--mtf)">MTF Epsilon-11</span>
         <span class="sq" style="--c: #9fb3c4">Site Security</span>
         <span style="--c: var(--subject)">D-Class</span>
-        <span class="sq" style="--c: #cfc6a8">Civilian · W = witness</span>
+        <span class="sq" style="--c: #cfc6a8">Civilian · W witness · R researcher</span>
         <span class="sq" style="--c: var(--raider)">Chaos Insurgency</span>
         <span class="sq" style="--c: var(--concrete)">SCP-173</span>
         <span style="--c: #6f7a5c">SCP-049-2</span>
@@ -138,7 +138,17 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("mTitle").innerHTML = kind === "breach" ? "SCP-049 Recontainment <small>“The Plague Doctor” · Euclid</small>" : `SCP-049 ${S.setup.title.startsWith("Anomalous") ? "Capture" : "Manhunt"} <small>“The Plague Doctor” · Euclid</small>`;
     $("objRule").innerHTML = `<b>Objective.</b> Get SCP-049 into the ${kind === "breach" ? "transport container in the staging room" : "truck's open container"}, with nobody else inside, then have an operative seal it. Its touch kills anyone next to it, and it spends a turn beside any fresh body to raise it as SCP-049-2. Gunfire can't hurt it, but a hit staggers it so it loses its next move. <b>Calm</b> (1 action, 6 sanity, within 3 tiles and in sight) stops it acting on its next turn and lets you lead it up to 3 tiles. SCP-049-2 can be killed with gunfire.${kind === "breach" ? " Site Security starts on the scene; Epsilon-11 arrives later." : ""}`;
   }
-  if (kind === "breach") $("squadLabel").textContent = "Site Security and Epsilon-11";
+  if (kind === "breach") {
+    $("squadLabel").textContent = "Site Security and Epsilon-11";
+    const extra = document.createElement("div");
+    extra.innerHTML = `<b>Staff and D-Class.</b> Researchers (R) are hiding in the wing: walk anyone next to one and they follow that person to an exit. Every one lost is gone from your staff. The breach opened the D-Class block: <b>Restrain</b> loose D-Class (next to them, 1 action) to send them back to holding. Killing one costs you a D-Class, and one who escapes through an exit is gone and adds 3 exposure.`;
+    $("objRule").after(extra);
+  }
+  {
+    const exits = document.createElement("div");
+    exits.innerHTML = `<b>Exits, carrying and cover.</b> Stand on an exit tile to <b>Exfiltrate</b>; anyone you carry comes with you. <b>Pick up</b> a downed ally or a body next to you (−1 move). <b>Hunker down</b> next to cover to double it until your next turn. <b>Abort mission</b> ends it at once, and anyone who hasn't left through an exit is left behind.`;
+    $("objRule").after(exits);
+  }
   if (kind === "breach" && has173) {
     $("objRule").innerHTML = `<b>Objective.</b> Get SCP-173 into the transport container at the dock in the southwest staging room, with nobody else inside, then seal it. Site Security starts on the scene; Epsilon-11 arrives later. If SCP-173 roams unseen for ${ESCAPE_AT} turns without a kill it heads for the surface hatch in the east lab, and if it gets there it's out of Site-19. Anyone at the panel at the east end of the corridor can spend both actions to lock the hatch for ${S.setup.mods.lockdownTurns} turns.`;
   }
@@ -270,6 +280,10 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
       const threat = escaping() ? `<span class="warn">high: it is heading for the hatch</span>` : S.escapeDrive >= ESCAPE_AT - 2 ? "rising" : "low";
       line.innerHTML += `<br>Escape threat: <b>${threat}</b> · Hatch ${locked ? `<b>locked</b> through turn ${S.lockedUntil}` : "open"}${next.length ? `<br>${next.map(r => `${r.members[0].guard ? "Guards" : "Epsilon-11"} (${r.members.length}) arrive turn ${r.turn}`).join(" · ")}` : ""}`;
     }
+    if (kind === "breach" && !S.over) {
+      const docs = S.units.filter(u => u.researcher), loose = S.units.filter(u => u.stray && u.alive && !u.saved && !u.restrained && u.side === "subject").length;
+      if (docs.length || S.units.some(u => u.stray)) line.innerHTML += `<br>Researchers: ${docs.filter(d => d.saved).length} out, ${docs.filter(d => d.alive && !d.saved).length} in the wing, ${docs.filter(d => !d.alive).length} lost · Loose D-Class: ${loose}`;
+    }
     const ops = S.units.filter(u => u.side === "mtf");
     const ds = S.units.filter(u => u.id.startsWith("d") || u.joined);
     $("squad").innerHTML = ops.map(card).join("") + (ds.length ? `<h3>D-Class work detail</h3>` + ds.map(card).join("") : "");
@@ -373,8 +387,8 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   $("evacBtn").onclick = () => {
     const b = $("evacBtn");
     if (!evacArmed) {
-      b.textContent = "Confirm evacuate";
-      evacArmed = window.setTimeout(() => { evacArmed = 0; b.textContent = "Evacuate"; }, 3000);
+      b.textContent = "Abort? Anyone not out is left behind";
+      evacArmed = window.setTimeout(() => { evacArmed = 0; b.textContent = "Abort mission"; }, 3000);
       return;
     }
     clearTimeout(evacArmed); evacArmed = 0;

@@ -3,7 +3,7 @@
 import type { ClassId, PerkId, TraitId } from "../data/classes";
 export type { ClassId, PerkId, TraitId };
 /** Class abilities plus Secure, which every operative can do. */
-export type AbilityId = PerkId | "secure" | "dose" | "lockdown" | "calm";
+export type AbilityId = PerkId | "secure" | "dose" | "lockdown" | "calm" | "restrain" | "pickup" | "drop" | "exfil" | "hunker";
 
 import type { AmmoId, AttachmentId, WeaponType } from "../data/weapons";
 export type { AmmoId, AttachmentId, WeaponType };
@@ -75,6 +75,17 @@ export interface Unit {
   staggeredUntil?: number;
   /** A body SCP-049 has already raised. */
   cured?: boolean;
+  /** Breaches: a researcher caught in the wing, and whoever they're following out. */
+  researcher?: boolean;
+  followId?: string;
+  /** A D-Class loose from the block in a breach, and one who has been restrained. */
+  stray?: boolean;
+  restrained?: boolean;
+  /** Carrying a downed ally or a body, or being carried. */
+  carrying?: string;
+  carriedBy?: string;
+  /** Hunkered down: cover counts double through this turn. */
+  hunkerUntil?: number;
   /** Pulled into SCP-106's pocket dimension; whether they come back is decided when the mission ends. */
   taken?: boolean;
   /** Site Security: guards are weaker than operatives and have no class. */
@@ -137,6 +148,9 @@ export interface MissionSetup {
   scp?: ScpId;
   map: "wingC" | "town" | "farm" | "port";
   amnestics: number;
+  /** Breaches: researchers caught in the wing, and how many D-Class are in the block to get loose. */
+  researchers?: number;
+  strayPool?: number;
   witnesses: number;
   civilians: number;
   incidentId: string;
@@ -171,6 +185,11 @@ export interface MissionResult {
   /** Material for studies: SCP-049-2 killed, and people who came back from SCP-106. */
   zombiesKilled: number;
   pocketReturned: number;
+  /** Breaches: researchers brought out and lost; loose D-Class killed and escaped. */
+  researchersRescued: number;
+  researchersLost: number;
+  straysLost: number;
+  straysEscaped: number;
   /** Anomalies photographed with the field camera, and whether a restraint kit came along. */
   photos: ScpId[];
   restraints: boolean;

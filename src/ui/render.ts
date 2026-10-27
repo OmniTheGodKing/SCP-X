@@ -190,7 +190,8 @@ export function createRenderer(cv: HTMLCanvasElement) {
       ctx.strokeStyle = u.witness && !u.dosed ? C.manila : "#0f1317"; ctx.lineWidth = 2;
       ctx.strokeRect(cx - 8, cy - 8, 16, 16);
       ctx.fillStyle = "#0f1317"; ctx.font = "600 9px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(u.dosed ? "✓" : u.witness ? "W" : "C", cx, cy + 1);
+      ctx.fillText(u.dosed ? "✓" : u.witness ? "W" : u.researcher ? "R" : "C", cx, cy + 1);
+      if (u.researcher && u.followId) tag("FOLLOWING", cx, cy - 18, C.ok);
       if (u.spooked && !u.dosed) tag("!", cx + 10, cy - 10, C.alert);
       return;
     } else {
@@ -204,6 +205,9 @@ export function createRenderer(cv: HTMLCanvasElement) {
       ctx.fillText("D", cx, cy + 1);
     }
     if (u.staring) drawEye(cx + 10, cy - 10);
+    if (u.restrained) tag("CUFFED", cx, cy - 18, C.manila);
+    if (u.carrying) tag("CARRYING", cx, cy + 18, C.manila);
+    if ((u.hunkerUntil ?? -1) >= S.turn) tag("HUNKERED", cx, cy + 18, C.ok);
     if (u.side !== "subject") {
       const w = 20, frac = u.hp / u.maxHp;
       ctx.fillStyle = "#0f1317"; ctx.fillRect(cx - w / 2 - 1, cy - 17, w + 2, 4);
@@ -248,8 +252,10 @@ export function createRenderer(cv: HTMLCanvasElement) {
       for (const i of S.corroded) { const x = i % L.W, y = (i / L.W) | 0; if (S.explored[i]) { ctx.beginPath(); ctx.ellipse(x * TS + TS / 2, y * TS + TS / 2, 13, 10, (i % 7) / 3, 0, Math.PI * 2); ctx.fill(); } }
     }
     // bodies SCP-049 could still raise
-    if (S.has049) for (const b of freshBodies()) {
+    // bodies (the ones SCP-049 could still raise are marked more strongly)
+    for (const b of S.units.filter(u => !u.alive && !u.saved && !u.carriedBy && !u.taken && u.side !== "anomaly" && u.side !== "zombie")) {
       if (!seen(b.x, b.y)) continue;
+      if (!S.has049 || !freshBodies().includes(b)) { const [bx, by] = center(b); ctx.strokeStyle = "#4a4338"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(bx - 5, by - 5); ctx.lineTo(bx + 5, by + 5); ctx.moveTo(bx + 5, by - 5); ctx.lineTo(bx - 5, by + 5); ctx.stroke(); continue; }
       const [cx, cy] = center(b);
       ctx.strokeStyle = "#7d6f5a"; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.moveTo(cx - 7, cy - 7); ctx.lineTo(cx + 7, cy + 7); ctx.moveTo(cx + 7, cy - 7); ctx.lineTo(cx - 7, cy + 7); ctx.stroke();
@@ -297,8 +303,8 @@ export function createRenderer(cv: HTMLCanvasElement) {
     }
 
     for (const u of S.units) {
-      if (!u.alive || u.saved) continue;
-      if (!isTeam(u) && !seen(u.x, u.y)) continue;
+      if (!u.alive || u.saved || u.carriedBy) continue;
+      if (!isTeam(u) && !seen(u.x, u.y) && !u.restrained) continue;
       drawUnit(u);
     }
 

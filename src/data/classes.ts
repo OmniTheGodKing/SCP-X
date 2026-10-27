@@ -38,7 +38,7 @@ export const PERKS: Record<PerkId, Perk> = {
   field_kit:      { name: "Field kit", desc: "A third item slot." },
   wrangler:       { name: "D-Class wrangler", desc: "D-Class within 3 tiles lose sanity half as fast and never flee." },
   procedure:      { name: "Procedure", desc: "Sealing an anomaly takes one action instead of the whole turn." },
-  shepherd:       { name: "Shepherd", desc: "Brings loose D-Class into the work detail from 3 tiles away." },
+  shepherd:       { name: "Shepherd", desc: "Restrains loose D-Class from 3 tiles away, and they join the work detail instead of going back to holding." },
   cell_expert:    { name: "Cell expert", desc: "Cleanings and tests at Site-19 are half as deadly when they watch." },
   calm_presence:  { name: "Calm presence", desc: "Allies within 4 tiles lose half as much sanity to anomalies." },
   medkit:         { name: "Medkit", desc: "Heals an adjacent ally 3 HP. 2 uses per mission. One action." },
