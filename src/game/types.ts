@@ -2,8 +2,16 @@
 
 import type { ClassId, PerkId, TraitId } from "../data/classes";
 export type { ClassId, PerkId, TraitId };
+/** Class abilities plus Secure, which every operative can do. */
+export type AbilityId = PerkId | "secure";
 
-export type ItemId = "armor" | "eyedrops" | "flashbang" | "smoke" | "tracker";
+import type { AttachmentId, WeaponType } from "../data/weapons";
+export type { AttachmentId, WeaponType };
+
+export type ItemId = "armor" | "eyedrops" | "flashbang" | "smoke" | "tracker" | "frag";
+
+/** The weapon a unit carries into a mission. */
+export interface Gun { name: string; type: WeaponType; dmg: [number, number]; mag: number; ammo: number; aim: number; attachment?: AttachmentId; }
 export interface Carried { id: ItemId; uses: number; }
 
 export type Side = "mtf" | "dclass" | "subject" | "raider" | "anomaly";
@@ -49,6 +57,9 @@ export interface Unit {
   blindUntil?: number;
   /** Research bonus: lower blink chance while staring. */
   blinkMod?: number;
+  gun?: Gun;
+  /** An incapacitated Insurgent who has been restrained. */
+  secured?: boolean;
   cls?: ClassId;
   perks?: PerkId[];
   traits?: TraitId[];
@@ -83,6 +94,7 @@ export interface SquadMember {
   hp: number; maxHp: number; san: number; maxSan: number; aim: number; blinkFull: number;
   armor: number; hasArmor: boolean; items: Carried[];
   cls?: ClassId; perks: PerkId[]; traits: TraitId[];
+  gun: Gun;
 }
 
 /** Effects of finished research that apply during missions. */
@@ -97,6 +109,7 @@ export interface MissionSetup {
   known: string[];
   mods: MissionMods;
   insurgentArmor: number;
+  year: number;
 }
 
 export interface MissionResult {
@@ -109,6 +122,7 @@ export interface MissionResult {
     witnessed: number; panics: number; minHp: number; bestStreak: number;
   }[];
   aftercare: boolean;
+  prisoners: number;
   known: string[];
   dSent: number;
   dReturned: number;
@@ -128,7 +142,7 @@ export interface MissionState {
   over: boolean;
   called: boolean;
   mode: "drag" | "throw" | "ability" | null;
-  ability: PerkId | null;
+  ability: AbilityId | null;
   units: Unit[];
   statue: Unit;
   sealed: boolean;

@@ -45,6 +45,7 @@ async function raiderAct(r: Unit) {
   for (let guard = 0; guard < 4 && r.ap > 0 && r.alive; guard++) {
     const t = team();
     if (!t.length) return;
+    if (r.gun && r.gun.ammo < 1) { r.gun.ammo = r.gun.mag; r.ap--; if (seen(r.x, r.y)) log(`An Insurgent reloads their ${r.gun.name}.`); continue; }
     let best: { m: Unit; s: ReturnType<typeof shotInfo>; score: number } | null = null;
     for (const m of t) if (canSee(r, m.x, m.y)) {
       const s = shotInfo(r, m);

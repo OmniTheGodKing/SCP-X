@@ -123,7 +123,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
         ctx.beginPath(); ctx.arc(cx, cy, 14, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke();
       }
     } else if (u.side === "raider") {
-      ctx.fillStyle = C.raider;
+      ctx.fillStyle = u.downed ? "#5d5266" : C.raider;
       ctx.beginPath(); ctx.moveTo(cx, cy - 12); ctx.lineTo(cx + 11, cy); ctx.lineTo(cx, cy + 12); ctx.lineTo(cx - 11, cy); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = "#0f1317"; ctx.lineWidth = 2; ctx.stroke();
     } else {

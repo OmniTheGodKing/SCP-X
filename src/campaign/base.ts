@@ -3,7 +3,7 @@ import type { Campaign } from "./campaign";
 import { has } from "./research";
 
 export type FacilityType =
-  | "command" | "generator" | "barracks" | "security" | "medical" | "psych" | "lab" | "workshop" | "training"
+  | "command" | "generator" | "barracks" | "security" | "medical" | "psych" | "lab" | "workshop" | "training" | "holding"
   | "cont_safe" | "cont_euclid" | "cont_keter";
 
 export interface FacilityDef {
@@ -27,6 +27,7 @@ export const FACILITIES: Record<FacilityType, FacilityDef> = {
   lab:         { name: "Research lab", cost: 200, days: 10, engineers: 3, power: 3, upkeep: 20, buildable: true, desc: "Room for 4 researchers. Needed for research and for tests on SCP-173." },
   workshop:    { name: "Workshop", cost: 180, days: 9, engineers: 3, power: 3, upkeep: 15, buildable: true, desc: "Builds equipment, and houses 4 more engineers." },
   psych:       { name: "Psychological services", cost: 160, days: 10, engineers: 3, power: 2, upkeep: 15, buildable: true, desc: "Operatives recover 20 sanity a day instead of 10, and one at a time can be treated for a bad trait." },
+  holding:     { name: "Holding cells", cost: 120, days: 6, engineers: 2, power: 2, upkeep: 10, buildable: true, desc: "Holds 4 captured Insurgents for interrogation. Each yields 1 Intel every 10 days, up to 3." },
   training:    { name: "Training range", cost: 150, days: 8, engineers: 2, power: 2, upkeep: 10, buildable: true, desc: "Operatives at Site-19 gain 1 XP a week, and can retrain into a new class." },
   cont_safe:   { name: "Safe-grade containment wing", cost: 120, days: 8, engineers: 3, power: 2, upkeep: 10, buildable: true, grade: 0, desc: "Basic cells. Anything above Safe breaches three times as often here." },
   cont_euclid: { name: "Euclid-grade containment wing", cost: 250, days: 12, engineers: 4, power: 4, upkeep: 20, buildable: true, grade: 1, desc: "Reinforced cells suited to Euclid-class anomalies like SCP-173." },

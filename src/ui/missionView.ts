@@ -6,14 +6,14 @@ import { blinkChance, maxSanOf, pct } from "../game/profiles";
 import { S, canAct, canSee, full, hooks, isBlind, isPanicked, isTeam, label, seen, starers, team, unitAt } from "../game/state";
 import {
   callBlink, callCheck, doOverwatch, doSeal, dragCheck, endTurn, evacuate, onTap, sealCheck, select, selectNext,
-  stareCheck, startPlayerTurn, throwCheck, toggleDrag, toggleStare, toggleThrow,
+  doReload, fireCheck, reloadCheck, stareCheck, startPlayerTurn, throwCheck, toggleDrag, toggleStare, toggleThrow,
 } from "../game/turn";
-import type { ItemId, PerkId } from "../game/types";
-import { abilitiesOf, abilityCheck, startAbility } from "../game/abilities";
+import type { AbilityId, ItemId } from "../game/types";
+import { abilitiesOf, abilityCheck, abilityDesc, abilityName, startAbility } from "../game/abilities";
 import { usesLeft } from "../game/perks";
 import { CLASSES, PERKS } from "../data/classes";
 
-const ITEM_NAMES: Record<ItemId, string> = { armor: "Body armor", eyedrops: "Eye drops", flashbang: "Flashbang", smoke: "Smoke grenade", tracker: "Motion tracker" };
+const ITEM_NAMES: Record<ItemId, string> = { armor: "Flak vest", eyedrops: "Eye drops", flashbang: "Stun grenade", smoke: "M18 smoke", tracker: "Seismic sensor", frag: "M26 frag" };
 import type { MissionResult, Unit } from "../game/types";
 import { esc } from "./util";
 import { createRenderer } from "./render";
@@ -78,6 +78,7 @@ const TEMPLATE = `
           <button class="act" id="dragBtn" type="button">Drag <kbd>G</kbd></button>
           <button class="act" id="sealBtn" type="button">Seal <kbd>S</kbd></button>
           <button class="act" id="owBtn" type="button">Overwatch <kbd>O</kbd></button>
+          <button class="act" id="reloadBtn" type="button">Reload <kbd>R</kbd></button>
           <button class="act" id="nextBtn" type="button">Next <kbd>Tab</kbd></button>
           <button class="act primary wide" id="endBtn" type="button">End turn <kbd>E</kbd></button>
         </div>
@@ -132,6 +133,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     if (m.alive && isBlind(m)) flags.push(`<span class="flag bad">Blinded</span>`);
     if (m.alive && m.downed) flags.push(`<span class="flag bad">${m.stabilized ? "Down · stabilized" : `Bleeding out · ${m.bleed} turn${m.bleed === 1 ? "" : "s"}`}</span>`);
     if (m.cls) flags.push(`<span class="flag">${CLASSES[m.cls].name}</span>`);
+    if (m.gun) flags.push(`<span class="flag ${m.gun.ammo ? "" : "bad"}">${esc(m.gun.name)} ${"●".repeat(m.gun.ammo)}${"○".repeat(Math.max(0, m.gun.mag - m.gun.ammo))}</span>`);
     if (m.armor) flags.push(`<span class="flag">Armor ${m.armor}</span>`);
     for (const it of m.items || []) if (it.uses > 0 || it.id === "tracker") flags.push(`<span class="flag">${ITEM_NAMES[it.id]}${it.id === "tracker" ? "" : ` ×${it.uses}`}</span>`);
     if (m.alive && m.san <= ms * 0.3) flags.push(`<span class="flag bad">Shaken</span>`);
@@ -195,6 +197,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     setBtn("sealBtn", off || sealCheck(sel));
     setBtn("owBtn", off || (!sel ? "Select someone." : sel.side !== "mtf" ? "D-Class are unarmed." : sel.ap < 1 ? "No actions left this turn." : null));
     setBtn("nextBtn", off);
+    setBtn("reloadBtn", off || reloadCheck(sel));
     setBtn("endBtn", off);
     setBtn("evacBtn", off);
     const bar = $("itemBar");
@@ -217,12 +220,13 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     else if (!can) h = S.over ? "" : "Enemy activity…";
     else if (sel) {
       const hv = S.hover && unitAt(S.hover.x, S.hover.y);
-      if (S.mode === "ability" && S.ability) h = `<b>${esc(full(sel))}: ${PERKS[S.ability].name}.</b>\n${esc(PERKS[S.ability].desc)} Click a highlighted target.`;
+      if (S.mode === "ability" && S.ability) h = `<b>${esc(full(sel))}: ${abilityName(S.ability)}.</b>\n${esc(abilityDesc(S.ability))} Click a highlighted target.`;
       else if (S.mode === "throw" && S.throwing) h = `<b>${esc(full(sel))}: choose where to throw the ${ITEM_NAMES[S.throwing.id].toLowerCase()}.</b>\nLit tiles are in range and in sight. It covers the target tile and every tile around it. Throwing ends their turn.`;
       else if (S.mode === "drag") h = `<b>${esc(sel.name)}: choose where to drag SCP-173.</b>\nOrange tiles keep it in someone else's sight the whole way. Dragging ends their turn.`;
       else if (hv && hv.side === "raider" && seen(hv.x, hv.y) && sel.side === "mtf" && sel.ap > 0 && canSee(sel, hv.x, hv.y)) {
         const s = shotInfo(sel, hv);
-        h = `<b>${sel.call} → Insurgent: ${s.chance}% to hit</b>${s.crit ? `, ${s.crit}% crit` : ""}\n` + s.mods.map(m => `${m[0]} ${m[1] >= 0 ? "+" : ""}${m[1]}`).join(" · ");
+        const fw = fireCheck(sel);
+        h = `<b>${sel.call} → Insurgent: ${s.chance}% to hit</b>${s.crit ? `, ${s.crit}% crit` : ""}${sel.gun ? ` · ${sel.gun.name}, ${sel.gun.dmg[0]}–${sel.gun.dmg[1]} damage` : ""}${fw ? `\n<b>${esc(fw)}</b>` : ""}\n` + s.mods.map(m => `${m[0]} ${m[1] >= 0 ? "+" : ""}${m[1]}`).join(" · ");
       } else if (!sealCheck(sel)) h = `<b>${sel.call} can seal the container now.</b> Press S.`;
       else if (sel.staring) h = `<b>${esc(full(sel))} is staring</b>, ${sel.ap} action${sel.ap === 1 ? "" : "s"}.\nThey can move anywhere that keeps sight of SCP-173. Press B to look away (free).`;
       else h = `<b>${esc(full(sel))}</b>, ${sel.ap} action${sel.ap === 1 ? "" : "s"}.\nClick a tile to move (blue costs 1, amber costs 2).${sel.side === "mtf" ? " Click a visible Insurgent to fire." : " D-Class are unarmed."} Next to SCP-173, press G to drag it.${matchMedia("(pointer: coarse)").matches ? " Tap twice to confirm." : ""}`;
@@ -260,12 +264,13 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   $("sealBtn").onclick = () => doSeal(flash);
   $("owBtn").onclick = doOverwatch;
   $("nextBtn").onclick = selectNext;
+  $("reloadBtn").onclick = () => doReload(flash);
   $("endBtn").onclick = endTurn;
   $("itemBar").addEventListener("click", e => {
     const b = (e.target as HTMLElement).closest<HTMLElement>("[data-item]");
     if (b) toggleThrow(Number(b.dataset.item), flash);
     const a = (e.target as HTMLElement).closest<HTMLElement>("[data-ability]");
-    if (a) startAbility(a.dataset.ability as PerkId, flash);
+    if (a) startAbility(a.dataset.ability as AbilityId, flash);
   });
   let evacArmed = 0;
   $("evacBtn").onclick = () => {
@@ -287,6 +292,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     else if (k === "1" || k === "2") toggleThrow(Number(k) - 1, flash);
     else if (k === "e") endTurn();
     else if (k === "o") doOverwatch();
+    else if (k === "r") doReload(flash);
     else if (k === "b") toggleStare(flash);
     else if (k === "c") callBlink(flash);
     else if (k === "g") toggleDrag(flash);

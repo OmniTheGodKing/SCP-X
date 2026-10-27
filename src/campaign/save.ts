@@ -3,6 +3,7 @@
 import type { Campaign } from "./campaign";
 
 import { newResearch } from "./research";
+import { startingModels } from "../data/weapons";
 
 const KEY = "site19-campaign-v2";
 
@@ -21,7 +22,11 @@ export function loadCampaign(): Campaign | null {
       for (const o of old.roster) Object.assign(o, { perks: [], traits: [], breakdowns: 0 });
       Object.assign(c, { version: 4 });
     }
-    return c.version === 4 ? (c as unknown as Campaign) : null;
+    if (c.version === 4) {
+      const old = c as unknown as Campaign;
+      Object.assign(c, { version: 5, models: startingModels(), armorTier: old.research.done.includes("body_armor") ? 1 : 0, attachments: {}, prisoners: [], intel: 0, cleaningOrder: true });
+    }
+    return c.version === 5 ? (c as unknown as Campaign) : null;
   } catch {
     return null;
   }
