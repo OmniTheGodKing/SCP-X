@@ -1,5 +1,6 @@
 // Site-19 Command: incidents and time, the base and its containment, and Epsilon-11's roster.
 import { STAFF_EVENTS, answerStaff } from "../campaign/staff";
+import { INSPECTION, inspectionChecks, inspectionSoon } from "../campaign/inspection";
 import {
   UPGRADE, canUpgrade, upgradeFacility, RECREATION, canAddRecreation, addRecreation, DEMOLISH, canDemolish, demolish, demolishDays, demolishLeavesShort, ENGINEER_COST, EXCAVATE, FACILITIES, nameInText, GRADE_NAMES, MAX_LEVELS, REPAIR, SLOTS, build, canBuild, canExcavate, canRepair,
   dclassCapacity, engineersFree, excavate, facilityAt, healPerDay, isContainment, monthlyUpkeep, neighbors, operational,
@@ -20,7 +21,7 @@ import {
 import {
   ARMOR_KINDS, ARMOR_TIERS, armorStats, ATTACHMENT_COST, REFIT, canOrderAmmo, orderAmmo, unlockedAmmo, canOrderAttachment, canRefit, orderAttachment, orderRefit, pendingRefits, unlockedAttachments,
   ITEMS, PROJECTS, TESTS, assign, canHireResearcher, canOrder, canTest, has, hireResearcher, order, projectLock,
-  researcherCapacity, researchersFree, runTest, offered, projectDays, unlockedItems, type Branch, type ItemId, type TestId,
+  researcherCapacity, projectCost, researchersFree, runTest, offered, projectDays, unlockedItems, type Branch, type ItemId, type TestId,
 } from "../campaign/research";
 import { HOME, LAND, REGIONS, REGION_IDS, SITE19, project, type RegionId } from "../data/regions";
 import {
@@ -157,6 +158,9 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         <p>${c.roster.filter(promotionDue).map(o => `<b>${esc(o.call)} ${esc(o.name)}</b>`).join(", ")} ${c.roster.filter(promotionDue).length > 1 ? "are" : "is"} waiting to choose ${c.roster.filter(promotionDue).some(o => !o.cls) ? "a class or perk" : "a perk"}.</p>
         <button class="act" type="button" data-goto="personnel">Open Personnel</button></div>` : ""}
       ${staffCard()}
+      ${inspectionSoon(c) ? `<div class="card plan"><div class="label">O5 inspection · ${dateText(c.inspectionDay!)}</div>
+        <p>If the inspector came today: $${INSPECTION.perCheck}k for each check passed${inspectionChecks(c).filter(k => !k.ok).length >= INSPECTION.failAt ? `, and <span class="warn">$${INSPECTION.penalty}k docked</span> for failing ${INSPECTION.failAt} or more` : ""}.</p>
+        <ul class="why">${inspectionChecks(c).map(k => `<li class="${k.ok ? "" : "warn"}">${k.ok ? "✓" : "✗"} ${esc(k.label)}</li>`).join("")}</ul></div>` : ""}
       ${c.scps.map(scpSummary).join("")}
       <div class="card">
         <div class="label">Active incidents</div>
@@ -386,7 +390,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     return `<div class="proj ${done ? "done" : ""} ${lock ? "locked" : ""}">
       <div class="ptop"><b>${esc(p.name)}</b>${inspired && !done ? `<span class="flag stare">Inspired</span>` : ""}${status}</div>
       <div class="muted">${esc(p.desc)}</div>
-      ${done ? "" : `<div class="pbar"><div class="exp-bar"><span style="width:${Math.min(100, (prog / days) * 100)}%"></span></div><span class="specs">${prog}/${days} researcher-days${r.paid.includes(id) ? "" : ` · $${p.cost}k to start`}</span></div>`}
+      ${done ? "" : `<div class="pbar"><div class="exp-bar"><span style="width:${Math.min(100, (prog / days) * 100)}%"></span></div><span class="specs">${prog}/${days} researcher-days${r.paid.includes(id) ? "" : ` · $${projectCost(c, id)}k to start`}</span></div>`}
       ${lock ? `<div class="why">${esc(lock)}</div>` : done ? "" : `<div class="row assign">
         <button class="act" type="button" data-unassign="${id}" ${n ? "" : "disabled"} aria-label="Remove a researcher">−</button>
         <b>${n}</b>

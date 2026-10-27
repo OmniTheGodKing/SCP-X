@@ -11,6 +11,8 @@ import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, collapsedCount, COLLAPSE_LIMIT, newRegions, regionFunding, tickWorld, travelDays, type RegionState } from "./world";
 import { ALERTS, breachGuards, guardMember, guardsReady, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
 import { monthlyStaff, tickStaff, type StaffEvent } from "./staff";
+import { tickInspection } from "./inspection";
+import { newsFor } from "./news";
 import { CLASS_WEAPONS, WEAPON_TIERS, model, startingModels, type AmmoId, type AttachmentId, type WeaponType } from "../data/weapons";
 
 export const RANKS = ["Operative", "Specialist", "Sergeant", "Lieutenant", "Captain", "Major", "Colonel"];
@@ -152,6 +154,8 @@ export interface Campaign {
   away?: { kind: "researcher" | "engineer"; back: number }[];
   laxUntil?: number;
   moleArmor?: boolean;
+  /** The day of the next O5 inspection. */
+  inspectionDay?: number;
 }
 
 // Perks per rank: steadier aim, fewer blinks, more composure.
@@ -297,6 +301,7 @@ export function advanceDay(c: Campaign) {
   tickGuards(c, heal, sanityPerDay(c));
   tickMorale(c);
   tickStaff(c);
+  tickInspection(c);
   tickContainment(c);
   tickWorld(c);
   for (const s of c.scps) if (s.status === "contained" && c.day - s.lastCleaned === CLEAN_EVERY)
@@ -311,6 +316,8 @@ export function advanceDay(c: Campaign) {
     const room = Math.max(0, dclassCapacity(c) - c.dclass), d = Math.min(DCLASS_MONTHLY, room);
     c.funds += funds - upkeep; c.dclass += d;
     for (const r of REGION_IDS) addExposure(c, r, -3);   // the public slowly forgets
+    { const last = dateOf(c.day - 1);
+      for (const n of newsFor(last.getUTCFullYear(), last.getUTCMonth() + 1)) log(c, `In the news: ${n.text}${n.note ? ` ${n.note}` : ""}`, n.effect ? "key" : ""); }
     log(c, `${monthName(c.day)}: the fronts pass on $${funds}k (less where exposure is high); upkeep and salaries cost $${upkeep}k. ${d} D-Class transferred in${d < DCLASS_MONTHLY ? " (the barracks are full)" : ""}. Exposure eases by 3 in every region.`, "key", "command");
   }
   checkOver(c);
