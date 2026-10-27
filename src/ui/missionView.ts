@@ -92,7 +92,7 @@ const TEMPLATE = `
 export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (r: MissionResult) => string) {
   root.innerHTML = TEMPLATE;
   const $ = (id: string) => root.querySelector<HTMLElement>("#" + id)!;
-  $("mEyebrow").textContent = `SCP Foundation · Site-19 · ${S.setup.title}`;
+  $("mEyebrow").textContent = `SCP Foundation · ${S.setup.title}`;
   const cv = $("cv") as HTMLCanvasElement;
   const draw = createRenderer(cv);
 

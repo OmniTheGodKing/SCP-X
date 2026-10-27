@@ -124,7 +124,7 @@ Regions with their own exposure and a Foundation cover-up front.
 ## 10. Campaign arc
 
 - Early: SCP-173 and the Insurgency; learn the systems and build the site.
-- Middle: new anomalies with different rules (SCP-096 next: you must not look at it), larger Insurgency operations, pressure to expand.
+- Middle: larger Insurgency operations and pressure to expand. New anomalies are not planned yet.
 - Late: find the Insurgency's main operation and take it down.
 - Finale: the Insurgency's all-out assault on Site-19, aiming for a mass breach.
 - Defeat: exposure reaches 100, O5 standing collapses, or Site-19 falls.
@@ -134,10 +134,10 @@ Regions with their own exposure and a Foundation cover-up front.
 | Pass | Contents |
 |---|---|
 | 1 (done) | Days, funding, exposure, incidents, roster with ranks, D-Class holding, deployment, saves |
-| 2A | Base building, containment cells, breaches inside Site-19, escapes |
+| 2A (done) | Base building, containment cells, breaches inside Site-19, escapes (escaped anomalies go dark and resurface; manhunts wait for the world map) |
 | 2B | Research tree and equipment |
 | 2C | Classes, perk choices, traits, psychological services |
-| 2D | World map, manhunts, field recovery, cover-ups, SCP-096 |
+| 2D | World map, manhunts, field recovery, cover-ups |
 | 2E | O5 orders and standing, Insurgency threat and raids, endgame |
 
 Every SCP added must credit its article's authors in-game and in the README (CC BY-SA 3.0).
