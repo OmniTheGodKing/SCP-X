@@ -1,5 +1,6 @@
 // Anomalies held at Site-19: daily breach risk, cell cleaning, breaches, and escapes.
-import { FACILITIES, isContainment, nameInText, neighbors, operational, powerShort, stationsOnLevel, type Facility } from "./base";
+import { chronicle } from "./history";
+import { FACILITIES, damageEffect, isContainment, nameInText, neighbors, operational, powerShort, stationsOnLevel, type Facility } from "./base";
 import { has, reachMilestone } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, travelDays } from "./world";
@@ -7,6 +8,9 @@ import { dateOf, dclassDied, log, type Campaign, type Incident } from "./campaig
 import type { ScpId } from "../game/types";
 import { GUARD, type Guard } from "./security";
 import { noteMissed } from "./council";
+import { PROCEDURES } from "../data/procedures";
+import { researchersFree } from "./research";
+import { engineersFree } from "./base";
 
 export type ScpClass = "Safe" | "Euclid" | "Keter";
 const CLASS_GRADE: Record<ScpClass, number> = { Safe: 0, Euclid: 1, Keter: 2 };
@@ -65,7 +69,7 @@ export function breachRisk(c: Campaign, s: ScpRecord) {
   if (has(c, "containment_rev")) { p *= 0.75; why.push("Revised procedures: ×0.75"); }
   if (has(c, "reinforced_doors")) { p *= 0.8; why.push("Reinforced doors: ×0.8"); }
   if (s.id === "106" && has(c, "em_containment")) { p *= 0.7; why.push("Electromagnetic containment: ×0.7"); }
-  if (powerShort(c) && !has(c, "backup_gen")) { p *= 2; why.push("Power shortage: ×2"); }
+  if (powerShort(c) && !has(c, "backup_gen")) { const k = s.id === "106" ? 3 : 2; p *= k; why.push(`Power shortage: ×${k}${s.id === "106" ? " (its cell depends on power)" : ""}`); }
   // the deeper a wing sits, the harder it is to get anywhere from it
   if (wing.level > 0) { p *= 1 - DEPTH.risk * wing.level; why.push(`Level ${wing.level + 1}, deep underground: ×${(1 - DEPTH.risk * wing.level).toFixed(1)}`); }
   return { p: Math.min(0.9, p), why };
@@ -87,12 +91,14 @@ export function startBreach(c: Campaign, s: ScpRecord, cause: string) {
   };
   c.nextIncident++;
   c.incidents.push(inc);
+  chronicle(c, "breach", `${s.name} breached containment in the ${nameInText(wing.type)} on level ${wing.level + 1}. ${cause}`);
   log(c, `${cause} ${s.name} is out of its cell. Site Security is responding now: send Epsilon-11 in after them, or leave it to the guards.`, "bad", "command");
 }
 
 export function goDark(c: Campaign, s: ScpRecord, why: string, from = "Site-19") {
   s.status = "loose";
   s.resurfaceDay = c.day + rand(30, 120);
+  chronicle(c, "anomaly", `${s.name} was lost near ${from}. ${why}`);
   log(c, `${why} ${s.name} has slipped away from ${from}. Nobody knows where it is.`, "bad");
 }
 
@@ -124,10 +130,12 @@ export const EVAC = { cost: 10, mult: 2, transferCost: 50, transferDays: 30 };
 export const unpowered = (c: Campaign) => powerShort(c) && !has(c, "backup_gen");
 
 /** Something knocks a facility out. A containment wing that's hit may crack open (20%). */
-export function wreckFacility(c: Campaign, f: Facility, text: string) {
+export function wreckFacility(c: Campaign, f: Facility, text: string, wrecked = false) {
+  f.wrecked = wrecked || f.disabled || f.wrecked;   // hit again before it was fixed: wrecked
   f.disabled = true;
+  if (f.repairDays) f.repairDays = 0;   // whatever repairs were under way are undone
   if (f.type === "generator") reachMilestone(c, "power_failure");
-  log(c, `${text} The ${nameInText(f.type)} on level ${f.level + 1} is out of action until repaired.`, "bad", "site");
+  log(c, `${text} The ${nameInText(f.type)} on level ${f.level + 1} is ${f.wrecked ? "wrecked and has to be rebuilt" : "damaged and out of action until repaired"}. ${damageEffect(c, f)}`, "bad", "site");
   const occ = occupantOf(c, f);
   if (occ?.status === "contained" && Math.random() < POWER.wreckBreach) startBreach(c, occ, "The damage cracked its cell open.");
 }
@@ -189,7 +197,9 @@ export function tickContainment(c: Campaign) {
     if (s.status === "contained") {
       s.maintenance = Math.max(0, s.maintenance - decay(c));
       if (isInert(s)) continue;
-      if (c.cleaningOrder && c.day - s.lastCleaned >= CLEAN_EVERY && c.dclass >= CLEAN_CREW) clean(c, s, "A routine cleaning");
+      // SCP-049 left without its interviews wears its cell down twice as fast
+      if (s.id === "049" && routineOverdue(c, s)) s.maintenance = Math.max(0, s.maintenance - decay(c));
+      if (c.cleaningOrder && routineOverdue(c, s) && !canClean(c, s)) clean(c, s, `A routine ${routineOf(s)!.name.toLowerCase()}`);
       if (Math.random() < breachRisk(c, s).p) startBreach(c, s, "Containment alarm.");
     } else if (s.status === "away") {
       if (c.day >= (s.returnDay ?? 0)) comeBack(c, s);
@@ -239,14 +249,29 @@ const watcherBlink = (g: Guard) => GUARD.blink + (0.5 - GUARD.blink) * (1 - Math
  *  It only happens when every one of them blinks at once. */
 export const workRisk = (watchers: Guard[]) => watchers.reduce((p, g) => p * watcherBlink(g), CLEAN_RISK);
 
+/** Each anomaly's own routine (cleaning, interviews, relining), from its containment procedures. */
+export const routineOf = (s: { id: string }) => PROCEDURES[s.id as ScpId]?.routine;
+export const routineEvery = (s: { id: string }) => routineOf(s)?.every ?? CLEAN_EVERY;
+/** Days until the routine is due (0 or less: due now or overdue). */
+export const routineDue = (c: Campaign, s: ScpRecord) => s.lastCleaned + routineEvery(s) - c.day;
+export const routineOverdue = (c: Campaign, s: ScpRecord) => !isInert(s) && s.status === "contained" && c.day - s.lastCleaned >= routineEvery(s);
 export function canClean(c: Campaign, s: ScpRecord): string | null {
   if (s.status !== "contained") return `${s.name} isn't in its cell.`;
-  if (c.dclass < CLEAN_CREW) return `Needs ${CLEAN_CREW} D-Class: one cleans while two watch.`;
+  const r = routineOf(s);
+  if (!r) return "It needs no routine work.";
+  if (r.crew === "dclass" && c.dclass < r.n) return `Needs ${r.n} D-Class: one cleans while two watch.`;
+  if (r.crew === "researcher" && researchersFree(c) < r.n) return "Needs a researcher not working on a project.";
+  if (r.crew === "engineers" && engineersFree(c) < r.n) return `Needs ${r.n} free engineers.`;
+  if (c.funds < r.cost) return `Needs $${r.cost}k.`;
   return null;
 }
 function clean(c: Campaign, s: ScpRecord, what: string) {
+  const r = routineOf(s);
   s.lastCleaned = c.day; s.maintenance = 100;
-  if (!has(c, "auto_cleaning") && Math.random() < CLEAN_RISK) { c.dclass--; dclassDied(c, 1); log(c, `${what} of ${s.name}'s cell went wrong: both watchers blinked at once and the D-Class cleaning was killed.`, "bad"); }
+  if (!r) return;
+  c.funds -= r.cost;
+  if (r.crew === "dclass" && !has(c, "auto_cleaning") && Math.random() < CLEAN_RISK) { c.dclass--; dclassDied(c, 1); log(c, `${what} of ${s.name}'s cell went wrong: both watchers blinked at once and the D-Class cleaning was killed.`, "bad"); }
+  if (r.crew === "researcher" && Math.random() < 0.03) { c.researchers--; log(c, `During ${s.name}'s interview it decided the researcher was ill, and cured them. They are dead. It apologised.`, "bad", "site"); }
 }
 
 /** D-Class work in the cell while operatives watch. `mult` scales the danger; `breach` is an extra
@@ -326,7 +351,8 @@ export function firstSighting(c: Campaign, id: ScpId) {
 
 /** Wings an anomaly could move into: working, empty, and at least its grade. */
 export const freeWings = (c: Campaign, cls: ScpClass) => c.base.facilities.filter(f =>
-  isContainment(f.type) && operational(f) && !occupantOf(c, f) && (FACILITIES[f.type].grade ?? 0) >= CLASS_GRADE[cls]);
+  isContainment(f.type) && operational(f) && !occupantOf(c, f) && (FACILITIES[f.type].grade ?? 0) >= CLASS_GRADE[cls])
+  .sort((a, b) => (FACILITIES[a.type].grade ?? 0) - (FACILITIES[b.type].grade ?? 0));   // the lowest grade that will hold it first
 
 /** A newly found anomaly was caught (or not). Returns a line for the debrief. */
 function firstContact(c: Campaign, inc: Incident, caught: boolean) {
@@ -335,9 +361,11 @@ function firstContact(c: Campaign, inc: Incident, caught: boolean) {
     const wing = freeWings(c, d.cls)[0];
     if (wing) {
       c.scps.push({ id, name: d.name, title: d.title, cls: d.cls, status: "contained", wingId: wing.id, maintenance: 100, lastCleaned: c.day });
+      chronicle(c, "anomaly", `${d.name}, "${d.title}" (${d.cls}), was recovered for the first time and contained at Site-19.`);
       log(c, `${d.name}, "${d.title}", is now held at Site-19 in the ${nameInText(wing.type)} on level ${wing.level + 1}. New research is open.`, "good");
     } else {
       c.funds += transferBonus(d.cls);
+      chronicle(c, "anomaly", `${d.name} was recovered but handed to another site: Site-19 had no free ${d.cls}-grade wing.`);
       log(c, `Site-19 has no free ${d.cls}-grade wing, so ${d.name} was handed to another site (+$${transferBonus(d.cls)}k). The chance to study it is gone.`, "key");
     }
   } else {

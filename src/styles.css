@@ -379,3 +379,14 @@ details.archived summary { cursor: pointer; font-family: var(--font-mono); font-
 .legend .dia::before { border-radius: 1px; transform: rotate(45deg) scale(.85); }
 .legend .fig::before { width: 7px; height: 11px; border-radius: 3px 3px 1px 1px; border: 1px solid #8a8f94; }
 .legend .ring::before { box-shadow: 0 0 0 2px #0f1317, 0 0 0 3px #b8463b; }
+
+.intel { display: inline-block; font: 600 10px/1 var(--mono, monospace); letter-spacing: .08em; text-transform: uppercase; padding: 3px 6px; border: 1px solid currentColor; margin-right: 4px; vertical-align: 1px; }
+.intel.ok { color: #3f7a4a; } .intel.est { color: #9a6a12; } .intel.unk { color: #8a3a2c; }
+.steps { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.steps .step { font-size: 12px; padding: 2px 8px; border: 1px solid var(--line); color: var(--muted); }
+.steps .step.on { border-color: #3f7a4a; color: #3f7a4a; }
+.histq { width: 100%; box-sizing: border-box; padding: 8px 10px; background: var(--panel-2); border: 1px solid var(--line); color: var(--ink); font: inherit; margin: 6px 0; }
+.histcats { flex-wrap: wrap; gap: 4px; }
+.history { list-style: none; margin: 8px 0 0; padding: 0; }
+.history li { padding: 6px 0; border-bottom: 1px solid var(--line); line-height: 1.45; }
+.history .hday { color: var(--muted); font-size: 12px; margin-right: 6px; white-space: nowrap; }

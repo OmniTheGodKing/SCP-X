@@ -1,7 +1,8 @@
 // O5 inspections: about every six months, with two weeks' warning, the Council sends someone to
 // look the site over. Each of five checks passed is worth $20k; failing three or more costs $50k.
+import { chronicle } from "./history";
 import { powerShort } from "./base";
-import { CLEAN_EVERY, isInert } from "./containment";
+import { routineOverdue } from "./containment";
 import { log, type Campaign } from "./campaign";
 import { addStanding } from "./council";
 
@@ -10,7 +11,7 @@ const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1
 
 export function inspectionChecks(c: Campaign) {
   return [
-    { label: "Every cell cleaned on schedule", ok: c.scps.every(s => s.status !== "contained" || isInert(s) || c.day - s.lastCleaned < CLEAN_EVERY) },
+    { label: "Every containment routine on schedule", ok: !c.scps.some(s => routineOverdue(c, s)) },
     { label: "No damaged facilities", ok: !c.base.facilities.some(f => f.disabled) },
     { label: "Global exposure under 30", ok: c.exposure < 30 },
     { label: "Enough power for the whole site", ok: !powerShort(c) },
@@ -28,6 +29,7 @@ export function inspect(c: Campaign) {
   c.council.audit = undefined;
   const misses = checks.filter(k => !k.ok).map(k => k.label.toLowerCase());
   addStanding(c, audit ? (failed < INSPECTION.failAt ? 10 : -5) : (passed - 3) * 2, audit ? (failed < INSPECTION.failAt ? "passed the O5 audit" : "failed the O5 audit") : `O5 inspection: ${passed} of ${checks.length} checks passed`);
+  chronicle(c, "council", `O5 ${audit ? "audit" : "inspection"}: ${passed} of ${checks.length} checks passed.`);
   log(c, `O5 ${audit ? "audit" : "inspection"}: ${passed} of ${checks.length} checks passed${bonus ? ` (+$${bonus}k)` : ""}${misses.length ? `. Noted against Site-19: ${misses.join("; ")}` : ". The inspector found nothing to note"}.${docked ? ` The Council docks $${docked}k for the state of the site.` : ""}`, docked ? "bad" : "good", "command");
 }
 

@@ -1,4 +1,5 @@
 // Site-19 between missions: the roster, time passing, funding, public exposure and incidents.
+import { chronicle, type HistEntry } from "./history";
 import { HEAVY, type MissionResult, type MissionSetup, type ScpId } from "../game/types";
 import { CLASSES, PERKS, TRAITS, type ClassId, type PerkId, type TraitId } from "../data/classes";
 import {
@@ -6,7 +7,7 @@ import {
   type Base,
 } from "./base";
 import { addStanding, councilGrant, issueDirectives, monthlyCouncil, newCouncil, rewardText, grantReward, tickCouncil, transferFought, type CouncilState, type Reward, type Transit } from "./council";
-import { CLEAN_EVERY, isInert, firstSightings, resolveScp, scpName, startingScps, tickContainment, type ScpRecord } from "./containment";
+import { isInert, routineEvery, routineOf, firstSightings, resolveScp, scpName, startingScps, tickContainment, type ScpRecord } from "./containment";
 import { reachMilestone, type Milestone } from "./research";
 import { ITEMS, PROJECTS, armorStats, has, projectLock, monthlyResearch, newResearch, tickResearch, type MaterialId, type ItemId, type Order, type ResearchState } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
@@ -113,6 +114,10 @@ export interface Incident {
   recon?: boolean;
   reconDue?: number;
   grown?: number;
+  /** What the briefing said when Epsilon-11 was sent, kept for the history. */
+  briefed?: string;
+  /** The field report it came with: an Insurgent count that may be out of date or wrong (see reportOf). */
+  report?: { ins: number; day: number };
   /** Forced choices: incidents that arrived together (only one can be answered), and what the Council gives for this one. */
   group?: string;
   reward?: Reward;
@@ -210,6 +215,8 @@ export interface Campaign {
   /** Incident reports, newest first. */
   archive?: Report[];
   retired?: Retiree[];
+  /** Everything that has happened, for the History tab. */
+  history?: HistEntry[];
   /** The last raid on Site-19 and the last Insurgency cell broken (raids follow strikes). */
   lastRaid?: number;
   lastStrike?: number;
@@ -313,6 +320,7 @@ export function retire(c: Campaign, o: Operative) {
   if (!o.alive || o.busy) return;
   const trainer = !trainerWhy(c, o);
   c.roster = c.roster.filter(x => x !== o);
+  chronicle(c, "personnel", `${RANKS[o.rank]} ${o.name} left Epsilon-11 ${trainer ? "to train recruits" : "with an honourable discharge"} after ${plural(o.missions, "mission")}.`, { op: o.id });
   (c.retired ??= []).push({ name: o.name, call: o.call, rank: o.rank, missions: o.missions, day: c.day, trainer,
     look: lookOf(o), unit: o.unit, sex: o.sex, kills: o.kills, medals: [...(o.medals ?? [])] });
   log(c, trainer ? `${RANKS[o.rank]} ${o.name} retires from the field to train recruits at the range. New operatives arrive as Privates First Class.`
@@ -347,6 +355,7 @@ export function newCampaign(): Campaign {
   const station = c.base.facilities.find(f => f.type === "security");
   for (let i = 0; i < 2; i++) { const g = newGuard(c); g.stationId = station?.id; c.guards.push(g); }
   issueDirectives(c, false);
+  chronicle(c, "council", "Site-19 Command came online, holding SCP-173 in the Euclid wing on level 2.");
   log(c, "Site-19 Command is online. SCP-173 is held in the Euclid wing on level 2. Keep its cell clean, keep it watched, and keep Epsilon-11 ready for when it gets out.", "key");
   return c;
 }
@@ -403,9 +412,9 @@ export function advanceDay(c: Campaign) {
   tickContainment(c);
   tickWorld(c);
   tickGeo(c);
-  for (const s of c.scps) if (s.status === "contained" && !isInert(s) && c.day - s.lastCleaned === CLEAN_EVERY) {
+  for (const s of c.scps) if (s.status === "contained" && !isInert(s) && c.day - s.lastCleaned === routineEvery(s)) {
     c.council.tally.overdue++;
-    log(c, `${s.name}'s cell is due for cleaning. Skipping it lets debris build up and raises the breach risk.`, "key");
+    log(c, `${s.name}'s ${routineOf(s)?.name.toLowerCase() ?? "routine"} is overdue. ${routineOf(s)?.overdue ?? ""}`, "key");
   }
   tickPrisoners(c);
   tickCouncil(c);
@@ -554,6 +563,7 @@ export function hireCandidate(c: Campaign, k: Candidate) {
   c.recruits = (c.recruits ?? []).filter(x => x !== k);
   const o = operativeFrom(c, k);
   c.roster.push(o);
+  chronicle(c, "personnel", `${o.call} ${o.name} joined Epsilon-11 from the ${UNITS[k.unit].name}.`, { op: o.id });
   log(c, `${o.call} ${o.name}, from the ${UNITS[k.unit].name}, joins Epsilon-11.`, "good");
 }
 /** An operative made from a candidate: their unit, look, file, lean, quality and trait. */
@@ -835,7 +845,12 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   }
   // the Insurgency punishes towns that helped the Foundation
   if (capture && Math.random() < 0.25) (c.retaliations ??= []).push({ region: inc!.region, day: c.day + rand(3, 10) });
-  (c.archive ??= []).unshift(buildReport(c, inc, r));
+  const report = buildReport(c, inc, r);
+  (c.archive ??= []).unshift(report);
+  chronicle(c, "deployment", `${name}, ${report.title}: ${r.win ? "closed" : "failed"} at ${report.location}. ${report.personnel.length ? `Sent: ${report.personnel.join(", ")}.` : ""}${inc?.briefed ? ` Briefed beforehand: ${inc.briefed}` : ""}${r.insurgentsTotal ? ` Found: ${r.insurgentsTotal} Insurgents.` : ""}`, { report: report.number });
+  for (const s of r.squad) { const o = c.roster.find(x => x.id === s.opId); if (o && !o.alive && o.diedDay === c.day) chronicle(c, "casualty", `${o.call} ${o.name} was killed in action at ${report.location} (${name}).`, { report: report.number, op: o.id }); }
+  for (const g of c.guards) if (!g.alive && g.diedDay === c.day) chronicle(c, "casualty", `Guard ${g.name} was killed in ${name}.`, { report: report.number });
+  for (const p of promotions) if (/promoted|awarded/.test(p)) chronicle(c, "personnel", /promoted/.test(p) ? p.split(". ")[0] + "." : p, { report: report.number, op: c.roster.find(o => p.includes(o.name))?.id });
   if (r.insurgentsTotal) reachMilestone(c, "insurgents");
   if (kind === "raid") reachMilestone(c, "raid");
   if (kind === "strike" && r.win) c.lastStrike = c.day;

@@ -1,19 +1,21 @@
 // Site-19 Command: incidents and time, the base and its containment, and Epsilon-11's roster.
 import { STAFF_EVENTS, answerStaff } from "../campaign/staff";
+import { HIST_CATS, type HistCat } from "../campaign/history";
 import { parseCampaign } from "../campaign/save";
 import type { Report } from "../campaign/reports";
 import { WEATHER, type Weather } from "../data/weather";
 import { MIN_RANGE } from "../game/perks";
 import { AUDIT_BELOW, PARTNERS, PAY_FOR, REQUESTS, answerOffer, canAcceptOffer, canRequest, canSendAway, councilGrant, directiveProgress, directiveText, makeRequest, rewardText, sendAway, tierOf, type RequestId } from "../campaign/council";
 import { REFINE_EVERY, canGivePill, canRefine, givePill, pillsLeft, refine, refineRecipes } from "../campaign/objects";
-import { TERRITORY, localHour, missionWeather, weatherAt, weatherLine, nightAt, nightPolygon, AMNESTIC_TEAM, BURY, FACILITIES_WORLD, FIELD_OPS, INVESTIGATE, buryCost, buryStory, canBury, canSendTeam, incidentName, sendAmnesticsTeam, briefing, canFieldOp, canInvestigate, groupOf, incidentPlace, incidentState, investigate, startFieldOp, type FieldOpKind, type MarkerGroup } from "../campaign/geo";
+import { PROCEDURES, PROCEDURE_610 } from "../data/procedures";
+import { reportOf, TERRITORY, localHour, missionWeather, weatherAt, weatherLine, nightAt, nightPolygon, AMNESTIC_TEAM, BURY, FACILITIES_WORLD, FIELD_OPS, INVESTIGATE, buryCost, buryStory, canBury, canSendTeam, incidentName, sendAmnesticsTeam, briefing, canFieldOp, canInvestigate, groupOf, incidentPlace, incidentState, investigate, startFieldOp, type FieldOpKind, type MarkerGroup } from "../campaign/geo";
 import { MEDALS } from "../data/bios";
 import { LEANS, QUALITY, UNITS, nationalityOf } from "../data/units";
 import { FACIAL, HAIR_BY_SEX, HAIR_COLORS, HAIR_STYLES, HEADGEAR, LOOK_PARTS, SEX_NAMES, SKIN, fitLook, rollLook } from "../data/looks";
 import { portraitSvg } from "./portrait";
 import { INSPECTION, inspectionChecks, inspectionSoon } from "../campaign/inspection";
 import {
-  UPGRADE, GEN_TIERS, canRefitGen, genTierOf, generatorOutput, refitGenerator, canUpgrade, upgradeFacility, RECREATION, canAddRecreation, addRecreation, DEMOLISH, canDemolish, demolish, demolishDays, demolishLeavesShort, ENGINEER_COST, EXCAVATE, FACILITIES, nameInText, GRADE_NAMES, MAX_LEVELS, REPAIR, SLOTS, build, canBuild, canExcavate, canRepair,
+  UPGRADE, damageEffect, engineersBusy, repairOf, GEN_TIERS, canRefitGen, genTierOf, generatorOutput, refitGenerator, canUpgrade, upgradeFacility, RECREATION, canAddRecreation, addRecreation, DEMOLISH, canDemolish, demolish, demolishDays, demolishLeavesShort, ENGINEER_COST, EXCAVATE, FACILITIES, nameInText, GRADE_NAMES, MAX_LEVELS, REPAIR, SLOTS, build, canBuild, canExcavate, canRepair,
   dclassCapacity, engineersFree, excavate, facilityAt, healPerDay, isContainment, monthlyUpkeep, neighbors, operational,
   powerShort, powerSupply, powerUse, repair, sanityPerDay, type Facility, type FacilityType,
 } from "../campaign/base";
@@ -26,12 +28,12 @@ import {
 import { CLASSES, PERKS, TRAITS, type ClassId, type PerkId, type TraitId } from "../data/classes";
 import { AMMO, ATTACHMENTS, SIDEARM, TYPES, model, type AmmoId, type AttachmentId, type WeaponType } from "../data/weapons";
 import {
-  CLEAN_CREW, CLEAN_EVERY, CLEAN_RISK, EVAC, SCP_DEFS, isInert, scpName, breachRisk, canClean, canEvacuate, canMove, cleanCell, evacuate, freeWings, moveScp, occupantOf, transferOut, unpowered, wingOf, workRisk,
+  CLEAN_RISK, EVAC, routineDue, routineOf, SCP_DEFS, isInert, scpName, breachRisk, canClean, canEvacuate, canMove, cleanCell, evacuate, freeWings, moveScp, occupantOf, transferOut, unpowered, wingOf, workRisk,
   type ScpRecord,
 } from "../campaign/containment";
 import {
   ARMOR_KINDS, ARMOR_TIERS, armorStats, ATTACHMENT_COST, REFIT, canOrderAmmo, orderAmmo, unlockedAmmo, canOrderAttachment, canRefit, orderAttachment, orderRefit, pendingRefits, unlockedAttachments,
-  ITEMS, PROJECTS, TESTS, assign, projectVisible, canHireResearcher, canOrder, canTest, has, hireResearcher, order, projectLock,
+  ITEMS, PROJECTS, TESTS, anomalyProgress, assign, projectVisible, canHireResearcher, canOrder, canTest, has, hireResearcher, order, projectLock,
   researcherCapacity, projectCost, researchersFree, startTest, testKey, offered, projectDays, unlockedItems, type Branch, type ItemId, type TestId,
 } from "../campaign/research";
 import { HOME, LAND, REGIONS, REGION_IDS, SITE19, project, type RegionId } from "../data/regions";
@@ -43,11 +45,13 @@ import {
   ALERTS, GUARD, PROMOTE, canHireGuard, canPromote, guardCapacity, guardOdds, guardsAlive, guardsReady, hireGuard, letGuardsHandle, mtfArrival,
   promoteGuard, breachGuards, letGuardsHandleRiot, letGuardsHandleRaid, raidArrival, raidOdds, postedAt, postGuard, unposted, TRAINING, canTrain, squadSize, train, type Alert, type Guard,
 } from "../campaign/security";
-import { HEAVY } from "../game/types";
+import { HEAVY, type ScpId } from "../game/types";
 import { esc } from "./util";
 
 const MAX_DCLASS = 4, MAX_WATCHERS = 2;
-type Tab = "command" | "world" | "site" | "research" | "personnel";
+type Tab = "command" | "world" | "site" | "research" | "personnel" | "history";
+/** History tab: the category shown and the incident report opened from it. */
+let histCat: HistCat | "all" = "all", openReport: string | null = null;
 
 export interface HubActions {
   save: () => void;
@@ -164,9 +168,10 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     ${tabBtn("site", "Site-19")}
     ${tabBtn("research", `Research${researchersFree(c) > 0 && c.researchers ? ` · ${researchersFree(c)} idle` : ""}`)}
     ${tabBtn("personnel", "Personnel")}
+    ${tabBtn("history", "History")}
   </nav>
   ${flashMsg ? `<p class="warn-box" role="status">${esc(flashMsg)}</p>` : ""}
-  ${tab === "command" ? commandTab() : tab === "world" ? worldTab() : tab === "site" ? siteTab() : tab === "research" ? researchTab() : personnelTab()}
+  ${tab === "command" ? commandTab() : tab === "world" ? worldTab() : tab === "site" ? siteTab() : tab === "research" ? researchTab() : tab === "history" ? historyTab() : personnelTab()}
   ${!c.over && c.notices?.length ? `<div class="overlay fixed"><div class="sheet notice" role="dialog" aria-label="Time paused">
     <div class="label">${dateText(c.day)} · time paused</div>
     <ul class="debrief">${c.notices.slice(0, 8).map(n => `<li class="${n.kind}">${esc(n.text)}</li>`).join("")}${c.notices.length > 8 ? `<li>…and ${c.notices.length - 8} more in the site log.</li>` : ""}</ul>
@@ -199,8 +204,29 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     const a = c.archive ?? [];
     if (!a.length) return "";
     return `<div class="card"><div class="label">Archive · ${plural(a.length, "incident report")}</div>
-      ${reportFile(a[0])}
-      ${a.slice(1).map(r => `<details class="archived"><summary>Incident ${esc(r.number)} · ${dateText(r.day)} · ${esc(r.title)} · ${r.win ? "closed" : "failed"}</summary>${reportFile(r)}</details>`).join("")}</div>`;
+      ${a.map(r => `<details class="archived" id="report-${esc(r.number)}" ${openReport === r.number || (!openReport && r === a[0]) ? "open" : ""}><summary>Incident ${esc(r.number)} · ${dateText(r.day)} · ${esc(r.title)} · ${r.win ? "closed" : "failed"}</summary>${reportFile(r)}</details>`).join("")}</div>`;
+  }
+
+  /** Everything that has happened, newest first, searchable and filtered by kind, linked to reports and files. */
+  function historyTab() {
+    // saves from before the history kept one: start it from the incident reports
+    c.history ??= [...(c.archive ?? [])].reverse().map(r => ({ day: r.day, cat: "deployment" as HistCat, text: `Incident ${r.number}, ${r.title}: ${r.win ? "closed" : "failed"} at ${r.location}. Sent: ${r.personnel.join(", ")}.`, report: r.number }));
+    const all = [...c.history].reverse(), shown = all.filter(h => histCat === "all" || h.cat === histCat);
+    const count = (k: HistCat) => all.filter(h => h.cat === k).length;
+    return `<div class="hubgrid">
+    <section class="col">
+      <div class="card">
+        <div class="label">Campaign history · ${`${all.length} ${all.length === 1 ? "entry" : "entries"}`}</div>
+        <input type="search" id="histQ" class="histq" placeholder="Search: a name, an anomaly, a place, a year" aria-label="Search the history">
+        <div class="row histcats"><button class="act ${histCat === "all" ? "on" : ""}" type="button" data-hcat="all">All</button>${(Object.keys(HIST_CATS) as HistCat[]).filter(count).map(k => `<button class="act ${histCat === k ? "on" : ""}" type="button" data-hcat="${k}">${HIST_CATS[k]} · ${count(k)}</button>`).join("")}</div>
+        <ul class="history">${shown.map(h => { const alive = h.op && c.roster.some(o => o.id === h.op && o.alive);
+          return `<li data-htext="${esc(`${dateText(h.day)} ${h.text}`.toLowerCase())}"><span class="hday">${dateText(h.day)}</span><span class="flag">${HIST_CATS[h.cat]}</span> ${esc(h.text)}
+            ${h.report ? `<button class="linkbtn" type="button" data-openreport="${esc(h.report)}">Report ${esc(h.report)}</button>` : ""}${alive ? ` <button class="linkbtn" type="button" data-openop="${h.op}">Personnel file</button>` : ""}</li>`; }).join("") || `<li class="muted">Nothing here yet.</li>`}</ul>
+        <p class="muted" id="histNone" hidden>Nothing matches.</p>
+      </div>
+    </section>
+    <section class="col">${archiveCard() || `<div class="card"><div class="label">Archive</div><p class="muted">No incident reports yet.</p></div>`}</section>
+  </div>`;
   }
 
   function staffCard() {
@@ -252,7 +278,6 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         <div class="label">Active incidents</div>
         ${c.incidents.length ? c.incidents.map(incidentCard).join("") : `<p class="muted">No open incidents. Let time run to see what happens next.</p>`}
       </div>
-      ${archiveCard()}
       <div class="card">
         <div class="label">Global exposure</div>
         <div class="exposure"><div class="exp-bar"><span style="width:${c.exposure}%"></span></div><b>${c.exposure} / 100</b></div>
@@ -292,10 +317,10 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       <div class="status-line"><b>Held at Site-17</b> for safekeeping. It comes back ${dateText(s.returnDay ?? c.day)}.</div></div>`;
     if (s.status === "breach") return `<div class="card status danger"><div class="label">${s.name} · ${s.title} · ${s.cls}</div>
       <div class="status-line"><b>Breach in progress.</b> Site Security is on it now. Send Epsilon-11 in after them, or leave it to the guards.</div></div>`;
-    const r = breachRisk(c, s), due = s.lastCleaned + CLEAN_EVERY - c.day;
+    const r = breachRisk(c, s), due = routineDue(c, s), rt = routineOf(s);
     return `<div class="card status held"><div class="label">${s.name} · ${s.title} · ${s.cls}</div>
       <div class="status-line"><b>Contained</b> in the ${wing ? nameInText(wing.type) + ` on level ${wing.level + 1}` : "?"}.<br>
-      Breach risk ${pctText(r.p)} a day · maintenance ${s.maintenance}% · cleaning ${due > 0 ? `due in ${plural(due, "day")}` : `<span class="warn">overdue</span>`}</div>
+      Breach risk ${pctText(r.p)} a day · maintenance ${s.maintenance}% · ${rt ? `${rt.name.toLowerCase()} ${due > 0 ? `due in ${plural(due, "day")}` : `<span class="warn">overdue</span>`}` : ""}</div>
       <button class="act" type="button" data-goto="site">Manage containment</button></div>`;
   }
 
@@ -304,7 +329,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     const where = i.kind === "breach" ? "Inside Site-19" : `${REGIONS[i.region].name} · ${t ? `${plural(t, "day")} away` : "a drive from Site-19"}${w !== "clear" ? ` · ${WEATHER[w].name.toLowerCase()}` : ""}${isContacted(c, i.region) ? "" : " · no front"}`;
     return `<div class="incident ${planning === i.id ? "sel" : ""}">
       <div><b>${esc(i.title)}</b> <span class="flag">${KIND_NAMES[i.kind]}</span></div>
-      <div class="muted">${left <= 0 ? "Last day to respond" : `${plural(left, "day")} left to respond`} · ${where} · Insurgency activity: ${has(c, "codebooks") ? `${i.insurgents - (i.weakened ?? 0)} Insurgents` : i.insurgents >= 4 ? "heavy" : i.insurgents >= 2 ? "reported" : i.insurgents ? "light" : "none reported"}${i.witnesses ? ` · ${i.witnesses} witnesses` : ""}</div>
+      <div class="muted">${left <= 0 ? "Last day to respond" : `${plural(left, "day")} left to respond`} · ${where} · Insurgency activity: ${confirmedIns(i) ? `${i.insurgents - (i.weakened ?? 0)} Insurgents` : (r => r >= 4 ? "heavy (reported)" : r >= 2 ? "some (reported)" : r ? "light (reported)" : "none reported")(reportOf(i).ins)}${i.witnesses ? ` · ${i.witnesses} witnesses` : ""}</div>
       ${block ? `<div class="warn">${esc(block)}</div>` : ""}
       ${i.reward ? `<div class="ok">Council reward for answering it: ${esc(rewardText(i.reward))}.</div>` : ""}
       ${i.group ? `<div class="warn">Arrived with ${plural(c.incidents.filter(x => x.group === i.group && x !== i).length, "other incident")}: only one can be answered.</div>` : ""}
@@ -315,18 +340,23 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     </div>`;
   }
 
+  const confirmedIns = (i: Incident) => has(c, "codebooks") || !!i.recon || i.kind === "raid" || i.kind === "breach" || i.kind === "escort";
   const briefText = (i: Incident) => i.transfer ? `A transfer convoy bringing ${scpName(i.transfer.scp)} from ${i.transfer.site} is under attack an hour from Site-19. Whoever is fit to go has to hold the truck: neutralise the Insurgents or last 8 turns.` : KIND_BRIEF[i.kind];
   function planPanel(inc: Incident) {
     const ops = readyFor(inc), t = flightOut(c, inc), noD = inc.kind === "strike" || inc.kind === "coverup" || inc.kind === "escort" || inc.kind === "retaliation" || inc.kind === "outbreak" || inc.kind === "riot" || inc.kind === "raid";
     return `<div class="card plan">
       <div class="label">Deploy to ${esc(inc.title.split(":")[0])}</div>
       <p>${esc(briefText(inc))}</p>
+      ${(() => { const id = inc.kind === "outbreak" ? "610" : (inc.kind === "breach" || inc.kind === "recovery") && !(inc.first && !inc.recon) ? inc.scpId : "";
+        const p = id === "610" ? PROCEDURE_610 : id ? PROCEDURES[id as ScpId] : undefined;
+        return p ? `<div class="facpanel"><div class="label">Procedure · ${esc(scpName(id))}</div><p>${esc(p.capture)}</p>${p.bring.length ? `<p class="muted">Bring: ${esc(p.bring.join("; "))}.</p>` : ""}</div>`
+          : inc.first && !inc.recon ? `<p class="muted">The anomaly hasn't been identified, so there is no procedure for it. Investigating first would tell the team what they're facing.</p>` : ""; })()}
       ${nightAt(c, inc) ? `<p class="warn">Night there (${String(Math.floor(localHour(c.hour ?? 0, incidentPlace(inc).lon))).padStart(2, "0")}:00 local): deploying now means fighting in the dark (everyone sees 4 tiles less). Flares help. Wait for daylight on the World Map if you'd rather.</p>` : ""}
       ${missionWeather(c, inc) !== "clear" ? `<p class="warn">${esc(weatherLine(c, inc))}${nightAt(c, inc) ? ` This stacks with the dark, though nobody's sight drops below ${MIN_RANGE} tiles.` : ""}</p>` : ""}
       ${inc.kind === "breach" ? (() => { const g = breachGuards(c, inc); return `<p>Site Security: <b>${g.first.length}</b> on the scene${g.late.length ? `, ${g.late.length} more on turn 2` : ""}${g.first.length + g.late.length ? ` (${[...g.first, ...g.late].map(m => esc(m.name)).join(", ")})` : ". Nobody is fit to respond"}. Operatives you pick arrive on turn <b>${mtfArrival(c, inc)}</b>; D-Class are on site from the start.</p>`; })() : ""}
       ${t ? `<p class="muted">The ${transportName(c)} takes ${plural(t, "day")} to reach ${REGIONS[inc.region].name}; time at Site-19 passes while the squad is in the air, and the survivors spend as long again flying home.</p>` : ""}
       ${inc.kind === "coverup" ? `<p class="${c.amnestics < (inc.witnesses ?? 0) ? "warn" : "muted"}">The squad carries all ${c.amnestics} amnestic doses in storage, for ${plural(inc.witnesses ?? 0, "witness")}.</p>` : ""}
-      ${inc.insurgents ? `<div class="row"><span>Insurgents expected: <b>${inc.insurgents - (inc.weakened ?? 0)}</b>${inc.weakened ? ` (${inc.weakened} intercepted)` : ""}</span>
+      ${inc.insurgents || reportOf(inc).ins ? `<div class="row"><span>Insurgents expected: <b>${confirmedIns(inc) ? inc.insurgents - (inc.weakened ?? 0) : `about ${Math.max(0, reportOf(inc).ins - (inc.weakened ?? 0))} (estimated)`}</b>${inc.weakened ? ` (${inc.weakened} intercepted)` : ""}</span>
         <button class="act" type="button" id="intelBtn" ${canWeaken(c, inc) ? `disabled title="${esc(canWeaken(c, inc)!)}"` : ""}>Spend 1 Intel: intercept one</button></div>` : ""}
       ${inc.kind === "raid" ? (() => { const g = guardsReady(c).slice(0, 8); return `<p>Site Security: <b>${g.length}</b> ${g.length === 1 ? "guard holds" : "guards hold"} the compound${g.length ? ` (${g.map(x => esc(x.name)).join(", ")})` : ""}${has(c, "perimeter_alarms") ? ", already on overwatch" : ""}. Insurgents: about <b>${inc.insurgents}</b>. Operatives you pick come up the lift on turn <b>${raidArrival(c)}</b>.</p>`; })() : ""}
       ${inc.kind === "riot" ? (() => { const g = guardsReady(c).slice(0, 8); return `<p>Site Security: <b>${g.length}</b> ${g.length === 1 ? "guard answers" : "guards answer"}${g.length ? ` (${g.map(x => esc(x.name)).join(", ")})` : ". Nobody is fit to respond"}. D-Class left: <b>${c.dclass}</b>.</p>`; })() : `
@@ -486,8 +516,9 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         ${i.group ? `<p class="warn"><b>Only one can be answered.</b> This came in with ${c.incidents.filter(x => x.group === i.group && x !== i).map(x => `<button class="linkbtn" type="button" data-mapinc="${x.id}">${esc(incidentName(x))}</button>`).join(" and ")}. Sending Epsilon-11 to one means the others go unanswered.</p>` : ""}
         ${(() => { const wl = i.dispatch ? "" : weatherLine(c, i); return wl ? `<p class="${missionWeather(c, i) === "clear" ? "muted" : "warn"}">${esc(wl)}</p>` : ""; })()}
         ${i.dispatch ? `<p class="ok">${i.dispatch.how === "team" ? `An amnestics team with ${plural(i.dispatch.doses, "dose")} is on its way.` : "The front is working on it."} Result ${dateText(i.dispatch.done)}.</p>` : ""}
-        ${b.known.length ? `<p><b>Known.</b> ${b.known.map(esc).join(" ")}</p>` : ""}
-        ${b.unknown.length ? `<p><b>Unknown.</b> ${b.unknown.map(esc).join(" ")}</p>` : ""}
+        ${b.known.length ? `<p><span class="intel ok">Confirmed</span> ${b.known.map(esc).join(" ")}</p>` : ""}
+        ${b.estimated.length ? `<p><span class="intel est">Estimated</span> ${b.estimated.map(esc).join(" ")}</p>` : ""}
+        ${b.unknown.length ? `<p><span class="intel unk">Unknown</span> ${b.unknown.map(esc).join(" ")}</p>` : ""}
         ${b.rewards.length && !i.dispatch ? `<p><b>If it goes well:</b> ${esc(b.rewards.join("; "))}.</p>` : ""}
         ${i.dispatch ? "" : `<p><b>If it's ignored:</b> ${esc(b.ignore)}</p>`}
         ${b.worse && !i.dispatch ? `<p class="warn"><b>While it waits:</b> ${esc(b.worse)}</p>` : ""}
@@ -654,6 +685,19 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
   }
 
   // ---------- Site-19 ----------
+  /** Everything out of action, what it costs Site-19 while it stays that way, and what fixing it takes. */
+  function damageReport() {
+    const hit = c.base.facilities.filter(f => f.disabled);
+    if (!hit.length) return "";
+    const busy = engineersBusy(c);
+    return `<div class="card status danger"><div class="label">Damage report · ${hit.length} ${hit.length === 1 ? "facility" : "facilities"} out of action</div>
+      <ul class="why">${hit.map(f => { const r = repairOf(f), rw = canRepair(c, f);
+        return `<li><b>${esc(FACILITIES[f.type].name)}</b>, level ${f.level + 1} · ${f.wrecked ? "wrecked" : "damaged"} · ${esc(damageEffect(c, f))}
+          ${f.repairDays ? `<span class="ok">${f.wrecked ? "Rebuilding" : "Repairs"}: ${plural(f.repairDays, "day")} left.</span>`
+            : `<button class="act" type="button" data-repair="${f.id}" ${rw ? `disabled title="${esc(rw)}"` : ""}>${f.wrecked ? "Rebuild" : "Repair"} · $${r.cost}k · ${plural(r.days, "day")} · ${r.engineers} engineers</button>${rw ? ` <span class="muted">${esc(rw)}</span>` : ""}`}</li>`; }).join("")}</ul>
+      <p class="muted">${busy} of ${c.engineers} engineers are busy. Repairs compete with construction, refits and workshop orders for them.</p></div>`;
+  }
+
   function siteTab() {
     const rows: string[] = [];
     for (let level = 0; level < c.base.levels; level++) {
@@ -674,6 +718,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         </div>
         <p class="muted">Facilities share walls with the ones beside, above and below them. Security stations protect every containment wing on their level; breaches wreck neighbours, and a wrecked containment wing can crack open too.</p>
       </div>
+      ${damageReport()}
     </section>
     <section class="col">
       ${sel ? slotDetail(sel.level, sel.slot) : `<div class="card"><div class="label">Facility</div><p class="muted">Select a slot to build, repair or inspect it.</p></div>`}
@@ -715,12 +760,13 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       <p class="muted">${esc(d.desc)}</p>
       <div class="specs">${f.type === "generator" ? `Supplies ${generatorOutput(f)} power` : d.power < 0 ? `Supplies ${-d.power} power` : `Uses ${d.power} power`} · $${d.upkeep + (f.type === "generator" ? genTierOf(f).upkeep : 0)}k/month upkeep${d.grade !== undefined ? ` · ${GRADE_NAMES[d.grade]} grade` : ""}</div>
       <div class="specs">Next to: ${esc(nb)}</div>
-      <p>${f.demolishDays ? "Shut down while it's taken apart." : f.daysLeft > 0 ? `Under construction: ${plural(f.daysLeft, "day")} left.` : f.repairDays > 0 ? `Engineers are repairing it: ${plural(f.repairDays, "day")} left.` : f.disabled ? `<span class="warn">Damaged in a breach and out of action.</span>` : "Operational."}</p>
+      <p>${f.demolishDays ? "Shut down while it's taken apart." : f.daysLeft > 0 ? `Under construction: ${plural(f.daysLeft, "day")} left.` : f.repairDays > 0 ? `Engineers are repairing it: ${plural(f.repairDays, "day")} left.` : f.disabled ? `<span class="warn">${f.wrecked ? "Wrecked: it has to be rebuilt." : "Damaged and out of action."}</span>` : "Operational."}</p>
       ${f.type === "barracks" && !f.upgraded ? (() => { const uw = canUpgrade(c, f);
         return f.upgradeDays ? `<p class="muted">Being expanded: ${plural(f.upgradeDays, "day")} left.</p>` : `<div class="row"><button class="act" id="upgradeBtn" type="button" ${uw ? `disabled title="${esc(uw)}"` : ""}>Expand to 15 beds · $${UPGRADE.cost}k · ${plural(UPGRADE.days, "day")} · ${UPGRADE.engineers} engineers</button>${uw ? `<span class="muted">${esc(uw)}</span>` : ""}</div>`; })() : f.upgraded ? `<p class="muted">Expanded: holds 15 D-Class.</p>` : ""}
       ${f.demolishDays ? `<p class="warn">Being torn down: ${plural(f.demolishDays, "day")} left.</p>` : f.type === "command" ? "" : (() => { const dw = canDemolish(c, f);
         return `<div class="row"><button class="act" id="demolishBtn" type="button" ${dw ? `disabled title="${esc(dw)}"` : ""}>Tear down · ${plural(demolishDays(f), "day")} · 1 engineer · +$${Math.round(d.cost * DEMOLISH.refund)}k salvage</button>${dw ? `<span class="muted">${esc(dw)}</span>` : demolishLeavesShort(c, f) ? `<span class="warn">This would leave Site-19 short of power.</span>` : ""}</div>`; })()}
-      ${f.disabled && f.repairDays === 0 ? `<div class="row"><button class="act primary" id="repairBtn" type="button" ${rw ? `disabled title="${esc(rw)}"` : ""}>Repair · $${REPAIR.cost}k · ${REPAIR.days} days · ${REPAIR.engineers} engineers</button>${rw ? `<span class="muted">${esc(rw)}</span>` : ""}</div>` : ""}
+      ${f.disabled ? `<p class="warn">${esc(damageEffect(c, f))}</p>` : ""}
+      ${f.disabled && f.repairDays === 0 ? `<div class="row"><button class="act primary" id="repairBtn" type="button" ${rw ? `disabled title="${esc(rw)}"` : ""}>${f.wrecked ? "Rebuild" : "Repair"} · $${repairOf(f).cost}k · ${plural(repairOf(f).days, "day")} · ${repairOf(f).engineers} engineers</button>${rw ? `<span class="muted">${esc(rw)}</span>` : ""}</div>` : ""}
       ${facilityPanel(f)}
       ${occ ? `<p>Holds <b>${occ.name}</b>.</p>` : ""}
       ${isContainment(f.type) && !occ && operational(f) && s.status === "contained" ? `
@@ -732,30 +778,57 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
 
   function containmentCard(s: ScpRecord) {
     const wing = wingOf(c, s);
-    const r = breachRisk(c, s), due = s.lastCleaned + CLEAN_EVERY - c.day, cw = canClean(c, s);
+    const r = breachRisk(c, s), due = routineDue(c, s), cw = canClean(c, s), rt = routineOf(s)!;
     if (s.status !== "contained") return scpSummary(s);
     if (isInert(s)) return `<div class="file">
       <div class="label">Containment · ${s.name}</div>
       <h2>${s.name} · ${s.title} <small>${s.cls}</small></h2>
+      ${progressHtml(s.id)}
       <p>Held in the ${wing ? `${nameInText(wing.type)} on level ${wing.level + 1}` : "?"}. An object: it doesn't breach and its cell needs no cleaning.</p>
       <p class="muted">${esc(SCP_DEFS[s.id].use ?? "")}</p>
       ${objectUse(s)}
+      ${procedureHtml(s.id)}
       ${sendAwayBlock(s)}
     </div>`;
     return `<div class="file">
       <div class="label">Containment · ${s.name}</div>
       <h2>${s.name} · ${s.title} <small>${s.cls}</small></h2>
+      ${progressHtml(s.id)}
       <p>Held in the ${wing ? `${nameInText(wing.type)} on level ${wing.level + 1}` : "?"}.</p>
       <div class="riskline"><b>Breach risk ${pctText(r.p)} a day</b></div>
       <ul class="why">${r.why.map(w => `<li>${esc(w)}</li>`).join("")}</ul>
       <div class="maint"><span>Maintenance ${s.maintenance}%</span><div class="exp-bar"><span style="width:${s.maintenance}%"></span></div></div>
-      <p>Its cell must be cleaned every ${CLEAN_EVERY} days. D-Class do it alone: ${CLEAN_CREW} go in, one cleans while two keep their eyes on it. If both watchers blink at once (${pctText(CLEAN_RISK)}), the one cleaning dies. A breach has to be answered the moment it starts.</p>
-      <label class="armorpick"><input type="checkbox" id="cleanOrder" ${c.cleaningOrder ? "checked" : ""}> Standing order: D-Class clean it on schedule</label>
-      <p>${c.cleaningOrder ? `Next scheduled cleaning ${due > 0 ? `in ${plural(due, "day")}` : "today"}.` : `Next cleaning ${due > 0 ? `due in ${plural(due, "day")}` : "<b>overdue</b>"}. Order it below.`}</p>
-      <div class="row"><button class="act primary" data-clean="${s.id}" type="button" ${cw ? `disabled title="${esc(cw)}"` : ""}>Clean the cell now · ${CLEAN_CREW} D-Class</button>${cw ? `<span>${esc(cw)}</span>` : ""}</div>
+      <div class="label" style="margin-top:8px">Routine · ${esc(rt.name)} every ${plural(rt.every, "day")}</div>
+      <p>${esc(rt.desc)}${rt.crew === "dclass" ? ` (${pctText(CLEAN_RISK)} a time.)` : ""} If it's missed: ${esc(rt.overdue.charAt(0).toLowerCase() + rt.overdue.slice(1))}</p>
+      <label class="armorpick"><input type="checkbox" id="cleanOrder" ${c.cleaningOrder ? "checked" : ""}> Standing order: every anomaly's routine is carried out on schedule when the staff are free</label>
+      <p>${c.cleaningOrder ? `Next ${rt.name.toLowerCase()} ${due > 0 ? `in ${plural(due, "day")}` : "today"}.` : `Next ${rt.name.toLowerCase()} ${due > 0 ? `due in ${plural(due, "day")}` : "<b>overdue</b>"}. Order it below.`}</p>
+      <div class="row"><button class="act primary" data-clean="${s.id}" type="button" ${cw ? `disabled title="${esc(cw)}"` : ""}>${esc(rt.name)} now · ${rt.crew === "dclass" ? `${rt.n} D-Class` : rt.crew === "researcher" ? "1 researcher" : `${rt.n} engineers`}${rt.cost ? ` · $${rt.cost}k` : ""}</button>${cw ? `<span>${esc(cw)}</span>` : ""}</div>
+      ${procedureHtml(s.id)}
       ${evacBlock(s)}
       ${sendAwayBlock(s)}
     </div>`;
+  }
+
+  /** Recovery → containment → study → use, as a strip of steps, with what each finished study gives. */
+  function progressHtml(id: string) {
+    const p = anomalyProgress(c, id);
+    if (!p.total && !p.recovered) return "";
+    const step = (on: boolean, label: string) => `<span class="step ${on ? "on" : ""}">${on ? "✓" : "·"} ${esc(label)}</span>`;
+    return `<div class="steps">${step(p.recovered, "Recovered")}${step(p.contained, "Contained")}${step(p.studied > 0, `Studied ${p.studied}/${p.total}`)}${step(p.total > 0 && p.studied === p.total, "Fully understood")}</div>
+      ${p.projects.some(x => x.done) ? `<p class="muted">In use: ${p.projects.filter(x => x.done).map(x => `<b>${esc(x.name)}</b> (${esc(x.desc)})`).join(" ")}</p>` : ""}
+      ${p.projects.some(x => !x.done) ? `<p class="muted">Still to learn: ${p.projects.filter(x => !x.done).map(x => esc(x.visible ? x.name : `${x.name} (not yet possible)`)).join(", ")}.</p>` : ""}`;
+  }
+
+  /** The anomaly's Special Containment Procedures, folded away under its cell. */
+  function procedureHtml(id: string) {
+    const p = id === "610" ? PROCEDURE_610 : PROCEDURES[id as ScpId];
+    if (!p) return "";
+    return `<details class="archived"><summary>Special Containment Procedures</summary>
+      <p><b>Cell.</b> ${esc(p.cell)}</p>
+      <p><b>Capture.</b> ${esc(p.capture)}</p>
+      ${p.bring.length ? `<p><b>Bring.</b> ${esc(p.bring.join("; "))}.</p>` : ""}
+      <p><b>What makes it fail.</b> ${esc(p.failure.join("; "))}.</p>
+      <p><b>If it gets out.</b> ${esc(p.emergency)}</p></details>`;
   }
 
   /** SCP-500's pills and SCP-914's refining, used from the object's own cell. */
@@ -1065,6 +1138,15 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     root.querySelectorAll<HTMLElement>("[data-ammoorder]").forEach(b => b.onclick = () => change(() => orderAmmo(c, b.dataset.ammoorder as AmmoId)));
     root.querySelectorAll<HTMLSelectElement>("[data-fit]").forEach(b => b.onchange = () => change(() => fitAttachment(c, opNow(), b.value as AttachmentId | "")));
     root.querySelectorAll<HTMLSelectElement>("[data-weapon]").forEach(b => b.onchange = () => change(() => { const o = c.roster.find(x => x.id === b.dataset.weapon); if (o) setWeapon(c, o, b.value as WeaponType); }));
+    root.querySelectorAll<HTMLElement>("[data-hcat]").forEach(b => b.onclick = () => { histCat = b.dataset.hcat as HistCat | "all"; render(); });
+    root.querySelectorAll<HTMLElement>("[data-openreport]").forEach(b => b.onclick = () => { openReport = b.dataset.openreport!; render(); document.getElementById(`report-${openReport}`)?.scrollIntoView({ block: "start" }); });
+    root.querySelectorAll<HTMLElement>("[data-openop]").forEach(b => b.onclick = () => { opSel = b.dataset.openop!; tab = "personnel"; render(); });
+    { const q = root.querySelector<HTMLInputElement>("#histQ"); if (q) q.oninput = () => {
+      const t = q.value.trim().toLowerCase(); let any = false;
+      root.querySelectorAll<HTMLElement>("[data-htext]").forEach(li => { const hit = !t || li.dataset.htext!.includes(t); li.hidden = !hit; any ||= hit; });
+      root.querySelector<HTMLElement>("#histNone")!.hidden = any;
+    }; }
+    root.querySelectorAll<HTMLElement>("[data-repair]").forEach(b => b.onclick = () => { const f = c.base.facilities.find(x => x.id === b.dataset.repair); if (f) change(() => repair(c, f)); });
     root.querySelectorAll<HTMLElement>("[data-refit]").forEach(b => b.onclick = () => change(() => orderRefit(c, b.dataset.refit!)));
     root.querySelectorAll<HTMLElement>("[data-att]").forEach(b => b.onclick = () => change(() => orderAttachment(c, b.dataset.att as AttachmentId)));
     on("intelBtn", () => { const inc = c.incidents.find(i => i.id === planning); if (inc) change(() => weaken(c, inc)); });
