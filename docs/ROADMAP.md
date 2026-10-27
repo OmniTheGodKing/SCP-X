@@ -158,7 +158,7 @@ retaliation (done); (5) doors and sirens (done).
 - **Phase boundary:** finish the playable 2D tactical and strategic foundations in Phase 3. A 3D globe, 3D tactical environments, multi-floor elevation and the campaign's final mission remain outside Phase 3.
 - **Integration:** world actions, missions, research, Site-19, personnel, economy, exposure, Council standing and the global Insurgency threat should share consequences. Avoid isolated minigames or duplicate menus.
 
-## Phase 3 priority: interactive 2D World Map / Geoscape (planned)
+## Phase 3 priority: interactive 2D World Map / Geoscape (in progress)
 
 **Purpose:** the World Map is the primary strategic hub and the place the player starts field missions, not merely an exposure dashboard or a separate list of missions.
 
@@ -174,6 +174,21 @@ retaliation (done); (5) doors and sirens (done).
 - **World scope:** other Foundation facilities exist as independent locations. The player manages Site-19, not the global Foundation. Additional regions/sites become accessible through research, contacts, Council standing or discovered intelligence.
 - **Visual target:** readable 2D map now; preserve locations, markers, operations and underlying strategic rules for the Phase 4 3D globe.
 - **Acceptance:** the player can see the current world situation, inspect an event, choose a response, prepare and launch a mission, advance time, return after debrief and observe world consequences entirely through this hub.
+
+### Built so far
+
+- **Chunk 1 (done):** every incident is a marker at its town (or at Site-19 for breaches, riots and raids), shaped by
+  kind (anomaly circle, Insurgency diamond, cover-up square, Site-19 triangle) with a state ring (urgent pulsing, new
+  dashed, under way); markers in the same town fan out. Independent facilities (Site-17, Site-23, Area-12) are shown
+  and explained as not run by Site-19. Filters toggle each marker type. Selecting a marker opens a briefing: place,
+  deadline, travel and arrival (or the turn Epsilon-11 arrives), what is known and unknown (opposition is exact only
+  with Insurgency codebooks; a first sighting's anomaly is unidentified), rewards (one shared table with the debrief)
+  and what happens if it is ignored, plus a dashed route from Site-19. "Prepare a response" opens team and loadout
+  selection on the World tab and launches from there; after the debrief the player returns to the World Map on that
+  region. An incident list sorted by urgency sits beside the map. The Command tab's incident cards now open the
+  incident on the map instead of planning separately.
+- **Still to come:** noncombat world actions (investigate, scan, surveillance, contacts), intelligence that can be
+  improved before committing, incidents that worsen while they wait, and showing squads in transit.
 
 ## Phase 3 priority: tactical map readability and feedback (planned)
 

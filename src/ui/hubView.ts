@@ -2,6 +2,7 @@
 import { STAFF_EVENTS, answerStaff } from "../campaign/staff";
 import { parseCampaign } from "../campaign/save";
 import type { Report } from "../campaign/reports";
+import { FACILITIES_WORLD, briefing, groupOf, incidentPlace, incidentState, type MarkerGroup } from "../campaign/geo";
 import { MEDALS } from "../data/bios";
 import { LEANS, QUALITY, UNITS, nationalityOf } from "../data/units";
 import { FACIAL, HAIR_BY_SEX, HAIR_COLORS, HAIR_STYLES, HEADGEAR, LOOK_PARTS, SEX_NAMES, SKIN, fitLook, rollLook } from "../data/looks";
@@ -65,6 +66,9 @@ const KIND_BRIEF = {
 } as const;
 const pctText = (p: number) => p < 0.01 ? (p * 100).toFixed(1) + "%" : Math.round(p * 100) + "%";
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+let pendingMapSel: string | null = null;
+/** Open the hub on a tab (after a mission the player comes back to the World Map). */
+export function openTab(t: Tab, sel?: string) { tab = t; pendingMapSel = sel ?? null; try { localStorage.setItem("site19-tab", t); } catch { /* fine */ } }
 let tab: Tab = (() => { try { return (localStorage.getItem("site19-tab") as Tab) || "command"; } catch { return "command"; } })();
 
 export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
@@ -78,7 +82,10 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let dCount = 2;
   let sel: { level: number; slot: number } | null = null;
   let resetArmed = 0;
-  let regionSel: RegionId = HOME;
+  let regionSel: RegionId = pendingMapSel?.startsWith("reg:") ? pendingMapSel.slice(4) as RegionId : HOME;
+  /** What's selected on the World Map ("inc:<id>" or "fac:<id>"), and which kinds of marker are shown. */
+  let mapSel: string | null = pendingMapSel?.startsWith("reg:") ? null : pendingMapSel; pendingMapSel = null;
+  const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "facility"]);
 
   // the running clock: starts paused every time the hub opens
   let speed = 0, lastSpeed = 1;
@@ -195,7 +202,6 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         <div class="label">Active incidents</div>
         ${c.incidents.length ? c.incidents.map(incidentCard).join("") : `<p class="muted">No open incidents. Let time run to see what happens next.</p>`}
       </div>
-      ${inc ? planPanel(inc) : ""}
       ${archiveCard()}
       <div class="card">
         <div class="label">Global exposure</div>
@@ -246,7 +252,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <div class="muted">${left <= 0 ? "Last day to respond" : `${plural(left, "day")} left to respond`} · ${where} · Insurgency activity: ${has(c, "codebooks") ? `${i.insurgents - (i.weakened ?? 0)} Insurgents` : i.insurgents >= 4 ? "heavy" : i.insurgents >= 2 ? "reported" : i.insurgents ? "light" : "none reported"}${i.witnesses ? ` · ${i.witnesses} witnesses` : ""}</div>
       ${block ? `<div class="warn">${esc(block)}</div>` : ""}
       ${i.kind === "breach" ? `<p class="muted">Happening now. ${guardsReady(c).length} guard${guardsReady(c).length === 1 ? "" : "s"} can respond; Epsilon-11 would arrive on turn ${mtfArrival(c, i)} (${ALERTS[c.alert].name.toLowerCase()} alert).</p>` : ""}
-      <div class="row"><button class="act ${planning === i.id ? "on" : ""}" type="button" data-plan="${i.id}" ${c.over || block ? "disabled" : ""}>${planning === i.id ? "Planning response" : i.kind === "breach" ? "Take command" : "Plan response"}</button>
+      <div class="row"><button class="act ${planning === i.id ? "on" : ""}" type="button" data-plan="${i.id}" ${c.over || block ? "disabled" : ""}>${i.kind === "breach" ? "Take command on the map" : "Open on the World Map"}</button>
       ${i.kind === "breach" ? `<button class="act" type="button" data-guards="${i.id}" ${c.over ? "disabled" : ""}>Let the guards handle it · ${pctText(guardOdds(c, i))} chance</button>` : ""}
       ${i.kind === "riot" || i.kind === "raid" ? `<button class="act" type="button" data-guards="${i.id}" ${c.over ? "disabled" : ""}>Let the guards handle it${i.kind === "raid" ? ` (${Math.round(raidOdds(c, i) * 100)}%)` : ""}</button>` : ""}</div>
     </div>`;
@@ -324,64 +330,106 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     const [x0, y0, w, h] = [8, 14, 344, 124];
     const path = (poly: [number, number][]) => "M" + poly.map(([lo, la]) => project(lo, la).map(v => v.toFixed(1)).join(",")).join("L") + "Z";
     const [sx, sy] = project(SITE19.lon, SITE19.lat);
-    const pins = REGION_IDS.map(r => {
+    const selInc = mapSel?.startsWith("inc:") ? c.incidents.find(i => i.id === mapSel!.slice(4)) ?? null : null;
+    const selFac = mapSel?.startsWith("fac:") ? FACILITIES_WORLD.find(f => f.id === mapSel!.slice(4)) ?? null : null;
+    const regionPins = REGION_IDS.map(r => {
       const d = REGIONS[r], st = c.regions[r], [px, py] = project(d.lon, d.lat);
-      const here = c.incidents.filter(i => i.region === r && i.kind !== "breach");
-      return `<g class="region ${st.collapsed ? "lost" : ""} ${regionSel === r ? "on" : ""}" data-region="${r}" tabindex="0" role="button" aria-label="${esc(d.name)}, exposure ${st.exposure}${st.collapsed ? ", collapsed" : ""}">
+      return `<g class="region ${st.collapsed ? "lost" : ""} ${regionSel === r && !mapSel ? "on" : ""}" data-region="${r}" tabindex="0" role="button" aria-label="${esc(d.name)}, exposure ${st.exposure}${st.collapsed ? ", collapsed" : ""}">
         <circle cx="${px}" cy="${py}" r="8" class="halo" style="--heat:${st.collapsed ? 100 : st.exposure}"></circle>
         <rect x="${px - 10}" y="${py + 9.5}" width="20" height="2" class="bar-bg"></rect>
         <rect x="${px - 10}" y="${py + 9.5}" width="${(st.collapsed ? 100 : st.exposure) / 5}" height="2" class="bar"></rect>
         <text x="${px}" y="${py + 16.5}" class="rname">${esc(d.name.replace("Western ", "W. ").replace("Eastern ", "E. ").replace("United States", "US").replace(" and the Middle East", " & M.E."))}</text>
-        ${here.map((i, k) => `<g class="pin ${i.kind}"><circle cx="${px - 4 + k * 5}" cy="${py - 11}" r="2.4"></circle></g>`).join("")}
       </g>`;
     }).join("");
+    // incident markers: a shape per kind of threat, a ring for their state
+    const shape = (g: MarkerGroup, x: number, y: number) => g === "site" ? `<path d="M${x} ${y - 3}L${x + 3} ${y + 2}L${x - 3} ${y + 2}Z"/>`
+      : g === "insurgency" ? `<rect x="${x - 2.2}" y="${y - 2.2}" width="4.4" height="4.4" transform="rotate(45 ${x} ${y})"/>`
+      : g === "coverup" ? `<rect x="${x - 2.2}" y="${y - 2.2}" width="4.4" height="4.4"/>` : `<circle cx="${x}" cy="${y}" r="2.4"/>`;
+    const stacked = new Map<string, number>();   // incidents in the same place fan out so each can be clicked
+    const markers = c.incidents.filter(i => mapShow.has(groupOf(i))).map(i => {
+      const pl = incidentPlace(i), [px0, py0] = project(pl.lon, pl.lat), st = incidentState(c, i);
+      const key = `${Math.round(px0)},${Math.round(py0)}`, n = stacked.get(key) ?? 0; stacked.set(key, n + 1);
+      const mx = px0 + (n ? Math.cos(n * 2.1) * 5 : 0), my = py0 + (n ? Math.sin(n * 2.1) * 5 : 0);
+      return `<g class="marker ${groupOf(i)} ${st} ${mapSel === "inc:" + i.id ? "on" : ""}" data-mapinc="${i.id}" tabindex="0" role="button" aria-label="${esc(i.title)}, ${st}">
+        <circle cx="${mx}" cy="${my}" r="4.2" class="ring"/>${shape(groupOf(i), mx, my)}<title>${esc(i.title)}</title></g>`;
+    }).join("");
+    const facs = mapShow.has("facility") ? FACILITIES_WORLD.map(f => { const [fx, fy] = project(f.lon, f.lat);
+      return `<g class="facility ${mapSel === "fac:" + f.id ? "on" : ""}" data-mapfac="${f.id}" tabindex="0" role="button" aria-label="${esc(f.name)}"><rect x="${fx - 1.8}" y="${fy - 1.8}" width="3.6" height="3.6"/><text x="${fx + 3}" y="${fy + 1.2}">${esc(f.name)}</text></g>`; }).join("") : "";
+    const route = selInc ? (() => { const pl = incidentPlace(selInc), [mx, my] = project(pl.lon, pl.lat), b = briefing(c, selInc);
+      return pl.name === "Site-19" ? "" : `<line x1="${sx}" y1="${sy}" x2="${mx}" y2="${my}" class="route"/><text x="${(sx + mx) / 2}" y="${(sy + my) / 2 - 2}" class="routetext">${b.travel ? plural(b.travel, "day") : "by road"}</text>`; })() : "";
     const r = regionSel, d = REGIONS[r], st = c.regions[r], cw = canCoverStory(c, r), lw = canLocate(c, r), t = travelDays(c, r);
-    const here = c.incidents.filter(i => i.region === r);
+    const regionCard = `<div class="card ${st.collapsed ? "status danger" : ""}">
+        <div class="label">Region · ${esc(d.name)}</div>
+        <p>Front: <b>${esc(d.front)}</b>${st.collapsed ? " (collapsed)" : ""}</p>
+        <div class="exposure"><div class="exp-bar"><span style="width:${st.collapsed ? 100 : st.exposure}%"></span></div><b>${st.collapsed ? "Lost" : `${st.exposure} / 100`}</b></div>
+        <p class="muted">Funding: $${regionFunding(c, r)}k a month. ${t ? `${plural(t, "day")} away by ${transportName(c)}.` : "Site-19 is here; teams go by road."}</p>
+        ${(() => { const here = c.incidents.filter(i => i.region === r); return here.length ? `<p>Active here: ${here.map(i => `<button class="linkbtn" type="button" data-mapinc="${i.id}">${esc(i.title.split(": ")[1] ?? i.title)}</button>`).join(" · ")}</p>` : `<p class="muted">Nothing active here.</p>`; })()}
+        ${st.collapsed ? `<p class="warn">The public knows too much here. This region sends nothing and can't be recovered.</p>` : `
+        <div class="row"><button class="act" type="button" id="coverBtn" ${cw ? `disabled title="${esc(cw)}"` : ""}>Cover story · $${COVER_STORY.cost}k · ${plural(coverDoses(c), "amnestic dose")}</button><span class="muted">${esc(cw || `${d.front} plants a story: −${COVER_STORY.cut} exposure here. Once every ${COVER_STORY.cooldown} days.`)}</span></div>
+        <div class="row"><button class="act" type="button" id="locateBtn" ${lw ? `disabled title="${esc(lw)}"` : ""}>Locate an Insurgency cell · ${locateIntel(c)} Intel</button><span class="muted">${esc(lw || "Creates a strike mission here. Breaking the cell pays $80k and lowers exposure.")}</span></div>`}
+      </div>`;
+    const briefCard = (i: Incident) => { const b = briefing(c, i), block = travelBlock(c, i), stt = incidentState(c, i);
+      return `<div class="file brief">
+        <div class="label">${KIND_NAMES[i.kind]} · ${esc(b.place.name)}${stt === "urgent" ? " · urgent" : stt === "new" ? " · new" : ""}</div>
+        <h2>${esc(i.title.split(": ")[1] ?? i.title)} <small>${esc(i.title.split(":")[0])}</small></h2>
+        <p>${esc(KIND_BRIEF[i.kind])}</p>
+        <div class="specs">Deadline: <b>${esc(b.deadline)}</b> · ${esc(b.arrival)}</div>
+        ${b.known.length ? `<p><b>Known.</b> ${b.known.map(esc).join(" ")}</p>` : ""}
+        ${b.unknown.length ? `<p><b>Unknown.</b> ${b.unknown.map(esc).join(" ")}</p>` : ""}
+        ${b.rewards.length ? `<p><b>If it goes well:</b> ${esc(b.rewards.join("; "))}.</p>` : ""}
+        <p><b>If it's ignored:</b> ${esc(b.ignore)}</p>
+        ${block ? `<p class="warn">${esc(block)}</p>` : ""}
+        <div class="row">${planning === i.id ? "" : `<button class="act primary" type="button" data-plan="${i.id}" ${c.over || block ? "disabled" : ""}>${i.kind === "breach" ? "Take command" : "Prepare a response"}</button>`}
+          ${i.kind === "breach" ? `<button class="act" type="button" data-guards="${i.id}" ${c.over ? "disabled" : ""}>Let the guards handle it · ${pctText(guardOdds(c, i))} chance</button>` : ""}
+          ${i.kind === "riot" || i.kind === "raid" ? `<button class="act" type="button" data-guards="${i.id}" ${c.over ? "disabled" : ""}>Let the guards handle it${i.kind === "raid" ? ` (${Math.round(raidOdds(c, i) * 100)}%)` : ""}</button>` : ""}
+          <button class="act" type="button" data-mapclear>Close</button></div>
+      </div>${planning === i.id ? planPanel(i) : ""}`; };
+    const facCard = (f: typeof FACILITIES_WORLD[number]) => `<div class="card"><div class="label">Independent Foundation facility · ${esc(REGIONS[f.region].name)}</div>
+        <h3 class="fac">${esc(f.name)}</h3><p class="muted">${esc(f.desc)}</p>
+        <p class="muted">Site-19 doesn't run ${esc(f.name)}: it has its own staff and command. It can take transfers, and later it may call for help.</p>
+        <div class="row"><button class="act" type="button" data-mapclear>Close</button></div></div>`;
+    const order = [...c.incidents].sort((a, b) => ({ active: 0, urgent: 1, new: 2, open: 3 }[incidentState(c, a)] - { active: 0, urgent: 1, new: 2, open: 3 }[incidentState(c, b)]) || a.expires - b.expires);
+    const list = `<div class="card"><div class="label">Active incidents · ${c.incidents.length}</div>
+        ${order.length ? `<ul class="inclist">${order.map(i => { const stt = incidentState(c, i), b = briefing(c, i);
+          return `<li class="${stt} ${mapSel === "inc:" + i.id ? "on" : ""}"><button class="linkbtn" type="button" data-mapinc="${i.id}"><span class="dot ${groupOf(i)}"></span>${esc(i.title.split(": ")[1] ?? i.title)}</button><span class="muted"> · ${esc(b.place.name)} · ${esc(b.deadline)}${stt === "urgent" || stt === "new" ? ` · ${stt}` : ""}</span></li>`; }).join("")}</ul>` : `<p class="muted">Nothing needs Epsilon-11 right now. Let time run.</p>`}
+      </div>`;
     return `<div class="card timecard">
-        <div class="label">Time · ${speed ? `running at ${speed}×` : "paused"}</div>
+        <div class="label">Time · ${dateText(c.day)} · ${String(c.hour ?? 0).padStart(2, "0")}:00 · ${speed ? `running at ${speed}×` : "paused"}</div>
         <div class="row speeds">
           <button class="act ${speed ? "" : "on"}" type="button" data-speed="0" aria-pressed="${!speed}">Pause <kbd>Space</kbd></button>
           ${SPEEDS.map((n, i) => `<button class="act ${speed === n ? "on" : ""}" type="button" data-speed="${n}" aria-pressed="${speed === n}" ${clockBlocked() ? "disabled" : ""}>${n}× <kbd>${i + 1}</kbd></button>`).join("")}
         </div>
-        ${pendingBreach(c) ? `<p class="warn">${pendingBreach(c)!.kind === "escort" ? "A convoy is under attack" : "A breach is under way"}. Deal with it before time moves on.</p>` : ""}
+        ${pendingBreach(c) ? `<p class="warn">${pendingBreach(c)!.kind === "escort" ? "A convoy is under attack" : "Something at Site-19 needs an answer"}. Deal with it before time moves on.</p>` : ""}
         <p class="muted">At 1× a day passes every ${DAY_MS / 1000} seconds. The clock pauses itself when something needs you. Next month: $${monthlyFunding(c)}k from the fronts, $${monthlyUpkeep(c)}k upkeep and salaries, up to ${DCLASS_MONTHLY} D-Class. Operatives heal ${healPerDay(c)} HP and recover ${sanityPerDay(c)} sanity a day.</p>
       </div>
     <div class="card worldcard">
-        <div class="label">The world · ${dateText(c.day)} · global exposure ${c.exposure} · ${collapsedCount(c)} of ${COLLAPSE_LIMIT} fronts lost</div>
-        <svg class="worldmap" viewBox="${x0} ${y0} ${w} ${h}" role="group" aria-label="World map of Foundation regions">
-          <rect x="${x0}" y="${y0}" width="${w}" height="${h}" class="sea"></rect>
+        <div class="label">The world · global exposure ${c.exposure} · ${collapsedCount(c)} of ${COLLAPSE_LIMIT} fronts lost</div>
+        <svg class="worldmap" viewBox="${x0} ${y0} ${w} ${h}" role="group" aria-label="World map: regions, incidents and Foundation facilities">
+          <rect x="${x0}" y="${y0}" width="${w}" height="${h}" class="sea" data-mapclear></rect>
           ${[-60, -30, 0, 30, 60].map(la => `<line x1="0" x2="360" y1="${90 - la}" y2="${90 - la}" class="grat"></line>`).join("")}
           ${[-120, -60, 0, 60, 120].map(lo => `<line y1="${y0}" y2="${y0 + h}" x1="${lo + 180}" x2="${lo + 180}" class="grat"></line>`).join("")}
           ${LAND.map(p => `<path d="${path(p)}" class="land"></path>`).join("")}
+          ${regionPins}
+          ${route}
           <g class="site19"><rect x="${sx - 2.2}" y="${sy - 2.2}" width="4.4" height="4.4" transform="rotate(45 ${sx} ${sy})"></rect>
-            <text x="${sx + 4}" y="${sy - 3}">Site-19</text><title>Site-19 · exact location classified</title></g>
-          ${pins}
+            <text x="${sx - 4}" y="${sy + 7}" text-anchor="end">Site-19</text><title>Site-19 · exact location classified</title></g>
+          ${facs}
+          ${markers}
         </svg>
-        <div class="legend"><span style="--c:var(--alert)">Exposure</span><span style="--c:var(--manila)">Cover-up</span><span style="--c:var(--raider)">Insurgency cell</span><span style="--c:var(--subject)">Sighting</span><span>Select a region for details</span></div>
+        <div class="row mapfilters">${(["anomaly", "insurgency", "coverup", "site", "facility"] as const).map(g => `<button class="act ${mapShow.has(g) ? "on" : ""}" type="button" data-mapfilter="${g}" aria-pressed="${mapShow.has(g)}"><span class="dot ${g}"></span>${{ anomaly: "Anomalies", insurgency: "Insurgency", coverup: "Cover-ups", site: "At Site-19", facility: "Facilities" }[g]}</button>`).join("")}</div>
+        <p class="muted">Select a marker for its briefing and to prepare a response, or a region for its front and exposure. A ring marks state: <span class="urgenttxt">urgent</span>, <span class="newtxt">new</span>, <span class="activetxt">under way</span>.</p>
       </div>
     <div class="hubgrid">
     <section class="col">
-      <div class="card ${st.collapsed ? "status danger" : ""}">
-        <div class="label">${esc(d.name)}</div>
-        <p>Front: <b>${esc(d.front)}</b>${st.collapsed ? " (collapsed)" : ""}</p>
-        <div class="exposure"><div class="exp-bar"><span style="width:${st.collapsed ? 100 : st.exposure}%"></span></div><b>${st.collapsed ? "Lost" : `${st.exposure} / 100`}</b></div>
-        <p class="muted">Funding: $${regionFunding(c, r)}k a month. ${t ? `${plural(t, "day")} away by ${transportName(c)}.` : "Site-19 is here; teams go by road."}</p>
-        ${here.length ? `<p>Open here: ${here.map(i => esc(i.title)).join("; ")}</p>` : ""}
-        ${st.collapsed ? `<p class="warn">The public knows too much here. This region sends nothing and can't be recovered.</p>` : `
-        <div class="row"><button class="act" type="button" id="coverBtn" ${cw ? `disabled title="${esc(cw)}"` : ""}>Cover story · $${COVER_STORY.cost}k · ${plural(coverDoses(c), "amnestic dose")}</button><span class="muted">${esc(cw || `${d.front} plants a story: −${COVER_STORY.cut} exposure here. Once every ${COVER_STORY.cooldown} days.`)}</span></div>
-        <div class="row"><button class="act" type="button" id="locateBtn" ${lw ? `disabled title="${esc(lw)}"` : ""}>Locate an Insurgency cell · ${locateIntel(c)} Intel</button><span class="muted">${esc(lw || "Creates a strike mission here. Breaking the cell pays $80k and lowers exposure.")}</span></div>`}
-      </div>
+      ${selInc ? briefCard(selInc) : selFac ? facCard(selFac) : regionCard}
     </section>
     <section class="col">
-      <div class="card">
-        <div class="label">How exposure works</div>
-        <p class="muted">Each region tracks its own exposure. Unanswered cover-ups add 12 there, failed missions 20, witnesses who get away undosed 5 each, and civilians killed 3 each. Breaches at Site-19 and an escaped anomaly count against the Eastern United States. Exposure eases by 3 everywhere each month; cover stories and won missions bring it down faster. Amnestics labs on the Site-19 tab brew the doses.</p>
-      </div>
+      ${list}
+      ${selInc || selFac ? regionCard : ""}
     </section>
   </div>`;
   }
 
-  // ---------- Research ----------
   function researchTab() {
     const branches: Branch[] = ["SCP-173", ...(["049", "106"] as const).filter(id => c.scps.some(s => s.id === id)).map(id => `SCP-${id}` as Branch),
       ...((c.materials.prisoners ?? 0) > 0 ? ["Insurgency" as Branch] : []), "Personnel", "Weapons", "Equipment", "Site"];
@@ -823,7 +871,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       render();
     });
     root.querySelectorAll<SVGElement>("[data-region]").forEach(b => {
-      const pickRegion = () => { regionSel = b.dataset.region as RegionId; render(); };
+      const pickRegion = () => { regionSel = b.dataset.region as RegionId; mapSel = null; planning = null; render(); };
       b.onclick = pickRegion;
       b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickRegion(); } };
     });
@@ -907,7 +955,17 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       if (b.checked && watchers.size < MAX_WATCHERS) watchers.add(id); else watchers.delete(id);
       render();
     });
+    root.querySelectorAll<HTMLElement>("[data-mapinc]").forEach(b => {
+      const pick = () => { const i = c.incidents.find(x => x.id === b.dataset.mapinc); if (!i) return; mapSel = "inc:" + i.id; regionSel = i.region; if (planning && planning !== i.id) planning = null; flashMsg = ""; tab = "world"; render(); };
+      b.onclick = pick; b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } };
+    });
+    root.querySelectorAll<HTMLElement>("[data-mapfac]").forEach(b => { const pick = () => { mapSel = "fac:" + b.dataset.mapfac; planning = null; render(); };
+      b.onclick = pick; b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } }; });
+    root.querySelectorAll<HTMLElement>("[data-mapclear]").forEach(b => b.onclick = () => { mapSel = null; planning = null; render(); });
+    root.querySelectorAll<HTMLElement>("[data-mapfilter]").forEach(b => b.onclick = () => { const g = b.dataset.mapfilter!; if (mapShow.has(g)) mapShow.delete(g); else mapShow.add(g); render(); });
     root.querySelectorAll<HTMLElement>("[data-plan]").forEach(b => b.onclick = () => {
+      // responses are prepared on the World Map, from the incident's briefing
+      if (tab !== "world" || mapSel !== "inc:" + b.dataset.plan) { tab = "world"; mapSel = "inc:" + b.dataset.plan; const inc0 = c.incidents.find(x => x.id === b.dataset.plan); if (inc0) regionSel = inc0.region; try { localStorage.setItem("site19-tab", tab); } catch { /* fine */ } planning = null; }
       planning = planning === b.dataset.plan ? null : b.dataset.plan!;
       if (planning) speed = 0;   // nothing expires while a plan is being made
       const pl = c.incidents.find(i => i.id === planning);

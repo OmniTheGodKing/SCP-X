@@ -625,6 +625,9 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
   };
 }
 
+/** What the O5 Council pays for each kind of mission won ($k). The World Map briefing shows the same figures. */
+export const MISSION_BONUS: Partial<Record<Incident["kind"], number>> = { recovery: 100, strike: 80, breach: 50, retaliation: 40, outbreak: 120, raid: 60 };
+
 export interface Debrief { lines: string[]; promotions: string[]; }
 
 export function applyResult(c: Campaign, r: MissionResult): Debrief {
@@ -731,7 +734,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   c.amnestics = Math.max(0, c.amnestics - r.amnesticsUsed);
   if (r.win) {
     c.stats.won++;
-    const bonus = kind === "riot" ? 0 : kind === "raid" ? RAID.bonus : kind === "recovery" ? 100 : kind === "strike" ? 80 : kind === "breach" ? 50 : kind === "retaliation" ? 40 : kind === "outbreak" ? 120 : 0;
+    const bonus = MISSION_BONUS[kind] ?? 0;
     const cut = kind === "coverup" ? 10 : kind === "riot" || kind === "raid" ? 0 : 5;
     addExposure(c, region, -cut);
     c.funds += bonus;
