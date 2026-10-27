@@ -176,19 +176,24 @@ The World Map should become the main strategic screen and the normal starting po
 
 ## Phase 3G: recruiting Epsilon-11 (XCOM style) (done)
 
-- (Done) A recruit pool in the Command facility's panel: 4 to 6 candidates a month, men and women, from 13 special
-  forces units opening by year (US Army Rangers, Navy UDT, Royal Marines Commandos, SAS, Special Boat Service from 1951;
-  US Army Special Forces 1952, New Zealand SAS 1955, Australian SAS 1957, Navy SEALs 1962). Each has a unit-fitting
-  hometown and backstory and a unit lean (+6 aim, +15 sanity, +1 HP or +1 move). Standard $100k, Veteran $140k
-  (arrives as PFC), Elite $190k (PFC and Steady).
-- (Done) Liaison research: Allied liaison office (after 3 wins) opens the French Foreign Legion and the Gurkhas (later
-  Sayeret Matkal and the Jægerkorps) and adds 2 candidates a month; Joint training exchange (after 6 wins) makes
-  Veteran and Elite candidates far more common. O5 standing can add to this in Phase 3H.
-- (Done) Individual designs: a flat, layered SVG portrait for every operative (skin tone, hair style and colour,
-  facial hair, scar, headgear by unit: SAS sand berets, green berets, the Legion's white kepi, Gurkha slouch hats).
-  Editable on the Personnel tab under Appearance. Built from plain data (src/data/looks.ts) and drawn in one file
-  (src/ui/portrait.ts) so the style can be replaced, and the data can dress the 3D models in Phase 4.
-- (Done) The memorial keeps each fallen operative's portrait, greyed out.
+- (Done) A recruit pool in the Command facility's panel: 4 to 6 candidates, refreshed monthly, men and women. Each has a
+  name, age, nationality, home unit, backstory, a stat lean and sometimes a starting trait. Better candidates cost more.
+  Built: a quarter of candidates bring a trait (Steady, Hardened, Twitchy or Nightmares), shown before hiring; Standard
+  $100k, Veteran $140k (arrives as PFC), Elite $190k (PFC and Steady).
+- (Done) Recruited from special forces around the world, opening by year: from 1951 US Army Ranger companies, Navy
+  Underwater Demolition Teams, Royal Marines Commandos, the SAS (Malayan Scouts), French Foreign Legion paratroopers,
+  Gurkha regiments and the Special Boat Service; later US Army Special Forces (1952), New Zealand SAS (1955), Sayeret
+  Matkal and the Australian SASR (1957), the Danish Jægerkorps (1961) and Navy SEALs (1962). Each unit gives a small lean
+  (Gurkhas steadier, SAS better shots, UDT frogmen faster). Built: +6 aim, +15 max sanity, +1 HP or +1 move by unit.
+- (Done) Individual designs: a generated portrait for every operative (face, skin tone, hair, facial hair, scars, headgear by
+  unit), editable as in XCOM. Flat drawn style for now, built from layered parts so the style can be replaced later;
+  the same design data carries into the 3D models in Phase 4. Built: data in src/data/looks.ts, drawing in
+  src/ui/portrait.ts; edited under Appearance on the Personnel tab.
+- (Done) Liaison research (and later O5 standing) opens more units and better candidates. Built: Allied liaison office
+  (after 3 wins) opens four allied units (Korps Commandotroepen and Philippine Scout Rangers from 1951, Belgian
+  Paracommandos 1952, Norwegian Marinejegerkommandoen 1953) and adds 2 candidates a month; Joint training exchange
+  (after 6 wins) makes Veteran and Elite candidates far more common. O5 standing comes with Phase 3H.
+- (Done) The memorial keeps each fallen operative's portrait and unit.
 
 ## Phase 3H: the O5 Council and strategic choices
 

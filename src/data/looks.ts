@@ -15,6 +15,7 @@ export const HEADGEAR: Partial<Record<UnitId, [string, string]>> = {
   commando: ["green beret", "#2f5a35"], sbs: ["green beret", "#2f5a35"], sf: ["green beret", "#3b5d3a"],
   legion: ["white kepi", "#e9e4d8"], gurkha: ["slouch hat", "#6f6146"], jaeger: ["maroon beret", "#6b2433"],
   rangers: ["patrol cap", "#55603f"], seals: ["watch cap", "#262b30"],
+  kct: ["green beret", "#2f5a35"], paracdo: ["maroon beret", "#6b2433"], mjk: ["green beret", "#2f5a35"], scoutrangers: ["patrol cap", "#4a5a3a"],
 };
 
 /** A small deterministic generator, so an operative with no saved look always gets the same face. */

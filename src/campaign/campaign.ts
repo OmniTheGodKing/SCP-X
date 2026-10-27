@@ -522,7 +522,7 @@ export function hireCandidate(c: Campaign, k: Candidate) {
   else if (lean === "hp") { o.maxHp++; o.hp++; }
   else o.fleet = true;
   if (k.quality >= 1 && o.rank < 1) { o.rank = 1; o.xp = RANK_XP[1]; }
-  if (k.quality >= 2 && !o.traits.includes("steady")) o.traits.push("steady");
+  if (k.trait && !o.traits.includes(k.trait)) o.traits.push(k.trait);
   o.san = maxSanOf(o);
   c.roster.push(o);
   log(c, `${o.call} ${o.name}, from the ${UNITS[k.unit].name}, joins Epsilon-11.`, "good");
