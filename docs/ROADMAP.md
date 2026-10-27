@@ -405,6 +405,18 @@ retaliation (done); (5) doors and sirens (done).
   Europe and East Asia have GRU-P agents on the ground: the mission's opposition is GRU-P, not the Insurgency, and beating
   them to it earns standing. Briefings warn of all of this.
 
+### Follow-up fixes after 3I
+
+- The World Map's night side now sweeps continuously while time runs (it only redrew at the day change before).
+- Drill XP: a quarter of an XP per weekly drill (1 a month), never past Private First Class; missions give the rest.
+- Generators: a twin diesel set tier (20 power) between turbocharged diesel and gas turbine; gas turbines (28) from
+  1952; compact reactors 40; a 1962 reactor uprate to 55. Saves keep the generators they had refitted.
+- Uniform armor line (XCOM's padded to plated to powered), researched once and worn by every operative under any vest:
+  padded combat jacket +1 HP; nylon ballistic liner +2 HP (1952); plated undersuit +2 HP and 1 armor (1955, 8 missions
+  won); powered combat harness +3 HP and 1 armor (1965, materials test).
+- Nicknames: given at Corporal from a class list (veterans sent by the Council get one too), shown as
+  First "Nick" Last on personnel files and in the field, and editable with the name and callsign.
+
 ## Phase 3J: task forces, field operations and independent Foundation sites (planned)
 
 - **Eta-10 “See No Evil”:** second squad with blindfolds/video goggles, granted by the Council after holding two or more anomalies or meeting a standing threshold; enables responding to two incidents at once where travel and availability permit.
