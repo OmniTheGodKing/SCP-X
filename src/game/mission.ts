@@ -1,5 +1,5 @@
 // Building a mission from what Site-19 sends, and turning its outcome into a result.
-import { FLOOR, L, Level, floorTiles, nearContainer, tileAt, useLevel, type Pt } from "../core/grid";
+import { FLOOR, L, Level, bfs, cheb, floorTiles, nearContainer, tileAt, useLevel, type Pt } from "../core/grid";
 import { MAPS } from "../data/maps";
 import { varyMap } from "../data/plots";
 
@@ -133,9 +133,10 @@ export function createMission(setup: MissionSetup) {
       ...(setup.squad.length ? [{ turn: setup.mtfTurn ?? 30, members: setup.squad }] : []),
     ] : [],
     escapeDrive: 0, lockedUntil: 0, escaped: false, photos: [],
-    siren: setup.kind === "breach", lockedDoors: [],
+    siren: setup.kind === "breach", lockedDoors: [], fires: new Map(), flesh: new Set(), core: null,
   };
   setMission(state);
+  if (setup.kind === "outbreak") seedOutbreak(setup, strayRooms);
   setSmoke([]);
   if (setup.squad.some(m => m.perks.includes("first_look"))) state.explored.fill(1);
   log(`${setup.title}.`, "key");
@@ -143,7 +144,25 @@ export function createMission(setup: MissionSetup) {
   computeVis();
 }
 
+/** SCP-610: a core of flesh in one of the rooms, flesh spread around it, and its instances on the flesh. */
+function seedOutbreak(setup: MissionSetup, rooms: [number, number, number, number][]) {
+  const spawn = L.def.squadSpawns[0];
+  const room = [...rooms].sort((a, b) => cheb(b[0], b[1], spawn[0], spawn[1]) - cheb(a[0], a[1], spawn[0], spawn[1]))[0];
+  const tiles = floorTiles(room).filter(([x, y]) => !S.units.some(u => u.alive && u.x === x && u.y === y));
+  const [cx, cy] = tiles[Math.floor(tiles.length / 2)];
+  const sev = setup.severity ?? 2;
+  S.core = { x: cx, y: cy, hp: 12, maxHp: 12 };
+  const reach = bfs([[cx, cy]], 1 + sev, () => false);
+  for (let i = 0; i < reach.dist.length; i++) if (reach.dist[i] >= 0) S.flesh.add(i);
+  const on = [...S.flesh].filter(i => i !== cy * L.W + cx && !S.units.some(u => u.alive && u.y * L.W + u.x === i));
+  for (let k = 0; k < sev + 1 && on.length; k++) {
+    const i = on.splice(Math.floor(Math.random() * on.length), 1)[0];
+    S.units.push(mk({ id: "f" + k, side: "zombie", name: "SCP-610 instance", x: i % L.W, y: (i / L.W) | 0, hp: 6, maxHp: 6, san: 0, flesh: true }));
+  }
+}
+
 export const BRIEFINGS: Record<MissionKind, (s: MissionSetup) => string> = {
+  outbreak: s => `SCP-610 has taken hold here. Flesh spreads from a core somewhere in the area, more every turn. Anyone who ends a turn on it without a sealed containment suit is infected, and turns into one of its instances 5 turns later: nothing saves them, not even leaving. Its instances infect with every blow. Only fire kills the core: incendiaries, a flamethrower, or fuel drums. Burn it out.${s.night ? " It's dark: everyone sees 4 tiles less." : ""}`,
   breach: s => s.scp === "106" ? `SCP-106 is out of its cell. It walks through walls, and anyone it reaches is dragged into its pocket dimension. Shooting it only sends it under the floor for a turn. The only way to recontain it is bait: put a D-Class (or a secured Insurgent) in the transport container in the staging room. It will go straight for them and stay a turn to feed. Seal it in during that turn.${s.squad.length ? ` Epsilon-11 arrives on turn ${s.mtfTurn}.` : ""}` : s.scp === "049" ? `SCP-049 is out of its cell in the north rooms and looking for patients. Its touch kills, and it will raise anyone who dies as SCP-049-2. Gunfire only staggers it. Talk it down (Calm, within ${3} tiles) and lead it into the transport container in the staging room, then seal it.${s.squad.length ? ` Epsilon-11 arrives on turn ${s.mtfTurn}.` : ""}` : `SCP-173 is out of its cell in the north rooms. Site Security is first on the scene${s.lateGuards?.length ? `, with ${s.lateGuards.length} more guard${s.lateGuards.length > 1 ? "s" : ""} arriving next turn` : ""}. ${s.squad.length ? `Epsilon-11 arrives on turn ${s.mtfTurn}.` : "Epsilon-11 isn't coming: nobody is available."} The transport container is open at the dock in the staging room: get it inside and seal it. If it reaches the surface hatch in the east lab, it's gone; the panel at the east end of the corridor locks the hatch down.${s.dclass.length ? ` ${s.dclass.join(" and ")} ${s.dclass.length > 1 ? "are" : "is"} assigned to you.` : ""}`,
   manhunt: s => s.scp === "106" ? "An old man who walks through walls is loose among the locals, and people are disappearing into the floor. That is SCP-106. Shooting only drives it under for a turn. Put a D-Class in the truck's container as bait; it goes straight for them and stays a turn to feed. Seal it in then." : s.scp === "049" ? "A man in a plague doctor's mask is walking among the locals, and some of them have stopped breathing. That is SCP-049. Its touch kills, and the dead get back up. Talk it down (Calm) and lead it into the truck's open container, then seal it. Keep people from dying near it." : "SCP-173 is somewhere nearby, and the locals are out. Every civilian it kills makes the cover story harder. A truck with an open container is waiting: get it inside and seal it.",
   coverup: s => `${s.witnesses} witness${s.witnesses === 1 ? "" : "es"} saw something they shouldn't have. Reach each one and give them amnestics (Dose, 1 action, adjacent) before they get away. Anyone who spots the team will run for the edge of the map. Dose at least half for the job to count.`,
@@ -154,7 +173,7 @@ export const BRIEFINGS: Record<MissionKind, (s: MissionSetup) => string> = {
 
 // Downed operatives come home if the mission is won or if they were stabilized; otherwise they die there.
 // When the team pulls out, only those who made it out through an exit come home.
-const survives = (u: Unit, win: boolean, evacuated: boolean) => u.alive && (win || (evacuated ? u.saved : !u.downed || !!u.stabilized));
+const survives = (u: Unit, win: boolean, evacuated: boolean) => u.alive && u.infectedTurn === undefined && !u.flesh && (win || (evacuated ? u.saved : !u.downed || !!u.stabilized));
 
 export function missionResult(win: boolean, evacuated: boolean): MissionResult {
   let pocketReturned = 0;
@@ -173,6 +192,8 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
     win, evacuated,
     turns: S.turn,
     escaped: S.escaped,
+    infectedLost: S.units.filter(u => u.opId && (u.infectedTurn !== undefined || u.flesh)).length,
+    coreBurned: !!S.core && S.core.hp <= 0,
     photos: [...S.photos],
     restraints: S.units.some(u => u.side === "mtf" && u.items?.some(i => i.id === "restraints")),
     zombiesKilled: S.units.filter(u => u.side === "zombie" && !u.alive).length,

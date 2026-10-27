@@ -60,7 +60,7 @@ function furnish(grid: string[][], r: Rect, keep: Set<number>) {
   } else if (plot === "storage") {
     // crates stacked along one wall, with gaps to squeeze between
     const top = Math.random() < 0.5;
-    for (let x = x0 + rand(0, 1); x <= x1; x += 2) put(x, top ? y0 : y1, Math.random() < 0.6 ? "H" : "h");
+    for (let x = x0 + rand(0, 1); x <= x1; x += 2) put(x, top ? y0 : y1, Math.random() < 0.15 ? "D" : Math.random() < 0.6 ? "H" : "h");
   } else {
     for (let i = rand(2, 3); i > 0; i--) put(rand(x0, x1), rand(y0, y1), "h");
   }

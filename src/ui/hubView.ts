@@ -42,8 +42,9 @@ export interface HubActions {
   newCampaign: () => void;
 }
 
-const KIND_NAMES = { breach: "Breach", recovery: "Manhunt", coverup: "Cover-up", strike: "Strike", escort: "Ambush", retaliation: "Retaliation" } as const;
+const KIND_NAMES = { outbreak: "SCP-610", breach: "Breach", recovery: "Manhunt", coverup: "Cover-up", strike: "Strike", escort: "Ambush", retaliation: "Retaliation" } as const;
 const KIND_BRIEF = {
+  outbreak: "Burn out SCP-610's core with fire. Bring incendiaries or the flamethrower, and containment suits for anyone going near the flesh: anyone infected turns 5 turns later and is lost for good. Each win brings the outbreak down a stage.",
   escort: "The convoy home is under attack. The squad that made the capture has to hold the truck: neutralise the Insurgents or last 8 turns. Wounds carry over.",
   retaliation: "The Insurgency is shooting up a town that helped you. Neutralise them; every civilian killed adds exposure.",
   breach: "SCP-173 is loose in its wing. Get it into the transport container and seal it.",
@@ -202,7 +203,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   }
 
   function planPanel(inc: Incident) {
-    const ops = readyFor(inc), t = inc.kind === "escort" ? 0 : travelDays(c, inc.region), noD = inc.kind === "strike" || inc.kind === "coverup" || inc.kind === "escort" || inc.kind === "retaliation";
+    const ops = readyFor(inc), t = inc.kind === "escort" ? 0 : travelDays(c, inc.region), noD = inc.kind === "strike" || inc.kind === "coverup" || inc.kind === "escort" || inc.kind === "retaliation" || inc.kind === "outbreak";
     return `<div class="card plan">
       <div class="label">Deploy to ${esc(inc.title.split(":")[0])}</div>
       <p>${esc(KIND_BRIEF[inc.kind])}</p>
@@ -780,7 +781,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         const g = gearOf(id);
         return { opId: id, armor: g.armor, items: g.items.filter((i): i is ItemId => !!i) };
       });
-      act.deploy(inc, loadouts, ["strike", "coverup", "escort", "retaliation"].includes(inc.kind) ? 0 : dCount);
+      act.deploy(inc, loadouts, ["strike", "coverup", "escort", "retaliation", "outbreak"].includes(inc.kind) ? 0 : dCount);
     });
     on("resetBtn", () => {
       const b = $("resetBtn")!;

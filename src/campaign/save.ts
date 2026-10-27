@@ -68,7 +68,13 @@ export function loadCampaign(): Campaign | null {
       for (const g of old.guards.filter(g => g.alive)) { const f = st[Math.floor(i / 4)]; if (f) g.stationId = f.id; i++; }
       Object.assign(c, { version: 13 });
     }
-    return c.version === 13 ? (c as unknown as Campaign) : null;
+    if (c.version === 13) {
+      const old = c as unknown as Campaign;
+      if (old.day < 1310) old.outbreakDay = Math.max(old.day + 30, 945 + Math.floor(Math.random() * 365));
+      else old.outbreakDay = old.day + 30 + Math.floor(Math.random() * 90);
+      Object.assign(c, { version: 14 });
+    }
+    return c.version === 14 ? (c as unknown as Campaign) : null;
   } catch {
     return null;
   }

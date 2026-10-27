@@ -1,5 +1,5 @@
 // Player actions and the turn cycle: your move, SCP-173, the Insurgency, then loose D-Class.
-import { FLOOR, HALF, L, STEEL, TS, area, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, setSlow, setVault, tileAt, DIRS, type Pt } from "../core/grid";
+import { DRUM, FLOOR, HALF, L, STEEL, TS, area, area as area_, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, setSlow, setVault, tileAt, DIRS, type Pt } from "../core/grid";
 import { setSmoke, sightFrom } from "../core/sight";
 import { activeGun, damage, fire, kill, moveUnit } from "./combat";
 import { TYPES } from "../data/weapons";
@@ -12,6 +12,7 @@ import { maxSanOf, prof } from "./profiles";
 import { release, rollBlinks } from "./scp173";
 import { leadOptions, leadTo, plaguePhase, zombiePhase } from "./scp049";
 import { oldManPhase } from "./scp106";
+import { CORE_BURN, firePhase, fleshContact, ignite, spreadFlesh, turnInfected } from "./fire";
 import {
   S, alive, breakConcealment, canAct, canSee, computeVis, full, fx, hooks, humans, isPanicked, isTeam, label, log, loseSanity,
   occupied, reveal, seen, sleep, starers, team, unitAt,
@@ -141,6 +142,7 @@ export function startPlayerTurn(first: boolean) {
     else log(`${full(u)} is bleeding out: ${u.bleed} turn${u.bleed > 1 ? "s" : ""} left.`, "bad");
   }
   arrivals(first);
+  if (!first) turnInfected();
   for (const m of team()) {
     m.overwatch = false;
     m.ap = isPanicked(m) ? 0 : m.staring ? 1 : 2;
@@ -376,7 +378,7 @@ export function doSeal(flash: (t: string) => void) {
 
 // ---------- grenades ----------
 export const THROW_RANGE = 6;
-export const throwRange = (u: Unit) => S.throwing?.id === "bazooka" ? 10 : S.throwing?.id === "law" ? 8
+export const throwRange = (u: Unit) => S.throwing?.id === "bazooka" ? 10 : S.throwing?.id === "law" ? 8 : S.throwing?.id === "flamer" ? 4
   : THROW_RANGE + (hasPerk(u, "grenadier") ? 3 + (S.setup.mods.m79 ? 4 : 0) : 0);
 /** Tiles the unit can throw to: within range and in sight. */
 export function throwOptions(u: Unit) {
@@ -455,6 +457,8 @@ function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y
       if (v.armor && hasPerk(u, "shredder")) v.armor--;
     }
     for (const [a, b] of area.concat(DIRS.map(([dx, dy]) => [x + dx, y + dy] as Pt))) if (tileAt(a, b) === HALF) { L.grid[b][a] = FLOOR; }
+    // blasts set off fuel drums and scorch flesh
+    for (const [a, b] of area) if (tileAt(a, b) === DRUM || S.flesh.has(b * L.W + a)) ignite(a, b, 1);
     if (!hasPerk(u, "quiet_steps")) S.mem.set("bang-" + u.id, { x, y, turn: S.turn });
   } else if (item.id === "flashbang") {
     fx({ type: "flash", x: x * TS + TS / 2, y: y * TS + TS / 2, dur: 700 });
@@ -464,6 +468,21 @@ function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y
     log(`${full(u)} throws a flashbang.${theirs.length ? ` ${theirs.length} Insurgent${theirs.length > 1 ? "s" : ""} blinded.` : ""}${ours.length ? ` ${ours.map(label).join(", ")} ${ours.length > 1 ? "are" : "is"} blinded too.` : ""}`, ours.length ? "bad" : "good");
     if (ours.some(v => v.hadLos)) log("Anyone blinded can't hold SCP-173 until next turn.", "bad");
     if (!hasPerk(u, "quiet_steps")) S.mem.set("bang-" + u.id, { x, y, turn: S.turn });   // SCP-173 hears it
+  } else if (item.id === "incendiary") {
+    log(`${full(u)} throws an incendiary grenade.`, "key");
+    for (const [a, b] of area) ignite(a, b);
+    if (S.core && area.some(([a, b]) => a === S.core!.x && b === S.core!.y)) { S.core.hp -= CORE_BURN; log(`The core catches (${Math.max(0, S.core.hp)} left).`, "good"); }
+    if (!hasPerk(u, "quiet_steps")) S.mem.set("bang-" + u.id, { x, y, turn: S.turn });
+  } else if (item.id === "flamer") {
+    // a jet of burning fuel: the line from the thrower to the target, and the tiles around where it lands
+    const line: Pt[] = [];
+    const n = Math.max(Math.abs(x - u.x), Math.abs(y - u.y));
+    for (let k = 1; k <= n; k++) line.push([Math.round(u.x + (x - u.x) * k / n), Math.round(u.y + (y - u.y) * k / n)]);
+    const hitTiles = [...line, ...area];
+    log(`${full(u)} sweeps the flamethrower across the ${area_(x, y)}.`, "key");
+    for (const v of S.units.filter(v => v.alive && !v.saved && v !== u && v.side !== "anomaly" && hitTiles.some(([a, b]) => a === v.x && b === v.y))) damage(v, v.flesh ? 6 : 3, u);
+    for (const [a, b] of hitTiles) ignite(a, b);
+    if (S.core && hitTiles.some(([a, b]) => a === S.core!.x && b === S.core!.y)) { S.core.hp -= CORE_BURN; log(`The core catches (${Math.max(0, S.core.hp)} left).`, "good"); }
   } else if (item.id === "flare") {
     S.flares.push({ x, y, until: S.turn + 2 });
     log(`${full(u)} throws a flare. Everything within 2 tiles of it can be seen for 3 turns.`, "key");
@@ -518,6 +537,11 @@ export async function endTurn() {
   S.phase = "subjects"; hooks.update();
   await subjectPhase();
   if (checkEnd()) { S.busy = false; return; }
+  // fire burns, the flesh grows, and anyone left standing on it is infected
+  await firePhase();
+  if (checkEnd()) { S.busy = false; return; }
+  spreadFlesh();
+  fleshContact();
   recoverSanity();
   S.turn++;
   S.busy = false;
@@ -560,6 +584,7 @@ export function checkEnd() {
     finish(w.filter(u => u.dosed).length * 2 >= w.length, false); return true;
   }
   if ((k === "strike" || k === "retaliation") && !alive("raider").length) { finish(true, false); return true; }
+  if (k === "outbreak" && S.core && S.core.hp <= 0) { finish(true, false); return true; }
   if (k === "escort") {
     if (S.stolen) { finish(false, false); return true; }
     if (!alive("raider").length || (S.turn >= ESCORT_TURNS && S.phase === "subjects")) { finish(true, false); return true; }

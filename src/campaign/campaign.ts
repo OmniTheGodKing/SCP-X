@@ -52,7 +52,7 @@ export interface Operative {
 
 export interface Incident {
   id: string;
-  kind: "breach" | "recovery" | "coverup" | "strike" | "escort" | "retaliation";
+  kind: "breach" | "recovery" | "coverup" | "strike" | "escort" | "retaliation" | "outbreak";
   /** Escorts: the survivors of the capture, who defend the convoy. */
   squad?: string[];
   scpId: string;
@@ -79,7 +79,10 @@ export interface SiteLogEntry { day: number; text: string; kind: string; }
 export interface Loadout { opId: string; armor: ItemId | ""; items: ItemId[]; }
 
 export interface Campaign {
-  version: 13;
+  version: 14;
+  /** SCP-610: when the first outbreak starts, and the outbreak under way (severity 1 to 5; 0 is burned out). */
+  outbreakDay?: number;
+  outbreak?: { region: RegionId; severity: number; lastMission: number };
   /** Insurgency attacks on towns, due after captures in a region. */
   retaliations?: { region: RegionId; day: number }[];
   /** Guards issued flak vests through the workshop. */
@@ -224,7 +227,7 @@ export function newCampaign(): Campaign {
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
-    version: 13, materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
+    version: 14, outbreakDay: rand(945, 1310), materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
     day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
     inventory: {}, orders: [], knownNotes: [], nextD: 9101, nextOp: 1, nextIncident: 1,
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
@@ -429,6 +432,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
   return {
     kind, scp: (inc.scpId || "173") as ScpId, map: inc.map, amnestics,
     night: inc.map !== "wingC" && ((c.hour ?? 0) < 6 || (c.hour ?? 0) >= 20),
+    severity: inc.kind === "outbreak" ? c.outbreak?.severity ?? 2 : undefined,
     // a breach at Site-19 catches researchers in the wing and opens the D-Class block
     researchers: kind === "breach" ? Math.min(c.researchers, rand(1, 3)) : 0, strayPool: kind === "breach" ? c.dclass : 0, guards: sec.first, lateGuards: sec.late, mtfTurn: mtfArrival(c, inc), witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
     incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: Math.max(0, inc.insurgents - (inc.weakened ?? 0)), squad, dclass,
@@ -542,13 +546,13 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   c.amnestics = Math.max(0, c.amnestics - r.amnesticsUsed);
   if (r.win) {
     c.stats.won++;
-    const bonus = kind === "recovery" ? 100 : kind === "strike" ? 80 : kind === "breach" ? 50 : kind === "retaliation" ? 40 : 0;
+    const bonus = kind === "recovery" ? 100 : kind === "strike" ? 80 : kind === "breach" ? 50 : kind === "retaliation" ? 40 : kind === "outbreak" ? 120 : 0;
     const cut = kind === "coverup" ? 10 : 5;
     addExposure(c, region, -cut);
     c.funds += bonus;
     const anomaly = scpName(inc?.scpId || "173");
     const what = kind === "coverup" ? "The witnesses remember nothing worth repeating." : kind === "strike" ? "The Insurgency cell is broken up."
-      : kind === "escort" ? `The convoy got ${anomaly} through.` : kind === "retaliation" ? "The Insurgency attack on the town is broken." : inc?.first ? `${anomaly} is in Foundation hands.` : `${anomaly} is back in its cell.`;
+      : kind === "outbreak" ? "The flesh here is burned out." : kind === "escort" ? `The convoy got ${anomaly} through.` : kind === "retaliation" ? "The Insurgency attack on the town is broken." : inc?.first ? `${anomaly} is in Foundation hands.` : `${anomaly} is back in its cell.`;
     lines.unshift(`${name} closed. ${what}${bonus ? ` The O5 Council approves a $${bonus}k bonus;` : ""} exposure in ${where} −${cut}.`);
   } else {
     c.stats.lost++;
@@ -560,6 +564,17 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   if (r.amnesticsUsed) lines.push(`Amnestics used: ${r.amnesticsUsed}.`);
   if (r.dSent || r.dRecruited) lines.push(`D-Class: ${r.dSent} sent, ${r.dLost} lost, ${r.dReturned} back in holding${r.dRecruited ? ` (including ${r.dRecruited} picked up on site)` : ""}.`);
   if (r.insurgentsTotal) lines.push(`Insurgents neutralised: ${r.insurgentsDown} of ${r.insurgentsTotal}.`);
+  if (r.infectedLost) lines.push(`${r.infectedLost} lost to SCP-610's infection. There was nothing anyone could do.`);
+  // an outbreak is only beaten back a stage at a time
+  if (kind === "outbreak" && c.outbreak) {
+    c.outbreak.severity = Math.max(0, Math.min(5, c.outbreak.severity + (r.win ? -1 : 1)));
+    c.outbreak.lastMission = c.day;
+    if (c.outbreak.severity === 0) { lines.push(`SCP-610 in ${where} is burned out for good.`); c.outbreak = undefined; }
+    else {
+      lines.push(`SCP-610 outbreak in ${where}: severity ${c.outbreak.severity} of 5.`);
+      c.incidents.push({ ...inc!, id: "inc" + c.nextIncident++, title: `${inc!.title.split(":")[0]}: SCP-610 outbreak, severity ${c.outbreak.severity}`, appeared: c.day });
+    }
+  }
   // a capture far from home has to get back: the convoy may be ambushed on the way (XCOM-style follow-up)
   const capture = r.win && inc && inc.kind === "recovery" && inc.scpId;
   const ambush = capture && travelDays(c, inc!.region) > 0 && r.squad.some(s => s.alive && !s.absent) && Math.random() < 0.3;

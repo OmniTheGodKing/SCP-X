@@ -9,10 +9,10 @@ import type { AmmoId, AttachmentId, WeaponType } from "../data/weapons";
 export type { AmmoId, AttachmentId, WeaponType };
 
 export type ItemId = "armor" | "armor_light" | "armor_heavy" | "hazmat" | "leadsuit"
-  | "flare" | "eyedrops" | "flashbang" | "smoke" | "tracker" | "frag" | "csgas" | "bazooka" | "law" | "medkit" | "camera" | "restraints" | "darts";
+  | "contsuit" | "incendiary" | "flamer" | "flare" | "eyedrops" | "flashbang" | "smoke" | "tracker" | "frag" | "csgas" | "bazooka" | "law" | "medkit" | "camera" | "restraints" | "darts";
 /** Items thrown or fired at a tile, and the heavy weapons among them (heavy armor only). */
-export const THROWN: ItemId[] = ["frag", "flashbang", "smoke", "csgas", "bazooka", "law", "flare"];
-export const HEAVY: ItemId[] = ["bazooka", "law"];
+export const THROWN: ItemId[] = ["frag", "flashbang", "smoke", "csgas", "bazooka", "law", "flare", "incendiary", "flamer"];
+export const HEAVY: ItemId[] = ["bazooka", "law", "flamer"];
 
 /** The weapon a unit carries into a mission. */
 export interface Gun { name: string; type: WeaponType; dmg: [number, number]; mag: number; ammo: number; aim: number; attachment?: AttachmentId;
@@ -23,7 +23,7 @@ export interface Carried { id: ItemId; uses: number; }
 export type Side = "mtf" | "dclass" | "subject" | "civilian" | "raider" | "anomaly" | "zombie";
 /** Anomalies a mission can be about. */
 export type ScpId = "173" | "049" | "106";
-export type MissionKind = "breach" | "manhunt" | "coverup" | "strike" | "escort" | "retaliation";
+export type MissionKind = "breach" | "manhunt" | "coverup" | "strike" | "escort" | "retaliation" | "outbreak";
 export type Phase = "player" | "anomaly" | "hand" | "subjects" | "over";
 
 export interface Unit {
@@ -84,6 +84,11 @@ export interface Unit {
   /** Carrying a downed ally or a body, or being carried. */
   carrying?: string;
   carriedBy?: string;
+  /** SCP-610: the turn they were infected (they turn 5 turns later, for good), a torn containment suit,
+   *  and whether this hostile is one of its instances. */
+  infectedTurn?: number;
+  suitTorn?: boolean;
+  flesh?: boolean;
   /** Escorts: the turn an Insurgent started working the truck open. */
   stealTurn?: number;
   /** The Insurgency fire team this unit belongs to. */
@@ -152,6 +157,8 @@ export interface MissionSetup {
   scp?: ScpId;
   map: "wingC" | "town" | "farm" | "port";
   amnestics: number;
+  /** SCP-610 outbreaks: how far it has spread (1 to 5). */
+  severity?: number;
   /** Field missions launched between 20:00 and 06:00 are played in the dark. */
   night?: boolean;
   /** Breaches: researchers caught in the wing, and how many D-Class are in the block to get loose. */
@@ -196,6 +203,9 @@ export interface MissionResult {
   researchersLost: number;
   straysLost: number;
   straysEscaped: number;
+  /** SCP-610: operatives lost to infection, and whether the core was burned out. */
+  infectedLost: number;
+  coreBurned: boolean;
   /** Anomalies photographed with the field camera, and whether a restraint kit came along. */
   photos: ScpId[];
   restraints: boolean;
@@ -263,6 +273,10 @@ export interface MissionState {
   lockedDoors: number[];
   /** Escorts: the Insurgency got the truck open. */
   stolen?: boolean;
+  /** Fire on the map (tile index → last turn it burns), and SCP-610's flesh and its core. */
+  fires: Map<number, number>;
+  flesh: Set<number>;
+  core: { x: number; y: number; hp: number; maxHp: number } | null;
   /** Flares burning on the ground at night. */
   flares: { x: number; y: number; until: number }[];
   throwing: Carried | null;

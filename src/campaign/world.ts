@@ -118,6 +118,25 @@ export function tickWorld(c: Campaign) {
   const labs = countOperational(c, "amnestics");
   if (labs && c.day % AMNESTIC_DAYS === 0 && c.amnestics < amnesticsCapacity(c)) c.amnestics = Math.min(amnesticsCapacity(c), c.amnestics + labs * (has(c, "classb_amnestics") ? 2 : 1));
   if (c.day >= c.nextCoverupDay) { spawnCoverup(c); c.nextCoverupDay = c.day + rand(25, 60); }
+  // SCP-610: the first outbreak in 1954, then it spreads every week it's left alone
+  if (c.outbreakDay && c.day >= c.outbreakDay) {
+    c.outbreakDay = undefined;
+    const open = REGION_IDS.filter(r => r !== HOME && !c.regions[r].collapsed);
+    const r = pick(open.length ? open : REGION_IDS);
+    c.outbreak = { region: r, severity: 2, lastMission: c.day };
+    c.materials.outbreaks = (c.materials.outbreaks ?? 0) + 1;
+    const inc = newIncident(c, { kind: "outbreak", region: r, map: Math.random() < 0.5 ? "town" : "farm", scpId: "", what: `SCP-610 outbreak, severity 2`, expires: c.day + 99999, insurgents: 0, witnesses: 0, civilians: 4 });
+    log(c, `${inc.title.split(":")[0]}: in ${pick(REGIONS[r].towns)}, people are fusing with something that grows out of the walls. SCP-610, "The Flesh that Hates". It can't be contained, only burned. It will spread every week it's left. Containment suit research is open.`, "bad", "command");
+  }
+  if (c.outbreak && c.day % 7 === 0) {
+    addExposure(c, c.outbreak.region, c.outbreak.severity * 2);
+    if (c.day - c.outbreak.lastMission >= 14 && c.outbreak.severity < 5) {
+      c.outbreak.severity++; c.outbreak.lastMission = c.day;
+      const inc = c.incidents.find(i => i.kind === "outbreak");
+      if (inc) inc.title = `${inc.title.split(":")[0]}: SCP-610 outbreak, severity ${c.outbreak.severity}`;
+      log(c, `SCP-610 is spreading in ${REGIONS[c.outbreak.region].name}: severity ${c.outbreak.severity} of 5.`, "bad", "command");
+    }
+  }
   for (const due of (c.retaliations ?? []).filter(x => x.day <= c.day)) {
     c.retaliations = c.retaliations!.filter(x => x !== due);
     if (c.regions[due.region].collapsed) continue;

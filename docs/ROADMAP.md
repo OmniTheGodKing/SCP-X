@@ -89,11 +89,16 @@ retaliation (done); (5) doors and sirens (done).
 - Carrying a downed ally or a body (which also keeps it away from SCP-049).
 - Exfiltration through the exit tiles, so a mission can be abandoned partway and whoever gets out survives.
 
-## Phase 3D: SCP-610, "The Flesh that Hates" (Keter), and fire
+## Phase 3D (done): SCP-610, "The Flesh that Hates" (Keter), and fire
 
-- A spreading outbreak on the world map that raises a region's exposure until burned back.
-- Tactical maps where infected flesh spreads each turn; fire is the only cure. Brings in the M2 flamethrower.
-- Fire and destructible environment: burning tiles, fuel drums, breakable walls.
+- Fire: burning tiles deal 2 damage a turn (double to SCP-610), spread into desks, crates and flesh, and set off fuel
+  drums, which now appear in storerooms. Incendiary grenades and rounds, and the M2 flamethrower (heavy armor).
+- SCP-610 on the world map from 1954: an outbreak in one region adds exposure every week and grows a stage every two
+  weeks without a mission (up to 5). Each win burns it back a stage; a loss feeds it. Only Epsilon-11 faces it.
+- Outbreak missions: flesh spreads from a core each turn; only fire hurts the core. Anyone who ends a turn on the flesh
+  without a sealed containment suit is infected, and turns 5 turns later, permanently lost, even if they left. Its
+  instances infect with every blow, and tear a containment suit 60% of the time.
+- Author credit for SCP-610 still to be confirmed.
 
 ## Phase 3E: a living Site-19
 
