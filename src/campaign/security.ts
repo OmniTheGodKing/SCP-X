@@ -117,6 +117,7 @@ export function guardMember(c: Campaign, g: Guard): SquadMember {
   const drilled = c.purchases.includes("guard_training");
   let aim = g.aim + (has(c, "bt_guard_aim") ? 5 : 0) + (c.purchases.includes("guard_training") ? 10 : 0), blink = GUARD.blink, san = g.san;
   if (g.traits.includes("gunshy")) aim -= 10;
+  if ((c.laxUntil ?? 0) >= c.day) aim -= 5;
   if (g.traits.includes("twitchy")) blink += 0.03;
   if (g.traits.includes("steady")) blink = Math.max(0.02, blink - 0.02);
   if (g.traits.includes("nightmares")) san = Math.max(1, san - 15);
