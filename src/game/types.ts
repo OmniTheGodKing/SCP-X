@@ -3,7 +3,8 @@
 import type { ClassId, PerkId, TraitId } from "../data/classes";
 export type { ClassId, PerkId, TraitId };
 /** Class abilities plus Secure, which every operative can do. */
-export type AbilityId = PerkId | "secure" | "dose" | "lockdown" | "doors" | "siren" | "calm" | "restrain" | "pickup" | "drop" | "exfil" | "hunker" | "recover" | "restore" | "scan";
+export type OptionalId = "ledger" | "radio" | "civilians" | "nocas" | "allwitnesses" | "nolosses" | "staff";
+export type AbilityId = PerkId | "cutradio" | "secure" | "dose" | "lockdown" | "doors" | "siren" | "calm" | "restrain" | "pickup" | "drop" | "exfil" | "hunker" | "recover" | "restore" | "scan";
 
 import type { AmmoId, AttachmentId, WeaponType } from "../data/weapons";
 export type { AmmoId, AttachmentId, WeaponType };
@@ -54,6 +55,8 @@ export interface Unit {
   goggles?: boolean;
   specialist?: "researcher" | "amnestics";
   record?: boolean;
+  /** An Insurgent radio set: cut it and they can't call for help. */
+  radio?: boolean;
   bonds?: Record<string, number>;
   /** Phase 3I Insurgents: their specialist role, an anomalous charm (still working, or carried at all), breaching
    *  charges left, and a commander who got away. */
@@ -262,6 +265,7 @@ export interface MissionResult {
   commander?: "killed" | "captured" | "escaped" | "absent";
   /** Phase 3J: survivors and records brought out of the total, power restored, the hazard dealt with, anomalies
    *  scanned, and support staff lost. */
+  optional?: { id: OptionalId; text: string; met: boolean }[];
   survivorsSaved?: number; survivorsTotal?: number; recordsRecovered?: number; recordsTotal?: number;
   powerRestored?: boolean; hazardDealt?: boolean; scans?: Record<string, number>; specialistsLost?: string[];
   charms?: number;
@@ -328,6 +332,9 @@ export interface MissionState {
   effects: Effect[];
   /** Insurgent reinforcements: where they will land, and whether they have. */
   ciDrop?: [number, number];
+  /** Optional objectives for this mission (Phase 3K), and whether the Insurgents' radio has been cut. */
+  optional: { id: OptionalId; text: string }[];
+  radioCut?: boolean;
   /** Emergencies: power restored at the panel; anomalies scanned by a field researcher, per SCP. */
   powerOn?: boolean;
   scans?: Record<string, number>;

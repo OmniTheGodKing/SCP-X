@@ -1,4 +1,5 @@
 // The mission screen: map, SCP-173 status, squad, actions, containment file and incident log.
+import { optionalMet } from "../game/mission";
 import { DRUM, EXIT, L, area, inContainer } from "../core/grid";
 import { activeGun, shotInfo } from "../game/combat";
 import { AMMO } from "../data/weapons";
@@ -83,6 +84,7 @@ const TEMPLATE = `
       <div class="card status" id="statusCard">
         <div class="label" id="statusLabel">SCP-173 status</div>
         <div class="status-line" id="statusLine"></div>
+        <div class="optional" id="optList"></div>
       </div>
       <div class="card">
         <div class="label" id="squadLabel">Mobile Task Force Epsilon-11 “Nine-Tailed Fox”</div>
@@ -124,7 +126,8 @@ function legendHtml() {
   if (any(x => x.side === "mtf" && !!x.guard)) items.push(["sq", "#9fb3c4", "Site Security"]);
   if (u.some(x => (x.side === "dclass" || x.side === "subject") && !x.rioter)) items.push(["", "var(--subject)", "D-Class (dashed ring: loose)"]);
   if (u.some(x => x.rioter)) items.push(["ring", "var(--subject)", "Rioting D-Class"]);
-  if (u.some(x => x.record)) items.push(["sq", "#d9c27a", "F · classified records: Recover records when adjacent"]);
+  if (u.some(x => x.record && !x.radio)) items.push(["sq", "#d9c27a", "F · records or a ledger: Recover records when adjacent"]);
+  if (u.some(x => x.radio)) items.push(["sq", "#d9c27a", "X · the Insurgents' radio: Cut the radio when adjacent, or they call for help"]);
   if (S.setup.kind === "rescue") items.push(["sq", "#cfc6a8", "L · lost operative: reach them and they follow you out"]);
   if (u.some(x => x.goggles)) items.push(["", "var(--mtf)", "Eta-10 (goggles): blink half as often staring, half the sanity lost to sight, −10 aim"]);
   if (u.some(x => x.specialist)) items.push(["", "var(--mtf)", "Support staff: field researcher (Scan) or amnestics specialist (darts, extra doses)"]);
@@ -278,6 +281,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     wp.hidden = w === "clear";
     if (w !== "clear") { wp.textContent = WEATHER[w].name; wp.title = `${WEATHER[w].name}: ${WEATHER[w].desc.replace(" Flights there take a day longer.", "")}`; }
     $("sirenPill").hidden = !S.siren;
+    $("optList").innerHTML = S.optional.length ? `<div class="label">Optional</div>${S.optional.map(o => `<div class="${optionalMet(o.id) ? "ok" : ""}">${optionalMet(o.id) ? "✓" : "·"} ${esc(o.text)}</div>`).join("")}` : "";
 
     const sc = $("statusCard"), line = $("statusLine");
     if (kind === "riot") {

@@ -83,7 +83,7 @@ export async function commanderFlees(r: Unit): Promise<boolean> {
 /** Long fights draw reinforcements: a turn's warning on the radio, then a team lands at the far edge. */
 export function reinforcementsTick() {
   const due = S.setup.reinforce;
-  if (!due || S.ciLanded) return;
+  if (!due || S.ciLanded || S.radioCut) return;
   if (S.turn === due - 1) {
     S.ciDrop = dropZone();
     log("Radio chatter: Insurgent reinforcements land next turn. The drop zone is marked.", "bad");

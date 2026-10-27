@@ -754,7 +754,8 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: Math.max(0, inc.insurgents - (inc.weakened ?? 0)) + (inc.insurgents && inc.kind !== "breach" ? threatExtra(c) : 0), squad, dclass,
     ciRoles: inc.kind === "breach" || inc.kind === "riot" || inc.kind === "outbreak" || inc.kind === "coverup" ? undefined : ciRoles(c),
     commander: commanderJoins(c, inc) ? `${c.chaos.commander!.rank} ${c.chaos.commander!.name}` : undefined,
-    reinforce: (inc.kind === "strike" || inc.kind === "retaliation") && c.chaos.threat >= 30 ? (c.chaos.threat >= 70 ? 5 : 7) : undefined,
+    // strikes always have a radio to call for help on; attacks only once the Insurgency's agenda is high
+    reinforce: inc.kind === "strike" ? (c.chaos.threat >= 70 ? 6 : 8) : inc.kind === "retaliation" && c.chaos.threat >= 30 ? (c.chaos.threat >= 70 ? 5 : 7) : undefined,
     gru: inc.gru,
     year: yearOf(c.day),
     known: [...c.knownNotes],
@@ -947,6 +948,13 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   if (away && r.squad.some(s => s.alive) && !ambush) {
     for (const s of r.squad) { const o = c.roster.find(x => x.id === s.opId); if (o?.alive) o.busy = { kind: "travel", daysLeft: away, from: inc!.region, total: away }; }
     lines.push(`The survivors fly back to Site-19: ${away} day${away > 1 ? "s" : ""}.`);
+  }
+  // optional objectives: each met one earns its own reward, missed ones cost nothing but the chance
+  for (const o of r.optional ?? []) {
+    if (!o.met) { lines.push(`Optional objective missed: ${o.text.replace(/ \([A-Z]\)/g, "")}.`); continue; }
+    const got = o.id === "ledger" ? (gainIntel(c, 2), "+2 Intel") : o.id === "radio" ? (addThreat(c, -1, "a cell cut off before it could call for help"), "the Insurgency's agenda −1")
+      : o.id === "allwitnesses" ? (addExposure(c, inc?.region ?? HOME, -5), "−5 more exposure") : (addStanding(c, 2, `optional objective: ${o.text.toLowerCase()}`), "+2 standing");
+    lines.push(`Optional objective met: ${o.text.replace(/ \([A-Z]\)/g, "")} (${got}).`);
   }
   lines.push(...afterMission(c, r));
   for (const l of [...lines, ...promotions]) log(c, l, r.win ? "good" : "bad");

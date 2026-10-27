@@ -400,3 +400,4 @@ details.archived summary { cursor: pointer; font-family: var(--font-mono); font-
 .memorial.staff { padding-left: 0; list-style: none; } .memorial.staff li { display: flex; gap: 8px; align-items: flex-start; }
 .worldmap .flight.out path { fill: var(--manila); stroke: #0f1317; stroke-width: .3; }
 .worldmap .flight.out line { stroke: var(--manila); opacity: .7; }
+.optional { margin-top: 8px; font-size: 13px; color: var(--muted); } .optional .ok { color: #6fae7c; } .optional .label { margin-bottom: 2px; }

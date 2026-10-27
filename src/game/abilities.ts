@@ -11,7 +11,7 @@ export interface AbilityDef {
   perk: AbilityId;
   label: string;
   desc?: string;
-  target: "ally" | "downed" | "panicked" | "enemy" | "self" | "captive" | "witness" | "panel" | "doctor" | "stray" | "carryable" | "record" | "specimen";
+  target: "ally" | "downed" | "panicked" | "enemy" | "self" | "captive" | "witness" | "panel" | "doctor" | "stray" | "carryable" | "record" | "specimen" | "radio";
   /** For self-targeted actions that only make sense sometimes: when they show up. */
   when?: (u: Unit) => boolean;
   endsTurn?: boolean;
@@ -37,13 +37,14 @@ export const ABILITIES: AbilityDef[] = [
   { perk: "doors", label: "Blast doors", target: "panel", desc: "At the panel: seal a doorway with a blast door, or open one (up to 2 sealed). Sealed doors block everyone but SCP-106." },
   { perk: "siren", label: "Silence the siren", target: "panel", desc: "At the panel: switch the breach siren off or on. While it wails nobody recovers sanity, but SCP-173 can't hear where your shots come from." },
   { perk: "lockdown", label: "Lock the hatch", target: "panel", endsTurn: true, desc: "At the lockdown panel: seal the surface hatch so SCP-173 can't get out that way for a few turns. Takes both actions." },
+  { perk: "cutradio", label: "Cut the radio", target: "radio", desc: "Smash the Insurgents' radio set next to you: they can't call for reinforcements." },
   { perk: "recover", label: "Recover records", target: "record", desc: "Gather up an adjacent file of classified records. They leave with the team." },
   { perk: "restore", label: "Restore power", target: "panel", endsTurn: true, desc: "At the panel: bring the site's power back. The lights come on (no more darkness penalty). Takes both actions." },
   { perk: "scan", label: "Scan the anomaly", target: "specimen", desc: "Field researcher only: take readings on an anomaly in sight within 8 tiles. Each scan (up to 3) puts work into research on it." },
   { perk: "dose", label: "Dose with amnestics", target: "witness", desc: "Give an adjacent witness amnestics. They forget what they saw and stop running." },
 ];
 
-const UNIVERSAL: AbilityId[] = ["secure", "dose", "lockdown", "doors", "siren", "calm", "restrain", "pickup", "drop", "exfil", "hunker", "recover", "restore", "scan"];
+const UNIVERSAL: AbilityId[] = ["cutradio", "secure", "dose", "lockdown", "doors", "siren", "calm", "restrain", "pickup", "drop", "exfil", "hunker", "recover", "restore", "scan"];
 const onExit = (u: Unit) => L.exitMap[u.y * L.W + u.x] === 0;
 const hasCover = (u: Unit) => DIRS.some(([dx, dy]) => { const t = tileAt(u.x + dx, u.y + dy); return t === WALL || t === FULL || t === HALF || t === STEEL || t === DRUM; });
 const knows = (u: Unit, p: AbilityId) => UNIVERSAL.includes(p)
@@ -84,7 +85,8 @@ export function abilityTargets(u: Unit, p: AbilityId): Unit[] {
     case "downed": return S.units.filter(a => a.alive && a.downed && !a.stabilized && adjacent(u, a));
     case "panicked": return alive("mtf").filter(a => a !== u && isPanicked(a) && adjacent(u, a));
     case "enemy": return alive("raider").filter(r => seen(r.x, r.y) && canSee(u, r.x, r.y));
-    case "record": return S.units.filter(a => a.record && !a.saved && adjacent(u, a));
+    case "record": return S.units.filter(a => a.record && !a.radio && !a.saved && adjacent(u, a));
+    case "radio": return S.units.filter(a => a.radio && !a.saved && adjacent(u, a));
     case "specimen": {
       if (u.specialist !== "researcher" || Object.values(S.scans ?? {}).reduce((a, n) => a + n, 0) >= 3 || u.used?.["scan" + S.turn]) return [];
       return S.units.filter(a => a.alive && !a.downed && (a === S.statue || a.side === "zombie" || a.flesh) && !(a === S.statue && S.sealed) && seen(a.x, a.y) && cheb(u.x, u.y, a.x, a.y) <= 8 && canSee(u, a.x, a.y)).slice(0, 1);
@@ -207,6 +209,10 @@ export function useAbility(u: Unit, p: AbilityId, t: Unit) {
       log(`Out through the exit: ${out.join(", ")}.`, "good");
       break;
     }
+    case "cutradio":
+      t.saved = true; S.radioCut = true; S.ciDrop = undefined;
+      log(`${full(u)} smashes the radio set. Nobody is coming to help them.`, "good");
+      break;
     case "recover":
       t.saved = true;
       log(`${full(u)} gathers up the classified records.`, "good");
