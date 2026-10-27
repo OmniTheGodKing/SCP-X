@@ -40,6 +40,7 @@ h1 small { font-size: .5em; color: var(--ink); opacity: .8; margin-left: 8px; }
 .turnbox { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-family: var(--font-mono); font-size: 13px; }
 .pill { border: 1px solid var(--line); padding: 3px 10px; border-radius: 999px; background: var(--panel); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .pill.hot { border-color: var(--alert); color: var(--alert); }
+.pill.warm { border-color: var(--manila); color: var(--manila); }
 .muted { color: var(--muted); }
 p.muted { font-size: 13px; margin: 8px 0 0; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
