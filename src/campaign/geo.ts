@@ -3,7 +3,8 @@
 // Foundation facilities are shown too, but Site-19 is the only one the player runs.
 import { REGIONS, SITE19, type RegionId } from "../data/regions";
 import { has } from "./research";
-import { addExposure, flightOut, locateCell, travelDays } from "./world";
+import { rewardText } from "./council";
+import { addExposure, flightOut, isContacted, locateCell, travelDays } from "./world";
 import { scpName } from "./containment";
 import { mtfArrival, raidArrival } from "./security";
 import { MISSION_BONUS, dateText, gainIntel, log, yearOf, type Campaign, type Incident } from "./campaign";
@@ -74,7 +75,8 @@ export function briefing(c: Campaign, inc: Incident) {
   const bonus = MISSION_BONUS[inc.kind] ?? 0;
   const rewards = [bonus ? `$${bonus}k from the O5 Council` : "", inc.kind === "coverup" ? "−10 exposure here" : inc.kind === "riot" || inc.kind === "raid" ? "" : "−5 exposure here",
     inc.kind === "strike" || inc.kind === "retaliation" || inc.kind === "raid" ? "captured Insurgent weapons and prisoners for research" : "",
-    inc.first ? "a new anomaly for Site-19 to hold and study" : "", inc.kind === "outbreak" ? "SCP-610 burned back a stage" : ""].filter(Boolean);
+    inc.first ? "a new anomaly for Site-19 to hold and study" : "", inc.kind === "outbreak" ? "SCP-610 burned back a stage" : "",
+    inc.reward ? `${rewardText(inc.reward)} from the Council for answering this one` : "", inc.transfer ? `${scpName(inc.transfer.scp)} delivered to Site-19` : ""].filter(Boolean);
   const ignore = inc.kind === "breach" ? "Site Security faces it alone; it may escape or wreck neighbouring facilities."
     : inc.kind === "riot" ? "Leave it to the guards: a few D-Class die."
     : inc.kind === "raid" ? "Leave it to the guards; if they lose, prisoners go free or the payroll is taken and a building is wrecked."
@@ -135,6 +137,7 @@ export const FIELD_OPS: Record<FieldOpKind, { name: string; cost: number; days: 
 };
 export function canFieldOp(c: Campaign, r: RegionId, k: FieldOpKind): string | null {
   if (c.regions[r].collapsed) return "The front here has collapsed.";
+  if (!isContacted(c, r)) return "No front here yet. Make contact first.";
   if ((c.ops ?? []).some(o => o.region === r)) return "An operation is already running here.";
   if (k === "surveil" && c.incidents.some(i => i.kind === "strike" && i.region === r)) return "A cell here is already located.";
   if (c.funds < FIELD_OPS[k].cost) return `Needs $${FIELD_OPS[k].cost}k.`;
@@ -229,6 +232,7 @@ export function sendAmnesticsTeam(c: Campaign, inc: Incident) {
 }
 export function canBury(c: Campaign, inc: Incident): string | null {
   const w = coverupWhy(c, inc); if (w) return w;
+  if (!isContacted(c, inc.region)) return "There's no front there to bury it.";
   return c.funds < buryCost(inc) ? `Needs $${buryCost(inc)}k.` : null;
 }
 export function buryStory(c: Campaign, inc: Incident) {

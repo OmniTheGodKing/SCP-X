@@ -5,11 +5,12 @@ import {
   ENGINEER_COST, countOperational, operational, engineerCapacity, dclassCapacity, healPerDay, monthlyUpkeep, sanityPerDay, startingBase, tickConstruction,
   type Base,
 } from "./base";
-import { CLEAN_EVERY, firstSightings, resolveScp, scpName, startingScps, tickContainment, type ScpRecord } from "./containment";
+import { addStanding, councilGrant, issueDirectives, monthlyCouncil, newCouncil, rewardText, grantReward, tickCouncil, transferFought, type CouncilState, type Reward, type Transit } from "./council";
+import { CLEAN_EVERY, isInert, firstSightings, resolveScp, scpName, startingScps, tickContainment, type ScpRecord } from "./containment";
 import { reachMilestone, type Milestone } from "./research";
 import { ITEMS, PROJECTS, armorStats, has, projectLock, monthlyResearch, newResearch, tickResearch, type MaterialId, type ItemId, type Order, type ResearchState } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
-import { addExposure, collapsedCount, COLLAPSE_LIMIT, newRegions, regionFunding, tickWorld, travelDays, type RegionState } from "./world";
+import { addExposure, collapsedCount, COLLAPSE_LIMIT, isContacted, newRegions, regionFunding, tickWorld, travelDays, type RegionState } from "./world";
 import { RAID, raidArrival, raidLoss, tickRaids, ALERTS, breachGuards, guardMember, guardsReady, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
 import { MEDALS, rollBio, type MedalId } from "../data/bios";
 import { QUALITY, UNITS, rollCandidate, type Candidate, type UnitId } from "../data/units";
@@ -112,6 +113,11 @@ export interface Incident {
   recon?: boolean;
   reconDue?: number;
   grown?: number;
+  /** Forced choices: incidents that arrived together (only one can be answered), and what the Council gives for this one. */
+  group?: string;
+  reward?: Reward;
+  /** An ambushed transfer convoy: the anomaly on the truck and where it was going. */
+  transfer?: Transit;
   /** Cover-ups handled without Epsilon-11: an amnestics team on its way, or the front paid to bury the story. */
   dispatch?: { how: "team" | "bury"; done: number; doses: number };
 }
@@ -124,7 +130,13 @@ export interface SiteLogEntry { day: number; text: string; kind: string; }
 export interface Loadout { opId: string; armor: ItemId | ""; items: ItemId[]; }
 
 export interface Campaign {
-  version: 17;
+  version: 18;
+  /** Standing with the O5 Council, its orders, requests and transfers. */
+  council: CouncilState;
+  /** SCP-500 pills left. */
+  pills?: number;
+  /** The last day SCP-914 was run. */
+  lastRefine?: number;
   /** The D-Class block's morale (0 to 100), and the standing order for the monthly termination. */
   morale: number;
   dPolicy: "terminate" | "retain" | "release";
@@ -320,7 +332,7 @@ export function newCampaign(): Campaign {
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
-    version: 17, morale: 60, dPolicy: "terminate", outbreakDay: rand(945, 1310), materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
+    version: 18, council: newCouncil(1), morale: 60, dPolicy: "terminate", outbreakDay: rand(945, 1310), materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
     day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
     inventory: {}, orders: [], knownNotes: [], nextD: 9101, nextOp: 1, nextIncident: 1,
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
@@ -334,6 +346,7 @@ export function newCampaign(): Campaign {
   refreshRecruits(c);
   const station = c.base.facilities.find(f => f.type === "security");
   for (let i = 0; i < 2; i++) { const g = newGuard(c); g.stationId = station?.id; c.guards.push(g); }
+  issueDirectives(c, false);
   log(c, "Site-19 Command is online. SCP-173 is held in the Euclid wing on level 2. Keep its cell clean, keep it watched, and keep Epsilon-11 ready for when it gets out.", "key");
   return c;
 }
@@ -348,7 +361,9 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 export const dateText = (day: number) => { const d = dateOf(day); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 export const monthName = (day: number) => { const d = dateOf(day); return `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 /** Each front sends its own share of funding, less the more exposed it is. */
-export const monthlyFunding = (c: Campaign) => Math.round(REGION_IDS.reduce((a, r) => a + regionFunding(c, r), 0) * (has(c, "front_accounting") ? 1.1 : 1));
+export const frontsFunding = (c: Campaign) => Math.round(REGION_IDS.reduce((a, r) => a + regionFunding(c, r), 0) * (has(c, "front_accounting") ? 1.1 : 1));
+/** The O5 Council's grant (set by standing) plus what the fronts pass on. */
+export const monthlyFunding = (c: Campaign) => councilGrant(c) + frontsFunding(c);
 
 /** Advance one day. Returns true if something happened that needs the player's attention. */
 export function advanceDay(c: Campaign) {
@@ -388,22 +403,26 @@ export function advanceDay(c: Campaign) {
   tickContainment(c);
   tickWorld(c);
   tickGeo(c);
-  for (const s of c.scps) if (s.status === "contained" && c.day - s.lastCleaned === CLEAN_EVERY)
+  for (const s of c.scps) if (s.status === "contained" && !isInert(s) && c.day - s.lastCleaned === CLEAN_EVERY) {
+    c.council.tally.overdue++;
     log(c, `${s.name}'s cell is due for cleaning. Skipping it lets debris build up and raises the breach risk.`, "key");
+  }
   tickPrisoners(c);
+  tickCouncil(c);
   if (dayOfMonth(c.day) === 1) {
     monthlyResearch(c);
     monthlyDClass(c);
     monthlyStaff(c);
     refreshRecruits(c);
     if (has(c, "sigint")) gainIntel(c, 1);
-    const funds = monthlyFunding(c), upkeep = monthlyUpkeep(c);
+    const grant = councilGrant(c), fronts = frontsFunding(c), funds = grant + fronts, upkeep = monthlyUpkeep(c);
     const room = Math.max(0, dclassCapacity(c) - c.dclass), d = Math.min(DCLASS_MONTHLY, room);
     c.funds += funds - upkeep; c.dclass += d;
-    for (const r of REGION_IDS) addExposure(c, r, -3);   // the public slowly forgets
+    for (const r of REGION_IDS) if (isContacted(c, r)) addExposure(c, r, -3);   // the public slowly forgets, where a front works at it
     { const last = dateOf(c.day - 1);
       for (const n of newsFor(last.getUTCFullYear(), last.getUTCMonth() + 1)) log(c, `In the news: ${n.text}${n.note ? ` ${n.note}` : ""}`, n.effect ? "key" : ""); }
-    log(c, `${monthName(c.day)}: the fronts pass on $${funds}k (less where exposure is high); upkeep and salaries cost $${upkeep}k. ${d} D-Class transferred in${d < DCLASS_MONTHLY ? " (the barracks are full)" : ""}. Exposure eases by 3 in every region.`, "key", "command");
+    log(c, `${monthName(c.day)}: the O5 Council grants $${grant}k (standing ${c.council.standing}) and the fronts pass on $${fronts}k (less where exposure is high); upkeep and salaries cost $${upkeep}k. ${d} D-Class transferred in${d < DCLASS_MONTHLY ? " (the barracks are full)" : ""}. Exposure eases by 3 wherever there's a front.`, "key", "command");
+    monthlyCouncil(c);
   }
   checkOver(c);
   return c.incidents.length > incidentsBefore || c.log.length !== logBefore || !!c.over;
@@ -538,7 +557,7 @@ export function hireCandidate(c: Campaign, k: Candidate) {
   log(c, `${o.call} ${o.name}, from the ${UNITS[k.unit].name}, joins Epsilon-11.`, "good");
 }
 /** An operative made from a candidate: their unit, look, file, lean, quality and trait. */
-function operativeFrom(c: Campaign, k: Candidate): Operative {
+export function operativeFrom(c: Campaign, k: Candidate): Operative {
   const o = makeOperative(c, k.name);
   Object.assign(o, { unit: k.unit, sex: k.sex, aimBase: k.aimBase, bio: { home: k.home, age: k.age, story: k.story }, look: rollLook(k.id, k.sex) });
   const lean = UNITS[k.unit].lean;
@@ -726,6 +745,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   if (r.win) { addMaterial(c, "ciWeapons", r.insurgentsDown); addMaterial(c, "tissue", r.zombiesKilled); }
   addMaterial(c, "survivors", r.pocketReturned);
   addMaterial(c, "prisoners", r.prisoners);
+  c.council.tally.prisoners += r.prisoners;
   // film from the field camera: a head start on research into what was photographed
   for (const id of r.photos) {
     const branch = `SCP-${id}`, p = Object.keys(PROJECTS).find(k => PROJECTS[k].branch === branch && !has(c, k) && !projectLock(c, k));
@@ -752,8 +772,13 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     const what = kind === "coverup" ? "The witnesses remember nothing worth repeating." : kind === "strike" ? "The Insurgency cell is broken up."
       : kind === "riot" ? "The D-Class block is quiet again." : kind === "raid" ? "The Insurgency raid on Site-19 is beaten off." : kind === "outbreak" ? "The flesh here is burned out." : kind === "escort" ? `The convoy got ${anomaly} through.` : kind === "retaliation" ? "The Insurgency attack on the town is broken." : inc?.first ? `${anomaly} is in Foundation hands.` : `${anomaly} is back in its cell.`;
     lines.unshift(`${name} closed. ${what}${bonus ? ` The O5 Council approves a $${bonus}k bonus${cut ? ";" : "."}` : ""}${cut ? ` exposure in ${where} −${cut}.` : ""}`);
+    if (kind !== "riot") c.council.tally.wins[region] = (c.council.tally.wins[region] ?? 0) + 1;
+    addStanding(c, inc?.first || kind === "outbreak" ? 4 : 2, `${name} closed`);
+    if (inc?.reward) lines.push(`For answering this one, the Council sends ${grantReward(c, inc.reward)}.`);
+    if (kind === "strike" && c.scps.some(s => s.id === "005" && s.status === "contained")) { gainIntel(c, 1); lines.push("SCP-005 opened the cell's strongbox (+1 Intel)."); }
   } else {
     c.stats.lost++;
+    addStanding(c, -4, `${name} failed`);
     if (kind === "raid") lines.unshift(`${name} failed. The Insurgency reached the lift. ${raidLoss(c).join(" ")}`);
     else if (kind === "riot") lines.unshift(`${name} failed. Site Security lost the block; it took a gas-and-baton sweep by the whole garrison to retake it.`);
     else { addExposure(c, region, 20);
@@ -791,7 +816,8 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     lines.push(`The survivors fly back to Site-19: ${away} day${away > 1 ? "s" : ""}.`);
   }
   for (const l of [...lines, ...promotions]) log(c, l, r.win ? "good" : "bad");
-  if (inc?.scpId) {
+  if (inc?.transfer) lines.push(transferFought(c, inc.transfer, r.win));
+  else if (inc?.scpId) {
     resolveScp(c, inc, r.win);
     if (!r.win) lines.push(`${scpName(inc.scpId)} got away. It will turn up again somewhere, in its own time.`);
   }
@@ -827,6 +853,7 @@ export function resolveInterrupted(c: Campaign) {
   addExposure(c, inc?.region ?? HOME, 20);
   c.stats.lost++;
   log(c, "Contact with the last deployment was lost. The incident had to be covered up (+20 exposure there).", "bad");
-  if (inc?.scpId) resolveScp(c, inc, false);
+  if (inc?.transfer) log(c, transferFought(c, inc.transfer, false), "bad");
+  else if (inc?.scpId) resolveScp(c, inc, false);
   checkOver(c);
 }

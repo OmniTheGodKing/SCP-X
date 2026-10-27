@@ -352,6 +352,11 @@ details.archived summary { cursor: pointer; font-family: var(--font-mono); font-
 .worldmap .terr:hover { fill-opacity: 1; }
 .worldmap .terr.on { stroke: var(--manila); stroke-width: .5; fill-opacity: 1; }
 .worldmap .terr.lost { fill: url(#lostHatch); }
+.worldmap .terr.nofront { fill-opacity: .35; }
+.worldmap .link { stroke: var(--muted); stroke-dasharray: 1.5 1.5; opacity: .6; pointer-events: none; }
+.worldmap .link.both { stroke: var(--manila); stroke-dasharray: none; opacity: .35; }
+.exp-bar.standing span { background: var(--manila); }
+.orders { margin: 4px 0 0; padding-left: 18px; } .orders li { margin: 4px 0; }
 .worldmap .night { fill: #02050c; fill-opacity: .38; pointer-events: none; }
 .worldmap .rlabel text { fill: #d9dee3; font-family: var(--font-mono); text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: #0b0f13; stroke-width: .25em; }
 .worldmap .rlabel .rexp { fill: var(--muted); font-size: .8em; }

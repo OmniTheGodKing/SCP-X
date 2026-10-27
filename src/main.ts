@@ -3,6 +3,7 @@ import { advanceDay, applyResult, buildSetup, log, newCampaign, refreshRecruits,
 import { clearCampaign, loadCampaign, saveCampaign } from "./campaign/save";
 import { REGIONS } from "./data/regions";
 import { missionWeather } from "./campaign/geo";
+import { forfeitGroup } from "./campaign/council";
 import { flightOut, stormDelay, travelBlock, transportName } from "./campaign/world";
 import { letGuardsHandle } from "./campaign/security";
 import { scpName } from "./campaign/containment";
@@ -60,6 +61,7 @@ function showHub() {
     deploy: (inc, loadouts, dCount) => {
       if (travelBlock(campaign, inc)) return;
       const setup = buildSetup(campaign, inc, loadouts, dCount);
+      forfeitGroup(campaign, inc);
       // the flight out: days pass at Site-19 while the squad is in the air
       // a storm over the destination holds the flight back a day
       const storm = inc.kind !== "escort" && stormDelay(campaign, inc.region), t = flightOut(campaign, inc);

@@ -6,7 +6,7 @@ import type { Guard } from "./security";
 import { AMMO, ATTACHMENTS, WEAPON_TIERS, model, type AmmoId, type AttachmentId } from "../data/weapons";
 import { cellWork, type ScpRecord } from "./containment";
 
-export type Branch = "SCP-173" | "SCP-049" | "SCP-106" | "Insurgency" | "Personnel" | "Weapons" | "Equipment" | "Site" | "Breakthrough";
+export type Branch = "SCP-173" | "SCP-049" | "SCP-106" | "Objects" | "Insurgency" | "Personnel" | "Weapons" | "Equipment" | "Site" | "Breakthrough";
 /** Things brought back from missions that some studies need (like XCOM autopsies). */
 export type MaterialId = "ciWeapons" | "prisoners" | "intelTotal" | "tissue" | "survivors" | "outbreaks";
 export const MATERIALS: Record<MaterialId, string> = {
@@ -92,6 +92,10 @@ export const PROJECTS: Record<string, ProjectDef> = {
   keter_containment:  { name: "Keter-grade containment", branch: "Site", days: 50, cost: 150, afterWon: 6, desc: "Designs for cells that can hold the worst anomalies: lead-lined, suspended, and wired for electromagnets. Keter-grade wings can be built." },
   em_containment:     { name: "Electromagnetic containment", branch: "SCP-106", days: 40, cost: 120, needsScp: "106", needs: ["keter_containment"], desc: "Electromagnets around SCP-106's cell hold it in place. Its breach risk drops by 30%." },
   pocket_study:       { name: "Pocket dimension study", branch: "SCP-106", days: 50, cost: 120, needsScp: "106", needsMaterial: ["survivors", 1], desc: "Interviews with the few who came back map parts of the pocket dimension. People SCP-106 takes come back half the time instead of a quarter." },
+  // ---- Safe-class objects that come to Site-19 by transfer ----
+  panacea_assay:      { name: "Panacea assay", branch: "Objects", days: 25, cost: 50, needsScp: "500", desc: "SCP-500 can't be copied, but half a pill works as well as a whole one. Each pill treats two operatives." },
+  very_fine:          { name: "The \"Very Fine\" setting", branch: "Objects", days: 30, cost: 60, needsScp: "914", desc: "Careful tests of SCP-914's highest setting. More it can refine, and it fails 1 time in 10 instead of 1 in 5." },
+  lock_studies:       { name: "Lock studies", branch: "Objects", days: 30, cost: 60, needsScp: "005", desc: "What SCP-005 shows about how locks fail. Locating an Insurgency cell takes 1 less Intel." },
   // ---- the research expansion ----
   psych_screening:    { name: "Psychological screening", branch: "Personnel", days: 30, cost: 70, afterWon: 4, desc: "Better selection and preparation. Operatives get +10 max sanity, and a quarter of new recruits arrive Steady." },
   field_medicine:     { name: "Field medicine", branch: "Personnel", days: 30, cost: 60, afterWon: 2, desc: "Medkits heal 4 instead of 3, and a stabilized operative gets back on their feet at 1 HP." },

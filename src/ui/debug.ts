@@ -7,6 +7,8 @@ import { captureNow, firstSighting, resurface, startBreach, wreckFacility } from
 import { addExposure, locateCell, spawnCoverup, locateIntel } from "../campaign/world";
 import { newGuard, startRaid, type Alert } from "../campaign/security";
 import { inspect } from "../campaign/inspection";
+import { addStanding, crisis, issueDirectives, newOffer, receive } from "../campaign/council";
+import type { ScpId } from "../game/types";
 import { STAFF_EVENTS, monthlyStaff, type StaffEventId } from "../campaign/staff";
 import { REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { S } from "../game/state";
@@ -67,6 +69,7 @@ export function mountDebug(host: DebugHost) {
         + `<label class="dbg-field">Insurgents <input type="number" min="0" max="8" value="${insurgents}" data-dbg-ins></label>`
         + btn("breach", "Breach at Site-19") + btn("manhunt", "Manhunt") + btn("coverup", "Cover-up") + btn("strike", "Strike") + btn("riot", "D-Class riot") + btn("raid", "Insurgency raid")),
       group("Research and building", btn("materials", "+5 of every material") + btn("offer", "Offer a breakthrough") + btn("research", "Finish current research") + btn("unlockall", "Unlock all research") + btn("build", "Finish construction and orders") + btn("genfail", "Generator fault") + btn("inspwarn", "O5 inspection in 14 days") + btn("inspnow", "O5 inspection now")),
+      group("O5 Council", btn("st+20", "+20 standing") + btn("st-20", "−20 standing") + btn("orders", "New orders") + btn("xoffer", "Transfer offer") + btn("crisis", "Forced choice") + btn("contactall", "Contact every region") + btn("get500", "Receive SCP-500") + btn("get914", "Receive SCP-914") + btn("get005", "Receive SCP-005")),
       group("Operatives and guards", btn("heal", "Heal everyone") + btn("sanity", "Restore sanity") + btn("unbusy", "Clear busy and training") + btn("rankup", "+1 rank to all operatives") + btn("guardvet", "Guards: 3 breaches survived")),
       group("Alert level", (["normal", "heightened", "full"] as Alert[]).map(a => btn("alert-" + a, a)).join("")),
       group(`World · ${esc(REGIONS[region].name)} (exposure ${c.regions[region].exposure}${c.regions[region].collapsed ? ", collapsed" : ""})`,
@@ -154,6 +157,13 @@ export function mountDebug(host: DebugHost) {
       case "genfail": { const g = c.base.facilities.find(f => f.type === "generator" && !f.disabled && f.daysLeft === 0); if (g) wreckFacility(c, g, "Debug: a generator fault."); else note = "No working generator."; break; }
       case "inspwarn": c.inspectionDay = c.day + 15; break;
       case "inspnow": inspect(c); break;
+      case "st+20": addStanding(c, 20, "debug"); break;
+      case "st-20": addStanding(c, -20, "debug"); break;
+      case "orders": c.council.directives = []; issueDirectives(c); break;
+      case "xoffer": newOffer(c); break;
+      case "crisis": crisis(c); break;
+      case "contactall": for (const r of REGION_IDS) { c.regions[r].contact = undefined; c.regions[r].contactDue = undefined; } break;
+      case "get500": case "get914": case "get005": receive(c, { scp: id.slice(3) as ScpId, dir: "in", site: "Site-17", arrive: c.day, funds: 0, standing: 0 }); break;
       case "raid": if (!c.incidents.some(i => i.kind === "raid")) startRaid(c); else note = "A raid is already under way."; break;
       case "riot": if (!c.incidents.some(i => i.kind === "riot") && c.dclass >= 3) { c.morale = Math.min(c.morale, 20); startRiot(c); } else note = "A riot needs at least 3 D-Class and no riot already under way."; break;
       case "guardvet": for (const g of c.guards) if (g.alive) g.breaches = Math.max(g.breaches, 3); break;

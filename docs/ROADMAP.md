@@ -312,7 +312,7 @@ retaliation (done); (5) doors and sirens (done).
 - **Acceptance test:** recruited, edited, renamed (with a callsign), deployed and killed one operative; the recruit
   card, squad card, incident report and memorial all showed the same person and the same saved look.
 
-## Phase 3H: O5 Council and strategic choices (planned)
+## Phase 3H: O5 Council and strategic choices (done; verified in source and in-game)
 
 - **Monthly O5 orders:** Council issues objectives with visible deadlines and rewards/penalties. Orders should interact with missions, containment and strategic resources rather than being purely decorative.
 - **Separate Council standing:** standing is distinct from regional exposure; it changes access to funding, requests, opportunities and scrutiny. Show why it rose or fell.
@@ -323,6 +323,41 @@ retaliation (done); (5) doors and sirens (done).
 - **Inbound anomaly transfers:** the Council can order Site-19 to accept an anomaly from a closing/damaged site, offering funding/standing in return; escort/containment consequences must be playable.
 - **Outbound transfers:** the player can move an anomaly away when Site-19 is damaged or another research site offers to receive/pay for it. Transfers should have time, risk and containment implications.
 - **Inter-site trades:** exchange held anomalies with independent sites for funding or research; the other sites are partners, not facilities the player directly controls.
+
+### As built (src/campaign/council.ts, objects.ts; fronts in world.ts)
+
+- **Standing** (0 to 100, start 50) is separate from exposure, shown as a top-bar pill and on the Command tab's O5
+  Council card with a "why it moved" history. Rises: missions won (+2, +4 for first contacts and outbreaks), orders met
+  (+5), fronts established (+3), good inspections, low exposure at month end, transfers taken. Falls: missions failed
+  (−4), incidents unanswered (−3), orders failed (−6), a front collapsing (−15), poor inspections, exposure 40+ at month
+  end, refusing an ordered transfer (−6), losing a convoy (−8). Tiers: Under review (<25), Adequate, Trusted (60+),
+  Favoured (80+).
+- **Funding** is now the Council's grant (60 + standing + any raise) plus what each established front passes on.
+- **Audits:** below 25 the next inspection is brought forward to 14 days and becomes an audit: no per-check pay,
+  double penalty, +10 standing if passed.
+- **Monthly orders:** two each month from: close an incident in a region, bring global exposure under a value, take a
+  prisoner, finish a research project, establish a new front, let nothing go unanswered, keep every cell cleaned.
+  Rewards beyond money: engineer, researcher, D-Class, Intel, amnestics, a veteran operative, or gear.
+- **Requests** (spend standing, each with a cooldown): emergency appropriation ($100k, 35+), engineering detail
+  (60 days, 50+), veteran transfer (a Corporal, 60+), an object for study (60+), Keter transfer (SCP-106 early, with
+  $150k, 75+), a permanent grant raise (+$15k a month, 80+). "Another MTF" is left for 3J's task forces.
+- **Forced choices:** every 50 to 80 days, 2 or 3 incidents (cover-up, cell, attack) arrive together with the same
+  deadline and their own Council rewards. Deploying Epsilon-11 to one forfeits the others. A cover-up in the group can
+  still be handled by an amnestics team or a paid burial instead.
+- **Fronts:** a new campaign starts with only the Eastern US. Contact spreads along routes (East US to West US, Europe
+  and Latin America; West US to Latin America and East Asia; Europe to Africa; Africa to Latin America and East Asia),
+  costs $50k for the second front then +$20k and +1 Intel each, and takes 6 days. Without a front a region sends no
+  funding, its exposure never eases, field operations, cover stories, cell hunts and burials can't be run there, cover-ups
+  don't arrive from it, and flights there take a day longer. Anomalies still turn up anywhere. Saves from before 3H keep
+  every region.
+- **Safe-class objects** that only arrive by transfer and never breach or need cleaning: SCP-500 (5 pills; one cures an
+  operative's wounds, sanity and bad traits), SCP-914 (once a week refines an item, 1 in 5 failures), SCP-005 (+1 Intel
+  per cell broken). Each has a study in the new Objects research branch (Panacea assay, the "Very Fine" setting, Lock
+  studies).
+- **Transfers:** inbound orders from Site-17, Site-23 or Area-12 (only when a wing is free), sale offers for an anomaly
+  Site-19 holds, and swaps; offers lapse after 10 days. Anything can be sent away for good from its cell for $40k to
+  $150k by class. Convoys take 3 to 5 days by road; from 1952 one coming in can be ambushed near Site-19 (an escort
+  mission any fit operatives can take); losing it costs standing and exposure.
 
 ## Phase 3I: global Chaos Insurgency and other groups (planned)
 

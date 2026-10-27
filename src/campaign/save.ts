@@ -8,6 +8,7 @@ import { HOME } from "../data/regions";
 import { newRegions } from "./world";
 import { newGuard } from "./security";
 import { firstSightings } from "./containment";
+import { issueDirectives, newCouncil } from "./council";
 import { startingModels } from "../data/weapons";
 
 const KEY = "site19-campaign-v2";
@@ -99,7 +100,13 @@ export function parseCampaign(raw: string): Campaign | null {
       for (const k of old.recruits ?? []) k.name = withGivenName(k.name, k.sex, k.id);
       Object.assign(c, { version: 17 });
     }
-    return c.version === 17 ? (c as unknown as Campaign) : null;
+    if (c.version === 17) {
+      // the O5 Council: a fresh standing of 50. Every region the save already worked in keeps its front.
+      const old = c as unknown as Campaign;
+      Object.assign(c, { version: 18, council: newCouncil(old.day) });
+      issueDirectives(old, false);
+    }
+    return c.version === 18 ? (c as unknown as Campaign) : null;
   } catch {
     return null;
   }
