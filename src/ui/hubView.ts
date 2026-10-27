@@ -1,4 +1,7 @@
 // Site-19 Command: incidents and time, the base and its containment, and Epsilon-11's roster.
+import { HUB_TIPS } from "./tutorial";
+import { SLOTS as SAVE_SLOTS, activeSlot, clearSlot, slotSummary, type Slot } from "../campaign/save";
+import { DIFFICULTIES, type Difficulty, type NewCampaignOptions } from "../campaign/difficulty";
 import { BOND_NAMES, FATIGUE, bondsOf, injured, tiredness } from "../campaign/condition";
 import { STAFF_EVENTS, answerStaff } from "../campaign/staff";
 import { HIST_CATS, type HistCat } from "../campaign/history";
@@ -62,7 +65,8 @@ export interface HubActions {
   deploy: (inc: Incident, loadouts: Loadout[], dCount: number, extras: Extras) => void;
   /** The squad flying out has landed. */
   arrive: () => void;
-  newCampaign: () => void;
+  newCampaign: (opts: NewCampaignOptions, slot: Slot) => void;
+  loadSlot: (slot: Slot) => void;
   importCampaign: (c: Campaign) => void;
 }
 
@@ -99,6 +103,8 @@ const nightPointsOf = (c: Campaign) => nightPolygon(c).map(([lo, la]) => project
 export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let planning: string | null = null;
   const chosen = new Set<string>();
+  /** The campaigns menu, when open. */
+  let dlg: null | { view: "slots" } | { view: "new"; slot: Slot; difficulty: Difficulty; ironman: boolean; tutorial: boolean } = null;
   /** Which task force is being sent, and the support people and units going with it. */
   let tfPick: TaskForce = "e11";
   const extras: Extras = {};
@@ -169,9 +175,9 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       <span class="pill ${c.researchers && researchersFree(c) <= 0 ? "warm" : ""}" title="Researchers not assigned to a project, out of everyone on staff.${c.researchers && researchersFree(c) <= 0 ? " All of them are busy: new research has to wait." : ""}">Researchers ${researchersFree(c)}/${c.researchers} free</span>
       <span class="pill ${pw ? "hot" : ""}">Power ${powerUse(c)}/${powerSupply(c)}</span>
       ${c.debug ? `<span class="pill hot">Debug save</span>` : ""}
-      <button class="act" id="resetBtn" type="button">New campaign</button>
+      <button class="act" id="campaignsBtn" type="button">Campaigns${c.ironman ? " · Ironman" : ""}</button>
       <button class="act" id="exportBtn" type="button" title="Download this campaign as a file, to keep or move to another browser">Export save</button>
-      <label class="act" for="importFile" title="Load a campaign from an exported file. It replaces the current one.">Import save</label>
+      ${c.ironman ? `<span class="act disabled" title="Ironman: this campaign can't be replaced by loading a save over it.">Import save</span>` : `<label class="act" for="importFile" title="Load a campaign from an exported file. It replaces the current one.">Import save</label>`}
       <input type="file" id="importFile" accept=".json,application/json" hidden>
     </div>
   </header>
@@ -184,12 +190,14 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     ${tabBtn("history", "History")}
   </nav>
   ${flashMsg ? `<p class="warn-box" role="status">${esc(flashMsg)}</p>` : ""}
+  ${coachCard()}
   ${tab === "command" ? commandTab() : tab === "world" ? worldTab() : tab === "site" ? siteTab() : tab === "research" ? researchTab() : tab === "history" ? historyTab() : personnelTab()}
   ${!c.over && c.notices?.length ? `<div class="overlay fixed"><div class="sheet notice" role="dialog" aria-label="Time paused">
     <div class="label">${dateText(c.day)} · time paused</div>
     <ul class="debrief">${c.notices.slice(0, 8).map(n => `<li class="${n.kind}">${esc(n.text)}</li>`).join("")}${c.notices.length > 8 ? `<li>…and ${c.notices.length - 8} more in the site log.</li>` : ""}</ul>
     <div class="row"><button class="act primary" type="button" id="noticeGo">Go to it</button><button class="act" type="button" id="noticeOk">Continue</button></div>
   </div></div>` : ""}
+  ${dlg ? campaignsDialog() : ""}
   ${c.over ? `<div class="overlay fixed"><div class="sheet">
     <div class="stampmark lose">Command relieved</div>
     <h3>Site-19 has fallen.</h3>
@@ -223,6 +231,41 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       return plane(ax, ay, sx, sy, done / (total + 1), "home", `Flying home from ${REGIONS[r].name}: back ${dateText(c.day + o.busy!.daysLeft)}`); }).join("");
     return out + home;
   }
+  /** The tutorial's tip for this screen, if there's one not yet seen. */
+  function coachCard() {
+    const t = c.tutorial;
+    if (!t?.on) return "";
+    const where = tab === "world" && planning ? "plan" : tab;
+    const tip = HUB_TIPS.find(x => x.tab === where && !t.seen.includes(x.id));
+    if (!tip) return "";
+    return `<div class="card coach" role="note"><div class="label">Tutorial · ${esc(tip.title)}</div><p>${esc(tip.text)}</p>
+      <div class="row"><button class="act primary" type="button" data-coach="${tip.id}">Got it</button><button class="act" type="button" id="coachOff">Turn the tutorial off</button></div></div>`;
+  }
+
+  /** The campaigns menu: three save slots, and the form for starting a new campaign in one. */
+  function campaignsDialog() {
+    if (!dlg) return "";
+    const cur = activeSlot();
+    if (dlg.view === "slots") return `<div class="overlay fixed"><div class="sheet campaigns" role="dialog" aria-label="Campaigns">
+      <div class="label">Campaigns · three save slots in this browser</div>
+      ${SAVE_SLOTS.map(s => { const sum = s === cur ? { day: c.day, funds: c.funds, won: c.stats.won, difficulty: c.difficulty, ironman: c.ironman, over: c.over } : slotSummary(s);
+        return `<div class="slotrow ${s === cur ? "on" : ""}"><b>Slot ${s}${s === cur ? " · playing" : ""}</b>
+          <span class="muted">${sum ? `${dateText(sum.day)} · $${sum.funds}k · ${plural(sum.won, "mission")} won · ${esc(DIFFICULTIES[(sum.difficulty ?? "agent") as Difficulty].name)}${sum.ironman ? " · Ironman" : ""}${sum.over ? " · ended" : ""}` : "Empty"}</span>
+          <span class="row">${sum && s !== cur ? `<button class="act" type="button" data-slotload="${s}">Load</button>` : ""}
+          <button class="act" type="button" data-slotnew="${s}">New campaign here</button>
+          ${sum && s !== cur ? `<button class="act" type="button" data-slotdel="${s}">Delete</button>` : ""}</span></div>`; }).join("")}
+      <p class="muted">Everything saves as you play. Export a save to keep a copy outside this browser.</p>
+      <div class="row"><button class="act" type="button" id="dlgClose">Close</button></div></div></div>`;
+    const d = DIFFICULTIES[dlg.difficulty];
+    return `<div class="overlay fixed"><div class="sheet campaigns" role="dialog" aria-label="New campaign">
+      <div class="label">New campaign · slot ${dlg.slot}${slotSummary(dlg.slot) || dlg.slot === cur ? ` · <span class="warn">replaces the campaign there</span>` : ""}</div>
+      <div class="row">${(Object.keys(DIFFICULTIES) as Difficulty[]).map(k => `<label class="armorpick"><input type="radio" name="diff" value="${k}" data-diff ${dlg!.view === "new" && dlg!.difficulty === k ? "checked" : ""}> ${esc(DIFFICULTIES[k].name)}</label>`).join("")}</div>
+      <p class="muted">${esc(d.desc)} Starting funds $${400 + d.funds}k; Council grant ${d.grant >= 0 ? "+" : ""}${d.grant}k a month; ${d.insurgents >= 0 ? "+" : ""}${d.insurgents} Insurgent per fight${d.aim ? `, ${d.aim > 0 ? "+" : ""}${d.aim} enemy aim` : ""}; breaches ×${d.breach}; Insurgency agenda ×${d.agenda}.</p>
+      <label class="armorpick"><input type="checkbox" id="dlgIron" ${dlg.ironman ? "checked" : ""}> Ironman: no importing a save over this campaign. Every decision stands.</label>
+      <label class="armorpick"><input type="checkbox" id="dlgTut" ${dlg.tutorial ? "checked" : ""}> Tutorial: short guidance on the World Map and in the first mission.</label>
+      <div class="row"><button class="act primary" type="button" id="dlgStart">Start</button><button class="act" type="button" id="dlgClose">Cancel</button></div></div></div>`;
+  }
+
   const tabBtn = (t: Tab, label: string) => `<button type="button" class="tab ${tab === t ? "on" : ""}" data-tab="${t}" aria-pressed="${tab === t}">${label}</button>`;
 
   // ---------- Command ----------
@@ -1407,17 +1450,24 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       act.deploy(inc, inc.kind === "riot" ? [] : loadouts, ["strike", "coverup", "escort", "retaliation", "outbreak", "riot", "raid", "rescue", "emergency"].includes(inc.kind) ? 0 : dCount, { ...extras });
       extras.researcher = extras.amnestics = extras.nu7 = false;
     });
-    on("resetBtn", () => {
-      const b = $("resetBtn")!;
-      if (!resetArmed) {
-        b.textContent = "Erase this campaign?";
-        resetArmed = window.setTimeout(() => { resetArmed = 0; b.textContent = "New campaign"; }, 3000);
-        return;
-      }
-      clearTimeout(resetArmed); resetArmed = 0;
-      act.newCampaign();
+    on("campaignsBtn", () => { dlg = { view: "slots" }; render(); });
+    root.querySelectorAll<HTMLElement>("[data-coach]").forEach(b => b.onclick = () => change(() => { c.tutorial?.seen.push(b.dataset.coach!); }));
+    on("coachOff", () => change(() => { if (c.tutorial) c.tutorial.on = false; }));
+    on("overBtn", () => { dlg = { view: "slots" }; render(); });
+    on("dlgClose", () => { dlg = null; render(); });
+    root.querySelectorAll<HTMLElement>("[data-slotload]").forEach(b => b.onclick = () => { dlg = null; act.loadSlot(Number(b.dataset.slotload) as Slot); });
+    root.querySelectorAll<HTMLElement>("[data-slotnew]").forEach(b => b.onclick = () => { dlg = { view: "new", slot: Number(b.dataset.slotnew) as Slot, difficulty: "agent", ironman: false, tutorial: true }; render(); });
+    root.querySelectorAll<HTMLElement>("[data-slotdel]").forEach(b => b.onclick = () => { const s = Number(b.dataset.slotdel) as Slot; if (confirm(`Delete the campaign in slot ${s}? This can't be undone.`)) { clearSlot(s); render(); } });
+    root.querySelectorAll<HTMLInputElement>("[data-diff]").forEach(b => b.onchange = () => { if (dlg?.view === "new") dlg.difficulty = b.value as Difficulty; render(); });
+    { const im = root.querySelector<HTMLInputElement>("#dlgIron"); if (im) im.onchange = () => { if (dlg?.view === "new") dlg.ironman = im.checked; }; }
+    { const tu = root.querySelector<HTMLInputElement>("#dlgTut"); if (tu) tu.onchange = () => { if (dlg?.view === "new") dlg.tutorial = tu.checked; }; }
+    on("dlgStart", () => {
+      if (dlg?.view !== "new") return;
+      const filled = slotSummary(dlg.slot);
+      if (filled && !confirm(`Slot ${dlg.slot} holds a campaign at ${dateText(filled.day)}. Starting a new one erases it. Go ahead?`)) return;
+      const d = dlg; dlg = null;
+      act.newCampaign({ difficulty: d.difficulty, ironman: d.ironman, tutorial: d.tutorial }, d.slot);
     });
-    on("overBtn", act.newCampaign);
     on("exportBtn", async () => {
       const text = JSON.stringify(c), filename = `site19-${dateText(c.day).replace(/ /g, "-").toLowerCase()}.json`;
       // inside the claude.ai viewer, files go out through its downloads capability (the viewer confirms the save)

@@ -1,4 +1,5 @@
 // The mission screen: map, SCP-173 status, squad, actions, containment file and incident log.
+import { MISSION_STEPS } from "./tutorial";
 import { optionalMet } from "../game/mission";
 import { DRUM, EXIT, L, area, inContainer } from "../core/grid";
 import { activeGun, shotInfo } from "../game/combat";
@@ -59,6 +60,7 @@ const TEMPLATE = `
     </div>
   </header>
 
+  <div class="card coach" id="coachBox" hidden></div>
   <div class="layout">
     <section class="board" aria-label="Tactical map">
       <canvas id="cv"></canvas>
@@ -158,6 +160,21 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   $("mEyebrow").textContent = `SCP Foundation · ${S.setup.title}`;
   const has173 = S.has173, kind = S.setup.kind;
   $("legend").innerHTML = legendHtml();
+  // the first mission walks through the basics, one step at a time
+  if (S.setup.tutorial) {
+    let step = 0;
+    const box = $("coachBox");
+    const show = () => {
+      if (step >= MISSION_STEPS.length) { box.hidden = true; return; }
+      const st = MISSION_STEPS[step];
+      box.hidden = false;
+      box.innerHTML = `<div class="label">Tutorial · ${step + 1} of ${MISSION_STEPS.length} · ${esc(st.title)}</div><p>${esc(st.text)}</p>
+        <div class="row"><button class="act primary" type="button" id="coachNext">${step + 1 < MISSION_STEPS.length ? "Next" : "Done"}</button><button class="act" type="button" id="coachSkip">Skip the rest</button></div>`;
+      $("coachNext").onclick = () => { step++; show(); };
+      $("coachSkip").onclick = () => { step = MISSION_STEPS.length; show(); };
+    };
+    show();
+  }
   if (kind !== "breach") {
     $("mTitle").innerHTML = { rescue: `Lost Team <small>${esc(S.setup.title)}</small>`, emergency: `Site Emergency <small>${esc(S.setup.site ?? "Partner site")}</small>`, raid: "Raid <small>Site-19 surface compound</small>", riot: "Riot <small>D-Class block</small>", outbreak: "SCP-610 Outbreak <small>“The Flesh that Hates” · Keter</small>", escort: "Convoy Ambush <small>Escort</small>", retaliation: "Retaliation <small>Insurgency attack</small>", manhunt: "SCP-173 Manhunt <small>Field recovery</small>", coverup: "Cover-up <small>Class-A amnestics</small>", strike: "Strike <small>Chaos Insurgency cell</small>", breach: "" }[kind];
     $("objRule").innerHTML = `<b>Objective.</b> ${esc(OBJECTIVES[kind])}`;
