@@ -111,8 +111,11 @@ retaliation (done); (5) doors and sirens (done).
 - (Done) Staff incidents: about once in two months in three, one of 8 events (a researcher's breakdown, a guard asleep
   on post, an injured engineer, an armoury mole, a researcher's discovery, a letter from home, a short shipment, a
   visiting researcher) comes up on the Command tab with two choices. Unanswered for 7 days, the second is taken.
-- Power failures (storms, generator faults) that spike breach risk until fixed; cascading breaches when a wing loses power.
-- Emergency evacuation: moving an anomaly out of a failing wing before it breaches.
+- (Done) Power failures: generators fail (1% a month, 3% next to a damaged facility, winter storms 2%). While short of
+  power, every cell has a 10% chance a day of failing outright. A wrecked containment wing cracks open 20% of the time.
+  "Backup generators" research keeps the wings powered.
+- (Done) Emergency evacuation from a damaged or unpowered wing: into a free wing ($10k, double the risk), or to Site-17
+  for 30 days ($50k) when nothing is free.
 - O5 inspections that reward an orderly site.
 - Era news in the monthly report (the Korean War armistice, Sputnik, the Cuban crisis), some with effects such as a
   Cold War exposure spike in Europe.

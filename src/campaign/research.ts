@@ -129,6 +129,7 @@ export const PROJECTS: Record<string, ProjectDef> = {
   bt_cold_storage:    { name: "Breakthrough: cold storage", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Each amnestics lab stores 5 more doses." },
   bt_jigs:            { name: "Breakthrough: production jigs", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Workshop items cost half as much." },
   efficient_gen:      { name: "Efficient generators", branch: "Site", days: 30, cost: 70, desc: "Each generator supplies 15 power instead of 10." },
+  backup_gen:         { name: "Backup generators", branch: "Site", days: 25, cost: 60, desc: "Containment wings get their own backup supply: a power shortage no longer doubles breach risk or lets cells fail." },
 };
 
 export interface TestDef { name: string; risk: number; breach: number; dclass: number; desc: string; notes: string[]; }
