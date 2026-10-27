@@ -2,14 +2,14 @@
 // blocked site data), so every access is guarded and the game still runs without it.
 import type { Campaign } from "./campaign";
 
-const KEY = "site19-campaign-v1";
+const KEY = "site19-campaign-v2";
 
 export function loadCampaign(): Campaign | null {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const c = JSON.parse(raw) as Campaign;
-    return c && c.version === 1 ? c : null;
+    return c && c.version === 2 ? c : null;
   } catch {
     return null;
   }
