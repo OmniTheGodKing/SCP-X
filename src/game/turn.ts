@@ -41,7 +41,7 @@ export function reachFor(u: Unit | null) {
   for (let i = 0; i < res.dist.length; i++) if (res.dist[i] > 0 && tileAt(i % L.W, (i / L.W) | 0) === HALF) res.dist[i] = -res.dist[i] - 100;
   return res;
 }
-export const moveOf = (u: Unit) => Math.max(1, prof(u).move + (u.gun ? TYPES[u.gun.type].move : 0) + (u.moveBonus ?? 0) - (u.carrying ? 1 : 0));
+export const moveOf = (u: Unit) => Math.max(1, prof(u).move + (u.gun ? TYPES[u.gun.type].move : 0) + (u.moveBonus ?? 0) - (u.carrying ? 1 : 0) - (S.setup.weather === "snow" ? 1 : 0));
 export const moveCost = (u: Unit, d: number) => d <= moveOf(u) ? 1 : 2;
 
 /** Why this unit can't fire right now, or null. */

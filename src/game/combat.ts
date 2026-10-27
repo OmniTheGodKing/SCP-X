@@ -63,6 +63,7 @@ export function shotInfo(sh: Unit, tg: Unit, reaction = false): ShotInfo {
   if (cover === 0 && hasPerk(sh, "hunter")) mods.push(["Hunter", 20]);
   if (dist <= 3 && hasPerk(sh, "shotgun_drills")) mods.push(["Shotgun drills", 20]);
   if ((sh.suppressedUntil ?? -1) >= S.turn) mods.push(["Suppressed", -30]);
+  if (S.setup.weather === "storm" && dist > 5) mods.push(["Storm", -10]);
   if (isTeam(sh) && (tg.markedUntil ?? -1) >= S.turn) mods.push(["Marked", 15]);
   if (isTeam(sh) && team().some(a => a !== sh && hasPerk(a, "spotter") && canSee(a, tg.x, tg.y))) mods.push(["Spotted", 10]);
   const raw = mods.reduce((a, m) => a + m[1], 0);
@@ -83,7 +84,8 @@ function why(info: ReturnType<typeof shotInfo>, gunName?: string) {
 export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
   const info = shotInfo(sh, tg, reaction);
   const gun = activeGun(sh), sidearm = usingSidearm(sh);
-  if (sh.side === "mtf") breakConcealment("shots fired");
+  // in a storm the noise covers the shot
+  if (sh.side === "mtf" && S.setup.weather !== "storm") breakConcealment("shots fired");
   if (sh.gun && !sidearm) sh.gun.ammo = Math.max(0, sh.gun.ammo - 1);
   const hit = Math.random() * 100 < info.chance;
   const [x0, y0] = center(info.from), [x1, y1] = center(tg);

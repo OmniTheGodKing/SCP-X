@@ -13,7 +13,8 @@ export const burning = (x: number, y: number) => (S.fires.get(idx(x, y)) ?? -1) 
 export const onFlesh = (x: number, y: number) => S.flesh.has(idx(x, y));
 
 /** Set a tile alight. Fuel drums explode; walls and steel don't burn. */
-export function ignite(x: number, y: number, turns = FIRE_TURNS) {
+const wet = () => S.setup.weather === "rain" || S.setup.weather === "storm";
+export function ignite(x: number, y: number, turns = FIRE_TURNS - (wet() ? 1 : 0)) {
   const t = tileAt(x, y);
   if (t === WALL || t === STEEL) return;
   if (t === DRUM) { explodeDrum(x, y); return; }
@@ -55,7 +56,8 @@ export async function firePhase() {
     const x = i % L.W, y = (i / L.W) | 0;
     for (const [dx, dy] of DIRS) {
       const nx = x + dx, ny = y + dy, t = tileAt(nx, ny);
-      if (t === DRUM || (onFlesh(nx, ny) && Math.random() < 0.6) || (t === HALF && Math.random() < 0.35)) spread.push([nx, ny]);
+      const damp = wet() ? 0.5 : 1;   // rain slows the spread
+      if (t === DRUM || (onFlesh(nx, ny) && Math.random() < 0.6 * damp) || (t === HALF && Math.random() < 0.35 * damp)) spread.push([nx, ny]);
     }
     // furniture that was burning is gone when the fire is
     if (until === S.turn && tileAt(x, y) === HALF) L.grid[y][x] = FLOOR;

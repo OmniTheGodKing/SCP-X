@@ -22,6 +22,8 @@ export function insurgentsStare() {
 
 /** How close an Insurgent who hasn't been alerted has to be to notice a concealed team. */
 export const DETECT = 4;
+/** How close the team can get to unalerted Insurgents (fog lets them get 2 tiles closer). */
+export const detectRange = () => DETECT - (S.setup.weather === "fog" ? 2 : 0);
 const podOf = (r: Unit) => r.pod ?? 0;
 export const podActive = (r: Unit) => S.activePods.includes(podOf(r));
 
@@ -29,7 +31,7 @@ export const podActive = (r: Unit) => S.activePods.includes(podOf(r));
 function alarm(pod: Unit[]): string | null {
   const t = team();
   for (const r of pod) for (const m of t)
-    if (canSee(r, m.x, m.y) && (!S.concealed || cheb(r.x, r.y, m.x, m.y) <= DETECT)) return "spotted";
+    if (canSee(r, m.x, m.y) && (!S.concealed || cheb(r.x, r.y, m.x, m.y) <= detectRange())) return "spotted";
   if (pod.some(r => !r.alive || r.downed || r.hp < r.maxHp)) return "hit";
   const loud = [...S.mem.entries()].some(([k, m]) => (k.startsWith("shot-") || k.startsWith("bang-")) && m.turn === S.turn && pod.some(r => cheb(r.x, r.y, m.x, m.y) <= 8));
   if (loud) return "heard";

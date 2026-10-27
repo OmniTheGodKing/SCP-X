@@ -362,6 +362,9 @@ details.archived summary { cursor: pointer; font-family: var(--font-mono); font-
 .worldmap .flight path { fill: var(--mtf); }
 .worldmap .site19 text { paint-order: stroke; stroke: #0b0f13; stroke-width: .3em; }
 .dot.night { background: #02050c; border: 1px solid var(--muted); }
+.dot.weather { background: #8fa6c2; }
+.worldmap .rlabel .rwx { fill: #9fb4cc; font-size: .78em; }
+.worldmap .rlabel .rwx.storm { fill: #c9b8ff; } .worldmap .rlabel .rwx.snow { fill: #e8eef6; }
 .worldmap .terr { fill: color-mix(in srgb, var(--alert) calc(var(--heat) * 0.8%), var(--base, #34414d)); }
 .linkbtn { text-align: left; }
 .inclist li { display: grid; gap: 1px; }

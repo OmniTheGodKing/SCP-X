@@ -252,6 +252,22 @@ retaliation (done); (5) doors and sirens (done).
   src/core/sight.ts). Someone standing beside a doorway can't see or shoot along the inside of the wall; standing in
   the doorway or squarely in front of it sees normally. Applies to everyone, enemies and anomalies included.
 
+## Weather (done; verified in source and in-game)
+
+- **Regional weather:** each region rolls clear, rain, storm, fog or snow by season and climate
+  (src/data/weather.ts), lasting 1 to 3 days. Shown on the World Map region labels (with a Weather filter), in the
+  region panel, incident briefings, Command incident cards and the deploy panel.
+- **Outdoor maps only** (Site-19's Wing C and D-Block are never affected). Effects stack with night, but sight never
+  drops below 3 tiles (MIN_RANGE in src/game/perks.ts):
+  - Rain: sight −2; fires burn a turn shorter and spread half as often.
+  - Storm: sight −3; shots past 5 tiles take −10 aim; firing doesn't break concealment; flights there take a day longer
+    (briefing arrival dates and the deadline check include it). Regions are never closed by weather.
+  - Fog: sight −4; unalerted Insurgents only notice the team within 2 tiles instead of 4.
+  - Snow: sight −1; move −1.
+- **Tactical feedback:** a weather pill beside Turn/Night, a log line at the start, and an animated overlay (rain
+  streaks, heavier storm rain with occasional lightning, drifting fog haze, falling snow).
+- Weather is read when the squad lands, so it can change while they are in the air.
+
 ## Phase 3G: recruiting Epsilon-11 and operative identity (done; verified in source and in-game)
 
 ### Recruit pool and historical sources

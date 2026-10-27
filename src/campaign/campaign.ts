@@ -20,7 +20,7 @@ export const lookOf = (o: { id: string; sex?: "m" | "f"; look?: Look }) => fitLo
 import { monthlyStaff, tickStaff, type StaffEvent } from "./staff";
 import { tickInspection } from "./inspection";
 import { buildReport, type Report } from "./reports";
-import { nightAt, tickGeo, type FieldOp } from "./geo";
+import { missionWeather, nightAt, tickGeo, type FieldOp } from "./geo";
 import { newsFor } from "./news";
 import { CLASS_WEAPONS, WEAPON_TIERS, model, startingModels, type AmmoId, type AttachmentId, type WeaponType } from "../data/weapons";
 
@@ -606,7 +606,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
   const amnestics = kind === "coverup" ? c.amnestics : 0;
   return {
     kind, scp: (inc.scpId || "173") as ScpId, map: inc.map, amnestics,
-    night: nightAt(c, inc),
+    night: nightAt(c, inc), weather: missionWeather(c, inc),
     severity: inc.kind === "outbreak" ? c.outbreak?.severity ?? 2 : undefined,
     rioters: inc.kind === "riot" ? riotSize(c) : undefined,
     // a breach at Site-19 catches researchers in the wing and opens the D-Class block

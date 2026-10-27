@@ -3,10 +3,13 @@
 import { countOperational } from "./base";
 import { dateOf, log, yearOf, type Campaign, type Incident } from "./campaign";
 import { newsActive } from "./news";
+import type { Weather } from "../data/weather";
 import { has } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 
-export interface RegionState { exposure: number; collapsed: boolean; lastCoverStory?: number; }
+export interface RegionState { exposure: number; collapsed: boolean; lastCoverStory?: number;
+  /** Current weather there and the day it next changes. */
+  weather?: Weather; weatherUntil?: number; }
 
 export const COLLAPSE_LIMIT = 3;           // fronts lost before the campaign ends
 export const COVER_STORY = { cost: 50, amnestics: 2, cut: 10, cooldown: 30 };
@@ -48,6 +51,11 @@ export function travelDays(c: Campaign, r: RegionId) {
   if (!base) return 0;
   return Math.max(1, Math.ceil(base * (has(c, "c130") ? 0.5 : has(c, "c119") ? 0.75 : 1)));
 }
+
+/** True when a storm over the region holds flights there back a day. */
+export const stormDelay = (c: Campaign, r: RegionId) => c.regions[r].weather === "storm" && travelDays(c, r) > 0;
+/** Days the squad needs to reach an incident: the flight, a day more in a storm, none for an escort. */
+export const flightOut = (c: Campaign, inc: Incident) => inc.kind === "escort" ? 0 : travelDays(c, inc.region) + (stormDelay(c, inc.region) ? 1 : 0);
 
 const STORIES = [
   "a \"weather balloon\" crash with too many witnesses",
@@ -171,6 +179,6 @@ export function tickWorld(c: Campaign) {
 /** Why the squad can't reach an incident in time, if it can't. */
 export function travelBlock(c: Campaign, inc: Incident) {
   if (inc.kind === "escort") return null;   // the squad is already there
-  const t = travelDays(c, inc.region);
-  return c.day + t > inc.expires ? `The ${transportName(c)} needs ${t} day${t > 1 ? "s" : ""} to get there, and the window closes sooner.` : null;
+  const t = flightOut(c, inc);
+  return c.day + t > inc.expires ? `The ${transportName(c)} needs ${t} day${t > 1 ? "s" : ""} to get there${stormDelay(c, inc.region) ? " (a storm adds one)" : ""}, and the window closes sooner.` : null;
 }
