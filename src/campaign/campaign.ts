@@ -12,8 +12,11 @@ import { addExposure, collapsedCount, COLLAPSE_LIMIT, newRegions, regionFunding,
 import { ALERTS, breachGuards, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
 import { CLASS_WEAPONS, WEAPON_TIERS, model, startingModels, type AmmoId, type AttachmentId, type WeaponType } from "../data/weapons";
 
-export const RANKS = ["Operative", "Specialist", "Sergeant", "Lieutenant", "Captain"];
-export const RANK_XP = [0, 3, 7, 12, 18];
+export const RANKS = ["Operative", "Specialist", "Sergeant", "Lieutenant", "Captain", "Major", "Colonel"];
+export const RANK_XP = [0, 3, 7, 12, 18, 25, 34];
+/** Ranks that come with a new perk (Specialist to Captain); Major and Colonel give a fixed bonus instead. */
+export const PERK_RANKS = 4;
+export const RANK_BONUS: Record<number, string> = { 5: "+1 HP and +5 aim", 6: "−2% blink chance and +10 max sanity" };
 export const RECRUIT_COST = 120;
 export const DCLASS_COST = 15;
 export const DCLASS_MONTHLY = 6;
@@ -143,12 +146,12 @@ export interface Campaign {
 }
 
 // Perks per rank: steadier aim, fewer blinks, more composure.
-export const aimOf = (o: Operative) => o.aimBase + o.rank * 4;
-export const maxSanOf = (o: Operative) => 100 + o.rank * 5 + (o.sanBonus ?? 0);
-export const blinkFullOf = (o: Operative) => Math.max(0.05, 0.10 - o.rank * 0.01);
+export const aimOf = (o: Operative) => o.aimBase + o.rank * 4 + (o.rank >= 5 ? 5 : 0);
+export const maxSanOf = (o: Operative) => 100 + o.rank * 5 + (o.sanBonus ?? 0) + (o.rank >= 6 ? 10 : 0);
+export const blinkFullOf = (o: Operative) => Math.max(0.03, 0.10 - Math.min(o.rank, 4) * 0.01 - (o.rank >= 6 ? 0.02 : 0));
 export const deployable = (o: Operative) => o.alive && o.hp >= o.maxHp && !o.busy;
 /** An operative who has ranked up but not yet picked their class or perk. */
-export const promotionDue = (o: Operative) => o.alive && o.rank > 0 && o.perks.length < o.rank;
+export const promotionDue = (o: Operative) => o.alive && o.rank > 0 && o.perks.length < Math.min(o.rank, PERK_RANKS);
 export const perkChoices = (o: Operative): [PerkId, PerkId] | null =>
   o.cls && o.perks.length >= 1 && o.perks.length < o.rank ? CLASSES[o.cls].choices[o.perks.length - 1] : null;
 
@@ -167,7 +170,9 @@ function checkPromotion(c: Campaign, o: Operative, out?: string[]) {
   const before = o.rank;
   while (o.rank < RANKS.length - 1 && o.xp >= RANK_XP[o.rank + 1]) o.rank++;
   if (o.rank > before) {
-    const msg = `${o.call} ${o.name} promoted to ${RANKS[o.rank]}. ${o.cls ? "Choose a new perk" : "Choose their class"} on the Personnel tab.`;
+    if (before < 5 && o.rank >= 5) { o.maxHp++; o.hp++; }
+    const what = o.rank > PERK_RANKS ? `${RANK_BONUS[o.rank]}.` : `${o.cls ? "Choose a new perk" : "Choose their class"} on the Personnel tab.`;
+    const msg = `${o.call} ${o.name} promoted to ${RANKS[o.rank]}. ${what}`;
     if (out) out.push(msg); else log(c, msg, "good", "personnel");
   }
 }
