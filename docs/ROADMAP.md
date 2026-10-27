@@ -25,38 +25,41 @@ they can be used, to keep the bar clear.
 
 Each new anomaly's author is checked on the SCP Wiki and credited under CC BY-SA 3.0.
 
-## Phase 3B: research expansion
+## Phase 3B: research expansion (lined up with XCOM 2 and War of the Chosen)
 
-Projects that each change how the game plays, beyond swapping weapon models.
+Part 1 (done): lab projects (psychological screening, field medicine, SCR-300 and AN/PRC-25 radios, AN/PVS-2 night
+optics, Class-B amnestics, automated cleaning, cell lock override, front company accounting, signals intelligence);
+studies that need mission material like XCOM autopsies (Insurgency weapons, prisoners, Intel gathered, SCP-049-2
+tissue, pocket dimension survivors) with a new Insurgency branch; breakthroughs and inspirations; training range
+purchases like the Guerrilla Tactics School (squad size 5 and 6, guard training); situational mission actions only
+shown when usable, with a first-time hint.
 
-Personnel
-- Officer school: squad size 5. Command staff (later): squad size 6.
-- Psychological screening: +10 max sanity; new recruits sometimes arrive Steady.
-- Field medicine: medkits heal 4; a stabilized operative can stand again at 1 HP.
-- Guard training program: guards get +10 aim and +10 sanity.
+Part 2: weapons
+- Tiers like XCOM's conventional, magnetic and beam: service (era models by year), Foundation special issue (+1 damage,
+  +5 aim, after captured weapon analysis), experimental electromagnetic "coil" weapons (+2 damage, ignore 1 armor,
+  after the SCP-106 electromagnet work).
+- Sidearms: an M1911 in a second slot for everyone, used when the main weapon is empty.
+- M79 grenade launcher (from 1961): grenadiers throw 4 tiles farther.
+- Heavy weapons (heavy armor only): M20 bazooka, M72 LAW (1963); the M2 flamethrower waits for SCP-610.
+- Ammunition built in the workshop, one type per operative: armor-piercing, tracer, hollow-point, sedative (downed
+  Insurgents and D-Class are always captured). Incendiary waits for fire.
+- Attachments: suppressor (shots don't alert anything), bayonet (3 damage to an adjacent enemy, no roll), improved
+  sights (+10 aim).
 
-Equipment
-- Guard flak vests: Site Security gets armor.
-- Field radios (SCR-300, then AN/PRC-25 from 1962): Epsilon-11 reaches breaches 3 turns sooner; overwatch loses less aim.
-- Restraint kit: Secure from 2 tiles; each prisoner yields 1 extra Intel.
-- Amnestic darts: Dose from 4 tiles.
-- Night optics (AN/PVS-2, from 1964): +2 sight range.
+Part 3: armor and kit
+- Each armor tier in light (+1 HP, +1 move), medium (the current vest) and heavy (+4 HP, 2 armor, −1 move, carries
+  heavy weapons) versions; a hazmat suit (immune to SCP-106's rot) and a later lead-lined suit (SCP-106 needs two turns
+  to take the wearer).
+- Utility items: medkit, CS gas grenade, field camera (photographing an anomaly gives research progress). Flares wait
+  for night missions; the incendiary grenade waits for fire.
+- Workshop projects like XCOM's Proving Ground: guard flak vests, restraint kit (Secure and Restrain from 2 tiles,
+  +1 Intel per prisoner), amnestic darts (Dose from 4 tiles).
+- Facility upgrade: expanded barracks (15 D-Class).
 
-Weapons
-- Armor-piercing rounds (attachment): hits ignore 1 armor point.
-- Tracer ammunition: +10 aim on overwatch shots.
-
-Site
-- Class-B amnestics: cover stories need 1 dose; amnestics labs make twice as many.
-- Automated cell cleaning (from 1960): cleanings no longer risk D-Class.
-- Expanded barracks: barracks hold 15 D-Class.
-- Front company accounting: +10% funding from every standing region.
-- Signals intelligence: +1 Intel a month.
-
-Chaos Insurgency (new branch, opens after the first prisoner)
-- Interrogation techniques: prisoners give Intel twice as fast.
-- Insurgency codebooks: locating a cell costs 2 Intel; incidents show exact Insurgent numbers.
-- Captured weapon analysis: Insurgents get −5 aim against armored operatives.
+Proposed, waiting for approval
+- Deconstructing facilities: 1 engineer, half the build time, 25% refund; not Command or an occupied wing.
+- Depth bonus: containment wings 10% less likely to breach per level below the top, and less likely to escape when the
+  guards handle a breach alone, but Epsilon-11 takes a turn longer per level to arrive.
 
 ## Phase 3C: tactical depth
 
