@@ -54,6 +54,7 @@ export interface Unit {
   goggles?: boolean;
   specialist?: "researcher" | "amnestics";
   record?: boolean;
+  bonds?: Record<string, number>;
   /** Phase 3I Insurgents: their specialist role, an anomalous charm (still working, or carried at all), breaching
    *  charges left, and a commander who got away. */
   role?: import("./ciTactics").CiRole;
@@ -167,6 +168,8 @@ export interface SquadMember {
   /** Phase 3J: Eta-10's video goggles, and staff who come along in a support role. */
   goggles?: boolean;
   specialist?: "researcher" | "amnestics";
+  /** Bonded squadmates on this mission (operative id to bond level). */
+  bonds?: Record<string, number>;
 }
 
 /** Effects of finished research that apply during missions. */

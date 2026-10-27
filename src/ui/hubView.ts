@@ -1,4 +1,5 @@
 // Site-19 Command: incidents and time, the base and its containment, and Epsilon-11's roster.
+import { BOND_NAMES, FATIGUE, bondsOf, injured, tiredness } from "../campaign/condition";
 import { STAFF_EVENTS, answerStaff } from "../campaign/staff";
 import { HIST_CATS, type HistCat } from "../campaign/history";
 import { FIELDS, FIELD_BONUS, TRADES, syncStaff, type StaffKind } from "../campaign/people";
@@ -18,13 +19,13 @@ import { FACIAL, HAIR_BY_SEX, HAIR_COLORS, HAIR_STYLES, HEADGEAR, LOOK_PARTS, SE
 import { portraitSvg } from "./portrait";
 import { INSPECTION, inspectionChecks, inspectionSoon } from "../campaign/inspection";
 import {
-  UPGRADE, damageEffect, engineersBusy, repairOf, GEN_TIERS, canRefitGen, genTierOf, generatorOutput, refitGenerator, canUpgrade, upgradeFacility, RECREATION, canAddRecreation, addRecreation, DEMOLISH, canDemolish, demolish, demolishDays, demolishLeavesShort, ENGINEER_COST, EXCAVATE, FACILITIES, nameInText, GRADE_NAMES, MAX_LEVELS, REPAIR, SLOTS, build, canBuild, canExcavate, canRepair,
+  UPGRADE, countOperational, damageEffect, engineersBusy, repairOf, GEN_TIERS, canRefitGen, genTierOf, generatorOutput, refitGenerator, canUpgrade, upgradeFacility, RECREATION, canAddRecreation, addRecreation, DEMOLISH, canDemolish, demolish, demolishDays, demolishLeavesShort, ENGINEER_COST, EXCAVATE, FACILITIES, nameInText, GRADE_NAMES, MAX_LEVELS, REPAIR, SLOTS, build, canBuild, canExcavate, canRepair,
   dclassCapacity, engineersFree, excavate, facilityAt, healPerDay, isContainment, monthlyUpkeep, neighbors, operational,
   powerShort, powerSupply, powerUse, repair, sanityPerDay, type Facility, type FacilityType,
 } from "../campaign/base";
 import {
   DCLASS_COST, DCLASS_MONTHLY, RANKS, RANK_XP, TRAINER, retire, trainerWhy, RANK_BONUS, RECRUIT_COST, advanceDay, aimOf, blinkFullOf, buyDClass,
-  NICK_RANK, fieldName, canBuyDClass, canHireEngineer, dayOfMonth, deployable, hireEngineer, maxSanOf, monthOf, monthlyFunding, frontsFunding, canHire, candidateCost, hireCandidate, lookOf, trainersActive,
+  answerWhileAway, NICK_RANK, fieldName, canBuyDClass, canHireEngineer, dayOfMonth, deployable, hireEngineer, maxSanOf, monthOf, monthlyFunding, frontsFunding, canHire, candidateCost, hireCandidate, lookOf, trainersActive,
   INTEL_PER_PRISONER, INTERROGATION_DAYS, interrogationDays, PRISONER_BOUNTY, holdingCapacity, canRetrain, canTherapy, canWeaken, dateText, fitAttachment, gunFor, loadAmmo, setWeapon, weaken, weaponOf, weaponOptions, chooseClass, choosePerk, perkChoices, promotionDue, startRetrain, startTherapy,
   pendingBreach, type Campaign, type Incident, type Extras, type Loadout, type Operative,
 } from "../campaign/campaign";
@@ -59,6 +60,8 @@ let histCat: HistCat | "all" = "all", openReport: string | null = null;
 export interface HubActions {
   save: () => void;
   deploy: (inc: Incident, loadouts: Loadout[], dCount: number, extras: Extras) => void;
+  /** The squad flying out has landed. */
+  arrive: () => void;
   newCampaign: () => void;
   importCampaign: (c: Campaign) => void;
 }
@@ -131,10 +134,10 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
   let speed = 0, lastSpeed = 1;
   const SPEEDS = [1, 2, 4], DAY_MS = 4000;
   const hourText = () => `${String(Math.floor(c.hour ?? 0)).padStart(2, "0")}:00`;
-  const clockBlocked = () => !!c.over || !!pendingBreach(c) || !!c.notices?.length;
+  const clockBlocked = () => { answerWhileAway(c); return !!c.over || !!pendingBreach(c) || !!c.notices?.length; };
   const setSpeed = (n: number) => { if (n > 0 && tab !== "world") { render(); return; } if (!(n > 0 && clockBlocked())) { speed = n; if (n) lastSpeed = n; } render(); };
 
-  const ready = () => c.roster.filter(deployable);
+  const ready = () => c.roster.filter(o => deployable(c, o));
   // an ambushed convoy is defended by whoever made the capture, wounded or not
   const readyFor = (inc: Incident) => inc.kind === "escort" && inc.squad ? c.roster.filter(o => o.alive && inc.squad!.includes(o.id)) : c.tf.eta10 ? ready().filter(o => tfOf(o) === tfPick) : ready();
   const watchPool = () => guardsReady(c);
@@ -199,6 +202,27 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
   }
 
   const nightPoints = () => nightPointsOf(c);
+  /** The World Map's scale when it was last drawn, so planes can be redrawn between renders. */
+  let lastK = 1;
+  /** Planes in the air: squads flying out to an incident and home again, placed by the clock (hours included), so
+   *  they move along their route while time runs. */
+  function flightMarkup(k: number) {
+    const [sx, sy] = project(SITE19.lon, SITE19.lat), now = c.day + (c.hour ?? 0) / 24;
+    const plane = (ax: number, ay: number, bx: number, by: number, f: number, cls: string, title: string) => {
+      f = Math.max(0, Math.min(1, f));
+      const z = cls === "out" ? 1.7 : 1;   // the squad on its way out is the one to watch
+      const px = ax + (bx - ax) * f, py = ay + (by - ay) * f, ang = Math.atan2(by - ay, bx - ax) * 180 / Math.PI;
+      return `<g class="flight ${cls}"><line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" style="stroke-width:${0.4 * k};stroke-dasharray:${1 * k} ${1.5 * k}"/><path d="M${px + 3 * k * z} ${py}L${px - 2 * k * z} ${py - 2 * k * z}L${px - 1 * k * z} ${py}L${px - 2 * k * z} ${py + 2 * k * z}Z" transform="rotate(${ang} ${px} ${py})"/><title>${esc(title)}</title></g>`;
+    };
+    const out = c.outbound ? (() => { const o = c.outbound!, inc = c.incidents.find(i => i.id === o.incId); if (!inc) return "";
+      const pl = incidentPlace(inc), [bx, by] = project(pl.lon, pl.lat);
+      return plane(sx, sy, bx, by, (now - o.depart) / (o.arrive - o.depart), "out", `${o.tf} flying out to ${pl.name}: lands ${dateText(Math.floor(o.arrive))}`); })() : "";
+    const home = [...new Set(c.roster.filter(o => o.alive && o.busy?.kind === "travel" && o.busy.from && !o.busy.out).map(o => o.busy!.from!))].map(r => {
+      const o = c.roster.find(x => x.alive && x.busy?.kind === "travel" && x.busy.from === r && !x.busy.out)!, total = o.busy!.total ?? o.busy!.daysLeft + 1;
+      const [ax, ay] = project(REGIONS[r].lon, REGIONS[r].lat), done = total - o.busy!.daysLeft + (c.hour ?? 0) / 24;
+      return plane(ax, ay, sx, sy, done / (total + 1), "home", `Flying home from ${REGIONS[r].name}: back ${dateText(c.day + o.busy!.daysLeft)}`); }).join("");
+    return out + home;
+  }
   const tabBtn = (t: Tab, label: string) => `<button type="button" class="tab ${tab === t ? "on" : ""}" data-tab="${t}" aria-pressed="${tab === t}">${label}</button>`;
 
   // ---------- Command ----------
@@ -410,7 +434,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       <p class="muted">Pick up to ${squadSize(c)} operatives. Only fully healed operatives can deploy; sanity carries over, so watch it.${inc.kind === "breach" ? " You can also send nobody and play it with the guards alone." : ""}</p>
       <div class="pick">${ops.length ? ops.map(o => `<label class="pickop ${chosen.has(o.id) ? "on" : ""}">
         <input type="checkbox" id="pick-${o.id}" data-pick="${o.id}" ${chosen.has(o.id) ? "checked" : ""} ${!chosen.has(o.id) && chosen.size >= squadSize(c) ? "disabled" : ""}>
-        <span><b>${esc(o.call)} ${esc(fieldName(o))}</b> · ${RANKS[o.rank]} · SAN ${o.san}/${maxSanOf(o)}</span></label>`).join("") : `<p class="muted">Nobody is fit to deploy. Wait for the wounded to heal or recruit.</p>`}</div>
+        <span><b>${esc(o.call)} ${esc(fieldName(o))}</b> · ${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""} · XP ${o.xp} · SAN ${o.san}/${maxSanOf(o)} · fatigue ${o.fatigue ?? 0}${tiredness(o) === "tired" ? ` <span class="warn">(tired: −5 aim, −10 sanity)</span>` : ""}${bondsOf(o).filter(b => chosen.has(b.id)).map(b => ` · <span class="ok">${BOND_NAMES[b.level].toLowerCase()} with ${esc(c.roster.find(x => x.id === b.id)?.name.split(" ").pop() ?? "")}</span>`).join("")}</span></label>`).join("") : `<p class="muted">Nobody is fit to deploy. Wait for the wounded to heal or recruit.</p>`}</div>
       ${chosen.size ? `<div class="loadouts"><div class="specs">Loadout: weapon, one armor slot and two item slots each. Unused items come back; gear on anyone killed is lost.</div>
         ${[...chosen].map(id => loadoutRow(c.roster.find(o => o.id === id)!)).join("")}</div>` : ""}`}
       ${extraRow("researcher", "Bring a field researcher", canBringResearcher(c, inc), "Unarmed but for a pistol. Scans the anomaly for research (up to 3 times); if they die, Site-19 loses a researcher.")}
@@ -523,12 +547,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     const route = selInc ? (() => { const pl = incidentPlace(selInc), [mx, my] = project(pl.lon, pl.lat), b = briefing(c, selInc);
       return pl.name === "Site-19" ? "" : `<line x1="${sx}" y1="${sy}" x2="${mx}" y2="${my}" class="route" style="stroke-width:${0.6 * k};stroke-dasharray:${2 * k} ${1.2 * k}"/><text x="${(sx + mx) / 2}" y="${(sy + my) / 2 - 2 * k}" class="routetext" style="font-size:${3.4 * k}px">${b.travel ? plural(b.travel, "day") : "by road"}${nightAt(c, selInc) ? " · night there" : ""}</text>`; })() : "";
     const ops = (c.ops ?? []).map(op => { const d = REGIONS[op.region], [ox, oy] = project(d.lon, d.lat); return `<g class="fieldop"><circle cx="${ox + 9 * k}" cy="${oy - 3 * k}" r="${2 * k}"/><circle cx="${ox + 9 * k}" cy="${oy - 3 * k}" r="${3.6 * k}" class="wave" style="stroke-width:${0.5 * k}"/><title>${esc(FIELD_OPS[op.kind].name)} in ${esc(d.name)}, results ${esc(dateText(op.done))}</title></g>`; }).join("");
-    // squads flying home: a plane along the route from where they were to Site-19
-    const flights = [...new Set(c.roster.filter(o => o.alive && o.busy?.kind === "travel" && o.busy.from).map(o => o.busy!.from!))].map(r => {
-      const o = c.roster.find(x => x.alive && x.busy?.kind === "travel" && x.busy.from === r)!, total = o.busy!.total ?? o.busy!.daysLeft + 1;
-      const [ax, ay] = project(REGIONS[r].lon, REGIONS[r].lat), f = 1 - o.busy!.daysLeft / total, px = ax + (sx - ax) * f, py = ay + (sy - ay) * f;
-      const ang = Math.atan2(sy - ay, sx - ax) * 180 / Math.PI;
-      return `<g class="flight"><line x1="${ax}" y1="${ay}" x2="${sx}" y2="${sy}" style="stroke-width:${0.4 * k};stroke-dasharray:${1 * k} ${1.5 * k}"/><path d="M${px + 3 * k} ${py}L${px - 2 * k} ${py - 2 * k}L${px - 1 * k} ${py}L${px - 2 * k} ${py + 2 * k}Z" transform="rotate(${ang} ${px} ${py})"/><title>Epsilon-11 flying home from ${esc(REGIONS[r].name)}: back ${esc(dateText(c.day + o.busy!.daysLeft))}</title></g>`; }).join("");
+    lastK = k;
+    const flights = flightMarkup(k);
     const night = nightPoints();
     const [s19x, s19y] = [sx, sy];
     // ---- the side panel: one thing at a time ----
@@ -562,7 +582,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         <div class="label">${KIND_NAMES[i.kind]} · ${esc(b.place.name)}${stt === "urgent" ? " · urgent" : stt === "new" ? " · new" : ""}</div>
         <h2>${esc(incidentName(i))} <small>${esc(i.title.split(":")[0])}</small></h2>
         <p>${esc(i.kind === "coverup" ? "Witnesses need amnestics before the story spreads." : briefText(i))}</p>
-        <div class="specs">Deadline: <b>${esc(b.deadline)}</b>${i.dispatch ? "" : ` · ${esc(b.arrival)}`}</div>
+        <div class="specs">Deadline: <b>${esc(b.deadline)}</b>${i.dispatch || c.outbound?.incId === i.id ? "" : ` · ${esc(b.arrival)}`}</div>
         ${i.group ? `<p class="warn"><b>Only one can be answered.</b> This came in with ${c.incidents.filter(x => x.group === i.group && x !== i).map(x => `<button class="linkbtn" type="button" data-mapinc="${x.id}">${esc(incidentName(x))}</button>`).join(" and ")}. Sending Epsilon-11 to one means the others go unanswered.</p>` : ""}
         ${(() => { const wl = i.dispatch ? "" : weatherLine(c, i); return wl ? `<p class="${missionWeather(c, i) === "clear" ? "muted" : "warn"}">${esc(wl)}</p>` : ""; })()}
         ${i.dispatch ? `<p class="ok">${i.dispatch.how === "team" ? `An amnestics team with ${plural(i.dispatch.doses, "dose")} is on its way.` : "The front is working on it."} Result ${dateText(i.dispatch.done)}.</p>` : ""}
@@ -582,7 +602,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
           : `<div class="row"><button class="act" type="button" data-investigate="${i.id}" data-how="intel" ${c.intel < INVESTIGATE.intel ? `disabled title="Needs ${INVESTIGATE.intel} Intel."` : ""}>Investigate · ${INVESTIGATE.intel} Intel, now</button><button class="act" type="button" data-investigate="${i.id}" data-how="agent" ${c.funds < INVESTIGATE.cost ? `disabled title="Needs $${INVESTIGATE.cost}k."` : ""}>Send a field agent · $${INVESTIGATE.cost}k, ${plural(INVESTIGATE.days, "day")}</button></div>`; })()}
         ${cover}
         ${block && !i.dispatch ? `<p class="warn">${esc(block)}</p>` : ""}
-        <div class="row">${planning === i.id || i.dispatch ? "" : `<button class="act ${i.kind === "coverup" ? "" : "primary"}" type="button" data-plan="${i.id}" ${c.over || block ? "disabled" : ""}>${i.kind === "breach" ? "Take command" : i.kind === "coverup" ? "Send Epsilon-11 instead" : "Prepare a response"}</button>`}
+        ${c.outbound?.incId === i.id ? `<p class="ok">${esc(c.outbound.tf)} is in the air: lands ${dateText(Math.floor(c.outbound.arrive))}, around ${String(Math.floor((c.outbound.arrive % 1) * 24)).padStart(2, "0")}:00 Site-19 time. Let time run.</p>` : ""}
+        <div class="row">${planning === i.id || i.dispatch || c.outbound?.incId === i.id ? "" : `<button class="act ${i.kind === "coverup" ? "" : "primary"}" type="button" data-plan="${i.id}" ${c.over || block ? "disabled" : ""}>${i.kind === "breach" ? "Take command" : i.kind === "coverup" ? "Send Epsilon-11 instead" : "Prepare a response"}</button>`}
           ${i.kind === "breach" ? `<button class="act" type="button" data-guards="${i.id}" ${c.over ? "disabled" : ""}>Let the guards handle it · ${pctText(guardOdds(c, i))} chance</button>` : ""}
           ${i.kind === "riot" || i.kind === "raid" ? `<button class="act" type="button" data-guards="${i.id}" ${c.over ? "disabled" : ""}>Let the guards handle it${i.kind === "raid" ? ` (${Math.round(raidOdds(c, i) * 100)}%)` : ""}</button>` : ""}
           ${back}</div>
@@ -632,7 +653,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
           ${links}
           ${mapShow.has("night") ? `<polygon points="${night}" class="night"><title>Night side of the world</title></polygon>` : ""}
           ${regionLabels}
-          ${flights}
+          <g id="flightsG">${flights}</g>
           ${route}
           <g class="site19"><rect x="${s19x - 2.2 * k}" y="${s19y - 2.2 * k}" width="${4.4 * k}" height="${4.4 * k}" transform="rotate(45 ${s19x} ${s19y})"></rect>
             <text x="${s19x - 4 * k}" y="${s19y - 3.5 * k}" text-anchor="end" style="font-size:${4 * k}px">Site-19</text><title>Site-19 · exact location classified</title></g>
@@ -1090,6 +1111,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
           return part("sex", "Sex", SEX_NAMES[o.sex ?? "m"]) + part("skin", "Skin tone", `${l.skin + 1} of ${SKIN.length}`) + part("hair", "Hair", HAIR_STYLES[l.hair]) + part("hairColor", "Hair colour", `${l.hairColor + 1} of ${HAIR_COLORS.length}`)
             + (o.sex === "f" ? "" : part("facial", "Facial hair", FACIAL[l.facial])) + part("scar", "Scar", l.scar ? "Yes" : "No") + (o.unit && HEADGEAR[o.unit] ? part("headgear", "Headgear", l.headgear ? HEADGEAR[o.unit]![0] : "None") : ""); })()}
       </details>
+      <p class="specs">Fatigue ${o.fatigue ?? 0}/100 (${tiredness(o)}; tired at ${FATIGUE.tired}, can't deploy at ${FATIGUE.exhausted}; −${FATIGUE.restPerDay} a day at Site-19${countOperational(c, "psych") ? `, −${FATIGUE.restPsych} more with psychological services` : ""})${o.injury && o.injury.until > c.day ? ` · <span class="warn">${esc(o.injury.name)} until ${dateText(o.injury.until)}</span>` : ""}</p>
+      ${bondsOf(o).length || o.lostBonds?.length ? `<p class="specs">Bonds: ${bondsOf(o).map(b => { const m = c.roster.find(x => x.id === b.id); return m ? `${BOND_NAMES[b.level]} with <b>${esc(m.name)}</b>${m.alive ? "" : " (fallen)"} (${b.n} missions together)` : ""; }).filter(Boolean).join("; ")}${o.lostBonds?.length ? `${bondsOf(o).length ? "; " : ""}lost: ${o.lostBonds.map(esc).join(", ")}` : ""}</p>` : ""}
       ${c.tf.eta10 ? `<div class="row"><span class="specs">Task force</span>${(["e11", "eta10"] as TaskForce[]).map(t => `<button class="act ${tfOf(o) === t ? "on" : ""}" type="button" data-assigntf="${t}" aria-pressed="${tfOf(o) === t}">${esc(TF_NAMES[t])}</button>`).join("")}</div>` : ""}
       <details class="archived"><summary>Rename</summary><div class="row">
         <label class="specs" for="renameName">Full name</label><input id="renameName" maxlength="40" value="${esc(o.name)}">
@@ -1144,8 +1167,11 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     const next = RANK_XP[o.rank + 1], heal = healPerDay(c);
     const days = Math.ceil((o.maxHp - o.hp) / heal);
     const status = o.busy ? `<span class="flag">${o.busy.kind === "therapy" ? "Therapy" : o.busy.kind === "travel" ? "In transit" : "Retraining"} · ${plural(o.busy.daysLeft, "day")}</span>`
+      : injured(c, o) ? `<span class="flag bad">${esc(o.injury!.name)} · ${plural(o.injury!.until - c.day, "day")}</span>`
+      : tiredness(o) === "exhausted" ? `<span class="flag bad">Exhausted · ${plural(Math.ceil(((o.fatigue ?? 0) - FATIGUE.exhausted + 1) / FATIGUE.restPerDay), "day")}</span>`
       : promotionDue(o) ? `<span class="flag stare">Promotion</span>`
-      : deployable(o) ? `<span class="flag">Ready</span>` : `<span class="flag bad">Wounded · ${plural(days, "day")}</span>`;
+      : o.hp < o.maxHp ? `<span class="flag bad">Wounded · ${plural(days, "day")}</span>`
+      : tiredness(o) === "tired" ? `<span class="flag stare">Tired</span>` : `<span class="flag">Ready</span>`;
     const ms = maxSanOf(o);
     return `<button type="button" class="oprow ${opSel === o.id ? "sel" : ""}" data-op="${o.id}">
       <span class="tag">${portraitSvg(lookOf(o), o.unit, 40)}<br>${esc(o.call)}</span>
@@ -1437,10 +1463,13 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         const el = document.getElementById("clockHour"); if (el) el.textContent = hourText();
         // the night side sweeps across the map with the clock, not just when the day turns over
         const night = root.querySelector<SVGPolygonElement>("polygon.night");
-        if (night && now - lastNight > 80) { lastNight = now; night.setAttribute("points", nightPoints()); }
+        if (night && now - lastNight > 80) { lastNight = now; night.setAttribute("points", nightPoints()); const fg = root.querySelector("#flightsG"); if (fg) fg.innerHTML = flightMarkup(lastK); }
+
         const gd = root.querySelector<HTMLElement>(".geodate"); if (gd) gd.textContent = `${dateText(c.day)} · ${String(Math.floor(c.hour ?? 0)).padStart(2, "0")}:00`;
       }
     }
+    // the squad has landed: the mission starts
+    if (c.outbound && c.day + (c.hour ?? 0) / 24 >= c.outbound.arrive && !c.notices?.length) { speed = 0; act.arrive(); return; }
     requestAnimationFrame(tick);
   };
   let redrawLater = false;
