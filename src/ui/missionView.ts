@@ -3,11 +3,14 @@ import { L, area, inContainer } from "../core/grid";
 import { shotInfo } from "../game/combat";
 import { NOTES_173 } from "../game/notes";
 import { blinkChance, maxSanOf, pct } from "../game/profiles";
-import { S, canAct, canSee, full, hooks, isPanicked, isTeam, label, seen, starers, team, unitAt } from "../game/state";
+import { S, canAct, canSee, full, hooks, isBlind, isPanicked, isTeam, label, seen, starers, team, unitAt } from "../game/state";
 import {
   callBlink, callCheck, doOverwatch, doSeal, dragCheck, endTurn, evacuate, onTap, sealCheck, select, selectNext,
-  stareCheck, startPlayerTurn, toggleDrag, toggleStare,
+  stareCheck, startPlayerTurn, throwCheck, toggleDrag, toggleStare, toggleThrow,
 } from "../game/turn";
+import type { ItemId } from "../game/types";
+
+const ITEM_NAMES: Record<ItemId, string> = { armor: "Body armor", eyedrops: "Eye drops", flashbang: "Flashbang", smoke: "Smoke grenade", tracker: "Motion tracker" };
 import type { MissionResult, Unit } from "../game/types";
 import { esc } from "./util";
 import { createRenderer } from "./render";
@@ -49,6 +52,7 @@ const TEMPLATE = `
         <div><b>Sanity</b> recovers on quiet turns: anyone not staring who lost no sanity that turn regains 5 (operatives) or 4 (D-Class).</div>
         <div><b>Cover</b> only stops gunfire, and only when it sits between shooter and target. SCP-173 ignores it.</div>
         <div><b>Sight and shooting.</b> At least 3 of 10 sight lines between two tiles must be clear to see or shoot. A target with only 3 or 4 clear lines is partly hidden: −15% to hit and no critical hits. Anyone with a wall or pillar beside them can lean out past its edge to look and shoot, at the same −15%.</div>
+        <div><b>Equipment.</b> Armor adds HP and armor points; each point cuts the damage of every hit by 1. Eye drops save one blink while staring. Flashbangs blind everyone within a tile of where they land until next turn, including anyone holding SCP-173. Smoke blocks all sight for two turns. Motion trackers show anything within 6 tiles, through walls.</div>
         <div><b>The Insurgency</b> holds SCP-173 with their eyes too, and loses sanity doing it. When they crack, they cover their eyes and SCP-173 is free to go after them.</div>
       </details>
       <div class="overlay" id="overlay" hidden><div class="sheet" id="overlaySheet"></div></div>
@@ -73,6 +77,7 @@ const TEMPLATE = `
           <button class="act" id="nextBtn" type="button">Next <kbd>Tab</kbd></button>
           <button class="act primary wide" id="endBtn" type="button">End turn <kbd>E</kbd></button>
         </div>
+        <div class="itembar" id="itemBar"></div>
         <div class="hint" id="hint"></div>
       </div>
       <div class="file">
@@ -120,6 +125,9 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     if (m.staring) flags.push(`<span class="flag stare">Do not blink</span>`);
     if (m.overwatch) flags.push(`<span class="flag">Overwatch</span>`);
     if (m.alive && isPanicked(m)) flags.push(`<span class="flag bad">Eyes shut</span>`);
+    if (m.alive && isBlind(m)) flags.push(`<span class="flag bad">Blinded</span>`);
+    if (m.armor) flags.push(`<span class="flag">Armor ${m.armor}</span>`);
+    for (const it of m.items || []) if (it.uses > 0 || it.id === "tracker") flags.push(`<span class="flag">${ITEM_NAMES[it.id]}${it.id === "tracker" ? "" : ` ×${it.uses}`}</span>`);
     if (m.alive && m.san <= ms * 0.3) flags.push(`<span class="flag bad">Shaken</span>`);
     if (!m.alive) flags.push(`<span class="flag bad">${m.side === "mtf" ? "KIA" : "Dead"}</span>`);
     if (m.alive && m.side === "subject") flags.push(`<span class="flag bad">Fled</span>`);
@@ -162,7 +170,8 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
       }
     } else {
       sc.className = "card status danger";
-      line.innerHTML = `<b>Not in sight.</b> ${S.lastSeen ? `Last seen turn ${S.lastSeen.turn}, ${area(S.lastSeen.x, S.lastSeen.y)}.` : "Somewhere in the north rooms."}<br>It is hunting. Anyone it catches not looking is in danger.`;
+      const tracked = S.setup.mods.track173 ? ` Movement study puts it in the <b>${area(st.x, st.y)}</b>.` : ` ${S.lastSeen ? `Last seen turn ${S.lastSeen.turn}, ${area(S.lastSeen.x, S.lastSeen.y)}.` : "Somewhere in the north rooms."}`;
+      line.innerHTML = `<b>Not in sight.</b>${tracked}<br>It is hunting. Anyone it catches not looking is in danger.`;
     }
 
     const ops = S.units.filter(u => u.side === "mtf");
@@ -182,13 +191,22 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     setBtn("nextBtn", off);
     setBtn("endBtn", off);
     setBtn("evacBtn", off);
+    const bar = $("itemBar");
+    const its = sel?.items || [];
+    bar.innerHTML = its.map((it, i) => {
+      const throwable = it.id === "flashbang" || it.id === "smoke";
+      if (!throwable) return `<span class="flag">${ITEM_NAMES[it.id]}${it.id === "eyedrops" ? ` ×${it.uses} · used automatically` : " · always on"}</span>`;
+      const why = off || (S.mode === "throw" && S.throwing === it ? null : throwCheck(sel, i));
+      return `<button class="act ${S.mode === "throw" && S.throwing === it ? "on" : ""}" type="button" data-item="${i}" ${why ? `disabled title="${esc(why)}"` : ""}>${S.mode === "throw" && S.throwing === it ? "Cancel throw" : `Throw ${ITEM_NAMES[it.id].toLowerCase()} ×${it.uses}`} <kbd>${i + 1}</kbd></button>`;
+    }).join("");
 
     let h = "";
     if (hintFlash) h = `<b>${esc(hintFlash)}</b>`;
     else if (!can) h = S.over ? "" : "Enemy activity…";
     else if (sel) {
       const hv = S.hover && unitAt(S.hover.x, S.hover.y);
-      if (S.mode === "drag") h = `<b>${esc(sel.name)}: choose where to drag SCP-173.</b>\nOrange tiles keep it in someone else's sight the whole way. Dragging ends their turn.`;
+      if (S.mode === "throw" && S.throwing) h = `<b>${esc(full(sel))}: choose where to throw the ${ITEM_NAMES[S.throwing.id].toLowerCase()}.</b>\nLit tiles are in range and in sight. It covers the target tile and every tile around it. Throwing ends their turn.`;
+      else if (S.mode === "drag") h = `<b>${esc(sel.name)}: choose where to drag SCP-173.</b>\nOrange tiles keep it in someone else's sight the whole way. Dragging ends their turn.`;
       else if (hv && hv.side === "raider" && seen(hv.x, hv.y) && sel.side === "mtf" && sel.ap > 0 && canSee(sel, hv.x, hv.y)) {
         const s = shotInfo(sel, hv);
         h = `<b>${sel.call} → Insurgent: ${s.chance}% to hit</b>${s.crit ? `, ${s.crit}% crit` : ""}\n` + s.mods.map(m => `${m[0]} ${m[1] >= 0 ? "+" : ""}${m[1]}`).join(" · ");
@@ -230,6 +248,10 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   $("owBtn").onclick = doOverwatch;
   $("nextBtn").onclick = selectNext;
   $("endBtn").onclick = endTurn;
+  $("itemBar").addEventListener("click", e => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>("[data-item]");
+    if (b) toggleThrow(Number(b.dataset.item), flash);
+  });
   let evacArmed = 0;
   $("evacBtn").onclick = () => {
     const b = $("evacBtn");
@@ -246,7 +268,8 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     if (t.closest && t.closest("input,textarea,select")) return;
     const k = e.key.toLowerCase();
     if (k === "tab") { e.preventDefault(); selectNext(); }
-    else if (k === "escape") { if (S.mode) { S.mode = null; update(); } }
+    else if (k === "escape") { if (S.mode) { S.mode = null; S.throwing = null; update(); } }
+    else if (k === "1" || k === "2") toggleThrow(Number(k) - 1, flash);
     else if (k === "e") endTurn();
     else if (k === "o") doOverwatch();
     else if (k === "b") toggleStare(flash);

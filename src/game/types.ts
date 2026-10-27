@@ -1,5 +1,8 @@
 // Shared types for a tactical mission.
 
+export type ItemId = "armor" | "eyedrops" | "flashbang" | "smoke" | "tracker";
+export interface Carried { id: ItemId; uses: number; }
+
 export type Side = "mtf" | "dclass" | "subject" | "raider" | "anomaly";
 export type Phase = "player" | "anomaly" | "hand" | "subjects" | "over";
 
@@ -35,6 +38,14 @@ export interface Unit {
   maxSan?: number;
   blinkFull?: number;
   sealed?: boolean;
+  /** Armor points: each one cuts the damage of every hit by 1. */
+  armor?: number;
+  hasArmor?: boolean;
+  items?: Carried[];
+  /** Blinded by a flashbang through the enemy phases of this turn. */
+  blindUntil?: number;
+  /** Research bonus: lower blink chance while staring. */
+  blinkMod?: number;
 }
 
 export interface LogEntry { t: number; text: string; kind: string; }
@@ -42,13 +53,18 @@ export interface LogEntry { t: number; text: string; kind: string; }
 export type Effect =
   | { type: "line"; t0: number; dur: number; x0: number; y0: number; x1: number; y1: number; color: string }
   | { type: "text"; t0: number; dur: number; x: number; y: number; text: string; color: string }
-  | { type: "ghost"; t0: number; dur: number; x: number; y: number };
+  | { type: "ghost"; t0: number; dur: number; x: number; y: number }
+  | { type: "flash"; t0: number; dur: number; x: number; y: number };
 
 /** One operative as sent from Site-19. */
 export interface SquadMember {
   opId: string; name: string; call: string;
   hp: number; maxHp: number; san: number; maxSan: number; aim: number; blinkFull: number;
+  armor: number; hasArmor: boolean; items: Carried[];
 }
+
+/** Effects of finished research that apply during missions. */
+export interface MissionMods { blinkBonus: number; recoverBonus: number; mtfDrag: number; track173: boolean; }
 
 export interface MissionSetup {
   incidentId: string;
@@ -56,6 +72,8 @@ export interface MissionSetup {
   insurgents: number;
   squad: SquadMember[];
   dclass: string[];
+  known: string[];
+  mods: MissionMods;
 }
 
 export interface MissionResult {
@@ -63,7 +81,8 @@ export interface MissionResult {
   win: boolean;
   evacuated: boolean;
   turns: number;
-  squad: { opId: string; alive: boolean; hp: number; san: number; kills: number; sealed: boolean }[];
+  squad: { opId: string; alive: boolean; hp: number; san: number; kills: number; sealed: boolean; hasArmor: boolean; items: Carried[] }[];
+  known: string[];
   dSent: number;
   dReturned: number;
   dRecruited: number;
@@ -81,7 +100,7 @@ export interface MissionState {
   busy: boolean;
   over: boolean;
   called: boolean;
-  mode: "drag" | null;
+  mode: "drag" | "throw" | null;
   units: Unit[];
   statue: Unit;
   sealed: boolean;
@@ -99,5 +118,7 @@ export interface MissionState {
   log: LogEntry[];
   effects: Effect[];
   stats: { mtfLost: number; dLost: number; escaped: number; raidersDown: number };
+  smoke: { x: number; y: number; until: number }[];
+  throwing: Carried | null;
   result?: MissionResult;
 }

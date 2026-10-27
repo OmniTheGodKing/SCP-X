@@ -4,13 +4,13 @@ import { L, bfs, cheb, pathTo } from "../core/grid";
 import { sightFrom } from "../core/sight";
 import { coverAgainst, fire, moveUnit, shotInfo } from "./combat";
 import { prof } from "./profiles";
-import { S, alive, canSee, isPanicked, log, occupied, reveal, seen, team } from "./state";
+import { S, alive, canSee, isBlind, isPanicked, log, occupied, reveal, seen, team } from "./state";
 import type { Unit } from "./types";
 
 /** Insurgents who see SCP-173 stare at it too, and crack the same way. */
 export function insurgentsStare() {
   for (const r of alive("raider")) {
-    if (isPanicked(r) || !canSee(r, S.statue.x, S.statue.y)) continue;
+    if (isPanicked(r) || isBlind(r) || !canSee(r, S.statue.x, S.statue.y)) continue;
     r.san -= r.seen173 ? prof(r).drain : prof(r).firstSight + prof(r).drain;
     r.seen173 = true;
     if (r.san <= 0) {
@@ -34,6 +34,7 @@ export async function raiderPhase(checkEnd: () => boolean) {
   }
   for (const r of rs) {
     if (!r.alive || !alive("mtf").length || isPanicked(r)) continue;
+    if (isBlind(r)) { if (seen(r.x, r.y)) log("A blinded Insurgent stumbles and can't fire."); continue; }
     r.ap = 2;
     await raiderAct(r);
     if (checkEnd()) return;
