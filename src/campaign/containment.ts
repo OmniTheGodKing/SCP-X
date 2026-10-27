@@ -1,4 +1,5 @@
 // Anomalies held at Site-19: daily breach risk, cell cleaning, breaches, and escapes.
+import { openInquiry, rivalTakes } from "./chaos";
 import { chronicle } from "./history";
 import { FACILITIES, damageEffect, isContainment, nameInText, neighbors, operational, powerShort, stationsOnLevel, type Facility } from "./base";
 import { has, reachMilestone } from "./research";
@@ -88,9 +89,12 @@ export function startBreach(c: Campaign, s: ScpRecord, cause: string) {
     expires: c.day,
     insurgents: Math.min(3, rand(0, 1) + Math.floor((c.day - 1) / 120)),
     region: HOME, map: "wingC",
+    // what really caused it is only known if someone looks into it afterwards
+    cause: c.chaos.pendingCause ?? (c.chaos.moles && Math.random() < 0.3 ? "sabotage" : s.id === "106" || s.id === "049" ? (Math.random() < 0.5 ? "anomalous" : "accident") : "accident"),
   };
   c.nextIncident++;
   c.incidents.push(inc);
+  openInquiry(c, inc);
   chronicle(c, "breach", `${s.name} breached containment in the ${nameInText(wing.type)} on level ${wing.level + 1}. ${cause}`);
   log(c, `${cause} ${s.name} is out of its cell. Site Security is responding now: send Epsilon-11 in after them, or leave it to the guards.`, "bad", "command");
 }
@@ -213,6 +217,8 @@ export function tickContainment(c: Campaign) {
     if (inc.first && c.day > inc.expires && inc.id !== c.activeIncident) {
       // a new anomaly nobody went for: it moves on, and turns up somewhere else later
       c.incidents = c.incidents.filter(i => i !== inc); addExposure(c, inc.region, 10); noteMissed(c, inc.title.split(":")[0]);
+      const rival = rivalTakes(c, inc);
+      if (rival) { (c.lostScps ??= []).push(inc.scpId); log(c, `${inc.title.split(":")[0]} went unanswered (+10 exposure in ${REGIONS[inc.region].name}). ${rival}`, "bad", "command"); continue; }
       c.sightings[inc.scpId as ScpId] = c.day + rand(60, 150);
       log(c, `${inc.title.split(":")[0]} went unanswered (+10 exposure in ${REGIONS[inc.region].name}). Whatever it was has moved on.`, "bad", "command");
       continue;
@@ -343,10 +349,13 @@ export function firstSighting(c: Campaign, id: ScpId) {
     title: `Incident ${String(c.nextIncident).padStart(3, "0")}: Anomalous sighting near ${where}`,
     appeared: c.day, expires: c.day + travelDays(c, region) + 4,
     insurgents: rand(0, 2), region, map: Math.random() < 0.5 ? "town" : "farm", civilians: rand(3, 4),
+    // in Europe and East Asia the Soviets' anomalous unit may already be on the ground
+    gru: (region === "europe" || region === "east_asia") && Math.random() < 0.5,
   };
+  if (inc.gru) inc.insurgents = rand(2, 3);
   c.nextIncident++;
   c.incidents.push(inc);
-  log(c, `Reports from ${where}: ${d.sighting}. Something new. Capture it within ${inc.expires - c.day} days.`, "bad", "command");
+  log(c, `Reports from ${where}: ${d.sighting}. Something new. Capture it within ${inc.expires - c.day} days.${inc.gru ? " GRU Division \"P\" is in the area too." : ""}`, "bad", "command");
 }
 
 /** Wings an anomaly could move into: working, empty, and at least its grade. */

@@ -390,3 +390,10 @@ details.archived summary { cursor: pointer; font-family: var(--font-mono); font-
 .history { list-style: none; margin: 8px 0 0; padding: 0; }
 .history li { padding: 6px 0; border-bottom: 1px solid var(--line); line-height: 1.45; }
 .history .hday { color: var(--muted); font-size: 12px; margin-right: 6px; white-space: nowrap; }
+.exp-bar.threat { position: relative; } .exp-bar.threat span { background: #8a5ab0; }
+.exp-bar.threat i { position: absolute; top: -2px; bottom: -2px; width: 1px; background: var(--muted); opacity: .7; }
+.geobar .agenda { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); text-decoration: none; }
+.geobar .agenda .mini { width: 70px; height: 6px; background: var(--panel-2); border: 1px solid var(--line); display: inline-block; position: relative; }
+.geobar .agenda .mini span { position: absolute; inset: 0 auto 0 0; background: #8a5ab0; }
+.geobar .agenda b { color: #c49ae0; }
+.worldmap .rlabel .ciop { fill: #c49ae0; }

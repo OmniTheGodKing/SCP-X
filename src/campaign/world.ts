@@ -1,5 +1,6 @@
 // The world outside Site-19: regional exposure and Foundation fronts, travel, cover-ups,
 // Insurgency cells and amnestics.
+import { addThreat, planActive } from "./chaos";
 import { chronicle } from "./history";
 import { countOperational } from "./base";
 import { dateOf, log, yearOf, type Campaign, type Incident } from "./campaign";
@@ -90,7 +91,7 @@ export function addExposure(c: Campaign, r: RegionId, n: number) {
 
 export const collapsedCount = (c: Campaign) => REGION_IDS.filter(r => c.regions[r].collapsed).length;
 export const regionFunding = (c: Campaign, r: RegionId) =>
-  c.regions[r].collapsed || !isContacted(c, r) ? 0 : Math.round(Math.max(3, Math.round(200 / REGION_IDS.length - c.regions[r].exposure * 0.25)) * (r === "east_asia" && newsActive(dateOf(c.day), "armistice") ? 1.1 : 1));
+  c.regions[r].collapsed || !isContacted(c, r) ? 0 : (planActive(c, "infiltrate", r) ? 0.5 : 1) * Math.round(Math.max(3, Math.round(200 / REGION_IDS.length - c.regions[r].exposure * 0.25)) * (r === "east_asia" && newsActive(dateOf(c.day), "armistice") ? 1.1 : 1));
 
 export const transportName = (c: Campaign) => has(c, "c130") ? "C-130 Hercules" : has(c, "c119") ? "C-119 Flying Boxcar" : "C-47 Skytrain";
 export function travelDays(c: Campaign, r: RegionId) {
@@ -227,12 +228,13 @@ export function tickWorld(c: Campaign) {
     if (inc.kind === "retaliation") {
       noteMissed(c, inc.title.split(":")[0]);
       addExposure(c, inc.region, 12);
+      addThreat(c, 3, `${inc.title.split(":")[0]} unanswered`);
       log(c, `Nobody answered ${inc.title.split(":")[0]}. People died in the streets (+12 exposure in ${REGIONS[inc.region].name}).`, "bad", "command");
     } else if (inc.kind === "coverup") {
       noteMissed(c, inc.title.split(":")[0]);
       addExposure(c, inc.region, 12);
       log(c, `${inc.title.split(":")[0]} went unanswered. The story is out in ${REGIONS[inc.region].name} (+12 exposure there).`, "bad", "command");
-    } else log(c, `The Insurgency cell near ${inc.title.split(", ").pop()} has moved on.`, "key", "command");
+    } else { addThreat(c, 4, `a cell near ${inc.title.split(", ").pop()} left alone`); log(c, `The Insurgency cell near ${inc.title.split(", ").pop()} has moved on.`, "key", "command"); }
   }
 }
 

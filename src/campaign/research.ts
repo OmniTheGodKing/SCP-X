@@ -8,10 +8,10 @@ import { cellWork, type ScpRecord } from "./containment";
 
 export type Branch = "SCP-173" | "SCP-049" | "SCP-106" | "Objects" | "Insurgency" | "Personnel" | "Weapons" | "Equipment" | "Site" | "Breakthrough";
 /** Things brought back from missions that some studies need (like XCOM autopsies). */
-export type MaterialId = "ciWeapons" | "prisoners" | "intelTotal" | "tissue" | "survivors" | "outbreaks";
+export type MaterialId = "ciWeapons" | "prisoners" | "intelTotal" | "tissue" | "survivors" | "outbreaks" | "charms";
 export const MATERIALS: Record<MaterialId, string> = {
   ciWeapons: "Insurgency weapons recovered", prisoners: "Insurgents taken prisoner", intelTotal: "Intel gathered",
-  tissue: "SCP-049-2 tissue samples", survivors: "people back from SCP-106's pocket dimension", outbreaks: "SCP-610 outbreaks seen",
+  tissue: "SCP-049-2 tissue samples", survivors: "people back from SCP-106's pocket dimension", outbreaks: "SCP-610 outbreaks seen", charms: "anomalous charms taken from the Insurgency",
 };
 export type TestId = "endurance" | "material" | "movement";
 import type { ItemId } from "../game/types";
@@ -108,6 +108,7 @@ export const PROJECTS: Record<string, ProjectDef> = {
   front_accounting:   { name: "Front company accounting", branch: "Site", days: 30, cost: 80, desc: "The fronts learn to hide more money. +10% funding from every region that hasn't collapsed." },
   sigint:             { name: "Signals intelligence", branch: "Site", days: 40, cost: 100, afterWon: 4, desc: "Listening posts pick up Insurgency traffic. +1 Intel a month." },
   interrogation:      { name: "Interrogation techniques", branch: "Insurgency", days: 30, cost: 60, needsMaterial: ["prisoners", 1], desc: "Prisoners give up Intel twice as fast." },
+  charm_study:        { name: "Anomalous charms", branch: "Insurgency", days: 35, cost: 90, needsMaterial: ["charms", 1], unlocks: "ward", desc: "What the Insurgency sews into its charms, and how to make our own. The workshop can build warding charms: the first round that would hit the carrier is turned aside." },
   codebooks:          { name: "Insurgency codebooks", branch: "Insurgency", days: 30, cost: 70, needsMaterial: ["intelTotal", 5], desc: "Locating a cell costs 2 Intel instead of 3, and incidents show exactly how many Insurgents to expect." },
   weapon_analysis:    { name: "Captured weapon analysis", branch: "Insurgency", days: 30, cost: 70, needsMaterial: ["ciWeapons", 3], desc: "Knowing their guns means knowing where armor helps. Insurgents get −5 aim against operatives wearing armor." },
   // ---- weapons: tiers, the M79, special ammunition and attachments ----
@@ -200,6 +201,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   frag:      { name: "M26 frag grenade", cost: 15, days: 1, uses: 1, desc: "3 damage within 1 tile of where it lands; destroys half cover." },
   flashbang: { name: "Stun grenade", cost: 15, days: 1, uses: 1, desc: "Blinds everyone within 1 tile of where it lands until the next turn." },
   smoke:     { name: "M18 smoke grenade", cost: 10, days: 1, uses: 1, desc: "Blocks sight within 1 tile of where it lands for two turns." },
+  ward:      { name: "Warding charm", cost: 60, days: 3, uses: 1, desc: "Copied from the Insurgency's charms: the first round that would hit the carrier is turned aside. Used up when it works." },
   tracker:   { name: "Seismic sensor", cost: 50, days: 3, uses: null, desc: "Detects anything within 6 tiles, through walls." },
 };
 /** Vest protection by researched tier. */

@@ -1,5 +1,6 @@
 // Campaign saves live in this browser only. Storage can be unavailable (private windows,
 // blocked site data), so every access is guarded and the game still runs without it.
+import { newChaos } from "./chaos";
 import { lookOf, newBio, type Campaign } from "./campaign";
 import { withGivenName } from "../data/names";
 
@@ -112,7 +113,11 @@ export function parseCampaign(raw: string): Campaign | null {
       if (old.research.done.includes("efficient_gen")) for (const f of old.base.facilities) if (f.type === "generator") f.genTier = Math.max(f.genTier ?? 0, 1);
       Object.assign(c, { version: 19 });
     }
-    return c.version === 19 ? (c as unknown as Campaign) : null;
+    if (c.version === 19) {
+      // the Insurgency as one organization: its agenda starts low, its first operations arrive next month
+      Object.assign(c, { version: 20, chaos: newChaos() });
+    }
+    return c.version === 20 ? (c as unknown as Campaign) : null;
   } catch {
     return null;
   }

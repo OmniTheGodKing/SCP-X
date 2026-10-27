@@ -1,4 +1,5 @@
 // Gunfire, cover, damage and movement.
+import { charmTurns, officerNear } from "./ciTactics";
 import { DIRS, DRUM, FULL, HALF, STEEL, TS, WALL, L, bfs, tileAt, type Pt } from "../core/grid";
 import { bestView, type View } from "../core/sight";
 import { hasPerk, rangeOf } from "./perks";
@@ -58,6 +59,7 @@ export function shotInfo(sh: Unit, tg: Unit, reaction = false): ShotInfo {
   if (rm) mods.push(rm);
   if (reaction && !hasPerk(sh, "covering_fire")) mods.push(["Reaction shot", (gun?.type === "mg" ? -5 : -15) + (sh.side === "mtf" ? Math.min(S.setup.mods.reactionBonus ?? 0, gun?.type === "mg" ? 5 : 15) : 0)]);
   if (sh.side === "raider" && tg.hasArmor && S.setup.mods.ciAnalysis) mods.push(["Known weapons", -5]);
+  if (officerNear(sh)) mods.push(["Officer nearby", 10]);
   if (sh.side === "mtf" && sh.san <= 30) mods.push(["Shaken", -10]);
   if (sh.medals?.includes("sealed_in") && (tg.side === "anomaly" || (tg.side === "zombie" && !tg.rioter))) mods.push(["Sealed in", 5]);
   if (cover === 0 && hasPerk(sh, "hunter")) mods.push(["Hunter", 20]);
@@ -99,6 +101,7 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
     S.mem.set("shot-" + sh.id, { x: i % L.W, y: (i / L.W) | 0, turn: S.turn });
   }
   if (sh.side === "mtf") reveal("hear");
+  if (hit && charmTurns(tg)) { hooks.update(); await sleep(380); return; }
   if (hit) {
     const crit = Math.random() * 100 < info.crit;
     let dmg = gun ? rand(gun.dmg[0], gun.dmg[1]) : rand(3, 4);
@@ -194,6 +197,11 @@ export async function moveUnit(u: Unit, path: Pt[]) {
     // SCP-106's rot eats at anyone who walks through it
     if (S.corroded.has(y * L.W + x) && u.side !== "anomaly" && u.armorKind !== "hazmat") { log(`${full(u)} steps in the black rot (1 damage).`, "bad"); damage(u, 1); }
     if (isTeam(u)) computeVis();
+    // Insurgent snipers on overwatch take their shot at anyone of the team who moves where they can see
+    if (isTeam(u)) for (const r of alive("raider")) {
+      if (!u.alive || u.downed) break;
+      if (r.overwatch && !isPanicked(r) && canSee(r, u.x, u.y)) { r.overwatch = false; if (seen(r.x, r.y)) log(`${r.name} fires from overwatch.`, "bad"); await fire(r, u, true); }
+    }
     if (u.side === "raider") {
       for (const m of alive("mtf")) {
         if (!u.alive) break;

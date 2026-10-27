@@ -1,5 +1,6 @@
 // Chaos Insurgency AI: hold SCP-173 with their eyes when they see it, fight from cover,
 // and push toward the Foundation team.
+import { commanderFlees, demoBreach } from "./ciTactics";
 import { L, area, bfs, cheb, nearContainer, pathTo } from "../core/grid";
 import { sightFrom } from "../core/sight";
 import { coverAgainst, fire, moveUnit, shotInfo } from "./combat";
@@ -83,7 +84,8 @@ export async function raiderPhase(checkEnd: () => boolean) {
     if (!podActive(r) || !r.alive || !alive("mtf").length || isPanicked(r)) continue;
     if ((S.setup.kind === "escort" || S.setup.kind === "raid") && nearContainer(r.x, r.y)) { workTruck(r); if (checkEnd()) return; continue; }
     if (isBlind(r)) { if (seen(r.x, r.y)) log("A blinded Insurgent stumbles and can't fire."); continue; }
-    r.ap = 2;
+    r.ap = 2; r.overwatch = false;
+    if (await commanderFlees(r)) { if (checkEnd()) return; continue; }
     await raiderAct(r);
     if (checkEnd()) return;
   }
@@ -139,6 +141,9 @@ async function raiderAct(r: Unit) {
       if (!best || score > best.score) best = { m, s, score };
     }
     if (best && (best.s.chance >= 45 || (r.ap === 1 && best.s.chance >= 20))) { r.ap = 0; await fire(r, best.m, false); return; }
+    // a sniper with no good shot settles in and watches; a sapper with nothing to shoot opens a wall
+    if (r.role === "sniper" && (best || r.ap === 1)) { r.ap = 0; r.overwatch = true; if (seen(r.x, r.y)) log(`${r.name} settles in on overwatch.`, "bad"); return; }
+    if (!best && demoBreach(r)) return;
     const path = bestSpot(r, t);
     if (!path) {
       if (best && best.s.chance >= 20) { r.ap = 0; await fire(r, best.m, false); }
