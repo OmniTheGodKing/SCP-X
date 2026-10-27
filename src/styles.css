@@ -289,3 +289,31 @@ details.archived summary { cursor: pointer; font-family: var(--font-mono); font-
 .portrait.fallen { filter: grayscale(1) contrast(.9); opacity: .8; }
 .proj .ptop .portrait { margin-right: 8px; }
 .proj .ptop .portrait + b { margin-right: auto; }
+.worldmap .marker { cursor: pointer; outline: none; }
+.worldmap .marker path, .worldmap .marker rect, .worldmap .marker circle:not(.ring) { stroke: #0b0f13; stroke-width: .5; }
+.worldmap .marker.anomaly :not(.ring) { fill: var(--subject); }
+.worldmap .marker.insurgency :not(.ring) { fill: var(--raider); }
+.worldmap .marker.coverup :not(.ring) { fill: var(--manila); }
+.worldmap .marker.site :not(.ring) { fill: var(--alert); }
+.worldmap .marker .ring { fill: none; stroke: transparent; stroke-width: .8; }
+.worldmap .marker.urgent .ring { stroke: var(--alert); animation: mpulse 1.2s ease-in-out infinite; }
+.worldmap .marker.new .ring { stroke: var(--manila); stroke-dasharray: 1.2 1; }
+.worldmap .marker.active .ring { stroke: var(--ok, #6fbf73); }
+.worldmap .marker.on .ring, .worldmap .marker:focus-visible .ring { stroke: var(--ink); stroke-width: 1.1; }
+@keyframes mpulse { 50% { stroke-opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .worldmap .marker.urgent .ring { animation: none; } }
+.worldmap .facility { cursor: pointer; outline: none; }
+.worldmap .facility rect { fill: none; stroke: var(--mtf); stroke-width: .7; }
+.worldmap .facility text { fill: var(--mtf); font: 3.2px var(--font-mono); }
+.worldmap .facility.on rect, .worldmap .facility:focus-visible rect { stroke: var(--ink); stroke-width: 1; }
+.worldmap .route { stroke: var(--manila); stroke-width: .6; stroke-dasharray: 2 1.2; }
+.worldmap .routetext { fill: var(--manila); font: 3.4px var(--font-mono); text-anchor: middle; }
+.mapfilters { flex-wrap: wrap; margin-top: 8px; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; background: var(--muted); }
+.dot.anomaly { background: var(--subject); } .dot.insurgency { background: var(--raider); } .dot.coverup { background: var(--manila); } .dot.site { background: var(--alert); } .dot.facility { background: transparent; border: 1px solid var(--mtf); border-radius: 0; }
+.urgenttxt { color: var(--alert); } .newtxt { color: var(--manila); } .activetxt { color: var(--ok, #6fbf73); }
+.inclist { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.inclist li.urgent .linkbtn { color: var(--alert); }
+.inclist li.on { outline: 1px solid var(--manila); outline-offset: 2px; }
+.linkbtn { background: none; border: none; color: var(--ink); font: inherit; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.file.brief { margin-bottom: 12px; }

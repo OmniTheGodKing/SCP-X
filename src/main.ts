@@ -9,7 +9,7 @@ import { pendingBreach } from "./campaign/campaign";
 import { createMission } from "./game/mission";
 import { S } from "./game/state";
 import type { MissionKind, MissionResult } from "./game/types";
-import { mountHub } from "./ui/hubView";
+import { mountHub, openTab } from "./ui/hubView";
 import { mountMission } from "./ui/missionView";
 import { esc } from "./ui/util";
 import { mountDebug } from "./ui/debug";
@@ -70,7 +70,7 @@ function showHub() {
       saveCampaign(campaign);
       createMission(setup);
       screen = "mission";
-      mountMission(root, showHub, result => {
+      mountMission(root, () => { openTab("world", "reg:" + inc.region); showHub(); }, result => {
         const d = applyResult(campaign, result);
         saveCampaign(campaign);
         return debriefHtml(result, d, setup.kind, scpName(setup.scp ?? "173"));
