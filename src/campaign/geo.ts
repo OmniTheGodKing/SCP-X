@@ -32,9 +32,10 @@ export function incidentPlace(inc: Incident): { name: string; lon: number; lat: 
   if (inc.kind === "breach" || inc.kind === "riot" || inc.kind === "raid") return { name: "Site-19", ...SITE19 };
   const town = REGIONS[inc.region].towns.find(t => inc.title.includes(t.split(",")[0]));
   if (town && TOWN_POS[town]) return { name: town, lon: TOWN_POS[town][0], lat: TOWN_POS[town][1] };
-  // no town in the title: a fixed spot near the middle of the region, offset by the incident id
+  // no town in the title (an outbreak, say): one of the region's towns, fixed by the incident id
   const d = REGIONS[inc.region], h = [...inc.id].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
-  return { name: d.name, lon: d.lon + ((h % 9) - 4) * 1.5, lat: d.lat + (((h >> 4) % 7) - 3) * 1.2 };
+  const t = d.towns[h % d.towns.length], p = TOWN_POS[t];
+  return p ? { name: t, lon: p[0], lat: p[1] } : { name: d.name, lon: d.lon, lat: d.lat };
 }
 
 export type MarkerGroup = "anomaly" | "insurgency" | "coverup" | "site";
@@ -67,8 +68,8 @@ export function briefing(c: Campaign, inc: Incident) {
   if (inc.scpId && !inc.first) known.push(`Anomaly: ${scpName(inc.scpId)}.`);
   else if (inc.first && inc.recon) known.push(`Anomaly: ${scpName(inc.scpId)}, identified by investigation.`);
   else if (inc.first) unknown.push("Anomaly: unidentified. Witnesses describe something new; investigating would identify it.");
-  if (inc.witnesses) known.push(`${inc.witnesses} witnesses to dose.`);
-  if (inc.civilians) known.push(`${inc.civilians} civilians in the area.`);
+  if (inc.witnesses) known.push(`${inc.witnesses} witness${inc.witnesses === 1 ? "" : "es"} to dose.`);
+  if (inc.civilians) known.push(`${inc.civilians} civilian${inc.civilians === 1 ? "" : "s"} in the area.`);
   const bonus = MISSION_BONUS[inc.kind] ?? 0;
   const rewards = [bonus ? `$${bonus}k from the O5 Council` : "", inc.kind === "coverup" ? "−10 exposure here" : inc.kind === "riot" || inc.kind === "raid" ? "" : "−5 exposure here",
     inc.kind === "strike" || inc.kind === "retaliation" || inc.kind === "raid" ? "captured Insurgent weapons and prisoners for research" : "",
@@ -77,7 +78,7 @@ export function briefing(c: Campaign, inc: Incident) {
     : inc.kind === "riot" ? "Leave it to the guards: a few D-Class die."
     : inc.kind === "raid" ? "Leave it to the guards; if they lose, prisoners go free or the payroll is taken and a building is wrecked."
     : inc.kind === "escort" ? "The convoy is lost with its cargo."
-    : inc.kind === "coverup" ? "The story gets out: +12 exposure here."
+    : inc.kind === "coverup" ? "The story gets out: +12 exposure here. An amnestics team or paying the front handles it without Epsilon-11."
     : inc.kind === "retaliation" ? "People die in the streets: +12 exposure here."
     : inc.kind === "strike" ? "The cell moves on; the Intel spent to find it is wasted."
     : inc.kind === "outbreak" ? "SCP-610 keeps spreading: more exposure every week and a worse stage every two weeks."
@@ -85,7 +86,9 @@ export function briefing(c: Campaign, inc: Incident) {
     : "It goes dark again (+15 exposure here) and resurfaces later.";
   const arrivalTurn = inc.kind === "breach" ? mtfArrival(c, inc) : inc.kind === "raid" ? raidArrival(c) : 0;
   return {
-    place, travel: t, arrives: c.day + t, deadline: immediate ? "Now" : left <= 0 ? "Last day" : `${dateText(inc.expires)} (${left} day${left === 1 ? "" : "s"})`,
+    place, travel: t, arrives: c.day + t,
+    deadline: immediate ? "Now" : inc.kind === "outbreak" ? "Ongoing: worsens every 2 weeks" : inc.dispatch ? `Handled ${dateText(inc.dispatch.done)}` : left <= 0 ? "Last day" : `${dateText(inc.expires)} (${left} day${left === 1 ? "" : "s"})`,
+    short: immediate ? "now" : inc.kind === "outbreak" ? "ongoing" : inc.dispatch ? "en route" : left <= 0 ? "last day" : `${left}d`,
     reachable: inc.kind === "escort" || c.day + t <= inc.expires, known, unknown, rewards, ignore, worse: worsening(inc),
     arrival: arrivalTurn ? `Epsilon-11 reaches the scene on turn ${arrivalTurn}.` : t ? `The team lands ${dateText(c.day + t)} after ${t} day${t > 1 ? "s" : ""} in the air.` : "The team goes by road and is there the same day.",
   };
@@ -160,7 +163,9 @@ function finishOp(c: Campaign, op: FieldOp) {
 
 /** Every day: field reports arrive, operations finish, and waiting incidents get worse. */
 export function tickGeo(c: Campaign) {
+  for (const inc of c.incidents.filter(i => i.dispatch && c.day >= i.dispatch.done)) resolveDispatch(c, inc);
   for (const inc of c.incidents) {
+    if (inc.dispatch) continue;
     if (inc.reconDue && c.day >= inc.reconDue) revealed(c, inc, true);
     if (inc.id === c.activeIncident) continue;
     const waited = c.day - inc.appeared;
@@ -172,4 +177,88 @@ export function tickGeo(c: Campaign) {
     if (inc.kind === "coverup" && waited > 0 && waited % 3 === 0 && (inc.grown ?? 0) < 2) { inc.witnesses = (inc.witnesses ?? 0) + 1; inc.grown = (inc.grown ?? 0) + 1; }
   }
   for (const op of (c.ops ?? []).filter(o => c.day >= o.done)) { c.ops = c.ops!.filter(o => o !== op); finishOp(c, op); }
+}
+
+/** An incident's name for display: the title without its number, and without the old "Cover-up:" prefix. */
+export const incidentName = (inc: Incident) => (inc.title.split(": ").slice(1).join(": ") || inc.title).replace(/^Cover-up: /, "").replace(/^./, ch => ch.toUpperCase());
+
+// ---- cover-ups without Epsilon-11: an amnestics team, or the front paid to bury the story ----
+export const AMNESTIC_TEAM = { cost: 10, researchers: 1 };
+export const BURY = { base: 30, perWitness: 10, chance: 0.7, days: 1 };
+export const buryCost = (inc: Incident) => BURY.base + BURY.perWitness * (inc.witnesses ?? 0);
+function coverupWhy(c: Campaign, inc: Incident): string | null {
+  if (inc.kind !== "coverup") return "Only for cover-ups.";
+  if (inc.dispatch) return "Already being handled.";
+  if (c.day + travelDays(c, inc.region) > inc.expires) return "Nobody can get there before the window closes.";
+  return null;
+}
+export function canSendTeam(c: Campaign, inc: Incident): string | null {
+  const w = coverupWhy(c, inc); if (w) return w;
+  const need = inc.witnesses ?? 0;
+  if (c.researchers - Object.values(c.research.assigned).reduce((a, n) => a + n, 0) < AMNESTIC_TEAM.researchers) return "Needs a researcher not working on a project.";
+  if (c.amnestics < need) return `Needs ${need} amnestic doses (${c.amnestics} in storage).`;
+  if (c.funds < AMNESTIC_TEAM.cost) return `Needs $${AMNESTIC_TEAM.cost}k.`;
+  return null;
+}
+export function sendAmnesticsTeam(c: Campaign, inc: Incident) {
+  if (canSendTeam(c, inc)) return;
+  const t = travelDays(c, inc.region), doses = inc.witnesses ?? 0;
+  c.funds -= AMNESTIC_TEAM.cost; c.amnestics -= doses; c.researchers -= AMNESTIC_TEAM.researchers;
+  (c.away ??= []).push({ kind: "researcher", back: c.day + Math.max(1, t) * 2 });
+  inc.dispatch = { how: "team", done: c.day + Math.max(1, t), doses };
+  log(c, `An amnestics team (a researcher and ${doses} doses) is on its way to ${incidentPlace(inc).name}. They dose the witnesses ${dateText(inc.dispatch.done)}.`);
+}
+export function canBury(c: Campaign, inc: Incident): string | null {
+  const w = coverupWhy(c, inc); if (w) return w;
+  return c.funds < buryCost(inc) ? `Needs $${buryCost(inc)}k.` : null;
+}
+export function buryStory(c: Campaign, inc: Incident) {
+  if (canBury(c, inc)) return;
+  c.funds -= buryCost(inc);
+  inc.dispatch = { how: "bury", done: c.day + BURY.days, doses: 0 };
+  log(c, `${REGIONS[inc.region].front} is paying to bury the story near ${incidentPlace(inc).name}. Word ${dateText(inc.dispatch.done)}.`);
+}
+function resolveDispatch(c: Campaign, inc: Incident) {
+  const d = inc.dispatch!, where = REGIONS[inc.region].name;
+  c.incidents = c.incidents.filter(i => i !== inc);
+  if (d.how === "team") {
+    c.stats.won++; addExposure(c, inc.region, -10);
+    log(c, `The amnestics team dosed all ${d.doses} witnesses near ${incidentPlace(inc).name}. Nobody remembers anything worth repeating (−10 exposure in ${where}).`, "good", "world");
+  } else if (Math.random() < BURY.chance) {
+    c.stats.won++; addExposure(c, inc.region, -5);
+    log(c, `The story near ${incidentPlace(inc).name} is buried: retractions, a lost roll of film, a quiet payment (−5 exposure in ${where}).`, "good", "world");
+  } else {
+    c.stats.lost++; addExposure(c, inc.region, 6);
+    log(c, `Paying off the story near ${incidentPlace(inc).name} only half worked. Some of it is out (+6 exposure in ${where}).`, "bad", "world");
+  }
+}
+
+// ---- territories, local time and night, and flights ----
+/** Rough territory of each region as lon/lat boxes [west, south, east, north]. Land outside every box (the Soviet
+ *  bloc and China) has no Foundation front. */
+export const TERRITORY: Record<RegionId, [number, number, number, number][]> = {
+  west_us: [[-170, 15, -100, 75]], east_us: [[-100, 15, -50, 75]], latam: [[-120, -60, -30, 15]],
+  europe: [[-30, 35, 30, 72]], africa: [[-20, -40, 60, 35]], east_asia: [[100, -50, 180, 45]],
+};
+/** The hour at a longitude when it is `hour` at Site-19 (solar time, by longitude). */
+export const localHour = (hour: number, lon: number) => ((hour + (lon - SITE19.lon) / 15) % 24 + 24) % 24;
+export const isNightHour = (h: number) => h < 6 || h >= 20;
+/** Whether a mission there would be fought in the dark: outdoors, by local time on arrival. */
+export function nightAt(c: Campaign, inc: Incident) {
+  if (inc.map === "wingC" || inc.map === "dblock") return false;
+  return isNightHour(localHour(c.hour ?? 0, incidentPlace(inc).lon));
+}
+/** The night side of the world as lon/lat points: the terminator from the date and Site-19's hour, closed over the dark pole. */
+export function nightPolygon(c: Campaign): [number, number][] {
+  const d = new Date(Date.UTC(1951, 5, 1) + (c.day - 1) * 864e5), doy = Math.floor((d.getTime() - Date.UTC(d.getUTCFullYear(), 0, 0)) / 864e5);
+  let dec = -23.44 * Math.cos((2 * Math.PI / 365) * (doy + 10));
+  if (Math.abs(dec) < 0.5) dec = dec < 0 ? -0.5 : 0.5;
+  const utc = ((c.hour ?? 0) - SITE19.lon / 15 + 24) % 24 - 0;   // Site-19 keeps local solar time
+  const sunLon = (12 - utc) * 15, rad = Math.PI / 180, pts: [number, number][] = [];
+  for (let lon = -180; lon <= 180; lon += 4) {
+    const H = (lon - sunLon) * rad;
+    pts.push([lon, Math.atan(-Math.cos(H) / Math.tan(dec * rad)) / rad]);
+  }
+  const pole = dec > 0 ? -90 : 90;
+  return [...pts, [180, pole], [-180, pole]];
 }

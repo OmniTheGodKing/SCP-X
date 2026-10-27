@@ -320,3 +320,50 @@ details.archived summary { cursor: pointer; font-family: var(--font-mono); font-
 .worldmap .fieldop circle { fill: var(--mtf); }
 .worldmap .fieldop .wave { fill: none; stroke: var(--mtf); stroke-width: .5; animation: mpulse 1.6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .worldmap .fieldop .wave { animation: none; } }
+
+/* the Geoscape: map first, one side panel beside it */
+.geo { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start; }
+.geo .geomap { padding: 10px; }
+.geobar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 8px; }
+.geobar .geodate { font-family: var(--font-display); font-size: 18px; color: var(--manila); font-weight: 400; margin-right: 6px; }
+.geobar .speeds { display: flex; gap: 4px; }
+.geobar .speeds .act, .geobar .mapfilters .act { padding: 6px 9px; }
+.geobar .mapfilters { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; margin-top: 0; }
+.geohelp { font-size: 12px; margin: 8px 2px 0; }
+.geoside { display: grid; gap: 12px; position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; }
+.geoside .card, .geoside .file { margin: 0; }
+.ok { color: var(--ok, #86c193); }
+.worldmap .marker.dispatched .ring { stroke: var(--mtf); stroke-dasharray: .8 .8; }
+.inclist li.dispatched .linkbtn { color: var(--muted); }
+@media (max-width: 960px) {
+  .geo { grid-template-columns: minmax(0, 1fr); }
+  .geoside { position: static; max-height: none; }
+  .geobar .mapfilters { margin-left: 0; }
+  .geobar .mapfilters .fname { display: none; }
+}
+
+.mapwrap { position: relative; }
+.zoombtns { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 4px; }
+.zoombtns .act { padding: 4px 9px; background: rgba(15,19,23,.85); }
+.worldmap { touch-action: none; cursor: grab; }
+.worldmap.panning { cursor: grabbing; }
+.worldmap .terr { fill: color-mix(in srgb, var(--alert) calc(var(--heat) * 0.9%), #34414d); fill-opacity: .85; cursor: pointer; outline: none; }
+.worldmap .terr:hover { fill-opacity: 1; }
+.worldmap .terr.on { stroke: var(--manila); stroke-width: .5; fill-opacity: 1; }
+.worldmap .terr.lost { fill: url(#lostHatch); }
+.worldmap .night { fill: #02050c; fill-opacity: .38; pointer-events: none; }
+.worldmap .rlabel text { fill: #d9dee3; font-family: var(--font-mono); text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: #0b0f13; stroke-width: .25em; }
+.worldmap .rlabel .rexp { fill: var(--muted); font-size: .8em; }
+.worldmap .rlabel .rexp.warm { fill: var(--manila); } .worldmap .rlabel .rexp.hot { fill: var(--alert); }
+.worldmap .mlabel { fill: #e6e0d0; font-family: var(--font-mono); text-anchor: middle; paint-order: stroke; stroke: #0b0f13; stroke-width: .3em; pointer-events: none; }
+.worldmap .leader { stroke: #c9c2b0; stroke-opacity: .6; }
+.worldmap .truept { fill: #c9c2b0; }
+.worldmap .flight line { stroke: var(--mtf); stroke-opacity: .6; }
+.worldmap .flight path { fill: var(--mtf); }
+.worldmap .site19 text { paint-order: stroke; stroke: #0b0f13; stroke-width: .3em; }
+.dot.night { background: #02050c; border: 1px solid var(--muted); }
+.worldmap .terr { fill: color-mix(in srgb, var(--alert) calc(var(--heat) * 0.8%), var(--base, #34414d)); }
+.linkbtn { text-align: left; }
+.inclist li { display: grid; gap: 1px; }
+.inclist .incmeta { color: var(--muted); font-size: 12px; padding-left: 14px; }
+.worldmap .leader, .worldmap .truept { pointer-events: none; }
