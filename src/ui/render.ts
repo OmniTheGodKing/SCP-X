@@ -7,6 +7,7 @@ import { blastArea, dragOptions, moveCost, reachFor, throwOptions } from "../gam
 import { abilityTargets } from "../game/abilities";
 import type { Unit } from "../game/types";
 import { mapLayer, noise } from "./tiles";
+import { animOf, badge, drawBase, drawFallen, drawPerson, drawRadio, drawRecords, lookFor, noteEffects, placeOf, resetAnims } from "./sprites";
 import { escaping } from "../game/scp173";
 import { detectRange } from "../game/insurgency";
 import { freshBodies, isCalm, isStaggered, leadOptions } from "../game/scp049";
@@ -24,6 +25,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
   const ctx = cv.getContext("2d")!;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   cv.width = L.W * TS * dpr; cv.height = L.H * TS * dpr;
+  resetAnims();
 
   function drawTiles() {
     ctx.drawImage(mapLayer(dpr), 0, 0, L.W * TS, L.H * TS);
@@ -45,19 +47,24 @@ export function createRenderer(cv: HTMLCanvasElement) {
     }
   }
 
-  // Placeholder SCP-173: a crude standing concrete figure with rebar and spray-paint marks.
-  function drawStatue(x: number, y: number, alpha: number) {
-    const cx = x * TS + TS / 2, cy = y * TS + TS / 2;
+  // SCP-173: the concrete figure, front-on, with rebar and spray-paint marks, on its own shadow
+  function drawStatueAt(cx: number, cy: number, alpha: number) {
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = C.concrete;
-    ctx.beginPath(); ctx.moveTo(cx - 6, cy + 13); ctx.lineTo(cx - 7, cy - 3); ctx.lineTo(cx + 7, cy - 3); ctx.lineTo(cx + 6, cy + 13); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(cx, cy - 8, 5.5, 6, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = "#6b5a48"; ctx.lineWidth = 1.2;
+    ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.beginPath(); ctx.ellipse(cx + 2, cy + 13, 9, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+    const g = ctx.createLinearGradient(cx - 7, 0, cx + 7, 0); g.addColorStop(0, "#cfc9bd"); g.addColorStop(1, "#9d978b");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.moveTo(cx - 6, cy + 13); ctx.lineTo(cx - 7.5, cy - 3); ctx.quadraticCurveTo(cx, cy - 5, cx + 7.5, cy - 3); ctx.lineTo(cx + 6, cy + 13); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx, cy - 8.5, 5.5, 6.2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#6b5a48"; ctx.lineWidth = 1.3;
     ctx.beginPath(); ctx.moveTo(cx - 7, cy - 1); ctx.lineTo(cx - 11, cy + 6); ctx.moveTo(cx + 7, cy - 1); ctx.lineTo(cx + 11, cy + 6); ctx.stroke();
-    ctx.fillStyle = "#7a2f22"; ctx.fillRect(cx - 4, cy - 9, 3, 1.6); ctx.fillRect(cx + 1, cy - 9, 3, 1.6);
+    ctx.strokeStyle = "rgba(60,50,40,0.6)"; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(cx - 2, cy + 2); ctx.lineTo(cx - 3, cy + 9); ctx.moveTo(cx + 3, cy - 1); ctx.lineTo(cx + 2, cy + 5); ctx.stroke();
+    ctx.fillStyle = "#7a2f22"; ctx.fillRect(cx - 4, cy - 9.5, 3, 1.6); ctx.fillRect(cx + 1, cy - 9.5, 3, 1.6);
     ctx.fillStyle = "#3f6b45"; ctx.fillRect(cx - 4, cy + 2, 8, 2);
     ctx.globalAlpha = 1;
   }
+  const drawStatue = (x: number, y: number, alpha: number) => drawStatueAt(x * TS + TS / 2, y * TS + TS / 2, alpha);
+  // grit thrown up where SCP-173 lands after moving unseen
+  let statueAt = "", puff: { x: number; y: number; t: number } | null = null;
 
   function drawEye(cx: number, cy: number) {
     ctx.fillStyle = "#0f1317"; ctx.beginPath(); ctx.ellipse(cx, cy, 7, 4.5, 0, 0, Math.PI * 2); ctx.fill();
@@ -80,115 +87,137 @@ export function createRenderer(cv: HTMLCanvasElement) {
     ctx.fillStyle = "#0f1317"; ctx.fillRect(px * TS + TS / 2 - 1, py * TS + 11, 2, 6);
   }
 
-  // SCP-049: a dark robed figure with the pale beak of a plague mask
-  function drawDoctor(cx: number, cy: number) {
-    ctx.fillStyle = "#1d1a18";
-    ctx.beginPath(); ctx.moveTo(cx, cy - 13); ctx.lineTo(cx + 10, cy + 12); ctx.lineTo(cx - 10, cy + 12); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = isCalm() ? C.ok : isStaggered() ? C.manila : C.alert; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = "#e8dcc0";
-    ctx.beginPath(); ctx.moveTo(cx - 3, cy - 6); ctx.lineTo(cx + 9, cy - 2); ctx.lineTo(cx - 3, cy + 1); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = "#0f1317"; ctx.beginPath(); ctx.arc(cx - 2, cy - 5, 1.6, 0, Math.PI * 2); ctx.fill();
+  // SCP-049 from above: a dark robe and hood, the pale beak of its mask pointing the way it faces
+  function drawDoctor(cx: number, cy: number, ang: number) {
+    drawBase(ctx, cx, cy, "circle", isCalm() ? C.ok : isStaggered() ? C.manila : C.alert);
+    ctx.save(); ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.beginPath(); ctx.ellipse(cx + 2, cy + 3, 11, 9, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.translate(cx, cy); ctx.rotate(ang);
+    ctx.fillStyle = "#1d1a18"; ctx.strokeStyle = "#3a332c"; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.ellipse(-1, 0, 8, 11, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#2a2521"; ctx.beginPath(); ctx.arc(1, 0, 5.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#e8dcc0"; ctx.beginPath(); ctx.moveTo(3, -2.6); ctx.lineTo(12, 0); ctx.lineTo(3, 2.6); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#0f1317"; ctx.beginPath(); ctx.arc(3.5, -2, 1, 0, Math.PI * 2); ctx.arc(3.5, 2, 1, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#6b4a2a"; ctx.fillRect(-4, 7, 6, 4);   // the black bag
+    ctx.restore();
     if (isCalm()) tag("CALM", cx, cy - 20, C.ok);
     else if (isStaggered()) tag("STAGGERED", cx, cy - 20, C.manila);
   }
 
-  // SCP-106: a stooped, dark figure dripping rot
-  function drawOldMan(cx: number, cy: number) {
-    ctx.fillStyle = "#2a2118";
-    ctx.beginPath(); ctx.ellipse(cx, cy + 2, 8, 12, 0.2, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(cx + 3, cy - 9, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = isFeeding() ? C.manila : C.alert; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = "#d8c690"; ctx.beginPath(); ctx.arc(cx + 5, cy - 10, 1.4, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "rgba(28,22,14,0.8)"; ctx.fillRect(cx - 6, cy + 12, 12, 3);
-    if (isFeeding()) tag("FEEDING · SEAL IT", cx, cy - 22, C.manila);
+  // SCP-106: a stooped, dark figure dripping rot, which sinks into the floor and rises out of it
+  let sinking: { sub: boolean; t: number } = { sub: false, t: -1e9 };
+  function drawOldMan(cx: number, cy: number, ang: number, now: number) {
+    if (S.submerged !== sinking.sub) sinking = { sub: S.submerged, t: now };
+    const k = Math.min(1, (now - sinking.t) / 700), scale = S.submerged ? 1 - k : k;
+    // the black puddle it comes and goes through
+    const pr = S.submerged ? 12 * (1 - k * 0.6) : 12 * Math.max(0.4, 1 - k * 0.4);
+    ctx.fillStyle = "rgba(14,10,6,0.85)"; ctx.beginPath(); ctx.ellipse(cx, cy + 3, pr, pr * 0.75, 0, 0, Math.PI * 2); ctx.fill();
+    if (scale <= 0.02) return;
+    ctx.save(); ctx.translate(cx, cy + (1 - scale) * 6); ctx.scale(scale, scale); ctx.rotate(ang);
+    ctx.fillStyle = "#2a2118"; ctx.strokeStyle = isFeeding() ? C.manila : C.alert; ctx.lineWidth = 2 / Math.max(0.3, scale);
+    ctx.beginPath(); ctx.ellipse(-1, 0, 7, 10, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#3a2e22"; ctx.beginPath(); ctx.arc(3, 0, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#d8c690"; ctx.beginPath(); ctx.arc(6, -1.5, 1.1, 0, Math.PI * 2); ctx.arc(6, 1.5, 1.1, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#2a2118"; ctx.fillRect(2, -11, 9, 3); ctx.fillRect(2, 8, 9, 3);   // long arms
+    ctx.restore();
+    // drips
+    ctx.fillStyle = "rgba(28,22,14,0.8)";
+    for (let i = 0; i < 3; i++) { const t = ((now / 900 + i / 3) % 1); ctx.beginPath(); ctx.arc(cx - 6 + i * 6, cy + 8 + t * 6, 1.4 * (1 - t), 0, Math.PI * 2); ctx.fill(); }
+    if (isFeeding() && !S.submerged) tag("FEEDING · SEAL IT", cx, cy - 22, C.manila);
   }
 
-  function drawUnit(u: Unit) {
-    const [cx, cy] = center(u);
-    if (u.side === "anomaly" && S.has049) { drawDoctor(cx, cy); return; }
-    if (u.side === "anomaly" && S.has106) { if (!S.submerged) drawOldMan(cx, cy); return; }
-    if (u.side === "anomaly") { drawStatue(u.x, u.y, 1); return; }
+  // SCP-610's instances: a lump of red flesh with grasping strands
+  function drawFlesh(cx: number, cy: number, now: number) {
+    const p = Math.sin(now / 260 + cx) * 0.8;
+    ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.beginPath(); ctx.ellipse(cx + 2, cy + 3, 11, 9, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#6e1f26"; ctx.lineWidth = 2;
+    ctx.beginPath(); for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2 + now / 3000; ctx.moveTo(cx, cy); ctx.quadraticCurveTo(cx + Math.cos(a + 0.4) * 8, cy + Math.sin(a + 0.4) * 8, cx + Math.cos(a) * (12 + p), cy + Math.sin(a) * (12 + p)); } ctx.stroke();
+    ctx.fillStyle = "#8c2c34"; ctx.beginPath(); ctx.ellipse(cx, cy, 8 + p, 7 - p, 0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#b5464e"; ctx.beginPath(); ctx.arc(cx - 2, cy - 2, 3, 0, Math.PI * 2); ctx.fill();
+  }
+
+  function hpBar(u: Unit, cx: number, cy: number) {
+    const w = 20, frac = Math.max(0, u.hp / u.maxHp);
+    ctx.fillStyle = "#0f1317"; ctx.fillRect(cx - w / 2 - 1, cy - 20, w + 2, 4);
+    ctx.fillStyle = u.side === "raider" || u.side === "zombie" ? C.alert : "#9cd0a6"; ctx.fillRect(cx - w / 2, cy - 19, w * frac, 2);
+  }
+
+  function drawUnit(u: Unit, now: number) {
+    const p = placeOf(u, now), cx = p.x, cy = p.y;
+    const hurt = Math.max(0, 1 - (now - p.a.hit) / 280), flash = now - p.a.fired < 110, bob = p.moving ? Math.sin(now / 35) * 0.8 : 0;
+    if (u.side === "anomaly" && S.has049) { drawDoctor(cx, cy, p.ang); return; }
+    if (u.side === "anomaly" && S.has106) { drawOldMan(cx, cy, p.ang, now); return; }
+    if (u.side === "anomaly") {
+      const key = `${u.x},${u.y}`;
+      if (statueAt && statueAt !== key) puff = { x: cx, y: cy, t: now };
+      statueAt = key;
+      if (puff && now - puff.t < 500) {
+        const k = (now - puff.t) / 500; ctx.fillStyle = `rgba(190,184,170,${0.5 * (1 - k)})`;
+        for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; ctx.beginPath(); ctx.arc(puff.x + Math.cos(a) * (6 + k * 10), puff.y + 10 + Math.sin(a) * (3 + k * 4), 2.2 * (1 - k) + 0.6, 0, Math.PI * 2); ctx.fill(); }
+      }
+      drawStatueAt(cx, cy, 1); return;
+    }
+    const look = lookFor(u);
     if (u.side === "zombie" && u.rioter) {
-      // a rioting D-Class: D-Class orange, ringed in dashed red
-      ctx.fillStyle = C.subject; ctx.beginPath(); ctx.arc(cx, cy, 9, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = "#b8463b"; ctx.lineWidth = 2.5; ctx.setLineDash([3, 2]); ctx.beginPath(); ctx.arc(cx, cy, 11, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-      ctx.fillStyle = "#0f1317"; ctx.font = "600 9px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("R", cx, cy + 1);
-      const w = 20; ctx.fillStyle = "#0f1317"; ctx.fillRect(cx - w / 2 - 1, cy - 17, w + 2, 4);
-      ctx.fillStyle = C.alert; ctx.fillRect(cx - w / 2, cy - 16, w * u.hp / u.maxHp, 2);
+      drawBase(ctx, cx, cy, "circle", "#b8463b", true);
+      drawPerson(ctx, cx, cy, p.ang, look, { hurt, bob });
+      badge(ctx, cx + 9, cy + 9, "R", C.subject);
+      hpBar(u, cx, cy);
       if (u.restrained) tag("CUFFED", cx, cy - 18, C.manila);
       return;
     }
     if (u.side === "zombie") {
-      ctx.fillStyle = u.flesh ? "#8c2c34" : "#6f7a5c";
-      ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = "#0f1317"; ctx.lineWidth = 2; ctx.stroke();
-      ctx.fillStyle = "#0f1317"; ctx.font = "600 9px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(u.flesh ? "6" : "2", cx, cy + 1);
-      const w = 20; ctx.fillStyle = "#0f1317"; ctx.fillRect(cx - w / 2 - 1, cy - 17, w + 2, 4);
-      ctx.fillStyle = C.alert; ctx.fillRect(cx - w / 2, cy - 16, w * u.hp / u.maxHp, 2);
+      drawBase(ctx, cx, cy, "circle", u.flesh ? "#8c2c34" : "#6f7a5c");
+      if (u.flesh) drawFlesh(cx, cy, now); else drawPerson(ctx, cx, cy, p.ang, look, { hurt, bob });
+      badge(ctx, cx + 9, cy + 9, u.flesh ? "6" : "2", u.flesh ? "#c2626a" : "#9aa588");
+      hpBar(u, cx, cy);
       return;
     }
     if (u.side === "mtf" && u.downed) {
-      ctx.fillStyle = "#3a4450";
-      ctx.beginPath(); ctx.arc(cx, cy, 11, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = u.stabilized ? C.ok : C.alert; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(cx - 5, cy); ctx.lineTo(cx + 5, cy); ctx.moveTo(cx, cy - 5); ctx.lineTo(cx, cy + 5); ctx.stroke();
-      if (!u.stabilized) tag(`${u.bleed}`, cx + 11, cy - 11, C.alert);
+      drawFallen(ctx, cx, cy, p.ang, look, false);
+      ctx.strokeStyle = u.stabilized ? C.ok : C.alert; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(cx + 6, cy - 9); ctx.lineTo(cx + 12, cy - 9); ctx.moveTo(cx + 9, cy - 12); ctx.lineTo(cx + 9, cy - 6); ctx.stroke();
+      if (!u.stabilized) tag(`${u.bleed}`, cx + 11, cy - 17, C.alert);
       return;
     }
     if (u.side === "mtf") {
-      const pan = isPanicked(u);
-      ctx.fillStyle = pan ? "#55636f" : u.guard ? "#9fb3c4" : C.mtf;
-      ctx.beginPath();
-      // guards are drawn as rounded squares, Epsilon-11 as circles
-      if (u.guard) ctx.roundRect(cx - 10, cy - 10, 20, 20, 5); else ctx.arc(cx, cy, 11, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "#0f1317"; ctx.lineWidth = 2; ctx.stroke();
-      ctx.fillStyle = "#0f1317"; ctx.font = "600 11px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(pan ? "––" : String(u.slot ?? ""), cx, cy + 1);
-      if (S.concealed) { ctx.strokeStyle = C.ok; ctx.lineWidth = 1.5; ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.arc(cx, cy, 14, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); }
-      if (u.overwatch) {
-        ctx.strokeStyle = C.manila; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(cx, cy, 14, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke();
-      }
+      const pan = isPanicked(u), col = pan ? "#55636f" : u.guard ? "#9fb3c4" : C.mtf;
+      drawBase(ctx, cx, cy, u.guard ? "rsquare" : "circle", col);
+      drawPerson(ctx, cx, cy, p.ang, look, { hurt, flash, bob });
+      badge(ctx, cx + 10, cy + 10, pan ? "!!" : u.guard ? "S" : String(u.slot ?? ""), col);
+      if (S.concealed) { ctx.strokeStyle = C.ok; ctx.lineWidth = 1.5; ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.arc(cx, cy, 16, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); }
+      if (u.overwatch) { ctx.strokeStyle = C.manila; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, 16, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke(); }
     } else if (u.side === "raider") {
-      ctx.fillStyle = u.downed ? "#5d5266" : S.activePods.includes(u.pod ?? 0) ? C.raider : "#8a74a0";
-      ctx.beginPath(); ctx.moveTo(cx, cy - 12); ctx.lineTo(cx + 11, cy); ctx.lineTo(cx, cy + 12); ctx.lineTo(cx - 11, cy); ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = u.role === "commander" ? C.manila : "#0f1317"; ctx.lineWidth = 2; ctx.stroke();
-      // specialists carry a letter: S sniper, X sapper, O officer, ★ the commander
-      const mark = { sniper: "S", demo: "X", officer: "O", commander: "★" }[u.role as string];
-      if (mark && !u.downed) { ctx.fillStyle = "#0f1317"; ctx.font = "700 10px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(mark, cx, cy + 1); }
-      if (u.overwatch && !u.downed) { ctx.strokeStyle = C.alert; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, 15, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke(); }
+      const col = u.downed ? "#5d5266" : S.activePods.includes(u.pod ?? 0) ? C.raider : "#8a74a0";
+      if (u.downed) { drawFallen(ctx, cx, cy, p.ang, look, false); drawBase(ctx, cx, cy, "diamond", col); }
+      else {
+        drawBase(ctx, cx, cy, "diamond", u.role === "commander" ? C.manila : col);
+        drawPerson(ctx, cx, cy, p.ang, look, { hurt, flash, bob });
+        // specialists carry a letter: S sniper, X sapper, O officer, ★ the commander
+        const mark = { sniper: "S", demo: "X", officer: "O", commander: "★" }[u.role as string];
+        if (mark) badge(ctx, cx + 10, cy + 10, mark, u.role === "commander" ? C.manila : col);
+        if (u.overwatch) { ctx.strokeStyle = C.alert; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, 17, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke(); }
+      }
     } else if (u.side === "civilian") {
-      // civilians are squares; witnesses carry a W until they are dosed
-      ctx.fillStyle = u.record ? "#d9c27a" : u.dosed ? "#8a9a86" : "#cfc6a8";
-      ctx.fillRect(cx - 8, cy - 8, 16, 16);
-      ctx.strokeStyle = u.witness && !u.dosed ? C.manila : "#0f1317"; ctx.lineWidth = 2;
-      ctx.strokeRect(cx - 8, cy - 8, 16, 16);
-      ctx.fillStyle = "#0f1317"; ctx.font = "600 9px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(u.radio ? "X" : u.record ? "F" : u.dosed ? "✓" : u.witness ? "W" : u.researcher ? (S.setup.kind === "rescue" ? "L" : "R") : "C", cx, cy + 1);
+      const col = u.record ? "#d9c27a" : u.dosed ? "#8a9a86" : "#cfc6a8";
+      drawBase(ctx, cx, cy, "square", u.witness && !u.dosed ? C.manila : col);
+      if (u.radio) drawRadio(ctx, cx, cy);
+      else if (u.record) drawRecords(ctx, cx, cy);
+      else drawPerson(ctx, cx, cy, p.ang, look, { hurt, bob });
+      badge(ctx, cx + 10, cy + 10, u.radio ? "X" : u.record ? "F" : u.dosed ? "✓" : u.witness ? "W" : u.researcher ? (S.setup.kind === "rescue" ? "L" : "R") : "C", col);
       if (u.researcher && u.followId) tag("FOLLOWING", cx, cy - 18, C.ok);
       if (u.spooked && !u.dosed) tag("!", cx + 10, cy - 10, C.alert);
       return;
     } else {
       // D-Class: the work detail gets a solid ring, loose ones a broken one
-      ctx.fillStyle = C.subject;
-      ctx.beginPath(); ctx.arc(cx, cy, 9, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = u.side === "dclass" ? "#f2e6c9" : "#0f1317"; ctx.lineWidth = 2;
-      if (u.side !== "dclass") ctx.setLineDash([3, 3]);
-      ctx.stroke(); ctx.setLineDash([]);
-      ctx.fillStyle = "#0f1317"; ctx.font = "600 9px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText("D", cx, cy + 1);
+      drawBase(ctx, cx, cy, "circle", u.side === "dclass" ? "#f2e6c9" : C.subject, u.side !== "dclass");
+      drawPerson(ctx, cx, cy, p.ang, look, { hurt, bob });
+      badge(ctx, cx + 10, cy + 10, "D", C.subject);
     }
     if (u.staring) drawEye(cx + 10, cy - 10);
     if (u.restrained) tag("CUFFED", cx, cy - 18, C.manila);
-    if (u.carrying) tag("CARRYING", cx, cy + 18, C.manila);
-    if ((u.hunkerUntil ?? -1) >= S.turn) tag("HUNKERED", cx, cy + 18, C.ok);
-    if (u.side !== "subject") {
-      const w = 20, frac = u.hp / u.maxHp;
-      ctx.fillStyle = "#0f1317"; ctx.fillRect(cx - w / 2 - 1, cy - 17, w + 2, 4);
-      ctx.fillStyle = u.side === "raider" ? C.alert : "#9cd0a6"; ctx.fillRect(cx - w / 2, cy - 16, w * frac, 2);
-    }
+    if (u.carrying) tag("CARRYING", cx, cy + 20, C.manila);
+    if ((u.hunkerUntil ?? -1) >= S.turn) tag("HUNKERED", cx, cy + 20, C.ok);
+    if (u.side !== "subject") hpBar(u, cx, cy);
   }
 
   function tag(text: string, x: number, y: number, color: string) {
@@ -251,6 +280,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
   return function draw(now: number) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, L.W * TS, L.H * TS);
+    noteEffects(S.effects, S.units);
     drawTiles();
     drawFog();
     // night: the map is dark except where flares burn
@@ -302,14 +332,17 @@ export function createRenderer(cv: HTMLCanvasElement) {
       ctx.fillStyle = "rgba(28,22,14,0.55)";
       for (const i of S.corroded) { const x = i % L.W, y = (i / L.W) | 0; if (S.explored[i]) { ctx.beginPath(); ctx.ellipse(x * TS + TS / 2, y * TS + TS / 2, 13, 10, (i % 7) / 3, 0, Math.PI * 2); ctx.fill(); } }
     }
-    // bodies SCP-049 could still raise
-    // bodies (the ones SCP-049 could still raise are marked more strongly)
-    for (const b of S.units.filter(u => !u.alive && !u.saved && !u.carriedBy && !u.taken && u.side !== "anomaly" && u.side !== "zombie")) {
+    // the fallen where they lie (the ones SCP-049 could still raise are marked)
+    for (const b of S.units.filter(u => !u.alive && !u.saved && !u.carriedBy && !u.taken && u.side !== "anomaly")) {
       if (!seen(b.x, b.y)) continue;
-      if (!S.has049 || !freshBodies().includes(b)) { const [bx, by] = center(b); ctx.strokeStyle = "#4a4338"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(bx - 5, by - 5); ctx.lineTo(bx + 5, by + 5); ctx.moveTo(bx + 5, by - 5); ctx.lineTo(bx - 5, by + 5); ctx.stroke(); continue; }
-      const [cx, cy] = center(b);
-      ctx.strokeStyle = "#7d6f5a"; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(cx - 7, cy - 7); ctx.lineTo(cx + 7, cy + 7); ctx.moveTo(cx + 7, cy - 7); ctx.lineTo(cx - 7, cy + 7); ctx.stroke();
+      const [bx, by] = center(b), ang = animOf(b.id)?.ang ?? 0;
+      if (b.side === "zombie" && b.flesh) { ctx.fillStyle = "rgba(90,18,20,0.6)"; ctx.beginPath(); ctx.ellipse(bx, by, 11, 8, 0.4, 0, Math.PI * 2); ctx.fill(); continue; }
+      if (b.radio || b.record) continue;
+      drawFallen(ctx, bx, by, ang, lookFor(b), true, 0.85);
+      if (S.has049 && freshBodies().includes(b)) {
+        ctx.strokeStyle = "#d8bf86"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(bx - 7, by - 7); ctx.lineTo(bx + 7, by + 7); ctx.moveTo(bx + 7, by - 7); ctx.lineTo(bx - 7, by + 7); ctx.stroke();
+      }
     }
     // choosing a doorway to seal or open
     if (playing && S.mode === "doors") {
@@ -361,7 +394,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
     for (const u of S.units) {
       if (!u.alive || u.saved || u.carriedBy) continue;
       if (!isTeam(u) && !seen(u.x, u.y) && !u.restrained) continue;
-      drawUnit(u);
+      drawUnit(u, now);
     }
 
     // smoke
@@ -391,9 +424,9 @@ export function createRenderer(cv: HTMLCanvasElement) {
     }
 
     if (sel && sel.alive) {
-      const [cx, cy] = center(sel);
+      const sa = animOf(sel.id), [cx, cy] = sa ? [sa.x, sa.y] : center(sel);
       ctx.strokeStyle = C.manila; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]); ctx.lineDashOffset = -now / 60;
-      ctx.beginPath(); ctx.arc(cx, cy, 15, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(cx, cy, 18, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
     }
 
     // every enemy the selected operative can shoot right now shows its hit chance (hovering one gives the detail)
