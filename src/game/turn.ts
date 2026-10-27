@@ -1,5 +1,5 @@
 // Player actions and the turn cycle: your move, SCP-173, the Insurgency, then loose D-Class.
-import { FLOOR, HALF, L, TS, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, setVault, tileAt, DIRS, type Pt } from "../core/grid";
+import { FLOOR, HALF, L, TS, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, setSlow, setVault, tileAt, DIRS, type Pt } from "../core/grid";
 import { setSmoke, sightFrom } from "../core/sight";
 import { damage, fire, kill, moveUnit } from "./combat";
 import { TYPES } from "../data/weapons";
@@ -11,6 +11,7 @@ import { entryTiles, missionResult, spawnMember } from "./mission";
 import { maxSanOf, prof } from "./profiles";
 import { release, rollBlinks } from "./scp173";
 import { leadOptions, leadTo, plaguePhase, zombiePhase } from "./scp049";
+import { oldManPhase } from "./scp106";
 import {
   S, alive, canAct, canSee, computeVis, full, fx, hooks, humans, isPanicked, isTeam, label, log, loseSanity,
   occupied, reveal, seen, sleep, starers, team, unitAt,
@@ -24,12 +25,13 @@ export function reachFor(u: Unit | null) {
   if (!u || u.ap < 1) return null;
   const move = moveOf(u);
   setVault(hasPerk(u, "bulldozer"));
+  setSlow(S.corroded);
   let res;
   if (u.staring) {
     const st = S.statue;
     res = bfs([[u.x, u.y]], move, (x, y) => occupied(x, y, u) || !sightFrom(x, y, st.x, st.y, rangeOf(u)));
   } else res = bfs([[u.x, u.y]], u.ap * move, (x, y) => occupied(x, y, u));
-  setVault(false);
+  setVault(false); setSlow(new Set());
   // nobody ends a move standing on a desk
   for (let i = 0; i < res.dist.length; i++) if (res.dist[i] > 0 && tileAt(i % L.W, (i / L.W) | 0) === HALF) res.dist[i] = -res.dist[i] - 100;
   return res;
@@ -119,7 +121,7 @@ export function sealCheck(u: Unit | null) {
   const st = S.statue;
   if (S.sealed) return "Already sealed.";
   if (!u || u.side !== "mtf") return "Only an operative can seal the container.";
-  if (!inContainer(st.x, st.y)) return `${st.name} isn't in the container yet.`;
+  if (!inContainer(st.x, st.y) || (S.has106 && S.submerged)) return `${st.name} isn't in the container yet.`;
   if (u.ap < 1) return "No actions left this turn.";
   if (!nearContainer(u.x, u.y)) return "Stand at the container door to close it.";
   if (humans().some(h => inContainer(h.x, h.y))) return "Get everyone out of the container first.";
@@ -223,8 +225,8 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
     await doDrag(sel, path);
     return;
   }
-  if (u && u.side === "anomaly" && S.has049 && seen(x, y) && sel.side === "mtf" && sel.ap > 0) {
-    if (!canSee(sel, x, y)) { flash(`${sel.call} has no line of sight to SCP-049.`); return; }
+  if (u && u.side === "anomaly" && (S.has049 || (S.has106 && !S.submerged)) && seen(x, y) && sel.side === "mtf" && sel.ap > 0) {
+    if (!canSee(sel, x, y)) { flash(`${sel.call} has no line of sight to ${u.name}.`); return; }
     const fw = fireCheck(sel);
     if (fw) { flash(fw); return; }
     if (!confirm()) return;
@@ -449,6 +451,7 @@ export async function endTurn() {
 
 async function anomalyPhase() {
   if (S.has049 && !S.debug?.freeze173) await plaguePhase();
+  if (S.has106 && !S.debug?.freeze173) await oldManPhase();
   await zombiePhase();
   if (!S.has173 || S.sealed || S.debug?.freeze173) return;
   for (const m of starers()) { loseSanity(m, prof(m).drain, "sight"); reveal("mind"); }

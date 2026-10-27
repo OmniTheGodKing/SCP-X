@@ -11,7 +11,7 @@ export const PLAGUE_MOVE = 4, ZOMBIE_MOVE = 4, CALM_RANGE = 3, CALM_SANITY = 6, 
 
 const doctor = () => S.statue;
 /** Bodies SCP-049 could still raise. */
-export const freshBodies = () => S.units.filter(u => !u.alive && !u.saved && !u.cured && u !== S.statue && u.side !== "zombie");
+export const freshBodies = () => S.units.filter(u => !u.alive && !u.saved && !u.cured && !u.taken && u !== S.statue && u.side !== "zombie");
 export const zombies = () => S.units.filter(u => u.side === "zombie" && u.alive);
 export const isCalm = () => S.calmUntil >= S.turn;
 export const isStaggered = () => (doctor().staggeredUntil ?? -1) >= S.turn;

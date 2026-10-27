@@ -9,6 +9,7 @@ import type { Unit } from "../game/types";
 import { MAPS } from "../data/maps";
 import { escaping } from "../game/scp173";
 import { freshBodies, isCalm, isStaggered, leadOptions } from "../game/scp049";
+import { isFeeding } from "../game/scp106";
 
 const C = {
   floor: "#222a32", floor2: "#252e37", wall: "#3a4551", wallTop: "#4b5866",
@@ -130,9 +131,21 @@ export function createRenderer(cv: HTMLCanvasElement) {
     else if (isStaggered()) tag("STAGGERED", cx, cy - 20, C.manila);
   }
 
+  // SCP-106: a stooped, dark figure dripping rot
+  function drawOldMan(cx: number, cy: number) {
+    ctx.fillStyle = "#2a2118";
+    ctx.beginPath(); ctx.ellipse(cx, cy + 2, 8, 12, 0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 3, cy - 9, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = isFeeding() ? C.manila : C.alert; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = "#d8c690"; ctx.beginPath(); ctx.arc(cx + 5, cy - 10, 1.4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(28,22,14,0.8)"; ctx.fillRect(cx - 6, cy + 12, 12, 3);
+    if (isFeeding()) tag("FEEDING · SEAL IT", cx, cy - 22, C.manila);
+  }
+
   function drawUnit(u: Unit) {
     const [cx, cy] = center(u);
     if (u.side === "anomaly" && S.has049) { drawDoctor(cx, cy); return; }
+    if (u.side === "anomaly" && S.has106) { if (!S.submerged) drawOldMan(cx, cy); return; }
     if (u.side === "anomaly") { drawStatue(u.x, u.y, 1); return; }
     if (u.side === "zombie") {
       ctx.fillStyle = "#6f7a5c";
@@ -229,6 +242,11 @@ export function createRenderer(cv: HTMLCanvasElement) {
       for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) if (passable(x, y) && area(x, y) === room) ctx.fillRect(x * TS, y * TS, TS, TS);
     }
 
+    // floor rotted by SCP-106
+    if (S.has106) {
+      ctx.fillStyle = "rgba(28,22,14,0.55)";
+      for (const i of S.corroded) { const x = i % L.W, y = (i / L.W) | 0; if (S.explored[i]) { ctx.beginPath(); ctx.ellipse(x * TS + TS / 2, y * TS + TS / 2, 13, 10, (i % 7) / 3, 0, Math.PI * 2); ctx.fill(); } }
+    }
     // bodies SCP-049 could still raise
     if (S.has049) for (const b of freshBodies()) {
       if (!seen(b.x, b.y)) continue;

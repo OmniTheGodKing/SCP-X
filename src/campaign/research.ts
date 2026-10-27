@@ -5,7 +5,7 @@ import type { Guard } from "./security";
 import { ATTACHMENTS, model, type AttachmentId } from "../data/weapons";
 import { cellWork, type ScpRecord } from "./containment";
 
-export type Branch = "SCP-173" | "SCP-049" | "Personnel" | "Weapons" | "Equipment" | "Site";
+export type Branch = "SCP-173" | "SCP-049" | "SCP-106" | "Personnel" | "Weapons" | "Equipment" | "Site";
 export type TestId = "endurance" | "material" | "movement";
 import type { ItemId } from "../game/types";
 export type { ItemId };
@@ -62,6 +62,9 @@ export const PROJECTS: Record<string, ProjectDef> = {
   c130:               { name: "C-130 Hercules", branch: "Site", days: 60, cost: 180, from: 1954, needs: ["c119"], desc: "A long-range turboprop transport. Travel to other regions takes half the time a C-47 would." },
   pestilence_theory:  { name: "Pestilence theory", branch: "SCP-049", days: 30, cost: 60, needsScp: "049", desc: "Interviews with SCP-049 about the \"Pestilence\" it claims to see. Calming it holds for two turns instead of one." },
   necrotic_study:     { name: "Necrotic tissue study", branch: "SCP-049", days: 40, cost: 80, needsScp: "049", desc: "Autopsies on SCP-049-2 tissue lead to better wound care. Operatives and guards heal 1 HP a day faster." },
+  keter_containment:  { name: "Keter-grade containment", branch: "Site", days: 50, cost: 150, desc: "Designs for cells that can hold the worst anomalies: lead-lined, suspended, and wired for electromagnets. Keter-grade wings can be built." },
+  em_containment:     { name: "Electromagnetic containment", branch: "SCP-106", days: 40, cost: 120, needsScp: "106", needs: ["keter_containment"], desc: "Electromagnets around SCP-106's cell hold it in place. Its breach risk drops by 30%." },
+  pocket_study:       { name: "Pocket dimension study", branch: "SCP-106", days: 50, cost: 120, needsScp: "106", desc: "Interviews with the few who came back map parts of the pocket dimension. People SCP-106 takes come back half the time instead of a quarter." },
   efficient_gen:      { name: "Efficient generators", branch: "Site", days: 30, cost: 70, desc: "Each generator supplies 15 power instead of 10." },
 };
 
@@ -114,7 +117,7 @@ export const unlockedItems = (c: Campaign) => Object.entries(PROJECTS).filter(([
 export function projectLock(c: Campaign, id: string): string | null {
   const p = PROJECTS[id];
   if (p.from && yearOf(c.day) < p.from) return `Available from ${p.from}.`;
-  if (p.needsScp && !c.scps.some(s => s.id === p.needsScp)) return `Needs ${p.needsScp === "049" ? "SCP-049" : p.needsScp} held at Site-19.`;
+  if (p.needsScp && !c.scps.some(s => s.id === p.needsScp)) return `Needs ${p.needsScp === "049" ? "SCP-049" : p.needsScp === "106" ? "SCP-106" : p.needsScp} held at Site-19.`;
   if (p.needsTest && !c.research.tests.includes(p.needsTest)) return `Needs the ${TESTS[p.needsTest].name.toLowerCase()}.`;
   const missing = (p.needs || []).filter(n => !has(c, n));
   if (missing.length) return `Needs ${missing.map(n => PROJECTS[n].name).join(", ")}.`;

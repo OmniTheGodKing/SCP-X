@@ -57,6 +57,7 @@ export function breachRisk(c: Campaign, s: ScpRecord) {
   if (wing.disabled) { p *= 3; why.push("Wing damaged: ×3"); }
   if (has(c, "containment_rev")) { p *= 0.75; why.push("Revised procedures: ×0.75"); }
   if (has(c, "reinforced_doors")) { p *= 0.8; why.push("Reinforced doors: ×0.8"); }
+  if (s.id === "106" && has(c, "em_containment")) { p *= 0.7; why.push("Electromagnetic containment: ×0.7"); }
   if (powerShort(c)) { p *= 2; why.push("Power shortage: ×2"); }
   return { p: Math.min(0.9, p), why };
 }
@@ -218,10 +219,13 @@ export function moveScp(c: Campaign, s: ScpRecord, to: Facility, watchers: Guard
 export const SCP_DEFS: Record<ScpId, { name: string; title: string; cls: ScpClass; sighting: string }> = {
   "173": { name: "SCP-173", title: "The Sculpture", cls: "Euclid", sighting: "" },
   "049": { name: "SCP-049", title: "The Plague Doctor", cls: "Euclid", sighting: "a man in a plague doctor's mask, and patients who stopped breathing" },
+  "106": { name: "SCP-106", title: "The Old Man", cls: "Keter", sighting: "an old man seen walking through a cellar wall, and people missing from locked rooms" },
 };
+export const scpName = (id: string) => SCP_DEFS[id as ScpId]?.name ?? `SCP-${id}`;
 /** The first sighting of each anomaly not yet found: SCP-049 turns up some time in 1952. */
-export const firstSightings = (): Partial<Record<ScpId, number>> => ({ "049": rand(215, 580) });
-export const TRANSFER_BONUS = 100;
+export const firstSightings = (): Partial<Record<ScpId, number>> => ({ "049": rand(215, 580), "106": rand(580, 945) });
+/** Paid when a captured anomaly has to go to another site; Keter-class ones are worth more. */
+export const transferBonus = (cls: ScpClass) => cls === "Keter" ? 150 : 100;
 
 export function firstSighting(c: Campaign, id: ScpId) {
   const open = REGION_IDS.filter(r => !c.regions[r].collapsed);
@@ -252,8 +256,8 @@ function firstContact(c: Campaign, inc: Incident, caught: boolean) {
       c.scps.push({ id, name: d.name, title: d.title, cls: d.cls, status: "contained", wingId: wing.id, maintenance: 100, lastCleaned: c.day });
       log(c, `${d.name}, "${d.title}", is now held at Site-19 in the ${nameInText(wing.type)} on level ${wing.level + 1}. New research is open.`, "good");
     } else {
-      c.funds += TRANSFER_BONUS;
-      log(c, `Site-19 has no free ${d.cls}-grade wing, so ${d.name} was handed to another site (+$${TRANSFER_BONUS}k). The chance to study it is gone.`, "key");
+      c.funds += transferBonus(d.cls);
+      log(c, `Site-19 has no free ${d.cls}-grade wing, so ${d.name} was handed to another site (+$${transferBonus(d.cls)}k). The chance to study it is gone.`, "key");
     }
   } else {
     c.scps.push({ id, name: d.name, title: d.title, cls: d.cls, status: "loose", wingId: "", maintenance: 0, lastCleaned: c.day, resurfaceDay: c.day + rand(30, 90) });

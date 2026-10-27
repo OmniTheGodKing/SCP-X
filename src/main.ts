@@ -4,6 +4,7 @@ import { clearCampaign, loadCampaign, saveCampaign } from "./campaign/save";
 import { REGIONS } from "./data/regions";
 import { travelBlock, travelDays, transportName } from "./campaign/world";
 import { letGuardsHandle } from "./campaign/security";
+import { scpName } from "./campaign/containment";
 import { pendingBreach } from "./campaign/campaign";
 import { createMission } from "./game/mission";
 import { S } from "./game/state";
@@ -65,7 +66,7 @@ function showHub() {
       mountMission(root, showHub, result => {
         const d = applyResult(campaign, result);
         saveCampaign(campaign);
-        return debriefHtml(result, d, setup.kind, setup.scp === "049" ? "SCP-049" : "SCP-173");
+        return debriefHtml(result, d, setup.kind, scpName(setup.scp ?? "173"));
       });
     },
   });

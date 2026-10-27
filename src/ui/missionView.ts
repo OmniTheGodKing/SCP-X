@@ -25,6 +25,7 @@ import { esc } from "./util";
 import { createRenderer } from "./render";
 import { ESCAPE_AT, escaping } from "../game/scp173";
 import { freshBodies, isCalm, isStaggered } from "../game/scp049";
+import { bait, isFeeding } from "../game/scp106";
 import { MAPS } from "../data/maps";
 
 const TEMPLATE = `
@@ -121,10 +122,14 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("objRule").innerHTML = `<b>Objective.</b> ${esc(OBJECTIVES[kind])}`;
   }
   if (!has173) {
-    for (const id of ["stareBtn", "callBtn", "dragBtn", ...(S.has049 ? [] : ["sealBtn"])]) $(id).hidden = true;
+    for (const id of ["stareBtn", "callBtn", "dragBtn", ...(S.has049 || S.has106 ? [] : ["sealBtn"])]) $(id).hidden = true;
     $("fileCard").hidden = true;
     root.querySelectorAll<HTMLElement>(".rules > div").forEach(d => { if (d.id !== "objRule" && /SCP-173|Do not blink|Dragging|Blinks\./.test(d.textContent || "")) d.hidden = true; });
-    $("statusLabel").textContent = S.has049 ? "SCP-049 status" : "Objective";
+    $("statusLabel").textContent = S.has049 ? "SCP-049 status" : S.has106 ? "SCP-106 status" : "Objective";
+  }
+  if (S.has106) {
+    $("mTitle").innerHTML = `SCP-106 ${kind === "breach" ? "Recontainment" : S.setup.title.startsWith("Anomalous") ? "Capture" : "Manhunt"} <small>“The Old Man” · Keter</small>`;
+    $("objRule").innerHTML = `<b>Objective.</b> Seal SCP-106 in the ${kind === "breach" ? "transport container in the staging room" : "truck's open container"}. It walks through walls and drags anyone it reaches into its pocket dimension, then sinks into the floor for 2 turns and rises near someone nobody is watching. Shooting it drives it under for a turn but can't hurt it. Its black rot costs double to cross and deals 1 damage. <b>Bait:</b> walk a D-Class (or a secured Insurgent) into the container. SCP-106 goes straight for them and stays a turn to feed: seal the door during that turn. People it takes have a ${Math.round(S.setup.mods.pocketReturn * 100)}% chance of coming back when the mission ends.${kind === "breach" ? " Site Security starts on the scene; Epsilon-11 arrives later." : ""}`;
   }
   if (S.has049) {
     $("mTitle").innerHTML = kind === "breach" ? "SCP-049 Recontainment <small>“The Plague Doctor” · Euclid</small>" : `SCP-049 ${S.setup.title.startsWith("Anomalous") ? "Capture" : "Manhunt"} <small>“The Plague Doctor” · Euclid</small>`;
@@ -168,7 +173,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     if (m.armor) flags.push(`<span class="flag">Armor ${m.armor}</span>`);
     for (const it of m.items || []) if (it.uses > 0 || it.id === "tracker") flags.push(`<span class="flag">${ITEM_NAMES[it.id]}${it.id === "tracker" ? "" : ` ×${it.uses}`}</span>`);
     if (m.alive && m.san <= ms * 0.3) flags.push(`<span class="flag bad">Shaken</span>`);
-    if (!m.alive) flags.push(`<span class="flag bad">${m.side === "mtf" ? "KIA" : "Dead"}</span>`);
+    if (!m.alive) flags.push(`<span class="flag bad">${m.taken ? "Taken by SCP-106" : m.side === "mtf" ? "KIA" : "Dead"}</span>`);
     if (m.alive && m.side === "subject") flags.push(`<span class="flag bad">Fled</span>`);
     const cap = m.staring ? 1 : 2, d = m.side !== "mtf";
     const usable = m.alive && isTeam(m) && !m.downed;
@@ -193,7 +198,12 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("phasePill").className = "pill" + (S.phase === "anomaly" ? " hot" : "");
 
     const sc = $("statusCard"), line = $("statusLine");
-    if (S.has049) {
+    if (S.has106) {
+      const m = S.statue, b = bait();
+      const state = S.sealed ? "<b>Sealed in the container.</b>" : isFeeding() ? "<b>Feeding in the container.</b> Seal the door now." : S.submerged ? `<b>Under the floor.</b> It rises again ${S.sunkUntil >= S.turn ? `after turn ${S.sunkUntil}` : "next turn"}.` : seen(m.x, m.y) ? `<b>In sight</b> in the ${area(m.x, m.y)}.` : "<b>Not in sight.</b> It could be behind any wall.";
+      sc.className = "card status " + (S.sealed ? "done" : isFeeding() ? "held" : "danger");
+      line.innerHTML = `${state}<br>Bait in the container: ${b.length ? b.map(u => esc(u.name)).join(", ") : "none"} · Taken so far: ${S.units.filter(u => u.taken).length}`;
+    } else if (S.has049) {
       const d = S.statue, z = S.units.filter(u => u.side === "zombie" && u.alive).length, bodies = freshBodies().length;
       const state = S.sealed ? "<b>Sealed in the container.</b>" : isCalm() ? "<b>Calm.</b> It won't act this turn." : isStaggered() ? "<b>Staggered.</b> It loses its next move." : seen(d.x, d.y) ? "<b>In sight.</b> Anyone next to it is in danger." : "<b>Not in sight.</b>";
       sc.className = "card status " + (S.sealed ? "done" : isCalm() ? "held" : "danger");

@@ -5,7 +5,7 @@ import {
   ENGINEER_COST, countOperational, engineerCapacity, dclassCapacity, healPerDay, monthlyUpkeep, sanityPerDay, startingBase, tickConstruction,
   type Base,
 } from "./base";
-import { CLEAN_EVERY, firstSightings, resolveScp, startingScps, tickContainment, type ScpRecord } from "./containment";
+import { CLEAN_EVERY, firstSightings, resolveScp, scpName, startingScps, tickContainment, type ScpRecord } from "./containment";
 import { ITEMS, armorOf, has, newResearch, tickResearch, type ItemId, type Order, type ResearchState } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, collapsedCount, COLLAPSE_LIMIT, newRegions, regionFunding, tickWorld, travelDays, type RegionState } from "./world";
@@ -73,7 +73,7 @@ export interface SiteLogEntry { day: number; text: string; kind: string; }
 export interface Loadout { opId: string; armor: boolean; items: ItemId[]; }
 
 export interface Campaign {
-  version: 8;
+  version: 9;
   /** When each anomaly not yet found will first be sighted. */
   sightings: Partial<Record<ScpId, number>>;
   /** Site Security, and how ready Epsilon-11 is kept for a breach. */
@@ -205,7 +205,7 @@ export function newCampaign(): Campaign {
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
-    version: 8, sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, prisoners: [], intel: 0, cleaningOrder: true,
+    version: 9, sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, prisoners: [], intel: 0, cleaningOrder: true,
     day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
     inventory: {}, orders: [], knownNotes: [], nextD: 9101, nextOp: 1, nextIncident: 1,
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
@@ -401,6 +401,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
       track173: has(c, "movement_study"),
       lockdownTurns: has(c, "early_warning") ? 8 : 5,
       calmTurns: has(c, "pestilence_theory") ? 2 : 1,
+      pocketReturn: has(c, "pocket_study") ? 0.5 : 0.25,
     },
   };
 }
@@ -475,8 +476,8 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     const cut = kind === "coverup" ? 10 : 5;
     addExposure(c, region, -cut);
     c.funds += bonus;
-    const scpName = inc?.scpId === "049" ? "SCP-049" : "SCP-173";
-    const what = kind === "coverup" ? "The witnesses remember nothing worth repeating." : kind === "strike" ? "The Insurgency cell is broken up." : inc?.first ? `${scpName} is in Foundation hands.` : `${scpName} is back in its cell.`;
+    const name = scpName(inc?.scpId || "173");
+    const what = kind === "coverup" ? "The witnesses remember nothing worth repeating." : kind === "strike" ? "The Insurgency cell is broken up." : inc?.first ? `${name} is in Foundation hands.` : `${name} is back in its cell.`;
     lines.unshift(`${name} closed. ${what}${bonus ? ` The O5 Council approves a $${bonus}k bonus;` : ""} exposure in ${where} −${cut}.`);
   } else {
     c.stats.lost++;
@@ -497,7 +498,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   for (const l of [...lines, ...promotions]) log(c, l, r.win ? "good" : "bad");
   if (inc?.scpId) {
     resolveScp(c, inc, r.win);
-    if (!r.win) lines.push(`${inc.scpId === "049" ? "SCP-049" : "SCP-173"} got away. It will turn up again somewhere, in its own time.`);
+    if (!r.win) lines.push(`${scpName(inc.scpId)} got away. It will turn up again somewhere, in its own time.`);
   }
   checkOver(c);
   return { lines, promotions };

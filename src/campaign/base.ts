@@ -101,6 +101,7 @@ export function canBuild(c: Campaign, type: FacilityType, level: number, slot: n
   if (!d.buildable) return "Can't be built.";
   if (level >= c.base.levels) return "That level hasn't been excavated.";
   if (facilityAt(c, level, slot)) return "That slot is taken.";
+  if (type === "cont_keter" && !has(c, "keter_containment")) return "Needs Keter-grade containment research.";
   if (c.funds < d.cost) return `Needs $${d.cost}k.`;
   if (engineersFree(c) < d.engineers) return `Needs ${d.engineers} free engineers.`;
   if (d.power > 0 && powerUse(c) + d.power > powerSupply(c)) return "Not enough power. Build a generator first.";
