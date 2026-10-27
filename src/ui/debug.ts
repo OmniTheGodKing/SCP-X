@@ -70,8 +70,8 @@ export function mountDebug(host: DebugHost) {
       group(`World · ${esc(REGIONS[region].name)} (exposure ${c.regions[region].exposure}${c.regions[region].collapsed ? ", collapsed" : ""})`,
         btn("exp-10", "−10 exposure") + btn("exp+10", "+10 exposure") + btn("exp0", "Set to 0") + btn("collapse", "Collapse") + btn("restore", "Restore")),
       group(`SCP-173 (${c.scps[0].status})`, btn("s-contained", "Contained") + btn("s-breach", "Breach now") + btn("s-loose", "Loose")),
-      group(`SCP-049 (${c.scps.find(s => s.id === "049")?.status ?? (c.sightings["049"] ? `first sighting ${dateText(c.sightings["049"])}` : "not held")})`,
-        btn("see049", "First sighting now") + btn("get049", "Capture into a free wing") + btn("breach049", "Breach now")),
+      ...(["049", "106"] as const).map(id => group(`SCP-${id} (${c.scps.find(s => s.id === id)?.status ?? (c.sightings[id] ? `first sighting ${dateText(c.sightings[id]!)}` : "not held")})`,
+        btn("see" + id, "First sighting now") + btn("get" + id, "Capture into a free wing") + btn("breach" + id, "Breach now"))),
       group("Save", `<span class="muted">${c.debug ? "This campaign is marked as a debug save." : "Untouched by debug so far."}</span>`),
     ].join("");
   }
@@ -89,6 +89,7 @@ export function mountDebug(host: DebugHost) {
   }
 
   function campaignAction(id: string, c: Campaign) {
+    const id_ = id;
     const s = c.scps[0];
     const days = (n: number) => {
       for (let i = 0; i < n && !c.over; i++) {
@@ -142,9 +143,13 @@ export function mountDebug(host: DebugHost) {
         s.status = "contained"; s.resurfaceDay = undefined; s.maintenance = 100;
         c.incidents = c.incidents.filter(i => i.scpId !== s.id || i.id === c.activeIncident);
         break;
-      case "see049": if (!c.scps.some(x => x.id === "049")) { delete c.sightings["049"]; firstSighting(c, "049"); } else note = "SCP-049 is already known."; break;
-      case "get049": if (!c.scps.some(x => x.id === "049")) { delete c.sightings["049"]; captureNow(c, "049"); } else note = "SCP-049 is already known."; break;
-      case "breach049": { const d = c.scps.find(x => x.id === "049"); if (d?.status === "contained") startBreach(c, d, "Debug:"); else note = "SCP-049 has to be contained first."; break; }
+      case "see049": case "see106": case "get049": case "get106": case "breach049": case "breach106": {
+        const id = id_.slice(-3) as "049" | "106", known = c.scps.find(x => x.id === id);
+        if (id_.startsWith("breach")) { if (known?.status === "contained") startBreach(c, known, "Debug:"); else note = `SCP-${id} has to be contained first.`; }
+        else if (known) note = `SCP-${id} is already known.`;
+        else { delete c.sightings[id]; if (id_.startsWith("see")) firstSighting(c, id); else { captureNow(c, id); if (!c.scps.some(x => x.id === id)) note = `No free wing of the right grade, so SCP-${id} was handed off.`; } }
+        break;
+      }
       case "s-breach": if (s.status === "contained") startBreach(c, s, "Debug:"); break;
       case "s-loose":
         c.incidents = c.incidents.filter(i => i.scpId !== s.id || i.id === c.activeIncident);

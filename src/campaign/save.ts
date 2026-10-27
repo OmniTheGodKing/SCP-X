@@ -49,7 +49,15 @@ export function loadCampaign(): Campaign | null {
       if (s["049"]! <= old.day) s["049"] = old.day + 20 + Math.floor(Math.random() * 60);
       Object.assign(c, { version: 8, sightings: s });
     }
-    return c.version === 8 ? (c as unknown as Campaign) : null;
+    if (c.version === 8) {
+      const old = c as unknown as Campaign;
+      if (!old.scps.some(s => s.id === "106")) {
+        const d = firstSightings()["106"]!;
+        old.sightings["106"] = d > old.day ? d : old.day + 30 + Math.floor(Math.random() * 90);
+      }
+      Object.assign(c, { version: 9 });
+    }
+    return c.version === 9 ? (c as unknown as Campaign) : null;
   } catch {
     return null;
   }

@@ -6,6 +6,7 @@ import { TYPES, rangeMod } from "../data/weapons";
 import { prof } from "./profiles";
 import { S, alive, canSee, full, fx, hooks, isPanicked, team, isTeam, log, loseSanity, rand, reveal, seen, sleep, computeVis } from "./state";
 import type { Unit } from "./types";
+import { shotAt106 } from "./scp106";
 
 export function coverAgainst(tx: number, ty: number, sx: number, sy: number) {
   const vx = sx - tx, vy = sy - ty, len = Math.hypot(vx, vy) || 1;
@@ -100,6 +101,7 @@ export function damage(u: Unit, dmg: number, by?: Unit) {
   // SCP-049 can't be hurt, only knocked back a step in its plans
   if (u.side === "anomaly") {
     if (S.has049) { u.staggeredUntil = S.turn; log("SCP-049 staggers under the hit but isn't hurt. It loses its next move.", "key"); }
+    if (S.has106) shotAt106();
     return;
   }
   u.hp -= dmg;
@@ -149,6 +151,8 @@ export async function moveUnit(u: Unit, path: Pt[]) {
   for (const [x, y] of path) {
     if (!u.alive) return;
     u.x = x; u.y = y;
+    // SCP-106's rot eats at anyone who walks through it
+    if (S.corroded.has(y * L.W + x) && u.side !== "anomaly") { log(`${full(u)} steps in the black rot (1 damage).`, "bad"); damage(u, 1); }
     if (isTeam(u)) computeVis();
     if (u.side === "raider") {
       for (const m of alive("mtf")) {

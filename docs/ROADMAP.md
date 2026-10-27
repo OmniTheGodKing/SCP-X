@@ -16,14 +16,11 @@ Order and contents are open to change.
 - Field recovery, and SCP-049, "The Plague Doctor" (Euclid): first sighted at a random point in 1952; kills by touch,
   raises any fresh body it can see as SCP-049-2 in one turn, staggered but not hurt by gunfire, calmed and led into
   containment.
+- SCP-106, "The Old Man" (Keter): first sighted at a random point in 1953; walks through walls, leaves rot that costs
+  double to cross and deals 1 damage, takes victims to its pocket dimension (25% come back), sinks after a grab or a
+  hit. Recontained with bait in the container (the femur breaker). Keter-grade wings now need research.
 
 Each new anomaly's author is checked on the SCP Wiki and credited under CC BY-SA 3.0.
-
-## Phase 3B: SCP-106, "The Old Man" (Keter)
-
-- Walks through walls, corrodes the floor, and takes victims to its pocket dimension.
-- Recontainment uses the femur breaker (a sacrifice whose scream lures it) and the electromagnets.
-- Needs a Keter-grade wing. Arrives through field recovery.
 
 ## Phase 3C: tactical depth
 

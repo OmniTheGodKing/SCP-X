@@ -58,6 +58,9 @@ export const tileAt = (x: number, y: number): Tile => (x < 0 || y < 0 || x >= L.
 // Breachers with Bulldozer vault desks: while planning their move, half cover counts as passable.
 let vaulting = false;
 export function setVault(on: boolean) { vaulting = on; }
+/** Tiles that cost 2 to move into (floor corroded by SCP-106). */
+let slow: Set<number> = new Set();
+export function setSlow(tiles: Set<number>) { slow = tiles; }
 export const passable = (x: number, y: number) => { const t = tileAt(x, y); return t === FLOOR || t === EXIT || t === CONT || (vaulting && t === HALF); };
 export const opaque = (x: number, y: number) => { const t = tileAt(x, y); return t === WALL || t === FULL || t === STEEL; };
 export const inContainer = (x: number, y: number) => tileAt(x, y) === CONT;
@@ -81,6 +84,24 @@ export function bfs(starts: Pt[], maxD: number, blocked?: (x: number, y: number)
   const dist = new Int16Array(W * H).fill(-1), prev = new Int16Array(W * H).fill(-1);
   const q: number[] = [];
   for (const [sx, sy] of starts) { dist[sy * W + sx] = 0; q.push(sy * W + sx); }
+  if (slow.size) {
+    // with slow tiles on the map, a simple Dijkstra (the map is small enough to scan for the next tile)
+    const done = new Uint8Array(W * H);
+    for (;;) {
+      let i = -1;
+      for (let k = 0; k < W * H; k++) if (dist[k] >= 0 && !done[k] && (i < 0 || dist[k] < dist[i])) i = k;
+      if (i < 0) break;
+      done[i] = 1;
+      const d = dist[i], x = i % W, y = (i / W) | 0;
+      for (const [dx, dy] of DIRS) {
+        if (!canStep(x, y, dx, dy)) continue;
+        const ni = (y + dy) * W + x + dx, nd = d + (slow.has(ni) ? 2 : 1);
+        if (nd > maxD || done[ni] || (dist[ni] !== -1 && dist[ni] <= nd) || (blocked && blocked(x + dx, y + dy))) continue;
+        dist[ni] = nd; prev[ni] = i;
+      }
+    }
+    return { dist, prev };
+  }
   for (let qi = 0; qi < q.length; qi++) {
     const i = q[qi], d = dist[i];
     if (d >= maxD) continue;

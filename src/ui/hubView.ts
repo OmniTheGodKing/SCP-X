@@ -320,7 +320,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
 
   // ---------- Research ----------
   function researchTab() {
-    const branches: Branch[] = ["SCP-173", ...(c.scps.some(s => s.id === "049") ? ["SCP-049" as Branch] : []), "Personnel", "Weapons", "Equipment", "Site"];
+    const branches: Branch[] = ["SCP-173", ...(["049", "106"] as const).filter(id => c.scps.some(s => s.id === id)).map(id => `SCP-${id}` as Branch), "Personnel", "Weapons", "Equipment", "Site"];
     const rw = canHireResearcher(c);
     const s = scp173();
     return `<div class="hubgrid">

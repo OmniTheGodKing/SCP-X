@@ -16,7 +16,7 @@ export interface Carried { id: ItemId; uses: number; }
 
 export type Side = "mtf" | "dclass" | "subject" | "civilian" | "raider" | "anomaly" | "zombie";
 /** Anomalies a mission can be about. */
-export type ScpId = "173" | "049";
+export type ScpId = "173" | "049" | "106";
 export type MissionKind = "breach" | "manhunt" | "coverup" | "strike";
 export type Phase = "player" | "anomaly" | "hand" | "subjects" | "over";
 
@@ -64,6 +64,8 @@ export interface Unit {
   staggeredUntil?: number;
   /** A body SCP-049 has already raised. */
   cured?: boolean;
+  /** Pulled into SCP-106's pocket dimension; whether they come back is decided when the mission ends. */
+  taken?: boolean;
   /** Site Security: guards are weaker than operatives and have no class. */
   guard?: boolean;
   /** Civilians who saw too much; dosed ones have had amnestics. */
@@ -112,7 +114,7 @@ export interface SquadMember {
 }
 
 /** Effects of finished research that apply during missions. */
-export interface MissionMods { blinkBonus: number; recoverBonus: number; mtfDrag: number; track173: boolean; lockdownTurns: number; calmTurns: number; }
+export interface MissionMods { blinkBonus: number; recoverBonus: number; mtfDrag: number; track173: boolean; lockdownTurns: number; calmTurns: number; pocketReturn: number; }
 
 export interface MissionSetup {
   kind: MissionKind;
@@ -174,6 +176,12 @@ export interface MissionState {
   /** SCP-049 instead: `statue` is SCP-049, and calmUntil is the last turn it stays calm. */
   has049: boolean;
   calmUntil: number;
+  /** SCP-106 instead: under the floor through sunkUntil, feeding on bait on feedTurn, and the floor it has rotted. */
+  has106: boolean;
+  sunkUntil: number;
+  submerged: boolean;
+  feedTurn: number;
+  corroded: Set<number>;
   amnestics: number;
   turn: number;
   phase: Phase;
