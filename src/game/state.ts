@@ -63,7 +63,7 @@ export function computeVis() {
   }
   for (let i = 0; i < W * H; i++) if (S.vis[i]) S.explored[i] = 1;
   const st = S.statue;
-  if (!S.sealed && seen(st.x, st.y)) S.lastSeen = { x: st.x, y: st.y, turn: S.turn };
+  if (S.has173 && !S.sealed && seen(st.x, st.y)) S.lastSeen = { x: st.x, y: st.y, turn: S.turn };
   updateStares();
 }
 
@@ -71,6 +71,7 @@ export function computeVis() {
 // SCP-173, costing 1 action if they have one. Looking away is free; it re-arms only after
 // sight is lost and regained.
 function updateStares() {
+  if (!S.has173) return;
   const st = S.statue;
   for (const m of team()) {
     const pan = isPanicked(m) || isBlind(m);

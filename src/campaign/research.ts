@@ -55,6 +55,8 @@ export const PROJECTS: Record<string, ProjectDef> = {
   powered_jack:       { name: "Powered pallet jack", branch: "Equipment", days: 25, cost: 50, needsTest: "material", desc: "Operatives can drag SCP-173 2 tiles instead of 1." },
   reinforced_doors:   { name: "Reinforced cell doors", branch: "Site", days: 40, cost: 100, needs: ["containment_rev"], desc: "Breach risk −20% in every containment wing." },
   early_warning:      { name: "Early warning sensors", branch: "Site", days: 30, cost: 80, needs: ["movement_study"], desc: "Breaches are 8% less likely to get out of the site each day." },
+  c119:               { name: "C-119 Flying Boxcar", branch: "Site", days: 40, cost: 120, desc: "A faster transport for Epsilon-11. Travel to other regions takes a quarter less time." },
+  c130:               { name: "C-130 Hercules", branch: "Site", days: 60, cost: 180, from: 1954, needs: ["c119"], desc: "A long-range turboprop transport. Travel to other regions takes half the time a C-47 would." },
   efficient_gen:      { name: "Efficient generators", branch: "Site", days: 30, cost: 70, desc: "Each generator supplies 15 power instead of 10." },
 };
 

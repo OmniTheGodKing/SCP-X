@@ -410,7 +410,7 @@ export async function endTurn() {
 }
 
 async function anomalyPhase() {
-  if (S.sealed) return;
+  if (!S.has173 || S.sealed) return;
   for (const m of starers()) { loseSanity(m, prof(m).drain, "sight"); reveal("mind"); }
   insurgentsStare();
   computeVis();
@@ -428,23 +428,33 @@ async function anomalyPhase() {
   }
 }
 
+/** Witnesses still out there: not dosed, not gone, not dead. */
+export const looseWitnesses = () => S.units.filter(u => u.witness && u.alive && !u.saved && !u.dosed);
+
 export function checkEnd() {
   if (S.over) return true;
-  if (S.sealed) { finish(true, false); return true; }
+  const k = S.setup.kind;
+  if ((k === "breach" || k === "manhunt") && S.sealed) { finish(true, false); return true; }
+  if (k === "coverup" && !looseWitnesses().length) {
+    // the job is done once nobody is left to dose; it counts as a success if at least half were dosed
+    const w = S.units.filter(u => u.witness);
+    finish(w.filter(u => u.dosed).length * 2 >= w.length, false); return true;
+  }
+  if (k === "strike" && !alive("raider").length) { finish(true, false); return true; }
   if (!alive("mtf").length) { finish(false, false); return true; }
   return false;
 }
 
 export function evacuate() {
   if (!canAct()) return;
-  log("Epsilon-11 pulls out of the wing. SCP-173 is still loose.", "bad");
+  log(S.has173 ? "Epsilon-11 pulls out. SCP-173 is still loose." : "Epsilon-11 pulls out before the job is done.", "bad");
   finish(false, true);
 }
 
 function finish(win: boolean, evacuated: boolean) {
   S.over = true; S.phase = "over";
   S.result = missionResult(win, evacuated);
-  log(win ? "Incident closed. SCP-173 recontained." : evacuated ? "Wing sealed with SCP-173 inside." : "Incident open. MTF Epsilon-11 lost.", win ? "good" : "bad");
+  log(win ? "Incident closed." : evacuated ? "Epsilon-11 has evacuated." : "Incident open. MTF Epsilon-11 lost.", win ? "good" : "bad");
   hooks.update();
   hooks.finished(S.result);
 }

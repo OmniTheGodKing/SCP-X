@@ -1,6 +1,8 @@
 // Anomalies held at Site-19: daily breach risk, cell cleaning, breaches, and escapes.
 import { FACILITIES, isContainment, nameInText, neighbors, operational, powerShort, type Facility } from "./base";
 import { has } from "./research";
+import { HOME, REGIONS, REGION_IDS } from "../data/regions";
+import { addExposure, travelDays } from "./world";
 import { blinkFullOf, log, maxSanOf, type Campaign, type Incident, type Operative } from "./campaign";
 
 export type ScpClass = "Safe" | "Euclid" | "Keter";
@@ -28,7 +30,6 @@ export interface ScpRecord {
 }
 
 const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
-const SITES = ["Site-17", "Site-23", "Site-43", "Area-12", "Site-62", "Site-81", "Area-14"];
 
 export const wingOf = (c: Campaign, s: ScpRecord) => c.base.facilities.find(f => f.id === s.wingId) || null;
 export const occupantOf = (c: Campaign, f: Facility) => c.scps.find(s => s.wingId === f.id) || null;
@@ -73,34 +74,38 @@ function startBreach(c: Campaign, s: ScpRecord, cause: string) {
     appeared: c.day,
     expires: c.day + breachWindow(c),
     insurgents: Math.min(4, rand(0, 2) + Math.floor((c.day - 1) / 60)),
+    region: HOME, map: "wingC",
   };
   c.nextIncident++;
   c.incidents.push(inc);
   log(c, `${cause} ${s.name} is out of its cell. Respond within ${breachWindow(c)} days before it gets out of the site.`, "bad");
 }
 
-function goDark(c: Campaign, s: ScpRecord, why: string) {
+function goDark(c: Campaign, s: ScpRecord, why: string, from = "Site-19") {
   s.status = "loose";
   s.resurfaceDay = c.day + rand(30, 120);
-  log(c, `${why} ${s.name} has escaped Site-19. Nobody knows where it is.`, "bad");
+  log(c, `${why} ${s.name} has slipped away from ${from}. Nobody knows where it is.`, "bad");
 }
 
 function resurface(c: Campaign, s: ScpRecord) {
-  const where = SITES[rand(0, SITES.length - 1)];
+  const open = REGION_IDS.filter(r => !c.regions[r].collapsed);
+  const region = open[rand(0, open.length - 1)] ?? HOME;
+  const towns = REGIONS[region].towns, where = towns[rand(0, towns.length - 1)];
   const inc: Incident = {
     id: "inc" + c.nextIncident,
     kind: "recovery",
     scpId: s.id,
-    title: `Incident ${String(c.nextIncident).padStart(3, "0")}: ${s.name} sighted at ${where}`,
+    title: `Incident ${String(c.nextIncident).padStart(3, "0")}: ${s.name} sighted near ${where}`,
     appeared: c.day,
-    expires: c.day + RECOVERY_WINDOW,
-    insurgents: Math.min(5, rand(2, 3) + Math.floor((c.day - 1) / 60)),
+    expires: c.day + travelDays(c, region) + RECOVERY_WINDOW,
+    insurgents: Math.min(4, rand(0, 2) + Math.floor((c.day - 1) / 90)),
+    region, map: Math.random() < 0.5 ? "town" : "farm", civilians: rand(3, 4),
   };
   c.nextIncident++;
   c.incidents.push(inc);
   s.resurfaceDay = undefined;
-  c.exposure = Math.min(100, c.exposure + 5);
-  log(c, `${s.name} has turned up at ${where}, with witnesses (+5 exposure). Recover it within ${RECOVERY_WINDOW} days.`, "bad");
+  addExposure(c, region, 5);
+  log(c, `${s.name} has turned up near ${where}, and the locals have seen it (+5 exposure in ${REGIONS[region].name}). Recover it within ${inc.expires - c.day} days.`, "bad");
 }
 
 /** One day of containment: wear, breaches, unanswered breaches spreading or escaping, sightings. */
@@ -114,17 +119,17 @@ export function tickContainment(c: Campaign) {
       }
       if (Math.random() < breachRisk(c, s).p) startBreach(c, s, "Containment alarm.");
     } else if (s.status === "loose") {
-      if ((c.day - (s.resurfaceDay ?? 0)) % 4 === 0) c.exposure = Math.min(100, c.exposure + 1);
+      if ((c.day - (s.resurfaceDay ?? 0)) % 4 === 0) addExposure(c, HOME, 1);
       if (s.resurfaceDay !== undefined && c.day >= s.resurfaceDay) resurface(c, s);
     }
   }
   for (const inc of [...c.incidents]) {
     const s = c.scps.find(x => x.id === inc.scpId);
-    if (!s || inc.appeared === c.day) continue;
+    if (!s || inc.appeared === c.day || inc.id === c.activeIncident) continue;
     const drop = () => { c.incidents = c.incidents.filter(i => i !== inc); };
     if (inc.kind === "breach") {
       if (c.day > inc.expires) {
-        drop(); c.exposure = Math.min(100, c.exposure + 15); c.stats.missed++;
+        drop(); addExposure(c, inc.region, 15); c.stats.missed++;
         goDark(c, s, `Nobody answered ${inc.title.split(":")[0]} (+15 exposure).`);
         continue;
       }
@@ -138,12 +143,12 @@ export function tickContainment(c: Campaign) {
         }
       }
       if (Math.random() < escapeChance(c, s)) {
-        drop(); c.exposure = Math.min(100, c.exposure + 10); c.stats.missed++;
+        drop(); addExposure(c, inc.region, 10); c.stats.missed++;
         goDark(c, s, "The breach wasn't contained in time (+10 exposure).");
       }
     } else if (c.day > inc.expires) {
-      drop(); c.exposure = Math.min(100, c.exposure + 15); c.stats.missed++;
-      goDark(c, s, `The sighting went unanswered (+15 exposure).`);
+      drop(); addExposure(c, inc.region, 15); c.stats.missed++;
+      goDark(c, s, `The sighting went unanswered (+15 exposure in ${REGIONS[inc.region].name}).`, REGIONS[inc.region].name);
     }
   }
 }
@@ -157,7 +162,7 @@ export function resolveScp(c: Campaign, inc: Incident, recovered: boolean) {
     s.maintenance = Math.max(s.maintenance, 60);
     s.resurfaceDay = undefined;
   } else {
-    goDark(c, s, "The team couldn't stop it.");
+    goDark(c, s, "The team couldn't stop it.", inc.kind === "recovery" ? REGIONS[inc.region].towns.find(t => inc.title.includes(t)) ?? REGIONS[inc.region].name : "Site-19");
   }
 }
 

@@ -126,6 +126,16 @@ export function createRenderer(cv: HTMLCanvasElement) {
       ctx.fillStyle = u.downed ? "#5d5266" : C.raider;
       ctx.beginPath(); ctx.moveTo(cx, cy - 12); ctx.lineTo(cx + 11, cy); ctx.lineTo(cx, cy + 12); ctx.lineTo(cx - 11, cy); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = "#0f1317"; ctx.lineWidth = 2; ctx.stroke();
+    } else if (u.side === "civilian") {
+      // civilians are squares; witnesses carry a W until they are dosed
+      ctx.fillStyle = u.dosed ? "#8a9a86" : "#cfc6a8";
+      ctx.fillRect(cx - 8, cy - 8, 16, 16);
+      ctx.strokeStyle = u.witness && !u.dosed ? C.manila : "#0f1317"; ctx.lineWidth = 2;
+      ctx.strokeRect(cx - 8, cy - 8, 16, 16);
+      ctx.fillStyle = "#0f1317"; ctx.font = "600 9px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(u.dosed ? "✓" : u.witness ? "W" : "C", cx, cy + 1);
+      if (u.spooked && !u.dosed) tag("!", cx + 10, cy - 10, C.alert);
+      return;
     } else {
       // D-Class: the work detail gets a solid ring, loose ones a broken one
       ctx.fillStyle = C.subject;
@@ -165,10 +175,10 @@ export function createRenderer(cv: HTMLCanvasElement) {
     drawFog();
     const sel = S.selected, playing = canAct();
     const st = S.statue;
-    const known = !S.sealed && seen(st.x, st.y);
+    const known = S.has173 && !S.sealed && seen(st.x, st.y);
 
     // Movement study: the room SCP-173 is in, even unseen
-    if (S.setup.mods.track173 && !S.sealed && !seen(st.x, st.y)) {
+    if (S.has173 && S.setup.mods.track173 && !S.sealed && !seen(st.x, st.y)) {
       const room = area(st.x, st.y);
       ctx.fillStyle = "rgba(215,91,71,0.13)";
       for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) if (passable(x, y) && area(x, y) === room) ctx.fillRect(x * TS, y * TS, TS, TS);

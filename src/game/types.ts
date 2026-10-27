@@ -3,7 +3,7 @@
 import type { ClassId, PerkId, TraitId } from "../data/classes";
 export type { ClassId, PerkId, TraitId };
 /** Class abilities plus Secure, which every operative can do. */
-export type AbilityId = PerkId | "secure";
+export type AbilityId = PerkId | "secure" | "dose";
 
 import type { AttachmentId, WeaponType } from "../data/weapons";
 export type { AttachmentId, WeaponType };
@@ -14,7 +14,8 @@ export type ItemId = "armor" | "eyedrops" | "flashbang" | "smoke" | "tracker" | 
 export interface Gun { name: string; type: WeaponType; dmg: [number, number]; mag: number; ammo: number; aim: number; attachment?: AttachmentId; }
 export interface Carried { id: ItemId; uses: number; }
 
-export type Side = "mtf" | "dclass" | "subject" | "raider" | "anomaly";
+export type Side = "mtf" | "dclass" | "subject" | "civilian" | "raider" | "anomaly";
+export type MissionKind = "breach" | "manhunt" | "coverup" | "strike";
 export type Phase = "player" | "anomaly" | "hand" | "subjects" | "over";
 
 export interface Unit {
@@ -57,6 +58,10 @@ export interface Unit {
   blindUntil?: number;
   /** Research bonus: lower blink chance while staring. */
   blinkMod?: number;
+  /** Civilians who saw too much; dosed ones have had amnestics. */
+  witness?: boolean;
+  dosed?: boolean;
+  spooked?: boolean;
   gun?: Gun;
   /** An incapacitated Insurgent who has been restrained. */
   secured?: boolean;
@@ -101,6 +106,11 @@ export interface SquadMember {
 export interface MissionMods { blinkBonus: number; recoverBonus: number; mtfDrag: number; track173: boolean; }
 
 export interface MissionSetup {
+  kind: MissionKind;
+  map: "wingC" | "town" | "farm" | "port";
+  amnestics: number;
+  witnesses: number;
+  civilians: number;
   incidentId: string;
   title: string;
   insurgents: number;
@@ -123,6 +133,10 @@ export interface MissionResult {
   }[];
   aftercare: boolean;
   prisoners: number;
+  civiliansKilled: number;
+  witnessesEscaped: number;
+  witnessesDosed: number;
+  amnesticsUsed: number;
   known: string[];
   dSent: number;
   dReturned: number;
@@ -136,6 +150,9 @@ export interface Mem { x: number; y: number; turn: number; }
 
 export interface MissionState {
   setup: MissionSetup;
+  /** Whether SCP-173 is in this mission at all. */
+  has173: boolean;
+  amnestics: number;
   turn: number;
   phase: Phase;
   busy: boolean;
