@@ -20,6 +20,10 @@ Order and contents are open to change.
   double to cross and deals 1 damage, takes victims to its pocket dimension (25% come back), sinks after a grab or a
   hit. Recontained with bait in the container (the femur breaker). Keter-grade wings now need research.
 
+Design rule: anything done with a facility is done in that facility's panel on the Site-19 tab (guards at their
+Security station, training at the range, therapy at psychological services, prisoners at holding cells, D-Class at
+the barracks, engineers and building at the workshop, researchers at the lab).
+
 Design rule: context actions (Calm, Dose, Secure, Restrain, Lock the hatch) only appear on the action bar when
 they can be used, to keep the bar clear.
 
@@ -64,7 +68,7 @@ Done alongside part 1
 ## Phase 3C: tactical depth
 
 From the XCOM 2 comparison, plus harder breaches. Order: (1) harder breaches, hunker down, carrying and exits
-(done); (2) concealment and enemy pods; (3) maps assembled from room plots; (4) night missions, escorts and
+(done); (2) concealment and enemy pods (done); (3) maps assembled from room plots; (4) night missions, escorts and
 retaliation; (5) doors and sirens.
 
 - Breaches: 1 to 3 researchers are caught in the wing. Walk someone next to one and they follow that person to an exit.
@@ -108,7 +112,7 @@ retaliation; (5) doors and sirens.
 
 - Insurgency raids on Site-19: a base defense mission where guards hold until Epsilon-11 arrives.
 - Guard equipment: vests and better weapons for Site Security through research.
-- Guard posts: assign guards to specific wings instead of only by station adjacency.
+- (Done early) Guard posts: each guard is posted to a Security station and hired there.
 
 ## Phase 3G: the O5 Council and strategic choices
 

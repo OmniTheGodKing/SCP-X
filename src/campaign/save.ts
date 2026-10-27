@@ -60,7 +60,15 @@ export function loadCampaign(): Campaign | null {
     if (c.version === 9) Object.assign(c, { version: 10, materials: {}, purchases: [] });
     if (c.version === 10) Object.assign(c, { version: 11, ammo: {}, weaponTier: 1 });
     if (c.version === 11) Object.assign(c, { version: 12 });
-    return c.version === 12 ? (c as unknown as Campaign) : null;
+    if (c.version === 12) {
+      // guards get posts at the stations that exist, in order
+      const old = c as unknown as Campaign;
+      const st = old.base.facilities.filter(f => f.type === "security" && f.daysLeft === 0);
+      let i = 0;
+      for (const g of old.guards.filter(g => g.alive)) { const f = st[Math.floor(i / 4)]; if (f) g.stationId = f.id; i++; }
+      Object.assign(c, { version: 13 });
+    }
+    return c.version === 13 ? (c as unknown as Campaign) : null;
   } catch {
     return null;
   }

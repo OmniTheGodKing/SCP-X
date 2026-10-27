@@ -4,7 +4,7 @@ import { bestView, type View } from "../core/sight";
 import { hasPerk, rangeOf } from "./perks";
 import { TYPES, rangeMod } from "../data/weapons";
 import { prof } from "./profiles";
-import { S, alive, canSee, full, fx, hooks, isPanicked, team, isTeam, log, loseSanity, rand, reveal, seen, sleep, computeVis } from "./state";
+import { S, alive, breakConcealment, canSee, full, fx, hooks, isPanicked, team, isTeam, log, loseSanity, rand, reveal, seen, sleep, computeVis } from "./state";
 import type { Gun, Unit } from "./types";
 import { SIDEARM } from "../data/weapons";
 import { dropCarried } from "./abilities";
@@ -74,6 +74,7 @@ export const center = (u: { x: number; y: number }): Pt => [u.x * TS + TS / 2, u
 export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
   const info = shotInfo(sh, tg, reaction);
   const gun = activeGun(sh), sidearm = usingSidearm(sh);
+  if (sh.side === "mtf") breakConcealment("shots fired");
   if (sh.gun && !sidearm) sh.gun.ammo = Math.max(0, sh.gun.ammo - 1);
   const hit = Math.random() * 100 < info.chance;
   const [x0, y0] = center(info.from), [x1, y1] = center(tg);
