@@ -28,7 +28,7 @@ const OBJECTIVES = {
 } as const;
 const ITEM_NAMES: Record<ItemId, string> = { armor: "Flak vest", armor_light: "Recon smock", armor_heavy: "Heavy plate", hazmat: "Hazmat suit", leadsuit: "Lead-lined suit",
   contsuit: "Containment suit", incendiary: "Incendiary", flamer: "M2 flamethrower", flare: "Signal flare", eyedrops: "Eye drops", flashbang: "Stun grenade", smoke: "M18 smoke", tracker: "Seismic sensor", frag: "M26 frag", csgas: "CS gas", bazooka: "M20 bazooka", law: "M72 LAW",
-  medkit: "Medkit", camera: "Field camera", restraints: "Restraint kit", darts: "Amnestic darts" };
+  medkit: "Medkit", camera: "Field camera", restraints: "Restraint kit", darts: "Amnestic darts", ward: "Warding charm" };
 import type { MissionResult, Unit } from "../game/types";
 import { esc } from "./util";
 import { createRenderer } from "./render";
@@ -123,7 +123,12 @@ function legendHtml() {
   if (u.some(x => (x.side === "dclass" || x.side === "subject") && !x.rioter)) items.push(["", "var(--subject)", "D-Class (dashed ring: loose)"]);
   if (u.some(x => x.rioter)) items.push(["ring", "var(--subject)", "Rioting D-Class"]);
   if (u.some(x => x.side === "civilian")) items.push(["sq", "#cfc6a8", `Civilian${u.some(x => x.witness) ? " · W witness" : ""}${u.some(x => x.researcher) ? " · R researcher" : ""}`]);
-  if (u.some(x => x.side === "raider") || S.setup.insurgents) items.push(["dia", "var(--raider)", "Chaos Insurgency (paler: hasn't spotted you)"]);
+  if (u.some(x => x.side === "raider") || S.setup.insurgents) items.push(["dia", "var(--raider)", `${S.setup.gru ? "GRU Division \"P\"" : "Chaos Insurgency"} (paler: hasn't spotted you; red arc: on overwatch)`]);
+  if (u.some(x => x.role === "sniper")) items.push(["dia", "var(--raider)", "S · sniper: long-range overwatch"]);
+  if (u.some(x => x.role === "demo")) items.push(["dia", "var(--raider)", "X · sapper: blows holes through walls"]);
+  if (u.some(x => x.role === "officer")) items.push(["dia", "var(--raider)", "O · officer: +10 aim to Insurgents within 4 tiles"]);
+  if (u.some(x => x.role === "commander")) items.push(["dia", "var(--raider)", `★ ${S.setup.commander}: their commander. Flees when badly hurt; take them alive if you can`]);
+  if (S.setup.reinforce && !S.ciLanded) items.push(["sq", "transparent", `Reinforcements expected around turn ${S.setup.reinforce} (a turn's warning)`]);
   if (S.has173) items.push(["fig", "var(--concrete)", "SCP-173 · the Sculpture"]);
   if (S.has049) items.push(["fig", "#1d1a18", "SCP-049 · the Plague Doctor (pale mask)"], ["", "#6f7a5c", "SCP-049-2 · its reanimated dead"]);
   if (S.has106) items.push(["fig", "#2a2118", "SCP-106 · the Old Man"], ["sq", "rgba(28,22,14,.9)", "Black rot · costs 2 to cross, 1 damage"]);

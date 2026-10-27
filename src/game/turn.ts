@@ -1,4 +1,5 @@
 // Player actions and the turn cycle: your move, SCP-173, the Insurgency, then loose D-Class.
+import { reinforcementsTick } from "./ciTactics";
 import { DRUM, FLOOR, HALF, L, STEEL, TS, area, area as area_, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, setSlow, setVault, tileAt, DIRS, type Pt } from "../core/grid";
 import { setSmoke, sightFrom } from "../core/sight";
 import { activeGun, damage, fire, kill, moveUnit } from "./combat";
@@ -547,6 +548,7 @@ export async function endTurn() {
   spreadFlesh();
   fleshContact();
   recoverSanity();
+  reinforcementsTick();
   S.turn++;
   S.busy = false;
   startPlayerTurn(false);

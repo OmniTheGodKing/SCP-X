@@ -1,6 +1,7 @@
 // Site-19 Command: incidents and time, the base and its containment, and Epsilon-11's roster.
 import { STAFF_EVENTS, answerStaff } from "../campaign/staff";
 import { HIST_CATS, type HistCat } from "../campaign/history";
+import { DISRUPT_INTEL, INQUIRY, PLANS, goalText, REVEAL_INTEL, THREAT_STEPS, canDisrupt, canInvestigateBreach, canReveal, disrupt, investigateBreach, reveal } from "../campaign/chaos";
 import { parseCampaign } from "../campaign/save";
 import type { Report } from "../campaign/reports";
 import { WEATHER, type Weather } from "../data/weather";
@@ -261,6 +262,33 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     </div>`;
   }
 
+  /** The Chaos Insurgency: its agenda, this month's operations, its commander, and the questions breaches leave. */
+  function chaosCard() {
+    const k = c.chaos, next = THREAT_STEPS.find(s => s.at > k.threat);
+    return `<div class="card chaos">
+      <div class="label">The Chaos Insurgency · agenda ${k.threat} / 100</div>
+      <div class="exposure"><div class="exp-bar threat">${THREAT_STEPS.map(s => `<i style="left:${s.at}%"></i>`).join("")}<span style="width:${k.threat}%"></span></div><b>${k.threat}</b></div>
+      <p class="muted">One organization working one agenda worldwide. Cells left alone, operations carried out and commanders who get away push it on; broken cells, disrupted operations and captured leaders set it back.${next ? ` At ${next.at}: ${esc(next.text)}.` : ""}</p>
+      ${k.history.length ? `<details class="archived"><summary>Why it moved</summary><ul class="why">${k.history.slice(0, 12).map(h => `<li class="${h.n > 0 ? "warn" : ""}">${h.n > 0 ? "+" : ""}${h.n} · ${esc(h.why)} <span class="muted">(${dateText(h.day)})</span></li>`).join("")}</ul></details>` : ""}
+      <div class="label" style="margin-top:10px">Operations this month</div>
+      ${k.plans.length ? `<ul class="orders">${k.plans.map(p => { const d = PLANS[p.kind], cell = p.cell && c.incidents.find(i => i.id === p.cell);
+        if (!p.known) { const w = canReveal(c, p); return `<li><b>Unidentified operation</b>, due ${dateText(p.due)} <span class="muted">· aimed at ${esc(REGIONS[p.region].name)}? Field work there would uncover it.</span>
+          <button class="act" type="button" data-reveal="${p.id}" ${w ? `disabled title="${esc(w)}"` : ""}>Identify · ${REVEAL_INTEL} Intel</button></li>`; }
+        const w = canDisrupt(c, p);
+        return `<li><b>${esc(d.name)}</b>: ${esc(goalText(p.kind))}, ${dateText(p.due)} <span class="muted">· ${esc(d.desc(p.region))}</span>
+          ${cell ? `<button class="linkbtn" type="button" data-mapinc="${cell.id}">A cell running it is located: strike it</button>` : ""}
+          <button class="act" type="button" data-disrupt="${p.id}" ${w ? `disabled title="${esc(w)}"` : ""}>Disrupt · ${DISRUPT_INTEL} Intel</button></li>`; }).join("")}</ul>` : `<p class="muted">Nothing known. New operations are picked up on the first of the month.</p>`}
+      ${k.active.length ? `<p class="warn">In force: ${k.active.map(a => `${esc(PLANS[a.kind].name)} until ${dateText(a.until)}`).join("; ")}.</p>` : ""}
+      <div class="label" style="margin-top:10px">Field commander</div>
+      ${k.commander ? `<p><b>${esc(k.commander.rank)} ${esc(k.commander.name)}</b> · in command since ${dateText(k.commander.since)} · met ${plural(k.commander.seen, "time")}${k.commander.escapes ? `, escaped ${plural(k.commander.escapes, "time")}` : ""}. Leads every cell running an operation, and turns up elsewhere too. Captured, they would set the agenda back by 10.</p>` : `<p class="muted">${k.past.length ? "No commander in the field since the last one fell. A replacement will come." : "Not yet identified."}</p>`}
+      ${k.past.length ? `<p class="muted">Past commanders: ${k.past.map(p => `${esc(p.rank)} ${esc(p.name)} (${esc(p.fate ?? "")}, met ${p.seen} times)`).join("; ")}.</p>` : ""}
+      ${k.inquiries.some(q => !q.known) ? `<div class="label" style="margin-top:10px">Open questions</div>
+        <ul class="orders">${k.inquiries.filter(q => !q.known).map(q => { const w = canInvestigateBreach(c, q);
+          return `<li>Why did ${esc(scpName(q.scp))} get out on ${dateText(q.day)}? <span class="muted">Accident, the anomaly itself, or someone inside.</span> <button class="act" type="button" data-inquiry="${q.id}" ${w ? `disabled title="${esc(w)}"` : ""}>Inquiry · $${INQUIRY.cost}k</button></li>`; }).join("")}</ul>` : ""}
+      ${k.inquiries.some(q => q.known) ? `<p class="muted">Settled: ${k.inquiries.filter(q => q.known).map(q => `${esc(scpName(q.scp))}, ${dateText(q.day)}: ${q.cause}`).join("; ")}.</p>` : ""}
+    </div>`;
+  }
+
   function commandTab() {
     const inc = c.incidents.find(i => i.id === planning) || null;
     return `<div class="hubgrid">
@@ -270,6 +298,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         <button class="act" type="button" data-goto="personnel">Open Personnel</button></div>` : ""}
       ${staffCard()}
       ${councilCard()}
+      ${chaosCard()}
       ${inspectionSoon(c) ? `<div class="card plan"><div class="label">O5 inspection · ${dateText(c.inspectionDay!)}</div>
         <p>If the inspector came today: $${INSPECTION.perCheck}k for each check passed${inspectionChecks(c).filter(k => !k.ok).length >= INSPECTION.failAt ? `, and <span class="warn">$${INSPECTION.penalty}k docked</span> for failing ${INSPECTION.failAt} or more` : ""}.</p>
         <ul class="why">${inspectionChecks(c).map(k => `<li class="${k.ok ? "" : "warn"}">${k.ok ? "✓" : "✗"} ${esc(k.label)}</li>`).join("")}</ul></div>` : ""}
@@ -462,7 +491,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       const tries: [number, number][] = [[0, 0], [0, 9], [0, -9], [14, 0], [-14, 0], [0, 16], [0, -16]];
       const [ox, oy] = tries.find(([dx, dy]) => busy.every(([bx, by]) => Math.abs(bx - (ax + dx * k)) > 11 * k || Math.abs(by - (ay + dy * k)) > 6 * k)) ?? [0, 0];
       const px = ax + ox * k, py = ay + oy * k;
-      return `<g class="rlabel" style="font-size:${3.6 * k}px"><text x="${px}" y="${py}">${esc(label(r))}</text><text x="${px}" y="${py + 4.5 * k}" class="rexp ${st.exposure >= 60 ? "hot" : st.exposure >= 35 ? "warm" : ""}">${st.collapsed ? "LOST" : st.contactDue ? `contact ${dateText(st.contactDue)}` : !isContacted(c, r) ? "no front" : `exposure ${st.exposure}`}</text>${(() => { const w = weatherAt(c, r); return mapShow.has("weather") && w !== "clear" ? `<text x="${px}" y="${py + 8.6 * k}" class="rwx ${w}">${WX_ICON[w]} ${WEATHER[w].name.toLowerCase()}<title>${esc(`${WEATHER[w].name} over ${REGIONS[r].name}: ${WEATHER[w].desc}`)}</title></text>` : ""; })()}</g>`; }).join("");
+      return `<g class="rlabel" style="font-size:${3.6 * k}px"><text x="${px}" y="${py}">${esc(label(r))}</text><text x="${px}" y="${py + 4.5 * k}" class="rexp ${st.exposure >= 60 ? "hot" : st.exposure >= 35 ? "warm" : ""}">${c.chaos.plans.some(p => p.known && p.region === r && p.kind !== "raid" && p.kind !== "sabotage" && p.kind !== "mole" && p.kind !== "agitate") ? `<tspan class="ciop"> · CI op</tspan>` : ""}${st.collapsed ? "LOST" : st.contactDue ? `contact ${dateText(st.contactDue)}` : !isContacted(c, r) ? "no front" : `exposure ${st.exposure}`}</text>${(() => { const w = weatherAt(c, r); return mapShow.has("weather") && w !== "clear" ? `<text x="${px}" y="${py + 8.6 * k}" class="rwx ${w}">${WX_ICON[w]} ${WEATHER[w].name.toLowerCase()}<title>${esc(`${WEATHER[w].name} over ${REGIONS[r].name}: ${WEATHER[w].desc}`)}</title></text>` : ""; })()}</g>`; }).join("");
     const markers = shown.map(({ i, tx, ty, mx, my }) => { const st = incidentState(c, i), b = briefing(c, i), moved = mx !== tx || my !== ty;
       return `<g class="marker ${groupOf(i)} ${st} ${i.dispatch ? "dispatched" : ""} ${mapSel === "inc:" + i.id ? "on" : ""}" data-mapinc="${i.id}" tabindex="0" role="button" aria-label="${esc(incidentName(i))}, ${esc(b.short)}">
         ${moved ? `<line x1="${tx}" y1="${ty}" x2="${mx}" y2="${my}" class="leader" style="stroke-width:${0.4 * k}"/><circle cx="${tx}" cy="${ty}" r="${0.8 * k}" class="truept"/>` : ""}
@@ -522,6 +551,12 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         ${b.rewards.length && !i.dispatch ? `<p><b>If it goes well:</b> ${esc(b.rewards.join("; "))}.</p>` : ""}
         ${i.dispatch ? "" : `<p><b>If it's ignored:</b> ${esc(b.ignore)}</p>`}
         ${b.worse && !i.dispatch ? `<p class="warn"><b>While it waits:</b> ${esc(b.worse)}</p>` : ""}
+        ${(() => { const notes: string[] = [], plan = i.plan && c.chaos.plans.find(p => p.id === i.plan);
+          if (plan) notes.push(`This cell is running ${PLANS[plan.kind].name} (${goalText(plan.kind)}, due ${dateText(plan.due)}). Breaking it stops the operation${c.chaos.commander ? `, and ${c.chaos.commander.rank} ${c.chaos.commander.name} leads it in person` : ""}.`);
+          if (i.gru) notes.push("GRU Division \"P\" agents are here for it too. They are Soviet, not Insurgency: whoever reaches it first keeps it.");
+          if (i.first) notes.push(`Left too long, ${i.region === "europe" || i.region === "east_asia" ? "GRU Division \"P\" may take it east, or " : ""}the Global Occult Coalition may destroy it. Either way it would be gone for good.`);
+          if ((i.kind === "strike" || i.kind === "retaliation") && c.chaos.threat >= 30) notes.push(`With the Insurgency's agenda at ${c.chaos.threat}, expect reinforcements around turn ${c.chaos.threat >= 70 ? 5 : 7} if the fight drags on.`);
+          return notes.length ? `<p class="muted">${notes.map(esc).join(" ")}</p>` : ""; })()}
         ${(() => { if (i.dispatch) return ""; const iw = canInvestigate(c, i); return iw && (i.recon || iw.startsWith("There's")) ? "" : iw ? `<p class="muted">${esc(iw)}</p>`
           : `<div class="row"><button class="act" type="button" data-investigate="${i.id}" data-how="intel" ${c.intel < INVESTIGATE.intel ? `disabled title="Needs ${INVESTIGATE.intel} Intel."` : ""}>Investigate · ${INVESTIGATE.intel} Intel, now</button><button class="act" type="button" data-investigate="${i.id}" data-how="agent" ${c.funds < INVESTIGATE.cost ? `disabled title="Needs $${INVESTIGATE.cost}k."` : ""}>Send a field agent · $${INVESTIGATE.cost}k, ${plural(INVESTIGATE.days, "day")}</button></div>`; })()}
         ${cover}
@@ -551,6 +586,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         <b class="geodate">${dateText(c.day)} · ${String(Math.floor(c.hour ?? 0)).padStart(2, "0")}:00</b>
         <div class="speeds"><button class="act ${speed ? "" : "on"}" type="button" data-speed="0" aria-pressed="${!speed}" title="Pause (Space)">❚❚</button>
           ${SPEEDS.map((n, k) => `<button class="act ${speed === n ? "on" : ""}" type="button" data-speed="${n}" aria-pressed="${speed === n}" ${clockBlocked() ? "disabled" : ""} title="${n}× (${k + 1})">${n}×</button>`).join("")}</div>
+        <button class="agenda linkbtn" type="button" data-goto="command" title="The Chaos Insurgency's global agenda. At 100 it completes: exposure everywhere, sabotage at Site-19 and a blow to Council standing. Details on the Command tab."><span>Insurgency agenda</span><span class="mini"><span style="width:${c.chaos.threat}%"></span></span><b>${c.chaos.threat}</b></button>
         ${pendingBreach(c) ? `<span class="warn">${pendingBreach(c)!.kind === "escort" ? "A convoy is under attack" : "Site-19 needs an answer"}: time is held.</span>` : ""}
         <div class="mapfilters">${(["anomaly", "insurgency", "coverup", "site", "facility", "night", "weather"] as const).map(g => `<button class="act ${mapShow.has(g) ? "on" : ""}" type="button" data-mapfilter="${g}" aria-pressed="${mapShow.has(g)}" title="${{ anomaly: "Anomalies", insurgency: "Insurgency", coverup: "Cover-ups", site: "At Site-19", facility: "Facilities", night: "Day and night", weather: "Weather" }[g]}"><span class="dot ${g}"></span><span class="fname">${{ anomaly: "Anomalies", insurgency: "Insurgency", coverup: "Cover-ups", site: "Site-19", facility: "Facilities", night: "Night", weather: "Weather" }[g]}</span></button>`).join("")}</div>
       </div>`;
@@ -1156,6 +1192,9 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     on("digBtn", () => change(() => excavate(c)));
     root.querySelectorAll<HTMLElement>("[data-evac]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.evac), f = c.base.facilities.find(x => x.id === b.dataset.to); if (s && f) change(() => evacuate(c, s, f, chosenWatchers())); });
     root.querySelectorAll<HTMLElement>("[data-refit]").forEach(b => b.onclick = () => { const f = c.base.facilities.find(x => x.id === b.dataset.refit); if (f) change(() => refitGenerator(c, f)); });
+    root.querySelectorAll<HTMLElement>("[data-disrupt]").forEach(b => b.onclick = () => change(() => disrupt(c, b.dataset.disrupt!)));
+    root.querySelectorAll<HTMLElement>("[data-reveal]").forEach(b => b.onclick = () => change(() => reveal(c, b.dataset.reveal!)));
+    root.querySelectorAll<HTMLElement>("[data-inquiry]").forEach(b => b.onclick = () => change(() => investigateBreach(c, b.dataset.inquiry!)));
     root.querySelectorAll<HTMLElement>("[data-offer]").forEach(b => b.onclick = () => change(() => answerOffer(c, b.dataset.offer!, !!b.dataset.yes)));
     root.querySelectorAll<HTMLElement>("[data-request]").forEach(b => b.onclick = () => change(() => makeRequest(c, b.dataset.request as RequestId)));
     root.querySelectorAll<HTMLElement>("[data-pill]").forEach(b => b.onclick = () => { const o = c.roster.find(x => x.id === b.dataset.pill); if (o) change(() => givePill(c, o)); });

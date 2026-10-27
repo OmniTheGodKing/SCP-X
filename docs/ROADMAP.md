@@ -359,7 +359,7 @@ retaliation (done); (5) doors and sirens (done).
   $150k by class. Convoys take 3 to 5 days by road; from 1952 one coming in can be ambushed near Site-19 (an escort
   mission any fit operatives can take); losing it costs standing and exposure.
 
-## Phase 3I: global Chaos Insurgency and other groups (planned)
+## Phase 3I: global Chaos Insurgency and other groups (done; verified in source and in-game)
 
 - **Single global opponent:** the Chaos Insurgency is **one coordinated worldwide organization** with an overarching agenda, shared strategic threat/doom clock and linked major operations. It can act in multiple regions but must **not** be modeled as independent regional factions with separate autonomous strategic economies or doom clocks.
 - **Threat escalation:** leaving cells or operations unchecked advances global threat. Make escalation and its consequences visible on the Geoscape.
@@ -370,6 +370,40 @@ retaliation (done); (5) doors and sirens (done).
 - **Global strategic goals:** steal anomalies during transport, recruit D-Class, plant staff moles, infiltrate fronts and conduct raids or sabotage. Regional operations should serve these global plans; success/failure affects future operations.
 - **Other factions:** the Global Occult Coalition may destroy an anomaly if the Foundation responds too slowly (preventing capture/exposure but displeasing the Council); GRU Division “P” acts as a Cold War anomalous rival in Europe and East Asia. They are not branches of the Insurgency.
 - **Ambiguity:** not every containment breach is Insurgency-caused. Some incidents may initially have unclear causes; evidence can reveal whether the event was accidental, anomalous or deliberate sabotage.
+
+### As built (src/campaign/chaos.ts strategic, src/game/ciTactics.ts tactical)
+
+- **One agenda:** a single global Insurgency meter (0 to 100, starts at 10) on the World Map bar and the Command tab, with
+  a "why it moved" list. Up: +1 a month (+1 per hidden mole), cells left alone (+4), attacks unanswered (+3), strikes or
+  raids lost, operations carried out (+3), a commander escaping (+2). Down: cells broken (−5), attacks and raids beaten
+  (−3), operations disrupted (−6), interrogations finished (−1), moles exposed (−4), commanders killed (−6) or captured
+  (−10). Steps: 25 snipers and sappers appear; 40 teams one larger; 55 raids twice as often; 70 teams two larger and
+  reinforcements sooner. At 100 the agenda completes: +10 exposure everywhere, a facility wrecked by sleeper charges,
+  −20 standing, and the meter resets to 60 (not a campaign loss).
+- **Operations (dark events):** three each month toward its global goals: Highway (every anomaly convoy ambushed for a
+  month), Open Door (D-Class morale −25), Glass Eye (plant a mole), Paper Mill (a front's funding halved for two months,
+  +8 exposure), Iron Gate (a raid), Ashfall (sabotage), Long Arm (larger, better-armed teams for a month). Two are known,
+  one is unidentified until 1 Intel is spent or field work in its target region uncovers it. Known ones can be disrupted
+  for 2 Intel, and one each month is run from a located cell: breaking that cell stops it. Targeted regions show "CI op"
+  on the map.
+- **Commander:** a named field commander (Captain, Major or Colonel) leads every cell running an operation and turns up
+  in other strikes, raids, attacks and ambushes 30% of the time. 8 HP, armor, steadies nearby troops, and runs for the
+  nearest exit at half health. Each escape is remembered on their file; killed or captured, a successor arrives 2 to 4
+  months later. Past commanders are listed with their fate.
+- **Tactical roles:** riflemen; snipers (scoped rifle, settle into long-range overwatch that fires on the team's
+  movement); sappers (blow a hole through a wall between them and the team, 2 damage to anyone beside it); officers
+  (+10 aim to Insurgents within 4 tiles). Marked S, X, O and ★ on the map and in the legend; Insurgents on overwatch show
+  a red arc. Some carry an anomalous charm that turns the first hit; recovered ones open "Anomalous charms" research,
+  which unlocks the warding charm item for operatives.
+- **Reinforcements:** in strikes and attacks once the agenda is 30+, a radio warning and a marked drop zone the turn
+  before 2 or 3 more Insurgents land at the far edge (turn 7, or 5 at 70+).
+- **Moles and ambiguity:** every breach opens an inquiry ("accident, the anomaly itself, or someone inside?") on the
+  Command tab; $20k settles it. Moles sabotage now and then and cause some breaches; an inquiry that finds sabotage
+  exposes one.
+- **Rivals:** first sightings left unanswered may be destroyed by the Global Occult Coalition, or in Europe and East Asia
+  taken east by GRU Division "P"; either way the anomaly is gone for good (−5 standing). Half of first sightings in
+  Europe and East Asia have GRU-P agents on the ground: the mission's opposition is GRU-P, not the Insurgency, and beating
+  them to it earns standing. Briefings warn of all of this.
 
 ## Phase 3J: task forces, field operations and independent Foundation sites (planned)
 

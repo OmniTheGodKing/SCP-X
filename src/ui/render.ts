@@ -250,7 +250,11 @@ export function createRenderer(cv: HTMLCanvasElement) {
     } else if (u.side === "raider") {
       ctx.fillStyle = u.downed ? "#5d5266" : S.activePods.includes(u.pod ?? 0) ? C.raider : "#8a74a0";
       ctx.beginPath(); ctx.moveTo(cx, cy - 12); ctx.lineTo(cx + 11, cy); ctx.lineTo(cx, cy + 12); ctx.lineTo(cx - 11, cy); ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = "#0f1317"; ctx.lineWidth = 2; ctx.stroke();
+      ctx.strokeStyle = u.role === "commander" ? C.manila : "#0f1317"; ctx.lineWidth = 2; ctx.stroke();
+      // specialists carry a letter: S sniper, X sapper, O officer, ★ the commander
+      const mark = { sniper: "S", demo: "X", officer: "O", commander: "★" }[u.role as string];
+      if (mark && !u.downed) { ctx.fillStyle = "#0f1317"; ctx.font = "700 10px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(mark, cx, cy + 1); }
+      if (u.overwatch && !u.downed) { ctx.strokeStyle = C.alert; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, 15, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke(); }
     } else if (u.side === "civilian") {
       // civilians are squares; witnesses carry a W until they are dosed
       ctx.fillStyle = u.dosed ? "#8a9a86" : "#cfc6a8";
@@ -563,6 +567,13 @@ export function createRenderer(cv: HTMLCanvasElement) {
       }
     }
 
+    // where Insurgent reinforcements will land next turn
+    if (S.ciDrop) {
+      const [dx, dy] = S.ciDrop;
+      ctx.strokeStyle = C.alert; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+      ctx.strokeRect((dx - 1) * TS + 2, (dy - 1) * TS + 2, TS * 3 - 4, TS * 3 - 4); ctx.setLineDash([]);
+      tag("DROP ZONE", dx * TS + TS / 2, (dy - 1) * TS - 4, C.alert);
+    }
     drawWeather(now);
 
     S.effects = S.effects.filter(e => now - e.t0 < e.dur);

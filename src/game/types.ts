@@ -9,7 +9,7 @@ import type { AmmoId, AttachmentId, WeaponType } from "../data/weapons";
 export type { AmmoId, AttachmentId, WeaponType };
 
 export type ItemId = "armor" | "armor_light" | "armor_heavy" | "hazmat" | "leadsuit"
-  | "contsuit" | "incendiary" | "flamer" | "flare" | "eyedrops" | "flashbang" | "smoke" | "tracker" | "frag" | "csgas" | "bazooka" | "law" | "medkit" | "camera" | "restraints" | "darts";
+  | "contsuit" | "incendiary" | "flamer" | "flare" | "eyedrops" | "flashbang" | "smoke" | "tracker" | "frag" | "csgas" | "bazooka" | "law" | "medkit" | "camera" | "restraints" | "darts" | "ward";
 /** Items thrown or fired at a tile, and the heavy weapons among them (heavy armor only). */
 export const THROWN: ItemId[] = ["frag", "flashbang", "smoke", "csgas", "bazooka", "law", "flare", "incendiary", "flamer"];
 export const HEAVY: ItemId[] = ["bazooka", "law", "flamer"];
@@ -50,6 +50,13 @@ export interface Unit {
   fled: boolean;
   kills: number;
   lostSanTurn?: number;
+  /** Phase 3I Insurgents: their specialist role, an anomalous charm (still working, or carried at all), breaching
+   *  charges left, and a commander who got away. */
+  role?: import("./ciTactics").CiRole;
+  charm?: boolean;
+  hadCharm?: boolean;
+  charges?: number;
+  escaped?: boolean;
   /** Frozen while observed; enables "Do not blink" and "Call the blink". */
   sightBound?: boolean;
   /** D-Class who joined the work detail mid-mission. */
@@ -194,6 +201,12 @@ export interface MissionSetup {
   known: string[];
   mods: MissionMods;
   insurgentArmor: number;
+  /** Phase 3I: which Insurgent specialists turn up, the named commander leading them, the turn reinforcements land
+   *  (strikes and attacks only), and GRU Division "P" in place of the Insurgency. */
+  ciRoles?: { sniper: boolean; demo: boolean; officer: boolean; charm: boolean };
+  commander?: string;
+  reinforce?: number;
+  gru?: boolean;
   year: number;
 }
 
@@ -227,6 +240,10 @@ export interface MissionResult {
   /** Riots: rioters killed (lost from storage). */
   riotersKilled: number;
   hadFire?: boolean;
+  /** Phase 3I: what became of the Insurgency commander, charms recovered, and whether GRU-P was the opposition. */
+  commander?: "killed" | "captured" | "escaped" | "absent";
+  charms?: number;
+  gru?: boolean;
   /** Anomalies photographed with the field camera, and whether a restraint kit came along. */
   photos: ScpId[];
   restraints: boolean;
@@ -287,6 +304,9 @@ export interface MissionState {
   fresh: Set<string>;
   log: LogEntry[];
   effects: Effect[];
+  /** Insurgent reinforcements: where they will land, and whether they have. */
+  ciDrop?: [number, number];
+  ciLanded?: boolean;
   stats: { mtfLost: number; dLost: number; escaped: number; raidersDown: number };
   smoke: { x: number; y: number; until: number }[];
   /** Site-19 breaches: the alarm siren, and doorways sealed with blast doors from the panel. */

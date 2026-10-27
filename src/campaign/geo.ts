@@ -1,6 +1,7 @@
 // The Geoscape: where everything on the World Map sits, what state it's in, and what the player knows about it.
 // Incidents are placed at the town they happened in (or at Site-19 for anything inside the site); independent
 // Foundation facilities are shown too, but Site-19 is the only one the player runs.
+import { scanReveals } from "./chaos";
 import { REGIONS, SITE19, type RegionId } from "../data/regions";
 import { anomalyProgress, has } from "./research";
 import { rewardText } from "./council";
@@ -165,6 +166,8 @@ export function startFieldOp(c: Campaign, r: RegionId, k: FieldOpKind) {
 }
 function finishOp(c: Campaign, op: FieldOp) {
   const where = REGIONS[op.region].name, roll = Math.random();
+  // either kind of field work uncovers a hidden Insurgency operation aimed at this region
+  if (scanReveals(c, op.region)) log(c, `Field work in ${where} uncovered an Insurgency operation aimed there.`, "key", "world");
   if (op.kind === "surveil") {
     if (roll < 0.7 && !c.incidents.some(i => i.kind === "strike" && i.region === op.region)) { locateCell(c, op.region, true); return; }
     gainIntel(c, 2); log(c, `Surveillance in ${where} found no cell, but picked up their radio traffic (+2 Intel).`, "key", "world"); return;

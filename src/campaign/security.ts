@@ -183,7 +183,7 @@ export const raidArrival = (c: Campaign) => Math.max(3, Math.round(mtfArrival(c)
 export function tickRaids(c: Campaign) {
   if (c.day < RAID.from || c.incidents.some(i => i.kind === "raid") || (c.lastRaid !== undefined && c.day - c.lastRaid < RAID.cooldown)) return;
   const recentStrike = c.lastStrike !== undefined && c.day - c.lastStrike <= 30;
-  if (Math.random() < RAID.base + RAID.perPrisoner * c.prisoners.length + (recentStrike ? RAID.afterStrike : 0)) startRaid(c);
+  if (Math.random() < (RAID.base + RAID.perPrisoner * c.prisoners.length + (recentStrike ? RAID.afterStrike : 0)) * (c.chaos.threat >= 55 ? 2 : 1)) startRaid(c);
 }
 export function startRaid(c: Campaign) {
   c.lastRaid = c.day;

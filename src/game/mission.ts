@@ -1,4 +1,5 @@
 // Building a mission from what Site-19 sends, and turning its outcome into a result.
+import { assignRoles } from "./ciTactics";
 import { FLOOR, L, Level, bfs, cheb, floorTiles, nearContainer, tileAt, useLevel, type Pt } from "../core/grid";
 import { MAPS } from "../data/maps";
 import { varyMap } from "../data/plots";
@@ -112,6 +113,7 @@ export function createMission(setup: MissionSetup) {
     units.push(mk({ id: "c" + (i + 1), side: "civilian", call: names[i % names.length], name: names[i % names.length], x, y, hp: 4, maxHp: 4, san: 50, witness,
       spooked: setup.kind === "manhunt" || setup.kind === "retaliation" }));
   }
+  assignRoles(units, setup);
   const statue = has049
     ? mk({ id: "scp049", side: "anomaly", name: "SCP-049", x: sx, y: sy, hp: 1, maxHp: 1, san: 0 })
     : has106 ? mk({ id: "scp106", side: "anomaly", name: "SCP-106", x: sx, y: sy, hp: 1, maxHp: 1, san: 0 })
@@ -154,6 +156,8 @@ export function createMission(setup: MissionSetup) {
   if (setup.squad.some(m => m.perks.includes("first_look"))) state.explored.fill(1);
   log(`${setup.title}.`, "key");
   log(BRIEFINGS[setup.kind](setup));
+  if (setup.gru) log("These aren't Insurgents: GRU Division \"P\", the Soviet anomalous unit, wants it too.", "bad");
+  if (setup.commander) log(`Intercepted radio: ${setup.commander} is leading them in person. They'll run when badly hurt.`, "bad");
   if (setup.weather && setup.weather !== "clear") log(`Weather: ${WEATHER[setup.weather].name.toLowerCase()}. ${WEATHER[setup.weather].desc.replace(" Flights there take a day longer.", "")}`, "key");
   computeVis();
 }
@@ -241,5 +245,8 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
     amnesticsUsed: S.setup.amnestics - S.amnestics,
     insurgentsDown: S.stats.raidersDown,
     insurgentsTotal: S.setup.insurgents,
+    commander: (() => { const c = S.units.find(u => u.role === "commander"); return !c ? "absent" : c.escaped ? "escaped" : !c.alive ? "killed" : c.downed && (c.secured || win) ? "captured" : "escaped"; })(),
+    charms: win ? S.units.filter(u => u.hadCharm && (!u.alive || u.downed)).length : 0,
+    gru: !!S.setup.gru,
   };
 }

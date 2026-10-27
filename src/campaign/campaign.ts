@@ -6,6 +6,7 @@ import {
   ENGINEER_COST, countOperational, operational, engineerCapacity, dclassCapacity, healPerDay, monthlyUpkeep, sanityPerDay, startingBase, tickConstruction,
   type Base,
 } from "./base";
+import { addThreat, ciRoles, commanderFate, commanderJoins, disrupt, planActive, monthlyChaos, newChaos, threatExtra, tickChaos, type ChaosState } from "./chaos";
 import { addStanding, councilGrant, issueDirectives, monthlyCouncil, newCouncil, rewardText, grantReward, tickCouncil, transferFought, type CouncilState, type Reward, type Transit } from "./council";
 import { isInert, routineEvery, routineOf, firstSightings, resolveScp, scpName, startingScps, tickContainment, type ScpRecord } from "./containment";
 import { reachMilestone, type Milestone } from "./research";
@@ -114,6 +115,11 @@ export interface Incident {
   recon?: boolean;
   reconDue?: number;
   grown?: number;
+  /** An Insurgency operation this cell is running (breaking it stops the plan), and for breaches, what really caused it. */
+  plan?: string;
+  cause?: "accident" | "anomalous" | "sabotage";
+  /** Recoveries in Europe or East Asia where GRU Division "P" is the opposition. */
+  gru?: boolean;
   /** What the briefing said when Epsilon-11 was sent, kept for the history. */
   briefed?: string;
   /** The field report it came with: an Insurgent count that may be out of date or wrong (see reportOf). */
@@ -135,7 +141,9 @@ export interface SiteLogEntry { day: number; text: string; kind: string; }
 export interface Loadout { opId: string; armor: ItemId | ""; items: ItemId[]; }
 
 export interface Campaign {
-  version: 19;
+  version: 20;
+  /** The Chaos Insurgency's global agenda, operations, commander and moles. */
+  chaos: ChaosState;
   /** Standing with the O5 Council, its orders, requests and transfers. */
   council: CouncilState;
   /** SCP-500 pills left. */
@@ -215,6 +223,8 @@ export interface Campaign {
   /** Incident reports, newest first. */
   archive?: Report[];
   retired?: Retiree[];
+  /** Anomalies destroyed by the GOC or taken by the Soviets: they never turn up again. */
+  lostScps?: string[];
   /** Everything that has happened, for the History tab. */
   history?: HistEntry[];
   /** The last raid on Site-19 and the last Insurgency cell broken (raids follow strikes). */
@@ -340,7 +350,7 @@ export function newCampaign(): Campaign {
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
-    version: 19, council: newCouncil(1), morale: 60, dPolicy: "terminate", outbreakDay: rand(945, 1310), materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
+    version: 20, chaos: newChaos(), council: newCouncil(1), morale: 60, dPolicy: "terminate", outbreakDay: rand(945, 1310), materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
     day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
     inventory: {}, orders: [], knownNotes: [], nextD: 9101, nextOp: 1, nextIncident: 1,
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
@@ -418,6 +428,7 @@ export function advanceDay(c: Campaign) {
   }
   tickPrisoners(c);
   tickCouncil(c);
+  tickChaos(c);
   if (dayOfMonth(c.day) === 1) {
     monthlyResearch(c);
     monthlyDClass(c);
@@ -432,6 +443,7 @@ export function advanceDay(c: Campaign) {
       for (const n of newsFor(last.getUTCFullYear(), last.getUTCMonth() + 1)) log(c, `In the news: ${n.text}${n.note ? ` ${n.note}` : ""}`, n.effect ? "key" : ""); }
     log(c, `${monthName(c.day)}: the O5 Council grants $${grant}k (standing ${c.council.standing}) and the fronts pass on $${fronts}k (less where exposure is high); upkeep and salaries cost $${upkeep}k. ${d} D-Class transferred in${d < DCLASS_MONTHLY ? " (the barracks are full)" : ""}. Exposure eases by 3 wherever there's a front.`, "key", "command");
     monthlyCouncil(c);
+    monthlyChaos(c);
   }
   checkOver(c);
   return c.incidents.length > incidentsBefore || c.log.length !== logBefore || !!c.over;
@@ -493,6 +505,7 @@ function tickPrisoners(c: Campaign) {
     p.intel++; gainIntel(c, 1);
     if (p.intel >= INTEL_PER_PRISONER) {
       c.prisoners = c.prisoners.filter(x => x !== p);
+      addThreat(c, -1, `interrogation of ${p.name}`);
       log(c, `Interrogation of ${p.name} is finished (+1 Intel). They are transferred out of Site-19.`, "good");
     } else log(c, `Interrogating ${p.name} yields +1 Intel.`, "good");
   }
@@ -640,7 +653,11 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     rioters: inc.kind === "riot" ? riotSize(c) : undefined,
     // a breach at Site-19 catches researchers in the wing and opens the D-Class block
     researchers: kind === "breach" ? Math.min(c.researchers, rand(1, 3)) : 0, strayPool: kind === "breach" ? c.dclass : 0, guards: sec.first, lateGuards: sec.late, mtfTurn: kind === "raid" ? raidArrival(c) : mtfArrival(c, inc), witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
-    incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: Math.max(0, inc.insurgents - (inc.weakened ?? 0)), squad, dclass,
+    incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: Math.max(0, inc.insurgents - (inc.weakened ?? 0)) + (inc.insurgents && inc.kind !== "breach" ? threatExtra(c) : 0), squad, dclass,
+    ciRoles: inc.kind === "breach" || inc.kind === "riot" || inc.kind === "outbreak" || inc.kind === "coverup" ? undefined : ciRoles(c),
+    commander: commanderJoins(c, inc) ? `${c.chaos.commander!.rank} ${c.chaos.commander!.name}` : undefined,
+    reinforce: (inc.kind === "strike" || inc.kind === "retaliation") && c.chaos.threat >= 30 ? (c.chaos.threat >= 70 ? 5 : 7) : undefined,
+    gru: inc.gru,
     year: yearOf(c.day),
     known: [...c.knownNotes],
     insurgentArmor: (yearOf(c.day) >= 1954 ? 1 : 0) + (mole ? 1 : 0),
@@ -818,7 +835,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   }
   // a capture far from home has to get back: the convoy may be ambushed on the way (XCOM-style follow-up)
   const capture = r.win && inc && inc.kind === "recovery" && inc.scpId;
-  const ambush = capture && travelDays(c, inc!.region) > 0 && r.squad.some(s => s.alive && !s.absent) && Math.random() < 0.3;
+  const ambush = capture && travelDays(c, inc!.region) > 0 && r.squad.some(s => s.alive && !s.absent) && Math.random() < (planActive(c, "hijack") ? 1 : 0.3);
   // the squad flies home from abroad
   const away = inc ? travelDays(c, inc.region) : 0;
   if (away && r.squad.some(s => s.alive) && !ambush) {
@@ -854,6 +871,14 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   if (r.insurgentsTotal) reachMilestone(c, "insurgents");
   if (kind === "raid") reachMilestone(c, "raid");
   if (kind === "strike" && r.win) c.lastStrike = c.day;
+  // the Insurgency's agenda: what this mission did to it
+  if (r.win && inc?.plan) disrupt(c, inc.plan, "Epsilon-11 broke the cell running it");
+  if (kind === "strike") addThreat(c, r.win ? -5 : 3, `${name} ${r.win ? "broken up" : "failed"}`);
+  if (kind === "retaliation") addThreat(c, r.win ? -3 : 3, `${name} ${r.win ? "beaten off" : "failed"}`);
+  if (kind === "raid") addThreat(c, r.win ? -3 : 5, `${name} ${r.win ? "beaten off" : "lost"}`);
+  if (r.commander && r.commander !== "absent" && c.chaos.commander) lines.push(commanderFate(c, r.commander));
+  if (r.charms) { addMaterial(c, "charms", r.charms); lines.push(`${r.charms === 1 ? "An anomalous charm was" : `${r.charms} anomalous charms were`} taken off the Insurgents for study.`); }
+  if (r.win && r.gru) { addStanding(c, 2, `beat GRU Division "P" to ${scpName(inc?.scpId ?? "")}`); chronicle(c, "anomaly", `Epsilon-11 beat GRU Division "P" to ${scpName(inc?.scpId ?? "")} near ${inc?.title.split(" near ").pop() ?? "the site"}.`); }
   if (r.hadFire) reachMilestone(c, "fire");
   checkOver(c);
   return { lines, promotions };
