@@ -72,7 +72,7 @@ export function spawnCoverup(c: Campaign, at?: RegionId) {
   const town = pick(REGIONS[r].towns);
   const inc = newIncident(c, {
     kind: "coverup", region: r, map: Math.random() < 0.5 ? "town" : "farm", scpId: "",
-    what: `Cover-up: ${pick(STORIES)}, ${town}`,
+    what: `${(st => st[0].toUpperCase() + st.slice(1))(pick(STORIES))}, ${town}`,
     expires: c.day + travelDays(c, r) + 4, insurgents: Math.random() < 0.5 ? 0 : rand(1, 2), witnesses: rand(3, 5), civilians: rand(1, 3),
   });
   log(c, `${inc.title}. Witnesses need amnestics before the story spreads. Respond within ${inc.expires - c.day} days.`, "bad", "command");
@@ -152,7 +152,7 @@ export function tickWorld(c: Campaign) {
     log(c, `${inc.title}. The Insurgency is punishing the town for helping the Foundation. Respond within ${inc.expires - c.day} days.`, "bad", "command");
   }
   for (const inc of [...c.incidents]) {
-    if (inc.id === c.activeIncident || (inc.kind !== "coverup" && inc.kind !== "strike" && inc.kind !== "retaliation") || c.day <= inc.expires) continue;
+    if (inc.id === c.activeIncident || inc.dispatch || (inc.kind !== "coverup" && inc.kind !== "strike" && inc.kind !== "retaliation") || c.day <= inc.expires) continue;
     c.incidents = c.incidents.filter(i => i !== inc);
     if (inc.kind === "retaliation") {
       c.stats.missed++;

@@ -194,6 +194,26 @@ retaliation (done); (5) doors and sirens (done).
   region's card, shown on the map while they run: Scan for leads ($20k, 4 days: Intel, money, a strong recruit added
   to the pool, or a cell) and Surveillance ($30k, 6 days: usually a cell to strike, else 2 Intel). Squads flying home
   and running operations are listed with the time controls.
+- **Refinement pass (done):**
+  - Layout: the map leads, with the date, clock and speeds and the marker filters in a bar on top; one side panel beside
+    it shows the incident list (name, then kind, place and countdown), a briefing, a region or a facility, with a way
+    back; team selection opens full width below the map. On phones the panel follows the map.
+  - Zoom and pan: wheel zoom around the cursor, drag to pan, +/− and World buttons; selecting a region frames it.
+    Markers, labels and lines keep the same size on screen at any zoom and screen width. Phones get a taller map window.
+  - No overlaps: markers close together fan out in a ring with a thin leader line to each true location; region labels
+    step aside from markers, facilities and Site-19.
+  - Regions are shaded territories (each with its own tint, reddening with exposure, hatched when lost), clickable
+    anywhere on their land, labelled with name and exposure. Soviet-bloc land has no front and stays neutral.
+  - Each marker shows its countdown; hovering gives the name and deadline.
+  - Day and night: the night side of the world is shaded from the date and the clock. Night missions now use the
+    local time where the mission is (they used Site-19's clock everywhere), and briefings and routes say "night there".
+  - Squads flying home are drawn as a plane along their route; field operations pulse on their region.
+  - Fixes: SCP-610 outbreaks show "Ongoing" (not a date in 2225) and sit at a town; cover-ups are named for their
+    story and town.
+- **Cover-ups without Epsilon-11:** from the briefing, send an amnestics team (a researcher and one dose per witness,
+  $10k; they dose everyone on arrival, −10 exposure, the researcher returns after the round trip) or pay the region's
+  front to bury the story ($30k + $10k per witness, 70%: −5 exposure, else +6). Sending Epsilon-11 is still possible
+  but no longer needed.
 - **Belongs to later phases:** establishing contacts and fronts (3H), covert teams and procurement (3J), rivals
   intervening in ignored incidents (3I). The Geoscape is where they will appear.
 

@@ -20,7 +20,7 @@ export const lookOf = (o: { id: string; sex?: "m" | "f"; look?: Look }) => fitLo
 import { monthlyStaff, tickStaff, type StaffEvent } from "./staff";
 import { tickInspection } from "./inspection";
 import { buildReport, type Report } from "./reports";
-import { tickGeo, type FieldOp } from "./geo";
+import { nightAt, tickGeo, type FieldOp } from "./geo";
 import { newsFor } from "./news";
 import { CLASS_WEAPONS, WEAPON_TIERS, model, startingModels, type AmmoId, type AttachmentId, type WeaponType } from "../data/weapons";
 
@@ -45,7 +45,7 @@ export interface Operative {
   /** Times they have broken down (shut their eyes at zero sanity), across missions. */
   breakdowns: number;
   /** Away from duty: in therapy or retraining. */
-  busy?: { kind: "therapy" | "retrain" | "travel"; daysLeft: number; trait?: TraitId; from?: RegionId };
+  busy?: { kind: "therapy" | "retrain" | "travel"; daysLeft: number; trait?: TraitId; from?: RegionId; total?: number };
   /** Chosen weapon type (one of their class's two) and the attachment fitted to it. */
   weapon?: WeaponType;
   attachment?: AttachmentId;
@@ -112,6 +112,8 @@ export interface Incident {
   recon?: boolean;
   reconDue?: number;
   grown?: number;
+  /** Cover-ups handled without Epsilon-11: an amnestics team on its way, or the front paid to bury the story. */
+  dispatch?: { how: "team" | "bury"; done: number; doses: number };
 }
 
 export interface Prisoner { name: string; days: number; intel: number; }
@@ -604,7 +606,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
   const amnestics = kind === "coverup" ? c.amnestics : 0;
   return {
     kind, scp: (inc.scpId || "173") as ScpId, map: inc.map, amnestics,
-    night: inc.map !== "wingC" && ((c.hour ?? 0) < 6 || (c.hour ?? 0) >= 20),
+    night: nightAt(c, inc),
     severity: inc.kind === "outbreak" ? c.outbreak?.severity ?? 2 : undefined,
     rioters: inc.kind === "riot" ? riotSize(c) : undefined,
     // a breach at Site-19 catches researchers in the wing and opens the D-Class block
@@ -785,7 +787,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   // the squad flies home from abroad
   const away = inc ? travelDays(c, inc.region) : 0;
   if (away && r.squad.some(s => s.alive) && !ambush) {
-    for (const s of r.squad) { const o = c.roster.find(x => x.id === s.opId); if (o?.alive) o.busy = { kind: "travel", daysLeft: away, from: inc!.region }; }
+    for (const s of r.squad) { const o = c.roster.find(x => x.id === s.opId); if (o?.alive) o.busy = { kind: "travel", daysLeft: away, from: inc!.region, total: away }; }
     lines.push(`The survivors fly back to Site-19: ${away} day${away > 1 ? "s" : ""}.`);
   }
   for (const l of [...lines, ...promotions]) log(c, l, r.win ? "good" : "bad");
