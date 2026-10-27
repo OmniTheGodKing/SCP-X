@@ -197,7 +197,7 @@ retaliation (done); (5) doors and sirens (done).
 - **Belongs to later phases:** establishing contacts and fronts (3H), covert teams and procurement (3J), rivals
   intervening in ignored incidents (3I). The Geoscape is where they will appear.
 
-## Phase 3 priority: tactical map readability and feedback (planned)
+## Phase 3 priority: tactical map readability and feedback (done)
 
 - **Terrain textures:** use restrained but distinguishable 2D grass, dirt, concrete, asphalt, indoor flooring, water where applicable, and rubble. Texture must not drown out grid or unit information.
 - **Geometry and cover:** visibly differentiate traversable floor, impassable walls, doors, windows, low/half cover, full cover, obstacles, hazardous tiles and extraction points. Make cover orientation and blocked routes intelligible.
@@ -208,6 +208,24 @@ retaliation (done); (5) doors and sirens (done).
 - **Do not reimplement existing combat systems:** overwatch and reactions to enemy movement, suppression, flanking bonuses, critical hits and status effects are already believed to exist; verify their actual behavior in source and playtesting, then improve visibility and balance rather than treating them as missing.
 - **Phase boundary:** 2D clarity and presentation now; 3D geometry, multi-storey elevation and models in Phase 4.
 - **Acceptance:** at normal zoom a new player can identify where they can move, what is cover, which units are threats, what actions are available and why an attack outcome occurred without trial-and-error clicks.
+
+### Verified and built
+
+- **Already present (verified in source, kept):** reachable tiles in two colours (one action blue, two amber), path
+  preview, cover pips on the hovered tile (full cover blue, half cover tan), selected-unit ring, overwatch arc,
+  Insurgent detection zones while concealed, SCP-173 sight lines and "EYES ON/NO LOS", hazards (fire, flesh, rot),
+  the hint panel's full hit-chance breakdown, and log lines with hit chance, crits and armor absorbed. Overwatch,
+  suppression, flanking, crits, cover and hunkering exist in combat and were not reimplemented.
+- **Terrain surfaces:** every tile's floor comes from its area: asphalt (streets, lots, motor pool, courtyard), grass
+  (fields), dirt (barn), concrete (corridors, warehouses, garages, docks), wooden boards (homes, shops, offices,
+  barracks, mess halls), lab tile and steel deck (cells). Textures are fixed per tile and kept dark and low-contrast;
+  a faint grid marks every tile. No windows exist in the current maps, so none are drawn.
+- **Threats at a destination:** hovering a move shows how many visible Insurgents could see that tile, whether any of
+  them flank it ("2 CAN SEE · FLANKED" in red), a line from each, or "NOT SEEN".
+- **Targets at a glance:** every enemy the selected operative can shoot shows its hit chance under it.
+- **Shot preview:** hit chance, the weapon's damage range, crit chance and the target's armor.
+- **Combat log reasons:** each shot line ends with the situational modifiers behind the chance (for example
+  "95%: flanked +10, close range +15").
 
 ## Phase 3G: recruiting Epsilon-11 and operative identity (done; verified in source and in-game)
 
