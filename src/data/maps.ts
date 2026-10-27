@@ -138,5 +138,40 @@ export const PORT: MapDef = {
   strayRooms: [],
 };
 
-export const MAPS = { wingC: WING_C, town: TOWN, farm: FARM, port: PORT };
+// The D-Class block at Site-19: two rows of cells off a corridor, and the mess hall. Riots happen here.
+export const DBLOCK: MapDef = {
+  name: "D-Class block",
+  rows: [
+    "############################",
+    "#....#....#....#....#......#",
+    "#.h..#.h..#..h.#.h..#......#",
+    "#....#....#....#....#..hh..#",
+    "##+####+####+####+####+#####",
+    "#..........................E",
+    "#..H.......H.......H.......E",
+    "#..........................E",
+    "##+####+####+####+####+#####",
+    "#....#....#....#....#......#",
+    "#.h..#..h.#.h..#..h.#..H...#",
+    "#....#....#....#....#......#",
+    "######################+#####",
+    "#..........................#",
+    "#..hh..hh..hh..hh..hh......#",
+    "#..........................#",
+    "#..hh..hh..hh..hh..hh...H..#",
+    "############################",
+  ],
+  area(x, y) {
+    if (y <= 3) return x >= 21 ? "guard room" : "north cells";
+    if (y <= 7) return "cell corridor";
+    if (y <= 11) return x >= 21 ? "laundry" : "south cells";
+    return "mess hall";
+  },
+  squadSpawns: [[26, 5], [26, 6], [26, 7], [25, 6]],
+  scpRooms: [],
+  insurgentRooms: [[1, 1, 4, 3], [6, 1, 9, 3], [11, 1, 14, 3], [16, 1, 19, 3], [1, 9, 4, 11], [6, 9, 9, 11], [11, 9, 14, 11], [1, 13, 20, 16]],
+  strayRooms: [[1, 13, 20, 16], [21, 9, 26, 11]],
+};
+
+export const MAPS = { wingC: WING_C, town: TOWN, farm: FARM, port: PORT, dblock: DBLOCK };
 export type MapId = keyof typeof MAPS;

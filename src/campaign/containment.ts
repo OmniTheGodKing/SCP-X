@@ -3,7 +3,7 @@ import { FACILITIES, isContainment, nameInText, neighbors, operational, powerSho
 import { has } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, travelDays } from "./world";
-import { log, type Campaign, type Incident } from "./campaign";
+import { dclassDied, log, type Campaign, type Incident } from "./campaign";
 import type { ScpId } from "../game/types";
 import { GUARD, type Guard } from "./security";
 
@@ -175,7 +175,7 @@ export function canClean(c: Campaign, s: ScpRecord): string | null {
 }
 function clean(c: Campaign, s: ScpRecord, what: string) {
   s.lastCleaned = c.day; s.maintenance = 100;
-  if (!has(c, "auto_cleaning") && Math.random() < CLEAN_RISK) { c.dclass--; log(c, `${what} of ${s.name}'s cell went wrong: both watchers blinked at once and the D-Class cleaning was killed.`, "bad"); }
+  if (!has(c, "auto_cleaning") && Math.random() < CLEAN_RISK) { c.dclass--; dclassDied(c, 1); log(c, `${what} of ${s.name}'s cell went wrong: both watchers blinked at once and the D-Class cleaning was killed.`, "bad"); }
 }
 
 /** D-Class work in the cell while operatives watch. `mult` scales the danger; `breach` is an extra
@@ -186,7 +186,7 @@ export function cellWork(c: Campaign, s: ScpRecord, watchers: Guard[], what: str
   const names = watchers.length ? `two D-Class and guard${watchers.length > 1 ? "s" : ""} ${watchers.map(o => o.name).join(" and ")}` : "the two D-Class watching";
   const crew = dclass > 1 ? `one of the ${dclass} D-Class inside` : "the D-Class inside";
   if (Math.random() < risk) {
-    c.dclass--;
+    c.dclass--; dclassDied(c, 1);
     log(c, `During ${what}, ${names} blinked at the same moment. SCP-173 killed ${crew}.`, "bad");
     if (Math.random() < 0.3) { startBreach(c, s, "It got past the door."); return false; }
   } else log(c, `${what[0].toUpperCase() + what.slice(1)}: done, watched by ${names}.`, "good");

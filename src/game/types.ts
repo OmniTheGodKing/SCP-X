@@ -23,7 +23,7 @@ export interface Carried { id: ItemId; uses: number; }
 export type Side = "mtf" | "dclass" | "subject" | "civilian" | "raider" | "anomaly" | "zombie";
 /** Anomalies a mission can be about. */
 export type ScpId = "173" | "049" | "106";
-export type MissionKind = "breach" | "manhunt" | "coverup" | "strike" | "escort" | "retaliation" | "outbreak";
+export type MissionKind = "breach" | "manhunt" | "coverup" | "strike" | "escort" | "retaliation" | "outbreak" | "riot";
 export type Phase = "player" | "anomaly" | "hand" | "subjects" | "over";
 
 export interface Unit {
@@ -89,6 +89,8 @@ export interface Unit {
   infectedTurn?: number;
   suitTorn?: boolean;
   flesh?: boolean;
+  /** A rioting D-Class: fights with fists, and can be restrained or put down. */
+  rioter?: boolean;
   /** Escorts: the turn an Insurgent started working the truck open. */
   stealTurn?: number;
   /** The Insurgency fire team this unit belongs to. */
@@ -155,7 +157,9 @@ export interface MissionSetup {
   kind: MissionKind;
   /** Which anomaly a breach or manhunt is about (SCP-173 if not set). */
   scp?: ScpId;
-  map: "wingC" | "town" | "farm" | "port";
+  map: "wingC" | "town" | "farm" | "port" | "dblock";
+  /** Riots: how many D-Class are rioting. */
+  rioters?: number;
   amnestics: number;
   /** SCP-610 outbreaks: how far it has spread (1 to 5). */
   severity?: number;
@@ -206,6 +210,8 @@ export interface MissionResult {
   /** SCP-610: operatives lost to infection, and whether the core was burned out. */
   infectedLost: number;
   coreBurned: boolean;
+  /** Riots: rioters killed (lost from storage). */
+  riotersKilled: number;
   /** Anomalies photographed with the field camera, and whether a restraint kit came along. */
   photos: ScpId[];
   restraints: boolean;

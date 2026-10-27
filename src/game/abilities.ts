@@ -63,7 +63,7 @@ export function abilityTargets(u: Unit, p: AbilityId): Unit[] {
     case "captive": return S.units.filter(a => a.side === "raider" && a.alive && a.downed && !a.secured && within(u, a, carries(u, "restraints") ? 2 : 1));
     case "witness": return S.units.filter(a => a.witness && a.alive && !a.saved && !a.dosed && within(u, a, carries(u, "darts") ? 4 : 1));
     case "self": return d.when && !d.when(u) ? [] : [u];
-    case "stray": return S.units.filter(a => a.side === "subject" && a.stray && a.alive && !a.saved && !a.downed && cheb(u.x, u.y, a.x, a.y) <= (hasPerk(u, "shepherd") ? 3 : 1));
+    case "stray": return S.units.filter(a => ((a.side === "subject" && a.stray) || (a.side === "zombie" && a.rioter)) && a.alive && !a.saved && !a.downed && cheb(u.x, u.y, a.x, a.y) <= (hasPerk(u, "shepherd") ? 3 : 1));
     case "carryable": return u.carrying ? [] : S.units.filter(a => a !== u && !a.saved && !a.carriedBy && a.side !== "anomaly" && a.side !== "zombie" && a.side !== "raider"
       && (a.downed || !a.alive) && !a.taken && !a.cured && adjacent(u, a));
     case "doctor": {

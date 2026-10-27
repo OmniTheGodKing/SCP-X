@@ -102,8 +102,12 @@ retaliation (done); (5) doors and sirens (done).
 
 ## Phase 3E: a living Site-19
 
-- D-Class morale: overcrowding and deaths raise the chance of a riot, which becomes a guard mission.
-- Monthly D-Class termination policy (keeping them costs money; releasing them costs amnestics).
+- (Done) Security stations defend their whole level; Major and Colonel ranks above the perk tree.
+- (Done) D-Class morale: overcrowding, deaths and termination orders lower it, a recreation room raises it, and below
+  30 the block can riot. A riot is a guards-only mission on the D-Class block map (restrain or kill the rioters), or
+  can be left to Site Security for a few D-Class dead.
+- (Done) Monthly D-Class order, set in the barracks panel: terminate (default, canon), keep them all ($2k each), or
+  release them (costs amnestics).
 - Staff incidents with choices: a researcher's breakdown, a guard's mistake, an injured engineer.
 - Power failures (storms, generator faults) that spike breach risk until fixed; cascading breaches when a wing loses power.
 - Emergency evacuation: moving an anomaly out of a failing wing before it breaches.
@@ -112,7 +116,8 @@ retaliation (done); (5) doors and sirens (done).
   Cold War exposure spike in Europe.
 - Incident reports in the Foundation's style after each mission, kept in a browsable archive.
 - Personnel files: hometowns, a line of backstory, service history, medals and commendations with small bonuses.
-- Retirement: veterans with low sanity can step back to become trainers (recruits start one rank higher).
+- Retirement: Majors and Colonels can retire as trainers (recruits arrive as Specialists, at most 2 trainers); lower
+  ranks get an honourable discharge.
 
 ## Phase 3F: defending Site-19
 

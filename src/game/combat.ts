@@ -125,9 +125,10 @@ export function damage(u: Unit, dmg: number, by?: Unit) {
   if (u.side === "mtf") u.minHp = Math.min(u.minHp ?? u.hp, Math.max(0, u.hp));
   if (u.hp <= 0 && u.side === "mtf" && !u.downed) { goDown(u); return; }
   // sedative rounds knock people out instead of killing them
-  if (u.hp <= 0 && by && activeGun(by)?.ammoType === "sedative" && !usingSidearm(by) && ["raider", "subject", "civilian"].includes(u.side) && !u.downed) {
+  if (u.hp <= 0 && by && activeGun(by)?.ammoType === "sedative" && !usingSidearm(by) && (["raider", "subject", "civilian"].includes(u.side) || u.rioter) && !u.downed) {
     u.hp = 0; u.downed = true; u.stabilized = true; by.kills++;
     if (u.side === "raider") { S.stats.raidersDown++; log("The sedative drops an Insurgent. Secure them to take a prisoner.", "good"); }
+    else if (u.rioter) { u.restrained = true; log(`${u.name} goes down, sedated.`, "good"); }
     else if (u.side === "subject") { u.side = "dclass"; u.joined = true; log(`${u.name} goes down, sedated. They'll be carried back to holding.`, "good"); }
     else log(`${u.name} goes down, sedated but alive.`, "key");
     return;
@@ -166,7 +167,8 @@ export function kill(u: Unit, by173 = false) {
     S.stats.raidersDown++;
     if (!by173) log("Insurgent down.", "good");
   } else if (u.side === "zombie") {
-    log(u.flesh ? "An SCP-610 instance collapses into a heap." : "SCP-049-2 goes down and stays down.", "good");
+    if (u.rioter) S.stats.dLost++;
+    log(u.rioter ? `${u.name} is dead.` : u.flesh ? "An SCP-610 instance collapses into a heap." : "SCP-049-2 goes down and stays down.", u.rioter ? "bad" : "good");
   } else {
     S.stats.dLost++;
     if (wasTeam) log(`${u.name} is dead.`, "bad");

@@ -57,7 +57,7 @@ export function createMission(setup: MissionSetup) {
   const has173 = contain && (setup.scp ?? "173") === "173", has049 = contain && setup.scp === "049", has106 = contain && setup.scp === "106";
 
   // On a breach, Site Security is first on the scene and Epsilon-11 follows later; elsewhere the squad goes in together.
-  const first = setup.kind === "breach" ? setup.guards ?? [] : setup.squad;
+  const first = setup.kind === "breach" || setup.kind === "riot" ? setup.guards ?? [] : setup.squad;
   const near: Pt[] = [];
   for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++)
     if (tileAt(x, y) === FLOOR && def.squadSpawns.some(([sx, sy]) => Math.max(Math.abs(sx - x), Math.abs(sy - y)) <= 2)) near.push([x, y]);
@@ -137,6 +137,16 @@ export function createMission(setup: MissionSetup) {
   };
   setMission(state);
   if (setup.kind === "outbreak") seedOutbreak(setup, strayRooms);
+  if (setup.kind === "riot") {
+    for (let i = 0; i < (setup.rioters ?? 0); i++) {
+      const room = def.insurgentRooms[i % def.insurgentRooms.length];
+      const free = floorTiles(room).filter(([x, y]) => !S.units.some(u => u.alive && u.x === x && u.y === y));
+      if (!free.length) continue;
+      const [x, y] = free[Math.floor(Math.random() * free.length)];
+      const name = "D-" + (4000 + Math.floor(Math.random() * 1000));
+      S.units.push(mk({ id: "q" + i, side: "zombie", call: name, name, x, y, hp: 5, maxHp: 5, san: 50, rioter: true }));
+    }
+  }
   setSmoke([]);
   if (setup.squad.some(m => m.perks.includes("first_look"))) state.explored.fill(1);
   log(`${setup.title}.`, "key");
@@ -162,6 +172,7 @@ function seedOutbreak(setup: MissionSetup, rooms: [number, number, number, numbe
 }
 
 export const BRIEFINGS: Record<MissionKind, (s: MissionSetup) => string> = {
+  riot: s => `The D-Class block is rioting: ${s.rioters} prisoners are out of their cells. They have nothing but their fists, but there are a lot of them. Restrain them (next to them, 1 action) or put them down; every one killed is a D-Class you won't have. Only Site Security answers this.`,
   outbreak: s => `SCP-610 has taken hold here. Flesh spreads from a core somewhere in the area, more every turn. Anyone who ends a turn on it without a sealed containment suit is infected, and turns into one of its instances 5 turns later: nothing saves them, not even leaving. Its instances infect with every blow. Only fire kills the core: incendiaries, a flamethrower, or fuel drums. Burn it out.${s.night ? " It's dark: everyone sees 4 tiles less." : ""}`,
   breach: s => s.scp === "106" ? `SCP-106 is out of its cell. It walks through walls, and anyone it reaches is dragged into its pocket dimension. Shooting it only sends it under the floor for a turn. The only way to recontain it is bait: put a D-Class (or a secured Insurgent) in the transport container in the staging room. It will go straight for them and stay a turn to feed. Seal it in during that turn.${s.squad.length ? ` Epsilon-11 arrives on turn ${s.mtfTurn}.` : ""}` : s.scp === "049" ? `SCP-049 is out of its cell in the north rooms and looking for patients. Its touch kills, and it will raise anyone who dies as SCP-049-2. Gunfire only staggers it. Talk it down (Calm, within ${3} tiles) and lead it into the transport container in the staging room, then seal it.${s.squad.length ? ` Epsilon-11 arrives on turn ${s.mtfTurn}.` : ""}` : `SCP-173 is out of its cell in the north rooms. Site Security is first on the scene${s.lateGuards?.length ? `, with ${s.lateGuards.length} more guard${s.lateGuards.length > 1 ? "s" : ""} arriving next turn` : ""}. ${s.squad.length ? `Epsilon-11 arrives on turn ${s.mtfTurn}.` : "Epsilon-11 isn't coming: nobody is available."} The transport container is open at the dock in the staging room: get it inside and seal it. If it reaches the surface hatch in the east lab, it's gone; the panel at the east end of the corridor locks the hatch down.${s.dclass.length ? ` ${s.dclass.join(" and ")} ${s.dclass.length > 1 ? "are" : "is"} assigned to you.` : ""}`,
   manhunt: s => s.scp === "106" ? "An old man who walks through walls is loose among the locals, and people are disappearing into the floor. That is SCP-106. Shooting only drives it under for a turn. Put a D-Class in the truck's container as bait; it goes straight for them and stays a turn to feed. Seal it in then." : s.scp === "049" ? "A man in a plague doctor's mask is walking among the locals, and some of them have stopped breathing. That is SCP-049. Its touch kills, and the dead get back up. Talk it down (Calm) and lead it into the truck's open container, then seal it. Keep people from dying near it." : "SCP-173 is somewhere nearby, and the locals are out. Every civilian it kills makes the cover story harder. A truck with an open container is waiting: get it inside and seal it.",
@@ -194,6 +205,7 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
     escaped: S.escaped,
     infectedLost: S.units.filter(u => u.opId && (u.infectedTurn !== undefined || u.flesh)).length,
     coreBurned: !!S.core && S.core.hp <= 0,
+    riotersKilled: S.units.filter(u => u.rioter && !u.alive).length,
     photos: [...S.photos],
     restraints: S.units.some(u => u.side === "mtf" && u.items?.some(i => i.id === "restraints")),
     zombiesKilled: S.units.filter(u => u.side === "zombie" && !u.alive).length,

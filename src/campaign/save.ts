@@ -74,7 +74,8 @@ export function loadCampaign(): Campaign | null {
       else old.outbreakDay = old.day + 30 + Math.floor(Math.random() * 90);
       Object.assign(c, { version: 14 });
     }
-    return c.version === 14 ? (c as unknown as Campaign) : null;
+    if (c.version === 14) Object.assign(c, { version: 15, morale: 60, dPolicy: "terminate" });
+    return c.version === 15 ? (c as unknown as Campaign) : null;
   } catch {
     return null;
   }

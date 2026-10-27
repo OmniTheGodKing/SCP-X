@@ -106,13 +106,14 @@ function leads(d: Unit): Pt[] {
 /** SCP-049-2: shamble toward the nearest living person and hit them. */
 export async function zombiePhase() {
   for (const z of zombies()) {
-    const prey = humans();
+    // rioters only go for the guards; everything else goes for anyone alive
+    const prey = z.rioter ? team().filter(m => m.side === "mtf") : humans();
     if (!prey.length) break;
     if (!prey.some(h => cheb(h.x, h.y, z.x, z.y) <= 1)) walk(z, prey.flatMap(besideTiles), ZOMBIE_MOVE);
     const near = prey.filter(h => cheb(h.x, h.y, z.x, z.y) <= 1 && canStep(z.x, z.y, h.x - z.x, h.y - z.y));
     if (near.length) {
-      const v = near[0], dmg = rand(2, 3), soak = Math.min(v.armor ?? 0, dmg);
-      if (seen(v.x, v.y) || v.side === "mtf" || v.side === "dclass") log(`${z.flesh ? "An SCP-610 instance" : "SCP-049-2"} claws at ${v.side === "mtf" ? full(v) : v.name} for ${dmg - soak}${soak ? ` (armor absorbed ${soak})` : ""}.`, "bad");
+      const v = near[0], dmg = z.rioter ? rand(1, 2) : rand(2, 3), soak = Math.min(v.armor ?? 0, dmg);
+      if (seen(v.x, v.y) || v.side === "mtf" || v.side === "dclass") log(`${z.rioter ? z.name : z.flesh ? "An SCP-610 instance" : "SCP-049-2"} ${z.rioter ? "lands a punch on" : "claws at"} ${v.side === "mtf" ? full(v) : v.name} for ${dmg - soak}${soak ? ` (armor absorbed ${soak})` : ""}.`, "bad");
       fx({ type: "text", x: v.x * TS + TS / 2, y: v.y * TS - 2, text: String(dmg - soak), color: "#d75b47", dur: 800 });
       damage(v, dmg - soak);
       if (z.flesh && v.alive) { if (v.side === "mtf") fleshBite(v); else infect(v, "a wound from an instance"); }
