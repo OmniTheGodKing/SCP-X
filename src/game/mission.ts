@@ -1,6 +1,8 @@
 // Building a mission from what Site-19 sends, and turning its outcome into a result.
 import { FLOOR, L, Level, floorTiles, tileAt, useLevel, type Pt } from "../core/grid";
 import { MAPS } from "../data/maps";
+import { varyMap } from "../data/plots";
+
 import { setSmoke } from "../core/sight";
 import { insurgentGuns } from "../data/weapons";
 import { STARTING_NOTES } from "./notes";
@@ -31,7 +33,7 @@ export function spawnMember(m: SquadMember, x: number, y: number, mods: MissionS
 
 /** Free floor tiles within 2 of the squad's entry points, nearest first. */
 export function entryTiles(): Pt[] {
-  const def = MAPS[S.setup.map], out: Pt[] = [];
+  const def = L.def, out: Pt[] = [];
   for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++)
     if (tileAt(x, y) === FLOOR && def.squadSpawns.some(([sx, sy]) => Math.max(Math.abs(sx - x), Math.abs(sy - y)) <= 2)) out.push([x, y]);
   const d = (p: Pt) => Math.min(...def.squadSpawns.map(([sx, sy]) => Math.max(Math.abs(sx - p[0]), Math.abs(sy - p[1]))));
@@ -40,7 +42,8 @@ export function entryTiles(): Pt[] {
 
 export function createMission(setup: MissionSetup) {
   nextSlot = 1;
-  const def = MAPS[setup.map];
+  // a fresh layout every time: rooms refurnished, field maps mirrored half the time
+  const def = varyMap(MAPS[setup.map], setup.map !== "wingC");
   useLevel(new Level(def));
   const taken = new Set<string>();
   const claim = (tiles: Pt[]) => {

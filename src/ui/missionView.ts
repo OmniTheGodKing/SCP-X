@@ -281,7 +281,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     }
 
     // breach extras: when help arrives, and how close SCP-173 is to leaving
-    if (has173 && MAPS[S.setup.map].hatch && !S.sealed) {
+    if (has173 && L.def.hatch && !S.sealed) {
       const next = [...S.reinforce].sort((a, b) => a.turn - b.turn);
       const locked = S.lockedUntil >= S.turn;
       const threat = escaping() ? `<span class="warn">high: it is heading for the hatch</span>` : S.escapeDrive >= ESCAPE_AT - 2 ? "rising" : "low";
