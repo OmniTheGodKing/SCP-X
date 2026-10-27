@@ -24,7 +24,7 @@ let nextSlot = 1;
 /** Puts one squad member (operative or guard) on the map. */
 export function spawnMember(m: SquadMember, x: number, y: number, mods: MissionSetup["mods"]): Unit {
   const i = nextSlot++;
-  return mk({ id: "m" + i, opId: m.opId, slot: i, side: "mtf", call: m.call, name: m.name, x, y, guard: m.guard,
+  return mk({ id: "m" + i, opId: m.opId, slot: i, side: "mtf", call: m.call, name: m.name, rankShort: m.rankShort, x, y, guard: m.guard,
     hp: m.hp, maxHp: m.maxHp, san: m.san, maxSan: m.maxSan, aim: m.aim, blinkFull: m.blinkFull,
     armor: m.armor + (m.perks.includes("plated") ? 1 : 0), hasArmor: m.hasArmor, armorKind: m.armorKind, moveBonus: m.moveBonus, blinkMod: mods.blinkBonus,
     items: m.items.map(it => ({ ...it, uses: it.uses + (m.perks.includes("grenadier") && (it.id === "flashbang" || it.id === "smoke" || it.id === "frag") ? 1 : 0) })),

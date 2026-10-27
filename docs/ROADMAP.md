@@ -102,7 +102,10 @@ retaliation (done); (5) doors and sirens (done).
 
 ## Phase 3E: a living Site-19 (done)
 
-- (Done) Security stations defend their whole level; Major and Colonel ranks above the perk tree.
+- (Done) Security stations defend their whole level; two ranks above the perk tree. Ranks follow the 1951 US Army
+  enlisted ladder: Private, Private First Class, Corporal, Sergeant, Sergeant First Class, Master Sergeant, Sergeant Major.
+- (Done) Guards who pass Epsilon-11 selection join as Privates; the Selection cadre course (training range) makes them
+  Privates First Class.
 - (Done) D-Class morale: overcrowding, deaths and termination orders lower it, a recreation room raises it, and below
   30 the block can riot. A riot is a guards-only mission on the D-Class block map (restrain or kill the rioters), or
   can be left to Site Security for a few D-Class dead.
@@ -126,8 +129,8 @@ retaliation (done); (5) doors and sirens (done).
 - (Done) Personnel files: hometown, age and a line of backstory, service history (missions, kills, wounds, seals,
   anomalies faced), and renaming operatives and callsigns. Medals with small bonuses: Sealed in, Iron nerve, Purple
   Heart, Survivor, Distinguished service.
-- (Done) Retirement: Majors and Colonels can retire as trainers at a working training range (recruits arrive as
-  Specialists, at most 2 trainers); anyone else leaves with an honourable discharge. Veterans with 10+ missions may ask
+- (Done) Retirement: Master Sergeants and Sergeants Major can retire as trainers at a working training range (recruits
+  arrive as Privates First Class, at most 2 trainers); anyone else leaves with an honourable discharge. Veterans with 10+ missions may ask
   to retire as a staff incident; talking them out of it risks Nightmares after every mission.
 
 ## Phase 3F: defending Site-19

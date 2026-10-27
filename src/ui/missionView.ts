@@ -228,7 +228,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     const usable = m.alive && isTeam(m) && !m.downed;
     return `<button type="button" class="op ${d ? "d" : ""} ${S.selected === m ? "sel" : ""} ${usable ? "" : "dead"}" data-id="${m.id}" ${usable ? "" : "disabled"}>
       <span class="tag">${d ? "D" : m.call}</span>
-      <span class="nm">${esc(m.name)}</span>
+      <span class="nm">${m.rankShort ? `<span class="muted">${m.rankShort}</span> ` : ""}${esc(m.name)}</span>
       <span class="ap">${[0, 1].map(i => `<i class="${i < m.ap ? "on" : i >= cap ? "locked" : ""}"></i>`).join("")}</span>
       <span class="bars">
         <span>HP ${Math.max(0, m.hp)}/${m.maxHp}<span class="meter" style="--c: var(--mtf)"><span style="width:${(Math.max(0, m.hp) / m.maxHp) * 100}%"></span></span></span>

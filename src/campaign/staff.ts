@@ -98,7 +98,7 @@ export const STAFF_EVENTS: Record<StaffEventId, EventDef> = {
     setup: (c, e) => { e.who = c.roster.filter(veteran).sort((a, b) => b.rank - a.rank)[0].id; },
     text: (c, e) => { const o = op(c, e); if (!o) return "An operative has asked to retire.";
       const t = trainerWhy(c, o);
-      return `${RANKS[o.rank]} ${o.name} has served on ${o.missions} missions and has asked to step back from the field. ${t ? `They would leave with an honourable discharge (${t.charAt(0).toLowerCase() + t.slice(1, -1)}).` : "They would stay on as a trainer: new recruits would arrive as Specialists."}`; },
+      return `${RANKS[o.rank]} ${o.name} has served on ${o.missions} missions and has asked to step back from the field. ${t ? `They would leave with an honourable discharge (${t.charAt(0).toLowerCase() + t.slice(1, -1)}).` : "They would stay on as a trainer: new recruits would arrive as Privates First Class."}`; },
     choices: [
       { label: "Let them retire", run: (c, e) => { const o = op(c, e); if (o) retire(c, o); return "The request is granted."; } },
       { label: "Ask them to stay (they may develop Nightmares after each mission)", run: (c, e) => { const o = op(c, e); if (o) o.refusedRetire = true; return `${opName(c, e)} stays on. They don't ask again.`; } },
