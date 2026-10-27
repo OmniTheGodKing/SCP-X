@@ -57,6 +57,7 @@ export interface Facility {
   repairDays: number;  // > 0 while being repaired
   demolishDays?: number;  // > 0 while being torn down
   upgraded?: boolean;     // expanded (barracks)
+  recreation?: boolean;   // barracks: a recreation room (morale +1 a day)
   upgradeDays?: number;   // > 0 while being expanded
 }
 
@@ -104,6 +105,19 @@ export function canUpgrade(c: Campaign, f: Facility): string | null {
   if (c.funds < UPGRADE.cost) return `Needs $${UPGRADE.cost}k.`;
   if (engineersFree(c) < UPGRADE.engineers) return `Needs ${UPGRADE.engineers} free engineers.`;
   return null;
+}
+export const RECREATION = { cost: 40, days: 3, engineers: 1 };
+export function canAddRecreation(c: Campaign, f: Facility): string | null {
+  if (f.type !== "barracks") return "Nothing to add.";
+  if (f.recreation) return "Already has one.";
+  if (!operational(f)) return "It has to be working first.";
+  if (c.funds < RECREATION.cost) return `Needs $${RECREATION.cost}k.`;
+  if (engineersFree(c) < RECREATION.engineers) return "Needs a free engineer.";
+  return null;
+}
+export function addRecreation(c: Campaign, f: Facility) {
+  if (canAddRecreation(c, f)) return;
+  c.funds -= RECREATION.cost; f.recreation = true;
 }
 export function upgradeFacility(c: Campaign, f: Facility) {
   if (canUpgrade(c, f)) return;

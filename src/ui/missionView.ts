@@ -18,6 +18,7 @@ const OBJECTIVES = {
   breach: "",
   manhunt: "SCP-173 is loose among civilians. Get it into the truck's open container, with nobody else inside, then have an operative seal it. Every civilian it kills adds exposure in the region.",
   coverup: "Reach every witness (marked W) and give them amnestics with Dose: 1 action, from the next tile. A witness who spots the team runs for the map edge; any who escape undosed add exposure. Dose at least half of them for the mission to count as a success. Other civilians can be ignored.",
+  riot: "Restrain the rioting D-Class (next to them, 1 action) or put them down. Every one killed is a D-Class lost from storage.",
   outbreak: "Burn out SCP-610's core with fire (incendiaries, the flamethrower, fuel drums). Anyone who ends a turn on the flesh without a sealed containment suit is infected and turns 5 turns later. Nothing saves them.",
   escort: "Keep the Insurgents away from the truck. One who stays next to it for a turn gets it open and the anomaly is lost. Neutralise them all, or hold for 8 turns.",
   retaliation: "Neutralise every Insurgent. They shoot civilians too, and every civilian killed adds exposure in the region.",
@@ -128,7 +129,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   $("mEyebrow").textContent = `SCP Foundation · ${S.setup.title}`;
   const has173 = S.has173, kind = S.setup.kind;
   if (kind !== "breach") {
-    $("mTitle").innerHTML = { outbreak: "SCP-610 Outbreak <small>“The Flesh that Hates” · Keter</small>", escort: "Convoy Ambush <small>Escort</small>", retaliation: "Retaliation <small>Insurgency attack</small>", manhunt: "SCP-173 Manhunt <small>Field recovery</small>", coverup: "Cover-up <small>Class-A amnestics</small>", strike: "Strike <small>Chaos Insurgency cell</small>", breach: "" }[kind];
+    $("mTitle").innerHTML = { riot: "Riot <small>D-Class block</small>", outbreak: "SCP-610 Outbreak <small>“The Flesh that Hates” · Keter</small>", escort: "Convoy Ambush <small>Escort</small>", retaliation: "Retaliation <small>Insurgency attack</small>", manhunt: "SCP-173 Manhunt <small>Field recovery</small>", coverup: "Cover-up <small>Class-A amnestics</small>", strike: "Strike <small>Chaos Insurgency cell</small>", breach: "" }[kind];
     $("objRule").innerHTML = `<b>Objective.</b> ${esc(OBJECTIVES[kind])}`;
   }
   if (!has173) {
@@ -249,7 +250,11 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("sirenPill").hidden = !S.siren;
 
     const sc = $("statusCard"), line = $("statusLine");
-    if (kind === "outbreak") {
+    if (kind === "riot") {
+      const left = S.units.filter(u => u.rioter && u.alive && !u.downed && u.side === "zombie").length;
+      sc.className = "card status " + (left ? "danger" : "done");
+      line.innerHTML = `<b>Rioters still loose: ${left}.</b> Restrained: ${S.units.filter(u => u.rioter && u.restrained).length} · killed: ${S.units.filter(u => u.rioter && !u.alive).length}`;
+    } else if (kind === "outbreak") {
       const inf = S.units.filter(u => u.alive && u.infectedTurn !== undefined && !u.flesh);
       sc.className = "card status " + (S.core && S.core.hp <= 0 ? "done" : "danger");
       line.innerHTML = `<b>Core: ${S.core ? `${Math.max(0, S.core.hp)} of ${S.core.maxHp}` : "?"}</b> · flesh covers ${S.flesh.size} tiles · instances: ${S.units.filter(u => u.flesh && u.alive).length}${inf.length ? `<br><span class="warn">Infected: ${inf.map(u => `${esc(u.name)} (turns in ${5 - (S.turn - u.infectedTurn!)})`).join(", ")}</span>` : ""}`;

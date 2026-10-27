@@ -1,6 +1,6 @@
 // Debug menu for testing. Opens with the backtick key, or a button when the page URL has ?debug.
 // Anything it does to a campaign marks that save as a debug save.
-import { advanceDay, dateText, gainIntel, log, maxSanOf, pendingBreach, type Campaign } from "../campaign/campaign";
+import { RANK_XP, RANKS, advanceDay, dateText, gainIntel, log, maxSanOf, pendingBreach, startRiot, type Campaign } from "../campaign/campaign";
 import { tickConstruction } from "../campaign/base";
 import { PROJECTS, tickResearch } from "../campaign/research";
 import { captureNow, firstSighting, resurface, startBreach } from "../campaign/containment";
@@ -63,7 +63,7 @@ export function mountDebug(host: DebugHost) {
       group("Spawn incident",
         `<label class="dbg-field">Region <select data-dbg-region>${REGION_IDS.map(r => `<option value="${r}" ${r === region ? "selected" : ""}>${esc(REGIONS[r].name)}</option>`).join("")}</select></label>`
         + `<label class="dbg-field">Insurgents <input type="number" min="0" max="8" value="${insurgents}" data-dbg-ins></label>`
-        + btn("breach", "Breach at Site-19") + btn("manhunt", "Manhunt") + btn("coverup", "Cover-up") + btn("strike", "Strike")),
+        + btn("breach", "Breach at Site-19") + btn("manhunt", "Manhunt") + btn("coverup", "Cover-up") + btn("strike", "Strike") + btn("riot", "D-Class riot")),
       group("Research and building", btn("materials", "+5 of every material") + btn("offer", "Offer a breakthrough") + btn("research", "Finish current research") + btn("unlockall", "Unlock all research") + btn("build", "Finish construction and orders")),
       group("Operatives and guards", btn("heal", "Heal everyone") + btn("sanity", "Restore sanity") + btn("unbusy", "Clear busy and training") + btn("rankup", "+1 rank to all operatives") + btn("guardvet", "Guards: 3 breaches survived")),
       group("Alert level", (["normal", "heightened", "full"] as Alert[]).map(a => btn("alert-" + a, a)).join("")),
@@ -140,7 +140,8 @@ export function mountDebug(host: DebugHost) {
       case "heal": for (const o of c.roster) if (o.alive) o.hp = o.maxHp; for (const g of c.guards) if (g.alive) g.hp = g.maxHp; break;
       case "sanity": for (const o of c.roster) if (o.alive) o.san = maxSanOf(o); for (const g of c.guards) if (g.alive) g.san = 80; break;
       case "unbusy": for (const o of c.roster) o.busy = undefined; for (const g of c.guards) g.training = undefined; break;
-      case "rankup": for (const o of c.roster) if (o.alive && o.rank < 4) { o.rank++; o.xp = Math.max(o.xp, [0, 3, 7, 12, 18][o.rank]); } break;
+      case "rankup": for (const o of c.roster) if (o.alive && o.rank < RANKS.length - 1) { o.rank++; o.xp = Math.max(o.xp, RANK_XP[o.rank]); } break;
+      case "riot": if (!c.incidents.some(i => i.kind === "riot") && c.dclass >= 3) { c.morale = Math.min(c.morale, 20); startRiot(c); } else note = "A riot needs at least 3 D-Class and no riot already under way."; break;
       case "guardvet": for (const g of c.guards) if (g.alive) g.breaches = Math.max(g.breaches, 3); break;
       case "exp-10": addExposure(c, region, -10); break;
       case "exp+10": addExposure(c, region, 10); break;

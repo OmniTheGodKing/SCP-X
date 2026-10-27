@@ -152,6 +152,16 @@ export function guardOdds(c: Campaign, inc: Incident) {
   return Math.max(0.05, Math.min(0.95, p));
 }
 
+/** Leave a riot to Site Security: a few D-Class die, a guard may get hurt, and the block calms down. */
+export function letGuardsHandleRiot(c: Campaign, inc: Incident) {
+  c.incidents = c.incidents.filter(i => i !== inc);
+  const g = guardsReady(c), dead = Math.max(1, rand(1, 3) - Math.floor(g.length / 4));
+  c.dclass = Math.max(0, c.dclass - dead); c.morale = 40;
+  const hurt = g.length ? g[rand(0, g.length - 1)] : null;
+  if (hurt && Math.random() < 0.5) hurt.hp = Math.max(1, hurt.hp - 2);
+  log(c, `Site Security put the riot down with clubs and gas. ${dead} D-Class ${dead > 1 ? "were" : "was"} killed${hurt && hurt.hp < hurt.maxHp ? `, and guard ${hurt.name} was hurt` : ""}.`, "key");
+}
+
 /** Leave the breach to Site Security without playing it. */
 export function letGuardsHandle(c: Campaign, inc: Incident) {
   const s = c.scps.find(x => x.id === inc.scpId);

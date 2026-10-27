@@ -24,6 +24,7 @@ const WIN: Record<MissionKind, [string, string]> = {
   manhunt: ["Recovered", "%s is sealed in the truck's container."],
   coverup: ["Contained", "Every witness has been dosed."],
   strike: ["Cell broken", "The Insurgency cell is out of action."],
+  riot: ["Riot over", "The D-Class block is back under control."],
   outbreak: ["Burned out", "SCP-610's core here is ash."],
   escort: ["Convoy safe", "The convoy is moving again with its cargo."],
   retaliation: ["Town held", "The Insurgency attack is broken."],

@@ -2,14 +2,14 @@
 import { HEAVY, type MissionResult, type MissionSetup, type ScpId } from "../game/types";
 import { CLASSES, PERKS, TRAITS, type ClassId, type PerkId, type TraitId } from "../data/classes";
 import {
-  ENGINEER_COST, countOperational, engineerCapacity, dclassCapacity, healPerDay, monthlyUpkeep, sanityPerDay, startingBase, tickConstruction,
+  ENGINEER_COST, countOperational, operational, engineerCapacity, dclassCapacity, healPerDay, monthlyUpkeep, sanityPerDay, startingBase, tickConstruction,
   type Base,
 } from "./base";
 import { CLEAN_EVERY, firstSightings, resolveScp, scpName, startingScps, tickContainment, type ScpRecord } from "./containment";
 import { ITEMS, PROJECTS, armorStats, has, projectLock, monthlyResearch, newResearch, tickResearch, type MaterialId, type ItemId, type Order, type ResearchState } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, collapsedCount, COLLAPSE_LIMIT, newRegions, regionFunding, tickWorld, travelDays, type RegionState } from "./world";
-import { ALERTS, breachGuards, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
+import { ALERTS, breachGuards, guardMember, guardsReady, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
 import { CLASS_WEAPONS, WEAPON_TIERS, model, startingModels, type AmmoId, type AttachmentId, type WeaponType } from "../data/weapons";
 
 export const RANKS = ["Operative", "Specialist", "Sergeant", "Lieutenant", "Captain", "Major", "Colonel"];
@@ -55,7 +55,7 @@ export interface Operative {
 
 export interface Incident {
   id: string;
-  kind: "breach" | "recovery" | "coverup" | "strike" | "escort" | "retaliation" | "outbreak";
+  kind: "breach" | "recovery" | "coverup" | "strike" | "escort" | "retaliation" | "outbreak" | "riot";
   /** Escorts: the survivors of the capture, who defend the convoy. */
   squad?: string[];
   scpId: string;
@@ -82,7 +82,10 @@ export interface SiteLogEntry { day: number; text: string; kind: string; }
 export interface Loadout { opId: string; armor: ItemId | ""; items: ItemId[]; }
 
 export interface Campaign {
-  version: 14;
+  version: 15;
+  /** The D-Class block's morale (0 to 100), and the standing order for the monthly termination. */
+  morale: number;
+  dPolicy: "terminate" | "retain" | "release";
   /** SCP-610: when the first outbreak starts, and the outbreak under way (severity 1 to 5; 0 is burned out). */
   outbreakDay?: number;
   outbreak?: { region: RegionId; severity: number; lastMission: number };
@@ -232,7 +235,7 @@ export function newCampaign(): Campaign {
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
-    version: 14, outbreakDay: rand(945, 1310), materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
+    version: 15, morale: 60, dPolicy: "terminate", outbreakDay: rand(945, 1310), materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
     day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
     inventory: {}, orders: [], knownNotes: [], nextD: 9101, nextOp: 1, nextIncident: 1,
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
@@ -286,6 +289,7 @@ export function advanceDay(c: Campaign) {
     if (drill && !o.busy) { o.xp++; checkPromotion(c, o); }
   }
   tickGuards(c, heal, sanityPerDay(c));
+  tickMorale(c);
   tickContainment(c);
   tickWorld(c);
   for (const s of c.scps) if (s.status === "contained" && c.day - s.lastCleaned === CLEAN_EVERY)
@@ -293,6 +297,7 @@ export function advanceDay(c: Campaign) {
   tickPrisoners(c);
   if (dayOfMonth(c.day) === 1) {
     monthlyResearch(c);
+    monthlyDClass(c);
     if (has(c, "sigint")) gainIntel(c, 1);
     const funds = monthlyFunding(c), upkeep = monthlyUpkeep(c);
     const room = Math.max(0, dclassCapacity(c) - c.dclass), d = Math.min(DCLASS_MONTHLY, room);
@@ -305,7 +310,41 @@ export function advanceDay(c: Campaign) {
 }
 
 /** Something that has to be answered before time can move: a breach, or an ambushed convoy. */
-export const pendingBreach = (c: Campaign) => c.incidents.find(i => (i.kind === "breach" || i.kind === "escort") && i.id !== c.activeIncident) ?? null;
+export const pendingBreach = (c: Campaign) => c.incidents.find(i => (i.kind === "breach" || i.kind === "escort" || i.kind === "riot") && i.id !== c.activeIncident) ?? null;
+
+// ---------- the D-Class block ----------
+export const MORALE = { start: 60, riotBelow: 30, perDeath: 5, terminate: 15, keep: 10, retainCost: 2 };
+/** D-Class died somewhere: the block hears about it. */
+export function dclassDied(c: Campaign, n: number) { if (n > 0) c.morale = Math.max(0, (c.morale ?? MORALE.start) - MORALE.perDeath * n); }
+function tickMorale(c: Campaign) {
+  const cap = dclassCapacity(c), full = cap ? c.dclass / cap : 1;
+  const rec = c.base.facilities.some(f => f.type === "barracks" && f.recreation && operational(f));
+  c.morale = Math.max(0, Math.min(100, (c.morale ?? MORALE.start) + (full > 0.8 ? -2 : full < 0.6 ? 1 : 0) + (rec ? 1 : 0)));
+  // below 30 the block can riot: up to 5% a day at 0
+  if (c.morale < MORALE.riotBelow && c.dclass >= 3 && !c.incidents.some(i => i.kind === "riot") && Math.random() < (MORALE.riotBelow - c.morale) / 600) startRiot(c);
+}
+export function startRiot(c: Campaign) {
+  const inc: Incident = { id: "inc" + c.nextIncident, kind: "riot", scpId: "", region: HOME, map: "dblock", appeared: c.day, expires: c.day, insurgents: 0,
+    title: `Incident ${String(c.nextIncident).padStart(3, "0")}: Riot in the D-Class block` };
+  c.nextIncident++; c.incidents.push(inc);
+  log(c, "The D-Class block is rioting. Site Security has to put it down, or you can leave it to them.", "bad", "command");
+}
+/** The monthly termination order (canon), or keeping or releasing them instead. */
+function monthlyDClass(c: Campaign) {
+  const extra = Math.max(0, c.dclass - MORALE.keep);
+  if (c.dPolicy === "terminate" && extra) {
+    c.dclass -= extra; c.morale = Math.max(0, c.morale - MORALE.terminate);
+    log(c, `The monthly termination order: ${extra} D-Class terminated, ${c.dclass} kept. The block knows (morale −${MORALE.terminate}).`, "key");
+  } else if (c.dPolicy === "release" && extra) {
+    const n = Math.min(extra, c.amnestics * 5);
+    c.amnestics -= Math.ceil(n / 5); c.dclass -= n;
+    log(c, `${n} D-Class were dosed with amnestics and released (${Math.ceil(n / 5)} doses).${n < extra ? " There weren't enough doses for the rest." : ""}`, "key");
+  } else if (c.dPolicy === "retain" && c.dclass) {
+    c.funds -= c.dclass * MORALE.retainCost;
+    log(c, `Keeping all ${c.dclass} D-Class costs $${c.dclass * MORALE.retainCost}k this month.`);
+  }
+}
+export const riotSize = (c: Campaign) => Math.min(c.dclass, 10, 5 + Math.floor(c.dclass / 5));
 
 /** Advance until something needs attention. */
 export function advanceToEvent(c: Campaign) {
@@ -432,12 +471,13 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
   c.dclass -= dCount;
   c.activeIncident = inc.id;
   const kind = inc.kind === "recovery" ? "manhunt" : inc.kind;
-  const sec = kind === "breach" ? breachGuards(c, inc) : { first: [], late: [] };
+  const sec = kind === "breach" ? breachGuards(c, inc) : kind === "riot" ? { first: guardsReady(c).slice(0, 8).map(g => guardMember(c, g)), late: [] } : { first: [], late: [] };
   const amnestics = kind === "coverup" ? c.amnestics : 0;
   return {
     kind, scp: (inc.scpId || "173") as ScpId, map: inc.map, amnestics,
     night: inc.map !== "wingC" && ((c.hour ?? 0) < 6 || (c.hour ?? 0) >= 20),
     severity: inc.kind === "outbreak" ? c.outbreak?.severity ?? 2 : undefined,
+    rioters: inc.kind === "riot" ? riotSize(c) : undefined,
     // a breach at Site-19 catches researchers in the wing and opens the D-Class block
     researchers: kind === "breach" ? Math.min(c.researchers, rand(1, 3)) : 0, strayPool: kind === "breach" ? c.dclass : 0, guards: sec.first, lateGuards: sec.late, mtfTurn: mtfArrival(c, inc), witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
     incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: Math.max(0, inc.insurgents - (inc.weakened ?? 0)), squad, dclass,
@@ -526,6 +566,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   }
   if (r.straysLost || r.straysEscaped) {
     c.dclass = Math.max(0, c.dclass - r.straysLost - r.straysEscaped);
+    dclassDied(c, r.straysLost);
     if (r.straysLost) lines.push(`${plural(r.straysLost, "D-Class")} from the block ${r.straysLost > 1 ? "were" : "was"} lost in the breach.`);
     if (r.straysEscaped) { addExposure(c, HOME, 3 * r.straysEscaped); lines.push(`${plural(r.straysEscaped, "D-Class")} got out of Site-19 and will talk (+${3 * r.straysEscaped} exposure in the Eastern US).`); }
   }
@@ -551,24 +592,31 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   c.amnestics = Math.max(0, c.amnestics - r.amnesticsUsed);
   if (r.win) {
     c.stats.won++;
-    const bonus = kind === "recovery" ? 100 : kind === "strike" ? 80 : kind === "breach" ? 50 : kind === "retaliation" ? 40 : kind === "outbreak" ? 120 : 0;
-    const cut = kind === "coverup" ? 10 : 5;
+    const bonus = kind === "riot" ? 0 : kind === "recovery" ? 100 : kind === "strike" ? 80 : kind === "breach" ? 50 : kind === "retaliation" ? 40 : kind === "outbreak" ? 120 : 0;
+    const cut = kind === "coverup" ? 10 : kind === "riot" ? 0 : 5;
     addExposure(c, region, -cut);
     c.funds += bonus;
     const anomaly = scpName(inc?.scpId || "173");
     const what = kind === "coverup" ? "The witnesses remember nothing worth repeating." : kind === "strike" ? "The Insurgency cell is broken up."
-      : kind === "outbreak" ? "The flesh here is burned out." : kind === "escort" ? `The convoy got ${anomaly} through.` : kind === "retaliation" ? "The Insurgency attack on the town is broken." : inc?.first ? `${anomaly} is in Foundation hands.` : `${anomaly} is back in its cell.`;
-    lines.unshift(`${name} closed. ${what}${bonus ? ` The O5 Council approves a $${bonus}k bonus;` : ""} exposure in ${where} −${cut}.`);
+      : kind === "riot" ? "The D-Class block is quiet again." : kind === "outbreak" ? "The flesh here is burned out." : kind === "escort" ? `The convoy got ${anomaly} through.` : kind === "retaliation" ? "The Insurgency attack on the town is broken." : inc?.first ? `${anomaly} is in Foundation hands.` : `${anomaly} is back in its cell.`;
+    lines.unshift(`${name} closed. ${what}${bonus ? ` The O5 Council approves a $${bonus}k bonus${cut ? ";" : "."}` : ""}${cut ? ` exposure in ${where} −${cut}.` : ""}`);
   } else {
     c.stats.lost++;
-    addExposure(c, region, 20);
-    lines.unshift(`${name} failed${r.escaped ? `: SCP-173 got out through the surface hatch` : r.evacuated ? " after the team evacuated" : ""}. ${REGIONS[region].front} has to clean up after it (+20 exposure in ${where}).`);
+    if (kind === "riot") lines.unshift(`${name} failed. Site Security lost the block; it took a gas-and-baton sweep by the whole garrison to retake it.`);
+    else { addExposure(c, region, 20);
+    lines.unshift(`${name} failed${r.escaped ? `: SCP-173 got out through the surface hatch` : r.evacuated ? " after the team evacuated" : ""}. ${REGIONS[region].front} has to clean up after it (+20 exposure in ${where}).`); }
   }
   if (r.witnessesEscaped) { addExposure(c, region, r.witnessesEscaped * 5); lines.push(`${r.witnessesEscaped} witness${r.witnessesEscaped > 1 ? "es" : ""} got away undosed (+${r.witnessesEscaped * 5} exposure in ${where}).`); }
   if (r.civiliansKilled) { addExposure(c, region, r.civiliansKilled * 3); lines.push(`${r.civiliansKilled} civilian${r.civiliansKilled > 1 ? "s" : ""} died (+${r.civiliansKilled * 3} exposure in ${where}).`); }
   if (r.amnesticsUsed) lines.push(`Amnestics used: ${r.amnesticsUsed}.`);
   if (r.dSent || r.dRecruited) lines.push(`D-Class: ${r.dSent} sent, ${r.dLost} lost, ${r.dReturned} back in holding${r.dRecruited ? ` (including ${r.dRecruited} picked up on site)` : ""}.`);
   if (r.insurgentsTotal) lines.push(`Insurgents neutralised: ${r.insurgentsDown} of ${r.insurgentsTotal}.`);
+  if (kind === "riot") {
+    c.dclass = Math.max(0, c.dclass - r.riotersKilled - (r.win ? 0 : 3));
+    c.morale = 40;
+    if (r.riotersKilled) lines.push(`${plural(r.riotersKilled, "D-Class")} killed putting the riot down.`);
+    if (!r.win) lines.push("The riot burned itself out after Site Security pulled back. 3 more D-Class are gone.");
+  }
   if (r.infectedLost) lines.push(`${r.infectedLost} lost to SCP-610's infection. There was nothing anyone could do.`);
   // an outbreak is only beaten back a stage at a time
   if (kind === "outbreak" && c.outbreak) {
