@@ -22,6 +22,39 @@ Order and contents are open to change.
 
 Each new anomaly's author is checked on the SCP Wiki and credited under CC BY-SA 3.0.
 
+## Phase 3B: research expansion
+
+Projects that each change how the game plays, beyond swapping weapon models.
+
+Personnel
+- Officer school: squad size 5. Command staff (later): squad size 6.
+- Psychological screening: +10 max sanity; new recruits sometimes arrive Steady.
+- Field medicine: medkits heal 4; a stabilized operative can stand again at 1 HP.
+- Guard training program: guards get +10 aim and +10 sanity.
+
+Equipment
+- Guard flak vests: Site Security gets armor.
+- Field radios (SCR-300, then AN/PRC-25 from 1962): Epsilon-11 reaches breaches 3 turns sooner; overwatch loses less aim.
+- Restraint kit: Secure from 2 tiles; each prisoner yields 1 extra Intel.
+- Amnestic darts: Dose from 4 tiles.
+- Night optics (AN/PVS-2, from 1964): +2 sight range.
+
+Weapons
+- Armor-piercing rounds (attachment): hits ignore 1 armor point.
+- Tracer ammunition: +10 aim on overwatch shots.
+
+Site
+- Class-B amnestics: cover stories need 1 dose; amnestics labs make twice as many.
+- Automated cell cleaning (from 1960): cleanings no longer risk D-Class.
+- Expanded barracks: barracks hold 15 D-Class.
+- Front company accounting: +10% funding from every standing region.
+- Signals intelligence: +1 Intel a month.
+
+Chaos Insurgency (new branch, opens after the first prisoner)
+- Interrogation techniques: prisoners give Intel twice as fast.
+- Insurgency codebooks: locating a cell costs 2 Intel; incidents show exact Insurgent numbers.
+- Captured weapon analysis: Insurgents get −5 aim against armored operatives.
+
 ## Phase 3C: tactical depth
 
 From the XCOM 2 comparison.
