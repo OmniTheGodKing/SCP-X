@@ -8,7 +8,7 @@ import { abilityTargets } from "../game/abilities";
 import type { Unit } from "../game/types";
 import { MAPS } from "../data/maps";
 import { escaping } from "../game/scp173";
-import { DETECT } from "../game/insurgency";
+import { detectRange } from "../game/insurgency";
 import { freshBodies, isCalm, isStaggered, leadOptions } from "../game/scp049";
 import { isFeeding } from "../game/scp106";
 
@@ -297,6 +297,49 @@ export function createRenderer(cv: HTMLCanvasElement) {
     ctx.stroke();
   }
 
+  // Weather over the whole map: falling streaks or flakes from a fixed scatter, scrolled by time, and a haze for fog.
+  function drawWeather(now: number) {
+    const w = S.setup.weather;
+    if (!w || w === "clear") return;
+    const Wp = L.W * TS, Hp = L.H * TS;
+    if (w === "fog") {
+      const drift = now / 9000;
+      for (let k = 0; k < 5; k++) {
+        const cx = ((noise(k, 1, 3) * Wp + drift * (40 + k * 12) * TS / 10) % (Wp + 400)) - 200, cy = noise(k, 2, 3) * Hp;
+        const g = ctx.createRadialGradient(cx, cy, 10, cx, cy, TS * (5 + k));
+        g.addColorStop(0, "rgba(200,206,212,0.10)"); g.addColorStop(1, "rgba(200,206,212,0)");
+        ctx.fillStyle = g; ctx.fillRect(cx - TS * 10, cy - TS * 10, TS * 20, TS * 20);
+      }
+      ctx.fillStyle = "rgba(190,196,204,0.10)"; ctx.fillRect(0, 0, Wp, Hp);
+      return;
+    }
+    const n = Math.round(Wp * Hp / (w === "snow" ? 5000 : w === "storm" ? 2200 : 3500));
+    if (w === "snow") {
+      ctx.fillStyle = "rgba(240,244,250,0.75)";
+      for (let i = 0; i < n; i++) {
+        const sp = 18 + noise(i, 7, 1) * 22, y = (noise(i, 3, 1) * Hp + now / 1000 * sp) % Hp;
+        const x = (noise(i, 4, 1) * Wp + Math.sin(now / 900 + i) * 6 + Wp) % Wp;
+        ctx.fillRect(x, y, 2, 2);
+      }
+      return;
+    }
+    // rain and storm: slanted streaks; a storm is heavier, faster and lit now and then by lightning
+    const slant = w === "storm" ? 0.35 : 0.15, len = w === "storm" ? 14 : 10, fall = w === "storm" ? 900 : 600;
+    ctx.strokeStyle = w === "storm" ? "rgba(170,190,215,0.42)" : "rgba(170,190,215,0.32)"; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const y = (noise(i, 5, 2) * Hp + now / 1000 * fall * (0.8 + noise(i, 6, 2) * 0.4)) % (Hp + len) - len;
+      const x = (noise(i, 8, 2) * Wp + y * slant) % Wp;
+      ctx.moveTo(x, y); ctx.lineTo(x + len * slant, y + len);
+    }
+    ctx.stroke();
+    ctx.fillStyle = "rgba(10,16,28,0.12)"; ctx.fillRect(0, 0, Wp, Hp);
+    if (w === "storm") {
+      const cycle = now % 11000;
+      if (cycle < 90 || (cycle > 160 && cycle < 220)) { ctx.fillStyle = "rgba(220,230,255,0.18)"; ctx.fillRect(0, 0, Wp, Hp); }
+    }
+  }
+
   return function draw(now: number) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, L.W * TS, L.H * TS);
@@ -326,9 +369,10 @@ export function createRenderer(cv: HTMLCanvasElement) {
     // concealment: where unalerted Insurgents would notice the team
     if (S.concealed) {
       ctx.fillStyle = "rgba(215,91,71,0.16)";
+      const D = detectRange();
       for (const r of S.units.filter(u => u.side === "raider" && u.alive && !u.downed && !S.activePods.includes(u.pod ?? 0) && seen(u.x, u.y))) {
-        for (let y = r.y - DETECT; y <= r.y + DETECT; y++) for (let x = r.x - DETECT; x <= r.x + DETECT; x++)
-          if (x >= 0 && y >= 0 && x < L.W && y < L.H && passable(x, y) && sightFrom(r.x, r.y, x, y, DETECT)) ctx.fillRect(x * TS + 1, y * TS + 1, TS - 2, TS - 2);
+        for (let y = r.y - D; y <= r.y + D; y++) for (let x = r.x - D; x <= r.x + D; x++)
+          if (x >= 0 && y >= 0 && x < L.W && y < L.H && passable(x, y) && sightFrom(r.x, r.y, x, y, D)) ctx.fillRect(x * TS + 1, y * TS + 1, TS - 2, TS - 2);
       }
     }
     // SCP-610's flesh, its core, and fire
@@ -518,6 +562,8 @@ export function createRenderer(cv: HTMLCanvasElement) {
         }
       }
     }
+
+    drawWeather(now);
 
     S.effects = S.effects.filter(e => now - e.t0 < e.dur);
     for (const e of S.effects) {

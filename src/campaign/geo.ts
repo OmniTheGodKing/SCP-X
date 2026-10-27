@@ -3,11 +3,12 @@
 // Foundation facilities are shown too, but Site-19 is the only one the player runs.
 import { REGIONS, SITE19, type RegionId } from "../data/regions";
 import { has } from "./research";
-import { addExposure, locateCell, travelDays } from "./world";
+import { addExposure, flightOut, locateCell, travelDays } from "./world";
 import { scpName } from "./containment";
 import { mtfArrival, raidArrival } from "./security";
 import { MISSION_BONUS, dateText, gainIntel, log, yearOf, type Campaign, type Incident } from "./campaign";
 import { rollCandidate } from "../data/units";
+import { WEATHER, rollWeather, type Weather } from "../data/weather";
 
 /** Where each town is (fictional towns placed in their real regions). */
 export const TOWN_POS: Record<string, [number, number]> = {
@@ -54,7 +55,7 @@ export function incidentState(c: Campaign, inc: Incident): "active" | "urgent" |
 
 /** What the player knows about an incident, what they don't, and what's at stake, for the briefing panel. */
 export function briefing(c: Campaign, inc: Incident) {
-  const place = incidentPlace(inc), t = inc.kind === "escort" ? 0 : travelDays(c, inc.region);
+  const place = incidentPlace(inc), t = flightOut(c, inc);
   const left = inc.expires - c.day, immediate = inc.kind === "breach" || inc.kind === "riot" || inc.kind === "raid" || inc.kind === "escort";
   const ins = Math.max(0, inc.insurgents - (inc.weakened ?? 0));
   const known: string[] = [], unknown: string[] = [];
@@ -162,7 +163,25 @@ function finishOp(c: Campaign, op: FieldOp) {
 }
 
 /** Every day: field reports arrive, operations finish, and waiting incidents get worse. */
+/** The weather in a region now (clear until the first roll). */
+export const weatherAt = (c: Campaign, r: RegionId): Weather => c.regions[r].weather ?? "clear";
+/** The weather a mission there would be fought in: indoor maps have none. */
+export const missionWeather = (c: Campaign, inc: Incident): Weather => inc.map === "wingC" || inc.map === "dblock" ? "clear" : weatherAt(c, inc.region);
+function tickWeather(c: Campaign) {
+  const month = new Date(Date.UTC(1951, 5, 1) + (c.day - 1) * 864e5).getUTCMonth();
+  for (const [r, st] of Object.entries(c.regions) as [RegionId, Campaign["regions"][RegionId]][])
+    if (!st.weather || c.day >= (st.weatherUntil ?? 0)) { st.weather = rollWeather(r, month); st.weatherUntil = c.day + 1 + Math.floor(Math.random() * 3); }
+}
+/** A line on the weather for briefings: what it is, how long it should last, and what it does. */
+export function weatherLine(c: Campaign, inc: Incident) {
+  const w = missionWeather(c, inc);
+  if (w === "clear") return inc.map === "wingC" || inc.map === "dblock" ? "" : "Weather there: clear.";
+  const until = c.regions[inc.region].weatherUntil;
+  return `Weather there: ${WEATHER[w].name.toLowerCase()}${until ? `, likely until ${dateText(until)}` : ""}. ${WEATHER[w].desc}`;
+}
+
 export function tickGeo(c: Campaign) {
+  tickWeather(c);
   for (const inc of c.incidents.filter(i => i.dispatch && c.day >= i.dispatch.done)) resolveDispatch(c, inc);
   for (const inc of c.incidents) {
     if (inc.dispatch) continue;

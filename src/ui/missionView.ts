@@ -2,6 +2,7 @@
 import { DRUM, EXIT, L, area, inContainer } from "../core/grid";
 import { activeGun, shotInfo } from "../game/combat";
 import { AMMO } from "../data/weapons";
+import { WEATHER } from "../data/weather";
 import { NOTES_173 } from "../game/notes";
 import { blinkChance, maxSanOf, pct } from "../game/profiles";
 import { S, canAct, canSee, full, hooks, isBlind, isPanicked, isTeam, label, seen, starers, team, unitAt } from "../game/state";
@@ -49,6 +50,7 @@ const TEMPLATE = `
       <span class="pill" id="phasePill">Your move</span>
       <span class="pill hot" id="sirenPill" hidden title="The breach siren: nobody recovers sanity on quiet turns, but SCP-173 can't hear where shots come from. Silence it at the panel.">Siren</span>
       <span class="pill" id="nightPill" hidden title="Night: everyone sees 4 tiles less, except inside a flare's light.">Night</span>
+      <span class="pill" id="weatherPill" hidden></span>
       <span class="pill" id="concealPill" hidden title="Insurgents haven't noticed the team. They only spot you within 4 tiles. Firing or throwing anything gives you away.">Concealed</span>
       <button class="act" id="evacBtn" type="button" title="Ends the mission. Anyone who hasn't left through an exit is left behind.">Abort mission</button>
     </div>
@@ -260,6 +262,9 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("phasePill").className = "pill" + (S.phase === "anomaly" ? " hot" : "");
     $("concealPill").hidden = !S.concealed;
     $("nightPill").hidden = !S.setup.night;
+    const w = S.setup.weather ?? "clear", wp = $("weatherPill");
+    wp.hidden = w === "clear";
+    if (w !== "clear") { wp.textContent = WEATHER[w].name; wp.title = `${WEATHER[w].name}: ${WEATHER[w].desc.replace(" Flights there take a day longer.", "")}`; }
     $("sirenPill").hidden = !S.siren;
 
     const sc = $("statusCard"), line = $("statusLine");

@@ -2,7 +2,9 @@
 import { STAFF_EVENTS, answerStaff } from "../campaign/staff";
 import { parseCampaign } from "../campaign/save";
 import type { Report } from "../campaign/reports";
-import { TERRITORY, localHour, nightAt, nightPolygon, AMNESTIC_TEAM, BURY, FACILITIES_WORLD, FIELD_OPS, INVESTIGATE, buryCost, buryStory, canBury, canSendTeam, incidentName, sendAmnesticsTeam, briefing, canFieldOp, canInvestigate, groupOf, incidentPlace, incidentState, investigate, startFieldOp, type FieldOpKind, type MarkerGroup } from "../campaign/geo";
+import { WEATHER, type Weather } from "../data/weather";
+import { MIN_RANGE } from "../game/perks";
+import { TERRITORY, localHour, missionWeather, weatherAt, weatherLine, nightAt, nightPolygon, AMNESTIC_TEAM, BURY, FACILITIES_WORLD, FIELD_OPS, INVESTIGATE, buryCost, buryStory, canBury, canSendTeam, incidentName, sendAmnesticsTeam, briefing, canFieldOp, canInvestigate, groupOf, incidentPlace, incidentState, investigate, startFieldOp, type FieldOpKind, type MarkerGroup } from "../campaign/geo";
 import { MEDALS } from "../data/bios";
 import { LEANS, QUALITY, UNITS, nationalityOf } from "../data/units";
 import { FACIAL, HAIR_BY_SEX, HAIR_COLORS, HAIR_STYLES, HEADGEAR, LOOK_PARTS, SEX_NAMES, SKIN, fitLook, rollLook } from "../data/looks";
@@ -33,7 +35,7 @@ import {
 import { HOME, LAND, REGIONS, REGION_IDS, SITE19, project, type RegionId } from "../data/regions";
 import {
   COLLAPSE_LIMIT, COVER_STORY, coverDoses, locateIntel, amnesticsCapacity, canCoverStory, canLocate, collapsedCount, coverStory, locateCell,
-  regionFunding, transportName, travelBlock, travelDays,
+  flightOut, regionFunding, transportName, travelBlock, travelDays,
 } from "../campaign/world";
 import {
   ALERTS, GUARD, PROMOTE, canHireGuard, canPromote, guardCapacity, guardOdds, guardsAlive, guardsReady, hireGuard, letGuardsHandle, mtfArrival,
@@ -92,7 +94,8 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let regionSel: RegionId = pendingMapSel?.startsWith("reg:") ? pendingMapSel.slice(4) as RegionId : HOME;
   /** What's selected on the World Map ("inc:<id>" or "fac:<id>"), and which kinds of marker are shown. */
   let mapSel: string | null = pendingMapSel?.startsWith("reg:") ? "region" : pendingMapSel; pendingMapSel = null;
-  const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "facility", "night"]);
+  const WX_ICON: Record<Weather, string> = { clear: "", rain: "☂", storm: "⚡", fog: "≋", snow: "❄" };
+const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "facility", "night", "weather"]);
   let dragMoved = false;
   /** Keep a view inside the world and at the map's proportions, between the whole world and about 8× zoom. */
   const clampView = (vw: { x: number; y: number; w: number; h: number }) => {
@@ -266,8 +269,8 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   }
 
   function incidentCard(i: Incident) {
-    const left = i.expires - c.day, t = travelDays(c, i.region), block = travelBlock(c, i);
-    const where = i.kind === "breach" ? "Inside Site-19" : `${REGIONS[i.region].name} · ${t ? `${plural(t, "day")} away` : "a drive from Site-19"}`;
+    const left = i.expires - c.day, t = flightOut(c, i), block = travelBlock(c, i), w = missionWeather(c, i);
+    const where = i.kind === "breach" ? "Inside Site-19" : `${REGIONS[i.region].name} · ${t ? `${plural(t, "day")} away` : "a drive from Site-19"}${w !== "clear" ? ` · ${WEATHER[w].name.toLowerCase()}` : ""}`;
     return `<div class="incident ${planning === i.id ? "sel" : ""}">
       <div><b>${esc(i.title)}</b> <span class="flag">${KIND_NAMES[i.kind]}</span></div>
       <div class="muted">${left <= 0 ? "Last day to respond" : `${plural(left, "day")} left to respond`} · ${where} · Insurgency activity: ${has(c, "codebooks") ? `${i.insurgents - (i.weakened ?? 0)} Insurgents` : i.insurgents >= 4 ? "heavy" : i.insurgents >= 2 ? "reported" : i.insurgents ? "light" : "none reported"}${i.witnesses ? ` · ${i.witnesses} witnesses` : ""}</div>
@@ -280,11 +283,12 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   }
 
   function planPanel(inc: Incident) {
-    const ops = readyFor(inc), t = inc.kind === "escort" ? 0 : travelDays(c, inc.region), noD = inc.kind === "strike" || inc.kind === "coverup" || inc.kind === "escort" || inc.kind === "retaliation" || inc.kind === "outbreak" || inc.kind === "riot" || inc.kind === "raid";
+    const ops = readyFor(inc), t = flightOut(c, inc), noD = inc.kind === "strike" || inc.kind === "coverup" || inc.kind === "escort" || inc.kind === "retaliation" || inc.kind === "outbreak" || inc.kind === "riot" || inc.kind === "raid";
     return `<div class="card plan">
       <div class="label">Deploy to ${esc(inc.title.split(":")[0])}</div>
       <p>${esc(KIND_BRIEF[inc.kind])}</p>
       ${nightAt(c, inc) ? `<p class="warn">Night there (${String(Math.floor(localHour(c.hour ?? 0, incidentPlace(inc).lon))).padStart(2, "0")}:00 local): deploying now means fighting in the dark (everyone sees 4 tiles less). Flares help. Wait for daylight on the World Map if you'd rather.</p>` : ""}
+      ${missionWeather(c, inc) !== "clear" ? `<p class="warn">${esc(weatherLine(c, inc))}${nightAt(c, inc) ? ` This stacks with the dark, though nobody's sight drops below ${MIN_RANGE} tiles.` : ""}</p>` : ""}
       ${inc.kind === "breach" ? (() => { const g = breachGuards(c, inc); return `<p>Site Security: <b>${g.first.length}</b> on the scene${g.late.length ? `, ${g.late.length} more on turn 2` : ""}${g.first.length + g.late.length ? ` (${[...g.first, ...g.late].map(m => esc(m.name)).join(", ")})` : ". Nobody is fit to respond"}. Operatives you pick arrive on turn <b>${mtfArrival(c, inc)}</b>; D-Class are on site from the start.</p>`; })() : ""}
       ${t ? `<p class="muted">The ${transportName(c)} takes ${plural(t, "day")} to reach ${REGIONS[inc.region].name}; time at Site-19 passes while the squad is in the air, and the survivors spend as long again flying home.</p>` : ""}
       ${inc.kind === "coverup" ? `<p class="${c.amnestics < (inc.witnesses ?? 0) ? "warn" : "muted"}">The squad carries all ${c.amnestics} amnestic doses in storage, for ${plural(inc.witnesses ?? 0, "witness")}.</p>` : ""}
@@ -387,7 +391,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       const tries: [number, number][] = [[0, 0], [0, 9], [0, -9], [14, 0], [-14, 0], [0, 16], [0, -16]];
       const [ox, oy] = tries.find(([dx, dy]) => busy.every(([bx, by]) => Math.abs(bx - (ax + dx * k)) > 11 * k || Math.abs(by - (ay + dy * k)) > 6 * k)) ?? [0, 0];
       const px = ax + ox * k, py = ay + oy * k;
-      return `<g class="rlabel" style="font-size:${3.6 * k}px"><text x="${px}" y="${py}">${esc(label(r))}</text><text x="${px}" y="${py + 4.5 * k}" class="rexp ${st.exposure >= 60 ? "hot" : st.exposure >= 35 ? "warm" : ""}">${st.collapsed ? "LOST" : `exposure ${st.exposure}`}</text></g>`; }).join("");
+      return `<g class="rlabel" style="font-size:${3.6 * k}px"><text x="${px}" y="${py}">${esc(label(r))}</text><text x="${px}" y="${py + 4.5 * k}" class="rexp ${st.exposure >= 60 ? "hot" : st.exposure >= 35 ? "warm" : ""}">${st.collapsed ? "LOST" : `exposure ${st.exposure}`}</text>${(() => { const w = weatherAt(c, r); return mapShow.has("weather") && w !== "clear" ? `<text x="${px}" y="${py + 8.6 * k}" class="rwx ${w}">${WX_ICON[w]} ${WEATHER[w].name.toLowerCase()}<title>${esc(`${WEATHER[w].name} over ${REGIONS[r].name}: ${WEATHER[w].desc}`)}</title></text>` : ""; })()}</g>`; }).join("");
     const markers = shown.map(({ i, tx, ty, mx, my }) => { const st = incidentState(c, i), b = briefing(c, i), moved = mx !== tx || my !== ty;
       return `<g class="marker ${groupOf(i)} ${st} ${i.dispatch ? "dispatched" : ""} ${mapSel === "inc:" + i.id ? "on" : ""}" data-mapinc="${i.id}" tabindex="0" role="button" aria-label="${esc(incidentName(i))}, ${esc(b.short)}">
         ${moved ? `<line x1="${tx}" y1="${ty}" x2="${mx}" y2="${my}" class="leader" style="stroke-width:${0.4 * k}"/><circle cx="${tx}" cy="${ty}" r="${0.8 * k}" class="truept"/>` : ""}
@@ -413,6 +417,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         <div class="label">Region · ${esc(d.name)}</div>
         <p>Front: <b>${esc(d.front)}</b>${st.collapsed ? " (collapsed)" : ""}</p>
         <div class="exposure"><div class="exp-bar"><span style="width:${st.collapsed ? 100 : st.exposure}%"></span></div><b>${st.collapsed ? "Lost" : `${st.exposure} / 100`}</b></div>
+        ${(() => { const w = weatherAt(c, r); return `<p class="muted">Weather: <b>${WEATHER[w].name}</b>${st.weatherUntil ? `, likely until ${dateText(st.weatherUntil)}` : ""}. ${esc(WEATHER[w].desc)}</p>`; })()}
         <p class="muted">Funding: $${regionFunding(c, r)}k a month. ${t ? `${plural(t, "day")} away by ${transportName(c)}.` : "Site-19 is here; teams go by road."}</p>
         ${(() => { const here = c.incidents.filter(i => i.region === r); return here.length ? `<p>Active here: ${here.map(i => `<button class="linkbtn" type="button" data-mapinc="${i.id}">${esc(incidentName(i))}</button>`).join(" · ")}</p>` : `<p class="muted">Nothing active here.</p>`; })()}
         ${st.collapsed ? `<p class="warn">The public knows too much here. This region sends nothing and can't be recovered.</p>` : `
@@ -435,6 +440,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         <h2>${esc(incidentName(i))} <small>${esc(i.title.split(":")[0])}</small></h2>
         <p>${esc(i.kind === "coverup" ? "Witnesses need amnestics before the story spreads." : KIND_BRIEF[i.kind])}</p>
         <div class="specs">Deadline: <b>${esc(b.deadline)}</b>${i.dispatch ? "" : ` · ${esc(b.arrival)}`}</div>
+        ${(() => { const wl = i.dispatch ? "" : weatherLine(c, i); return wl ? `<p class="${missionWeather(c, i) === "clear" ? "muted" : "warn"}">${esc(wl)}</p>` : ""; })()}
         ${i.dispatch ? `<p class="ok">${i.dispatch.how === "team" ? `An amnestics team with ${plural(i.dispatch.doses, "dose")} is on its way.` : "The front is working on it."} Result ${dateText(i.dispatch.done)}.</p>` : ""}
         ${b.known.length ? `<p><b>Known.</b> ${b.known.map(esc).join(" ")}</p>` : ""}
         ${b.unknown.length ? `<p><b>Unknown.</b> ${b.unknown.map(esc).join(" ")}</p>` : ""}
@@ -467,11 +473,11 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       </div>`;
     const side = selInc ? briefPanel(selInc) : selFac ? facPanel(selFac) : selReg ? regionPanel() : overview;
     const clock = `<div class="geobar">
-        <b class="geodate">${dateText(c.day)} · ${String(c.hour ?? 0).padStart(2, "0")}:00</b>
+        <b class="geodate">${dateText(c.day)} · ${String(Math.floor(c.hour ?? 0)).padStart(2, "0")}:00</b>
         <div class="speeds"><button class="act ${speed ? "" : "on"}" type="button" data-speed="0" aria-pressed="${!speed}" title="Pause (Space)">❚❚</button>
           ${SPEEDS.map((n, k) => `<button class="act ${speed === n ? "on" : ""}" type="button" data-speed="${n}" aria-pressed="${speed === n}" ${clockBlocked() ? "disabled" : ""} title="${n}× (${k + 1})">${n}×</button>`).join("")}</div>
         ${pendingBreach(c) ? `<span class="warn">${pendingBreach(c)!.kind === "escort" ? "A convoy is under attack" : "Site-19 needs an answer"}: time is held.</span>` : ""}
-        <div class="mapfilters">${(["anomaly", "insurgency", "coverup", "site", "facility", "night"] as const).map(g => `<button class="act ${mapShow.has(g) ? "on" : ""}" type="button" data-mapfilter="${g}" aria-pressed="${mapShow.has(g)}" title="${{ anomaly: "Anomalies", insurgency: "Insurgency", coverup: "Cover-ups", site: "At Site-19", facility: "Facilities", night: "Day and night" }[g]}"><span class="dot ${g}"></span><span class="fname">${{ anomaly: "Anomalies", insurgency: "Insurgency", coverup: "Cover-ups", site: "Site-19", facility: "Facilities", night: "Night" }[g]}</span></button>`).join("")}</div>
+        <div class="mapfilters">${(["anomaly", "insurgency", "coverup", "site", "facility", "night", "weather"] as const).map(g => `<button class="act ${mapShow.has(g) ? "on" : ""}" type="button" data-mapfilter="${g}" aria-pressed="${mapShow.has(g)}" title="${{ anomaly: "Anomalies", insurgency: "Insurgency", coverup: "Cover-ups", site: "At Site-19", facility: "Facilities", night: "Day and night", weather: "Weather" }[g]}"><span class="dot ${g}"></span><span class="fname">${{ anomaly: "Anomalies", insurgency: "Insurgency", coverup: "Cover-ups", site: "Site-19", facility: "Facilities", night: "Night", weather: "Weather" }[g]}</span></button>`).join("")}</div>
       </div>`;
     return `<div class="geo">
       <div class="card geomap">

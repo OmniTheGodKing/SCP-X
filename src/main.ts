@@ -2,7 +2,8 @@ import "./styles.css";
 import { advanceDay, applyResult, buildSetup, log, newCampaign, refreshRecruits, resolveInterrupted, type Campaign, type Debrief } from "./campaign/campaign";
 import { clearCampaign, loadCampaign, saveCampaign } from "./campaign/save";
 import { REGIONS } from "./data/regions";
-import { travelBlock, travelDays, transportName } from "./campaign/world";
+import { missionWeather } from "./campaign/geo";
+import { flightOut, stormDelay, travelBlock, transportName } from "./campaign/world";
 import { letGuardsHandle } from "./campaign/security";
 import { scpName } from "./campaign/containment";
 import { pendingBreach } from "./campaign/campaign";
@@ -60,9 +61,10 @@ function showHub() {
       if (travelBlock(campaign, inc)) return;
       const setup = buildSetup(campaign, inc, loadouts, dCount);
       // the flight out: days pass at Site-19 while the squad is in the air
-      const t = inc.kind === "escort" ? 0 : travelDays(campaign, inc.region);
+      // a storm over the destination holds the flight back a day
+      const storm = inc.kind !== "escort" && stormDelay(campaign, inc.region), t = flightOut(campaign, inc);
       if (t) {
-        log(campaign, `Epsilon-11 flies out to ${REGIONS[inc.region].name} on the ${transportName(campaign)}: ${t} day${t > 1 ? "s" : ""}.`);
+        log(campaign, `Epsilon-11 flies out to ${REGIONS[inc.region].name} on the ${transportName(campaign)}: ${t} day${t > 1 ? "s" : ""}${storm ? " (a storm there adds a day)" : ""}.`);
         for (let i = 0; i < t && !campaign.over; i++) {
           advanceDay(campaign);
           // a breach while the squad is in the air is Site Security's problem
@@ -70,6 +72,7 @@ function showHub() {
           if (b) { log(campaign, "Epsilon-11 is in the air. Site Security has to handle the breach alone.", "bad"); letGuardsHandle(campaign, b); }
         }
       }
+      setup.weather = missionWeather(campaign, inc); // the sky they land under
       saveCampaign(campaign);
       createMission(setup);
       screen = "mission";

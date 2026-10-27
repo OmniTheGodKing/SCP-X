@@ -8,6 +8,7 @@ import { insurgentGuns } from "../data/weapons";
 import { STARTING_NOTES } from "./notes";
 import { PROFILE } from "./profiles";
 import { S, computeVis, log, setMission } from "./state";
+import { WEATHER } from "../data/weather";
 import { RAID_TURNS, type MissionKind, type MissionResult, type MissionSetup, type MissionState, type SquadMember, type Unit } from "./types";
 
 function mk(o: Partial<Unit> & Pick<Unit, "id" | "side" | "name" | "x" | "y" | "hp" | "maxHp" | "san">): Unit {
@@ -153,6 +154,7 @@ export function createMission(setup: MissionSetup) {
   if (setup.squad.some(m => m.perks.includes("first_look"))) state.explored.fill(1);
   log(`${setup.title}.`, "key");
   log(BRIEFINGS[setup.kind](setup));
+  if (setup.weather && setup.weather !== "clear") log(`Weather: ${WEATHER[setup.weather].name.toLowerCase()}. ${WEATHER[setup.weather].desc.replace(" Flights there take a day longer.", "")}`, "key");
   computeVis();
 }
 

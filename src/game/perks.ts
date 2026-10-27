@@ -1,4 +1,5 @@
 // How perks and traits change things during a mission.
+import { WEATHER } from "../data/weather";
 import { S } from "./state";
 import { R, cheb } from "../core/grid";
 import type { PerkId, Unit } from "./types";
@@ -6,7 +7,10 @@ import type { PerkId, Unit } from "./types";
 export const hasPerk = (u: Unit | null | undefined, p: PerkId) => !!u?.perks?.includes(p);
 export const hasTrait = (u: Unit, t: NonNullable<Unit["traits"]>[number]) => !!u.traits?.includes(t);
 export const NIGHT_SIGHT = 4;
-export const rangeOf = (u: Unit) => R + (hasPerk(u, "keen_eyes") ? 3 : 0) + (u.side === "mtf" && S ? S.setup.mods.sightBonus ?? 0 : 0) - (S?.setup.night ? NIGHT_SIGHT : 0);
+/** Night and weather never cut sight below this many tiles (fog at night would otherwise leave 1). */
+export const MIN_RANGE = 3;
+const dim = () => (S?.setup.night ? NIGHT_SIGHT : 0) + (S?.setup.weather ? WEATHER[S.setup.weather].sight : 0);
+export const rangeOf = (u: Unit) => { const base = R + (hasPerk(u, "keen_eyes") ? 3 : 0) + (u.side === "mtf" && S ? S.setup.mods.sightBonus ?? 0 : 0); return Math.max(Math.min(base, MIN_RANGE), base - dim()); };
 export const usesLeft = (u: Unit, key: string, max: number) => max - (u.used?.[key] ?? 0);
 export function spend(u: Unit, key: string) { u.used = u.used || {}; u.used[key] = (u.used[key] ?? 0) + 1; }
 

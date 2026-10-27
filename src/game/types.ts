@@ -175,6 +175,8 @@ export interface MissionSetup {
   severity?: number;
   /** Field missions launched between 20:00 and 06:00 are played in the dark. */
   night?: boolean;
+  /** Outdoor weather (clear indoors). */
+  weather?: import("../data/weather").Weather;
   /** Breaches: researchers caught in the wing, and how many D-Class are in the block to get loose. */
   researchers?: number;
   strayPool?: number;
