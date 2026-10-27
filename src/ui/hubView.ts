@@ -13,7 +13,7 @@ import { FACIAL, HAIR_BY_SEX, HAIR_COLORS, HAIR_STYLES, HEADGEAR, LOOK_PARTS, SE
 import { portraitSvg } from "./portrait";
 import { INSPECTION, inspectionChecks, inspectionSoon } from "../campaign/inspection";
 import {
-  UPGRADE, canUpgrade, upgradeFacility, RECREATION, canAddRecreation, addRecreation, DEMOLISH, canDemolish, demolish, demolishDays, demolishLeavesShort, ENGINEER_COST, EXCAVATE, FACILITIES, nameInText, GRADE_NAMES, MAX_LEVELS, REPAIR, SLOTS, build, canBuild, canExcavate, canRepair,
+  UPGRADE, GEN_TIERS, canRefitGen, genTierOf, generatorOutput, refitGenerator, canUpgrade, upgradeFacility, RECREATION, canAddRecreation, addRecreation, DEMOLISH, canDemolish, demolish, demolishDays, demolishLeavesShort, ENGINEER_COST, EXCAVATE, FACILITIES, nameInText, GRADE_NAMES, MAX_LEVELS, REPAIR, SLOTS, build, canBuild, canExcavate, canRepair,
   dclassCapacity, engineersFree, excavate, facilityAt, healPerDay, isContainment, monthlyUpkeep, neighbors, operational,
   powerShort, powerSupply, powerUse, repair, sanityPerDay, type Facility, type FacilityType,
 } from "../campaign/base";
@@ -713,7 +713,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     return `<div class="card"><div class="label">Level ${f.level + 1}, slot ${f.slot + 1}</div>
       <h3 class="fac">${esc(d.name)}</h3>
       <p class="muted">${esc(d.desc)}</p>
-      <div class="specs">${d.power < 0 ? `Supplies ${-d.power} power` : `Uses ${d.power} power`} · $${d.upkeep}k/month upkeep${d.grade !== undefined ? ` · ${GRADE_NAMES[d.grade]} grade` : ""}</div>
+      <div class="specs">${f.type === "generator" ? `Supplies ${generatorOutput(f)} power` : d.power < 0 ? `Supplies ${-d.power} power` : `Uses ${d.power} power`} · $${d.upkeep + (f.type === "generator" ? genTierOf(f).upkeep : 0)}k/month upkeep${d.grade !== undefined ? ` · ${GRADE_NAMES[d.grade]} grade` : ""}</div>
       <div class="specs">Next to: ${esc(nb)}</div>
       <p>${f.demolishDays ? "Shut down while it's taken apart." : f.daysLeft > 0 ? `Under construction: ${plural(f.daysLeft, "day")} left.` : f.repairDays > 0 ? `Engineers are repairing it: ${plural(f.repairDays, "day")} left.` : f.disabled ? `<span class="warn">Damaged in a breach and out of action.</span>` : "Operational."}</p>
       ${f.type === "barracks" && !f.upgraded ? (() => { const uw = canUpgrade(c, f);
@@ -876,6 +876,12 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         <p class="muted">Working on: ${Object.entries(c.research.assigned).filter(([, n]) => n).map(([id, n]) => `${esc(PROJECTS[id]?.name ?? (TESTS[id.slice(5) as TestId]?.name || id))} (${n})`).join(", ") || "nothing"}.</p>
         <button class="act" type="button" data-goto="research">Open the Research tab</button>`); }
       case "amnestics": return box(`Amnestics · ${c.amnestics} of ${amnesticsCapacity(c)} doses`, `<p class="muted">Each lab brews ${has(c, "classb_amnestics") ? 2 : 1} dose every 5 days. Doses go on cover-ups and cover stories.</p>`);
+      case "generator": { const t = genTierOf(f), next = GEN_TIERS[(f.genTier ?? 0) + 1], rw = canRefitGen(c, f);
+        return box(`${t.name} · ${f.upgradeDays ? "offline for refitting" : `${t.power} power`}`, f.upgradeDays
+          ? `<p class="warn">Being refitted as a ${esc(next.name.toLowerCase())}: ${plural(f.upgradeDays, "day")} left. It supplies nothing until then.</p>`
+          : next ? `<p class="muted">Refit as a <b>${esc(next.name.toLowerCase())}</b>: ${next.power} power${next.upkeep ? `, $${next.upkeep}k more upkeep a month` : ""}. The generator is offline for ${plural(next.days, "day")} while engineers work on it${powerUse(c) > powerSupply(c) - t.power ? `, <span class="warn">which would leave Site-19 short of power</span>` : ""}.</p>
+            <div class="row"><button class="act" type="button" data-refit="${f.id}" ${rw ? `disabled title="${esc(rw)}"` : ""}>Refit · $${next.cost}k · ${plural(next.days, "day")} · ${next.engineers} engineers</button>${rw ? `<span class="muted">${esc(rw === "Needs research first." ? `Needs ${PROJECTS[next.research].name} research first.` : rw)}</span>` : ""}</div>`
+          : `<p class="muted">The best generator Site-19 can build.</p>`); }
       case "medical": { const hurt = c.roster.filter(o => o.alive && o.hp < o.maxHp); return box(`Medical bay · ${healPerDay(c)} HP a day`, hurt.length ? `<ul class="memorial">${hurt.map(o => `<li>${esc(o.call)} ${esc(o.name)} · HP ${o.hp}/${o.maxHp}</li>`).join("")}</ul>` : `<p class="muted">Nobody is wounded.</p>`); }
       default: return "";
     }
@@ -1067,6 +1073,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     on("engBtn", () => change(() => hireEngineer(c)));
     on("digBtn", () => change(() => excavate(c)));
     root.querySelectorAll<HTMLElement>("[data-evac]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.evac), f = c.base.facilities.find(x => x.id === b.dataset.to); if (s && f) change(() => evacuate(c, s, f, chosenWatchers())); });
+    root.querySelectorAll<HTMLElement>("[data-refit]").forEach(b => b.onclick = () => { const f = c.base.facilities.find(x => x.id === b.dataset.refit); if (f) change(() => refitGenerator(c, f)); });
     root.querySelectorAll<HTMLElement>("[data-offer]").forEach(b => b.onclick = () => change(() => answerOffer(c, b.dataset.offer!, !!b.dataset.yes)));
     root.querySelectorAll<HTMLElement>("[data-request]").forEach(b => b.onclick = () => change(() => makeRequest(c, b.dataset.request as RequestId)));
     root.querySelectorAll<HTMLElement>("[data-pill]").forEach(b => b.onclick = () => { const o = c.roster.find(x => x.id === b.dataset.pill); if (o) change(() => givePill(c, o)); });

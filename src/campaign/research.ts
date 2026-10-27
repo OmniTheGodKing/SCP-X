@@ -149,7 +149,9 @@ export const PROJECTS: Record<string, ProjectDef> = {
   bt_triage:          { name: "Breakthrough: triage protocol", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Everyone heals 1 more HP a day." },
   bt_cold_storage:    { name: "Breakthrough: cold storage", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Each amnestics lab stores 5 more doses." },
   bt_jigs:            { name: "Breakthrough: production jigs", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Workshop items cost half as much." },
-  efficient_gen:      { name: "Efficient generators", branch: "Site", days: 30, cost: 70, desc: "Each generator supplies 15 power instead of 10." },
+  efficient_gen:      { name: "Turbocharged diesels", branch: "Site", days: 30, cost: 70, desc: "Generators can be refitted with turbochargers (from each generator's panel): 15 power instead of 10." },
+  gas_turbine:        { name: "Gas turbine generators", branch: "Site", days: 40, cost: 120, from: 1953, needs: ["efficient_gen"], desc: "Turbocharged generators can be refitted as gas turbines: 22 power, $5k more upkeep a month." },
+  compact_reactor:    { name: "Compact reactor", branch: "Site", days: 70, cost: 250, from: 1957, needs: ["gas_turbine"], desc: "A small pressurised-water reactor, after the Army's SM-1. Gas turbines can be refitted as reactors: 35 power, $15k more upkeep a month." },
   backup_gen:         { name: "Backup generators", branch: "Site", days: 25, cost: 60, afterMilestone: "power_failure", desc: "Containment wings get their own backup supply: a power shortage no longer doubles breach risk or lets cells fail." },
 };
 
