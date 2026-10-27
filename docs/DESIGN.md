@@ -122,6 +122,10 @@ Built in pass 2E:
 - Guards who survive 3 breaches can train into Epsilon-11 ($80k, 10 days).
 - Cleaning is D-Class only: three go in, two watch. Tests and moves can add guards at the door as watchers.
 
+### Debug menu
+
+Press the backtick key, or open the page with `?debug` for a Debug button. On the hub it adds resources, skips time or jumps the calendar, spawns any incident in any region, finishes research and construction, and edits operatives, guards, alert level, regional exposure and SCP-173's status. In a mission it reveals the map, wins or loses, refills the squad, makes them invincible, brings reinforcements in, kills units, and freezes, teleports or provokes SCP-173. A campaign it touches is marked as a debug save. `node tests/combat.e2e.cjs` (after `npm run build`) checks shooting and frag grenades in a breach.
+
 ## 8. Mission types
 
 | Mission | Where | Goal |

@@ -62,8 +62,8 @@ function newIncident(c: Campaign, i: Omit<Incident, "id" | "title" | "appeared">
 }
 
 /** Witnesses somewhere need dosing before they talk. */
-export function spawnCoverup(c: Campaign) {
-  const r = pick(REGION_IDS.filter(x => !c.regions[x].collapsed));
+export function spawnCoverup(c: Campaign, at?: RegionId) {
+  const r = at ?? pick(REGION_IDS.filter(x => !c.regions[x].collapsed));
   if (!r) return;
   const town = pick(REGIONS[r].towns);
   const inc = newIncident(c, {

@@ -259,3 +259,18 @@ ul.traits button { margin-left: 6px; padding: 4px 8px; }
 .worldmap .pin.coverup circle { fill: var(--manila); }
 .worldmap .pin.strike circle { fill: var(--raider); }
 .worldmap .pin.recovery circle { fill: var(--subject); }
+
+/* ---------- debug menu ---------- */
+.debug { position: fixed; top: 12px; right: 12px; z-index: 50; width: min(420px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow-y: auto;
+  background: var(--panel-2); border: 1px solid var(--manila); padding: 12px; display: grid; gap: 10px; font-size: 13px; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+.debug[hidden] { display: none; }
+.dbg-head { display: flex; align-items: center; gap: 10px; }
+.dbg-head b { font-family: var(--font-mono); color: var(--manila); letter-spacing: .1em; text-transform: uppercase; }
+.dbg-head .act { margin-left: auto; }
+.dbg-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.dbg-row .act { font-size: 12px; padding: 4px 8px; }
+.dbg-field { display: inline-flex; gap: 6px; align-items: center; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.dbg-field input { width: 52px; }
+.dbg-field select, .dbg-field input { background: var(--panel); color: var(--ink); border: 1px solid var(--line); padding: 3px; font: inherit; }
+.dbg-note { margin: 0; color: var(--alert); }
+.debug-toggle { position: fixed; left: 12px; bottom: 12px; z-index: 49; }
