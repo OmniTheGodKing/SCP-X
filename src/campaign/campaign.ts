@@ -10,6 +10,7 @@ import { ITEMS, PROJECTS, armorStats, has, projectLock, monthlyResearch, newRese
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, collapsedCount, COLLAPSE_LIMIT, newRegions, regionFunding, tickWorld, travelDays, type RegionState } from "./world";
 import { ALERTS, breachGuards, guardMember, guardsReady, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
+import { MEDALS, rollBio, type MedalId } from "../data/bios";
 import { monthlyStaff, tickStaff, type StaffEvent } from "./staff";
 import { tickInspection } from "./inspection";
 import { buildReport, type Report } from "./reports";
@@ -55,6 +56,14 @@ export interface Operative {
   alive: boolean;
   diedDay?: number;
   diedAt?: string;
+  /** Personnel file: where they're from, their age when recruited, and a line of who they were. */
+  bio?: { home: string; age: number; story: string };
+  medals?: MedalId[];
+  /** Service history beyond missions and kills. */
+  wounds?: number;
+  seals?: number;
+  faced?: string[];
+  survivor?: boolean;
 }
 
 export interface Incident {
@@ -86,7 +95,7 @@ export interface SiteLogEntry { day: number; text: string; kind: string; }
 export interface Loadout { opId: string; armor: ItemId | ""; items: ItemId[]; }
 
 export interface Campaign {
-  version: 15;
+  version: 16;
   /** The D-Class block's morale (0 to 100), and the standing order for the monthly termination. */
   morale: number;
   dPolicy: "terminate" | "retain" | "release";
@@ -162,9 +171,11 @@ export interface Campaign {
 }
 
 // Perks per rank: steadier aim, fewer blinks, more composure.
-export const aimOf = (o: Operative) => o.aimBase + o.rank * 4 + (o.rank >= 5 ? 5 : 0);
-export const maxSanOf = (o: Operative) => 100 + o.rank * 5 + (o.sanBonus ?? 0) + (o.rank >= 6 ? 10 : 0);
-export const blinkFullOf = (o: Operative) => Math.max(0.03, 0.10 - Math.min(o.rank, 4) * 0.01 - (o.rank >= 6 ? 0.02 : 0));
+const medal = (o: Operative, m: MedalId) => !!o.medals?.includes(m);
+export const aimOf = (o: Operative) => o.aimBase + o.rank * 4 + (o.rank >= 5 ? 5 : 0) + (medal(o, "distinguished") ? 5 : 0);
+export const maxSanOf = (o: Operative) => 100 + o.rank * 5 + (o.sanBonus ?? 0) + (o.rank >= 6 ? 10 : 0) + (medal(o, "survivor") ? 10 : 0);
+export const blinkFullOf = (o: Operative) => Math.max(0.03, 0.10 - Math.min(o.rank, 4) * 0.01 - (o.rank >= 6 ? 0.02 : 0) - (medal(o, "iron_nerve") ? 0.02 : 0));
+export const newBio = rollBio;
 export const deployable = (o: Operative) => o.alive && o.hp >= o.maxHp && !o.busy;
 /** An operative who has ranked up but not yet picked their class or perk. */
 export const promotionDue = (o: Operative) => o.alive && o.rank > 0 && o.perks.length < Math.min(o.rank, PERK_RANKS);
@@ -241,14 +252,14 @@ export function makeOperative(c: Campaign, given?: string): Operative {
   const name = given ?? NAMES.find(n => !used.has(n)) ?? `Recruit ${c.nextOp}`;
   const n = c.nextOp++;
   const steady = has(c, "psych_screening") && Math.random() < 0.25;
-  return { sanBonus: has(c, "psych_screening") ? 10 : 0, id: "op" + n, name, call: `E11-${String(n).padStart(2, "0")}`, rank: 0, xp: 0, hp: 7, maxHp: 7, san: 100, aimBase: rand(64, 74), missions: 0, kills: 0, alive: true, perks: [], traits: steady ? ["steady"] : [], breakdowns: 0 };
+  return { sanBonus: has(c, "psych_screening") ? 10 : 0, id: "op" + n, name, call: `E11-${String(n).padStart(2, "0")}`, rank: 0, xp: 0, hp: 7, maxHp: 7, san: 100, aimBase: rand(64, 74), missions: 0, kills: 0, alive: true, perks: [], traits: steady ? ["steady"] : [], breakdowns: 0, bio: newBio(), medals: [], wounds: 0, seals: 0, faced: [] };
 }
 
 export function newCampaign(): Campaign {
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
-    version: 15, morale: 60, dPolicy: "terminate", outbreakDay: rand(945, 1310), materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
+    version: 16, morale: 60, dPolicy: "terminate", outbreakDay: rand(945, 1310), materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
     day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
     inventory: {}, orders: [], knownNotes: [], nextD: 9101, nextOp: 1, nextIncident: 1,
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
@@ -474,7 +485,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     const bonus = st.hp;
     return {
       opId: o.id, name: o.name, call: o.call, hp: o.hp + bonus, maxHp: o.maxHp + bonus, san: Math.min(o.san, maxSanOf(o)),
-      maxSan: maxSanOf(o), aim: aimOf(o) + (has(c, "marksmanship") ? 5 : 0), blinkFull: blinkFullOf(o),
+      maxSan: maxSanOf(o), aim: aimOf(o) + (has(c, "marksmanship") ? 5 : 0), blinkFull: blinkFullOf(o), medals: [...(o.medals ?? [])],
       armor: st.points, hasArmor: !!kind, armorKind: kind || undefined, armorHp: st.hp, moveBonus: st.move, items: items.map(id => ({ id, uses: ITEMS[id].uses ?? 1 })),
       cls: o.cls, perks: [...o.perks], traits: [...o.traits], gun: gunFor(c, o),
     };
@@ -563,6 +574,23 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     if (s.armorKind) c.inventory[s.armorKind] = (c.inventory[s.armorKind] || 0) + 1;
     for (const it of s.items) if (it.uses > 0) c.inventory[it.id] = (c.inventory[it.id] || 0) + 1;
     o.xp += 1 + (r.win ? 2 : 0) + s.kills + (s.sealed ? 1 : 0);
+    // service history, and the medals it earns
+    if (s.minHp < o.maxHp) o.wounds = (o.wounds ?? 0) + 1;
+    if (s.sealed) o.seals = (o.seals ?? 0) + 1;
+    if (s.returned) o.survivor = true;
+    const facedNow = inc?.scpId ? scpName(inc.scpId) : inc?.kind === "strike" || inc?.kind === "retaliation" || inc?.kind === "escort" ? "the Chaos Insurgency" : "";
+    if (facedNow && !(o.faced ??= []).includes(facedNow)) o.faced.push(facedNow);
+    const award = (m: MedalId, hit: boolean) => {
+      if (!hit || medal(o, m)) return;
+      (o.medals ??= []).push(m);
+      if (m === "purple_heart") { o.maxHp++; o.hp++; }
+      promotions.push(`${o.call} ${o.name} is awarded the ${MEDALS[m].name}: ${MEDALS[m].bonus}`);
+    };
+    award("sealed_in", (o.seals ?? 0) >= 3);
+    award("iron_nerve", s.bestStreak >= 10);
+    award("purple_heart", (o.wounds ?? 0) >= 3);
+    award("survivor", !!s.returned);
+    award("distinguished", o.missions >= 15);
     checkPromotion(c, o, promotions);
     o.breakdowns += s.panics;
     if (r.aftercare) o.aftercareUntil = c.day + 7;

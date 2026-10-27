@@ -1,6 +1,6 @@
 // Campaign saves live in this browser only. Storage can be unavailable (private windows,
 // blocked site data), so every access is guarded and the game still runs without it.
-import type { Campaign } from "./campaign";
+import { newBio, type Campaign } from "./campaign";
 
 import { newResearch } from "./research";
 import { HOME } from "../data/regions";
@@ -75,7 +75,12 @@ export function loadCampaign(): Campaign | null {
       Object.assign(c, { version: 14 });
     }
     if (c.version === 14) Object.assign(c, { version: 15, morale: 60, dPolicy: "terminate" });
-    return c.version === 15 ? (c as unknown as Campaign) : null;
+    if (c.version === 15) {
+      // personnel files for everyone already on the roster
+      for (const o of (c as unknown as Campaign).roster) Object.assign(o, { bio: o.bio ?? newBio(), medals: o.medals ?? [], wounds: o.wounds ?? 0, seals: o.seals ?? 0, faced: o.faced ?? [] });
+      Object.assign(c, { version: 16 });
+    }
+    return c.version === 16 ? (c as unknown as Campaign) : null;
   } catch {
     return null;
   }

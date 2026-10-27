@@ -123,7 +123,9 @@ retaliation (done); (5) doors and sirens (done).
   Eastern US and Latin America for 3 months) and the Gulf of Tonkin (weapons research 20% faster from then on).
 - (Done) Incident reports in the Foundation's style after every mission, built from what happened, kept in an Archive
   on the Command tab (newest open, older ones folded).
-- Personnel files: hometowns, a line of backstory, service history, medals and commendations with small bonuses.
+- (Done) Personnel files: hometown, age and a line of backstory, service history (missions, kills, wounds, seals,
+  anomalies faced), and renaming operatives and callsigns. Medals with small bonuses: Sealed in, Iron nerve, Purple
+  Heart, Survivor, Distinguished service.
 - Retirement: Majors and Colonels can retire as trainers (recruits arrive as Specialists, at most 2 trainers); lower
   ranks get an honourable discharge.
 
