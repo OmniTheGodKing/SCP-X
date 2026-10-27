@@ -73,6 +73,13 @@ export function shotInfo(sh: Unit, tg: Unit, reaction = false): ShotInfo {
 
 export const center = (u: { x: number; y: number }): Pt => [u.x * TS + TS / 2, u.y * TS + TS / 2];
 
+/** The situational reasons behind a hit chance, for the log: cover, flanking, range and the like (not the shooter's
+ *  own aim and weapon, which are always there). */
+function why(info: ReturnType<typeof shotInfo>, gunName?: string) {
+  const r = info.mods.filter(([n, v], k) => k > 0 && v && n !== gunName);
+  return r.length ? `: ${r.slice(0, 3).map(([n, v]) => `${n.toLowerCase()} ${v > 0 ? "+" : ""}${v}`).join(", ")}` : "";
+}
+
 export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
   const info = shotInfo(sh, tg, reaction);
   const gun = activeGun(sh), sidearm = usingSidearm(sh);
@@ -98,14 +105,14 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
     const soak = Math.min(Math.max(0, (tg.armor ?? 0) - (gun?.pierce ?? 0)), dmg);   // each armor point cuts the hit by 1
     dmg -= soak;
     fx({ type: "text", x: x1, y: y1 - 14, text: (crit ? `${dmg}!` : `${dmg}`) + (soak ? ` (−${soak})` : ""), color: crit ? "#f0c060" : "#ffffff", dur: 900 });
-    if (visibleShot) log(`${reaction ? "Overwatch: " : ""}${sidearm ? "Sidearm: " : ""}${full(sh)} hits ${full(tg)} for ${dmg}${crit ? ", critical" : ""}${soak ? `; armor absorbed ${soak}` : ""} (${info.chance}%).`, sh.side === "mtf" ? "good" : "bad");
+    if (visibleShot) log(`${reaction ? "Overwatch: " : ""}${sidearm ? "Sidearm: " : ""}${full(sh)} hits ${full(tg)} for ${dmg}${crit ? ", critical" : ""}${soak ? `; armor absorbed ${soak}` : ""} (${info.chance}%${why(info, gun?.name)}).`, sh.side === "mtf" ? "good" : "bad");
     if (hasPerk(sh, "shredder") && (tg.armor ?? 0) > 0) { tg.armor!--; log("The hit shreds a point of armor.", "good"); }
     damage(tg, dmg, sh);
     if (gun?.ammoType === "incendiary" && !sidearm) ignite(tg.x, tg.y, 1);
   } else {
     const graze = gun?.attachment === "stock" ? Math.max(0, 1 - (tg.armor ?? 0)) : 0;
     fx({ type: "text", x: x1, y: y1 - 14, text: graze ? "graze 1" : "miss", color: "#8b939b", dur: 800 });
-    if (visibleShot) log(`${reaction ? "Overwatch: " : ""}${full(sh)} misses ${full(tg)} (${info.chance}%)${graze ? ", but the round grazes for 1" : ""}.`);
+    if (visibleShot) log(`${reaction ? "Overwatch: " : ""}${full(sh)} misses ${full(tg)} (${info.chance}%${why(info, gun?.name)})${graze ? ", but the round grazes for 1" : ""}.`);
     if (graze) damage(tg, 1, sh);
   }
   hooks.update();

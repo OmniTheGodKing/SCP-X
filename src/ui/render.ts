@@ -1,7 +1,7 @@
 // Draws the tactical map, units, sightlines, previews and effects onto the mission canvas.
 import { CONT, DRUM, EXIT, FULL, HALF, L, STEEL, TS, WALL, area, inContainer, passable, pathTo, tileAt, type Pt } from "../core/grid";
 import { sightFrom } from "../core/sight";
-import { center, shotInfo } from "../game/combat";
+import { activeGun, center, coverAgainst, shotInfo } from "../game/combat";
 import { S, canAct, canSee, isPanicked, isTeam, seen, team, unitAt } from "../game/state";
 import { blastArea, dragOptions, moveCost, reachFor, throwOptions } from "../game/turn";
 import { abilityTargets } from "../game/abilities";
@@ -19,6 +19,23 @@ const C = {
   mtf: "#7aaad0", raider: "#b98bd3", subject: "#e0843f", concrete: "#bdb7ab",
   manila: "#d8bf86", alert: "#d75b47", ok: "#86c193",
 };
+
+// Floor surfaces by area, so a lab, a street and a field read differently at a glance. Kept dark and low-contrast so
+// units, cover and overlays stay on top.
+type Surface = "asphalt" | "grass" | "dirt" | "concrete" | "wood" | "labtile" | "steel";
+const SURFACE_BASE: Record<Surface, string> = { asphalt: "#24282c", grass: "#222d22", dirt: "#2b271f", concrete: "#283038", wood: "#2b2520", labtile: "#28313a", steel: "#232a31" };
+function surfaceFor(name: string): Surface {
+  if (/field/.test(name)) return "grass";
+  if (/barn/.test(name)) return "dirt";
+  if (/street|road|lot|motor pool|courtyard/i.test(name)) return "asphalt";
+  if (/lab/.test(name)) return "labtile";
+  if (/cell(?! corridor)|containment/.test(name)) return "steel";
+  if (/diner|store|church|farmhouse|houses|office|records|barracks|canteen|mess|guard room/.test(name)) return "wood";
+  return "concrete";
+}
+/** A fixed pseudo-random number per tile, so textures don't shimmer between frames. */
+const noise = (x: number, y: number, k: number) => { let h = (x * 374761393 + y * 668265263 + k * 2147483647) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+let surfaceCache: { grid: unknown; s: Surface[] } | null = null;
 
 export function createRenderer(cv: HTMLCanvasElement) {
   const ctx = cv.getContext("2d")!;
@@ -44,7 +61,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
         ctx.beginPath(); for (let k = 4; k < TS; k += 7) { ctx.moveTo(px + k, py); ctx.lineTo(px + k, py + TS); } ctx.stroke();
         continue;
       }
-      ctx.fillStyle = (x + y) % 2 ? C.floor : C.floor2; ctx.fillRect(px, py, TS, TS);
+      drawFloor(x, y, px, py);
       if (t === HALF) {
         ctx.fillStyle = C.desk; ctx.fillRect(px + 4, py + 7, TS - 8, TS - 12);
         ctx.fillStyle = C.deskTop; ctx.fillRect(px + 4, py + 7, TS - 8, 4);
@@ -78,6 +95,42 @@ export function createRenderer(cv: HTMLCanvasElement) {
     ctx.beginPath(); ctx.moveTo(x0 * TS, y0 * TS + 1); ctx.lineTo((x1 + 1) * TS, y0 * TS + 1); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = "#e7ecf0"; ctx.font = "9px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText(S.setup.kind === "raid" ? "LIFT" : "CONTAINER", (x0 + x1 + 1) / 2 * TS, (y0 + 2) * TS - 5);
+  }
+
+  function surfaces() {
+    if (surfaceCache?.grid !== L.grid) {
+      const s: Surface[] = [];
+      for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) s.push(surfaceFor(area(x, y)));
+      surfaceCache = { grid: L.grid, s };
+    }
+    return surfaceCache.s;
+  }
+  function drawFloor(x: number, y: number, px: number, py: number) {
+    const sf = surfaces()[y * L.W + x];
+    ctx.fillStyle = SURFACE_BASE[sf]; ctx.fillRect(px, py, TS, TS);
+    ctx.save(); ctx.beginPath(); ctx.rect(px, py, TS, TS); ctx.clip();
+    if (sf === "asphalt" || sf === "dirt") {
+      ctx.fillStyle = sf === "asphalt" ? "rgba(255,255,255,0.05)" : "rgba(160,130,90,0.12)";
+      for (let k = 0; k < 7; k++) ctx.fillRect(px + noise(x, y, k) * TS, py + noise(x, y, k + 9) * TS, 1.5, 1.5);
+    } else if (sf === "grass") {
+      ctx.strokeStyle = "rgba(120,160,100,0.16)"; ctx.lineWidth = 1; ctx.beginPath();
+      for (let k = 0; k < 6; k++) { const gx = px + noise(x, y, k) * TS, gy = py + noise(x, y, k + 5) * TS; ctx.moveTo(gx, gy); ctx.lineTo(gx + 1.5, gy - 4); }
+      ctx.stroke();
+    } else if (sf === "wood") {
+      ctx.strokeStyle = "rgba(0,0,0,0.28)"; ctx.lineWidth = 1; ctx.beginPath();
+      for (let k = 8; k < TS; k += 8) { ctx.moveTo(px, py + k); ctx.lineTo(px + TS, py + k); }
+      const off = (y % 2) * 16 + 8; ctx.moveTo(px + off, py); ctx.lineTo(px + off, py + TS);
+      ctx.stroke();
+    } else if (sf === "labtile") {
+      ctx.strokeStyle = "rgba(200,220,235,0.07)"; ctx.lineWidth = 1; ctx.beginPath();
+      ctx.moveTo(px + TS / 2, py); ctx.lineTo(px + TS / 2, py + TS); ctx.moveTo(px, py + TS / 2); ctx.lineTo(px + TS, py + TS / 2); ctx.stroke();
+    } else if (sf === "steel") {
+      ctx.fillStyle = "rgba(170,185,200,0.09)";
+      for (let k = 4; k < TS; k += 8) for (let j = 4; j < TS; j += 8) ctx.fillRect(px + j + ((k / 8) % 2) * 4 - 2, py + k - 1, 3, 1.5);
+    } else if ((x + y) % 2) { ctx.fillStyle = "rgba(255,255,255,0.018)"; ctx.fillRect(px, py, TS, TS); }   // concrete slabs
+    ctx.restore();
+    // a faint grid so tiles can be counted at a glance
+    ctx.strokeStyle = "rgba(255,255,255,0.045)"; ctx.lineWidth = 1; ctx.strokeRect(px + 0.5, py + 0.5, TS - 1, TS - 1);
   }
 
   function drawFog() {
@@ -381,6 +434,13 @@ export function createRenderer(cv: HTMLCanvasElement) {
       ctx.beginPath(); ctx.arc(cx, cy, 15, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
     }
 
+    // every enemy the selected operative can shoot right now shows its hit chance (hovering one gives the detail)
+    if (playing && sel && sel.side === "mtf" && sel.ap > 0 && !S.mode) {
+      for (const r of S.units) if (r.side === "raider" && r.alive && !r.downed && seen(r.x, r.y) && canSee(sel, r.x, r.y) && !(S.hover && S.hover.x === r.x && S.hover.y === r.y)) {
+        const [rx, ry] = center(r); tag(`${shotInfo(sel, r).chance}%`, rx, ry + 19, C.manila);
+      }
+    }
+
     // hover: path preview, drag preview or target
     const hv = S.hover;
     if (playing && sel && hv) {
@@ -407,9 +467,15 @@ export function createRenderer(cv: HTMLCanvasElement) {
         ctx.strokeStyle = "rgba(215,91,71,0.8)"; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
         ctx.beginPath(); ctx.arc(bx, by, 15, 0, Math.PI * 2); ctx.stroke();
-        ctx.fillStyle = "#0f1317"; ctx.fillRect(bx + 14, by - 22, 40, 17);
+        // hit chance, then damage, crit chance and the target's armor
+        const g = activeGun(sel), line2 = `${g ? `${g.dmg[0]}–${g.dmg[1]} dmg` : ""}${s.crit ? ` · crit ${s.crit}%` : ""}${tu.armor ? ` · armor ${tu.armor}` : ""}`;
+        ctx.font = "500 12px IBM Plex Mono, monospace"; const w1 = ctx.measureText(`${s.chance}%`).width;
+        ctx.font = "10px IBM Plex Mono, monospace"; const w2 = ctx.measureText(line2).width;
+        const bw = Math.max(w1, w2) + 10, bxL = bx + 14 + bw > L.W * TS ? bx - 14 - bw : bx + 14;
+        ctx.fillStyle = "#0f1317"; ctx.fillRect(bxL, by - 26, bw, 30);
         ctx.fillStyle = "#f2e6c9"; ctx.font = "500 12px IBM Plex Mono, monospace"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
-        ctx.fillText(`${s.chance}%`, bx + 18, by - 13);
+        ctx.fillText(`${s.chance}%`, bxL + 5, by - 18);
+        ctx.fillStyle = "#b9b2a2"; ctx.font = "10px IBM Plex Mono, monospace"; ctx.fillText(line2, bxL + 5, by - 5);
       } else if (res && !tu) {
         const d = res.dist[hv.y * L.W + hv.x];
         if (d > 0) {
@@ -424,6 +490,14 @@ export function createRenderer(cv: HTMLCanvasElement) {
             }
             tag(eyes ? "EYES ON" : "NO LOS", hv.x * TS + TS / 2, hv.y * TS + TS + 7, eyes ? C.ok : C.alert);
           }
+          // threats at the destination: visible Insurgents who could shoot this tile, and whether any of them flank it
+          const threats = S.units.filter(r => r.side === "raider" && r.alive && !r.downed && seen(r.x, r.y) && sightFrom(r.x, r.y, hv.x, hv.y));
+          if (threats.length) {
+            const flanked = threats.some(r => coverAgainst(hv.x, hv.y, r.x, r.y) === 0);
+            tag(`${threats.length} CAN SEE${flanked ? " · FLANKED" : ""}`, hv.x * TS + TS / 2, hv.y * TS - 8, flanked ? C.alert : C.manila);
+            for (const r of threats) { const [rx, ry] = center(r); ctx.setLineDash([2, 4]); ctx.strokeStyle = coverAgainst(hv.x, hv.y, r.x, r.y) === 0 ? "rgba(215,91,71,0.7)" : "rgba(216,191,134,0.45)"; ctx.lineWidth = 1;
+              ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(hv.x * TS + TS / 2, hv.y * TS + TS / 2); ctx.stroke(); ctx.setLineDash([]); }
+          } else if (S.units.some(r => r.side === "raider" && r.alive && !r.downed && seen(r.x, r.y))) tag("NOT SEEN", hv.x * TS + TS / 2, hv.y * TS - 8, C.ok);
           const shields = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => { const t = tileAt(hv.x + dx, hv.y + dy); return t === HALF || t === FULL || t === WALL || t === STEEL; });
           for (const [dx, dy] of shields) {
             const fullCover = tileAt(hv.x + dx, hv.y + dy) !== HALF;
