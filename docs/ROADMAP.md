@@ -560,6 +560,26 @@ retaliation (done); (5) doors and sirens (done).
 - Also fixed: a new anomaly now takes the lowest-grade free wing that can hold it, so a Euclid no longer fills the
   Keter wing.
 
+### Usability and raid follow-up (done; verified in source and in-game)
+
+- **Starting over a filled slot** works in the claude.ai viewer, which blocks browser confirm boxes: Start (and slot
+  delete, and sending an anomaly away) now asks on the button itself and acts on the second click.
+- **Equipment, XCOM style:** each operative's file shows a slot grid (primary weapon, attachment, ammunition, armor,
+  uniform, sidearm, utility slots). Clicking a slot opens it below with its stats and what can go in it; the weapon
+  view lists its fitted attachment and ammunition with a shortcut to change each. Choices are kept on the operative.
+- **Research tabs:** Anomalies, Weapons and armor, Gear (flashbangs and other items), Facilities and power, Personnel
+  and Insurgency, each with a count of open projects. The list and the test log scroll inside their own panels, so
+  the page itself doesn't.
+- **Site-19 tab:** an anomaly's containment file appears only in the panel of the wing that holds it.
+- **Tactical action bar:** the selected unit's hint, actions, items, Next and End turn sit in a bar pinned to the
+  bottom of the screen. On a wide screen the map shrinks to fit above it and the side column scrolls on its own.
+- **Insurgency timing:** operations, raids included, are shown as a window ("sometime in the next 5 to 18 days", then
+  "any day now") that holds the real date somewhere inside it; a located cell's mission closes at the window's start.
+- **A lost raid is a breach:** when the guards lose a raid (or the raid mission fails), the raiders free any prisoners
+  and then go down the lift and open the most dangerous contained anomaly's cell (Keter first), leaving about half
+  their number inside. It plays as an ordinary breach caused by sabotage, answered with whichever team the player
+  sends. With nothing contained they take the payroll and wreck a level-1 building, as before.
+
 ## Phase 3 completion gate (not a campaign ending)
 
 - Play a stable long-term campaign from Site-19 through the interactive Geoscape, deploy to readable 2D tactical missions, recover/contain/research SCPs, manage persistent operatives, respond to independent facilities, engage with O5 choices and a global Insurgency, and observe consistent world/facility consequences.

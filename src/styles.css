@@ -407,3 +407,33 @@ details.archived summary { cursor: pointer; font-family: var(--font-mono); font-
 .act.disabled { opacity: .45; cursor: not-allowed; }
 .coach { border-color: var(--manila); background: color-mix(in srgb, var(--manila) 8%, var(--panel)); }
 .coach p { margin: 6px 0; }
+.act.armed { border-color: var(--alert); color: var(--alert); }
+.eqgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px; margin-top: 4px; }
+.eqslot { display: grid; gap: 2px; text-align: left; padding: 8px; background: var(--panel-2); border: 1px solid var(--line); color: var(--ink); font: inherit; cursor: pointer; min-width: 0; }
+.eqslot.on { border-color: var(--manila); }
+.eqslot .eqlabel { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.eqslot b { font-size: 13px; overflow-wrap: anywhere; }
+.eqdetail { margin-top: 8px; padding: 8px; border: 1px solid var(--line); }
+.eqstats { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 6px; }
+.eqopts { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; }
+.eqfitted { margin: 6px 0 10px; border-top: 1px solid var(--line, #333); padding-top: 6px; }
+.eqfitted .row { justify-content: space-between; gap: 8px; margin: 3px 0; }
+.eqopt { display: grid; gap: 2px; text-align: left; padding: 8px; background: var(--panel-2); border: 1px solid var(--line); color: var(--ink); font: inherit; cursor: pointer; }
+.eqopt.on { border-color: var(--manila); background: color-mix(in srgb, var(--manila) 10%, var(--panel-2)); }
+.eqopt:disabled { opacity: .5; cursor: not-allowed; }
+/* the tactical action bar, pinned to the bottom of the screen */
+.actionbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; gap: 6px; padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--panel) 94%, transparent); border-top: 1px solid var(--line); backdrop-filter: blur(4px); }
+.actionbar .actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.actionbar .itembar { display: contents; }
+.actionbar .hint { font-size: 13px; color: var(--muted); }
+.actionbar #endBtn { margin-left: auto; }
+main.wrap:has(#actionBar) { padding-bottom: 150px; }
+.restabs { flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.scrollpanel { max-height: max(260px, calc(100vh - 530px)); overflow-y: auto; padding-right: 4px; }
+.scrollpanel.tall { max-height: max(320px, calc(100vh - 270px)); }
+/* on a wide screen the whole mission fits between the header and the action bar: the map shrinks to fit and the side column scrolls on its own */
+@media (min-width: 900px) {
+  main.wrap:has(#actionBar) .board canvas { width: auto; max-width: 100%; max-height: calc(100vh - 250px); margin: 0 auto; }
+  main.wrap:has(#actionBar) .side { position: sticky; top: 8px; max-height: calc(100vh - 150px); overflow-y: auto; align-self: start; }
+}

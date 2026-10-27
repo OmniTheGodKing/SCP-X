@@ -101,7 +101,7 @@ export function briefing(c: Campaign, inc: Incident) {
     inc.kind === "emergency" ? `${inc.site}'s gratitude for every part done: researchers out, records recovered (Intel), power restored, the threat dealt with` : "", inc.transfer ? `${scpName(inc.transfer.scp)} delivered to Site-19` : ""].filter(Boolean);
   const ignore = inc.kind === "breach" ? "Site Security faces it alone; it may escape or wreck neighbouring facilities."
     : inc.kind === "riot" ? "Leave it to the guards: a few D-Class die."
-    : inc.kind === "raid" ? "Leave it to the guards; if they lose, prisoners go free or the payroll is taken and a building is wrecked."
+    : inc.kind === "raid" ? "Leave it to the guards. If they lose, prisoners go free and the raiders open a containment cell: a breach you then have to answer (or, with nothing contained, the payroll is taken and a building wrecked)."
     : inc.kind === "escort" ? "The convoy is lost with its cargo."
     : inc.kind === "rescue" ? `${inc.team} is never heard from again; ${inc.site} won't forget it (−15 relations, −4 standing).`
     : inc.kind === "emergency" ? `${inc.site} copes alone: staff die, records are lost${inc.scpId ? `, and ${scpName(inc.scpId)} may get away` : ""} (−15 relations, −4 standing, +6 exposure).`

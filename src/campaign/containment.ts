@@ -101,6 +101,7 @@ export function startBreach(c: Campaign, s: ScpRecord, cause: string) {
   openInquiry(c, inc);
   chronicle(c, "breach", `${s.name} breached containment in the ${nameInText(wing.type)} on level ${wing.level + 1}. ${cause}`);
   log(c, `${cause} ${s.name} is out of its cell. Site Security is responding now: send Epsilon-11 in after them, or leave it to the guards.`, "bad", "command");
+  return inc;
 }
 
 export function goDark(c: Campaign, s: ScpRecord, why: string, from = "Site-19") {

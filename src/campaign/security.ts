@@ -10,7 +10,8 @@ import { addExposure } from "./world";
 import { HOME } from "../data/regions";
 import { has } from "./research";
 import { RANKS, RANK_XP, log, makeOperative, yearOf, type Campaign, type Incident } from "./campaign";
-import { DEPTH, goDark, wingLevel, wingOf, wreckFacility } from "./containment";
+import { DEPTH, SCP_DEFS, goDark, isInert, startBreach, wingLevel, wingOf, wreckFacility } from "./containment";
+import type { ScpId } from "../game/types";
 
 export interface Guard {
   id: string;
@@ -193,17 +194,30 @@ export function startRaid(c: Campaign) {
   chronicle(c, "insurgency", `The Chaos Insurgency raided Site-19's surface compound with about ${raidSize(c)} fighters.`);
   log(c, `Gunfire at the wire: the Chaos Insurgency is attacking Site-19's surface compound, about ${raidSize(c)} of them. Site Security is holding; Epsilon-11 can come up the lift.`, "bad", "command");
 }
-/** What the Insurgency gets when it reaches the lift: its people out of holding, or the payroll and a wrecked building. */
-export function raidLoss(c: Campaign): string[] {
+/** What the Insurgency gets when it reaches the lift: its people out of holding, and then the cells. With an anomaly in
+ *  containment they go down to its wing and open it, and Site-19 has a breach to answer with Insurgents still inside.
+ *  With nothing to let out, they take the payroll and wreck a building on the way out. */
+export function raidLoss(c: Campaign, left = 3): string[] {
   const out: string[] = [];
   if (c.prisoners.length) { out.push(`They broke ${c.prisoners.length > 1 ? `all ${c.prisoners.length} prisoners` : "the prisoner"} out of holding.`); c.prisoners = []; }
-  else {
+  const rank = { Keter: 0, Euclid: 1, Safe: 2 } as Record<string, number>;
+  const cells = c.scps.filter(s => s.status === "contained" && !isInert(s) && wingOf(c, s))
+    .sort((a, b) => (rank[SCP_DEFS[a.id as ScpId]?.cls] ?? 1) - (rank[SCP_DEFS[b.id as ScpId]?.cls] ?? 1));
+  if (cells.length) {
+    const s = cells[0];
+    c.chaos.pendingCause = "sabotage";
+    const inc = startBreach(c, s, `The raiders went down the lift and blew the doors on ${s.name}'s cell.`);
+    c.chaos.pendingCause = undefined;
+    inc.insurgents = Math.max(2, left);
+    if (inc.cause) inc.cause = "sabotage";
+    out.push(`They went down the lift and opened ${s.name}'s cell: it is loose on level ${wingOf(c, s)!.level + 1} with about ${inc.insurgents} Insurgents covering the way out. Send a team in.`);
+  } else {
     const took = Math.min(60, Math.max(0, c.funds));
     c.funds -= took;
     if (took) out.push(`They emptied the payroll safe ($${took}k).`);
+    const hit = c.base.facilities.filter(f => f.level === 0 && f.type !== "command" && f.type !== "generator" && !f.disabled && f.daysLeft === 0);
+    if (hit.length) { const f = hit[rand(0, hit.length - 1)]; wreckFacility(c, f, "Demolition charges went off on the way out.", true); out.push(`The ${nameInText(f.type)} on level 1 was wrecked.`); }
   }
-  const hit = c.base.facilities.filter(f => f.level === 0 && f.type !== "command" && f.type !== "generator" && !f.disabled && f.daysLeft === 0);
-  if (hit.length) { const f = hit[rand(0, hit.length - 1)]; wreckFacility(c, f, "Demolition charges went off on the way out.", true); out.push(`The ${nameInText(f.type)} on level 1 was wrecked.`); }
   addExposure(c, HOME, 5); out.push("Locals heard the shooting (+5 exposure in the Eastern US).");
   return out;
 }
@@ -220,7 +234,7 @@ export function letGuardsHandleRaid(c: Campaign, inc: Incident) {
   const lost = dead.length ? ` ${dead.join(" and ")} ${dead.length > 1 ? "were" : "was"} killed.` : "";
   if (won) { c.stats.won++; log(c, `Site Security held the compound and drove the Insurgency back through the wire.${lost}`, "good"); return; }
   c.stats.lost++;
-  log(c, `Site Security couldn't hold the lift.${lost} ${raidLoss(c).join(" ")}`, "bad");
+  log(c, `Site Security couldn't hold the lift.${lost} ${raidLoss(c, Math.ceil(inc.insurgents / 2)).join(" ")}`, "bad");
 }
 
 /** Leave the breach to Site Security without playing it. */

@@ -92,20 +92,6 @@ const TEMPLATE = `
         <div class="label" id="squadLabel">Mobile Task Force Epsilon-11 “Nine-Tailed Fox”</div>
         <div class="squad" id="squad"></div>
       </div>
-      <div class="card">
-        <div class="actions">
-          <button class="act" id="stareBtn" type="button">Do not blink <kbd>B</kbd></button>
-          <button class="act" id="callBtn" type="button">Call the blink <kbd>C</kbd></button>
-          <button class="act" id="dragBtn" type="button">Drag <kbd>G</kbd></button>
-          <button class="act" id="sealBtn" type="button">Seal <kbd>S</kbd></button>
-          <button class="act" id="owBtn" type="button">Overwatch <kbd>O</kbd></button>
-          <button class="act" id="reloadBtn" type="button">Reload <kbd>R</kbd></button>
-          <button class="act" id="nextBtn" type="button">Next <kbd>Tab</kbd></button>
-          <button class="act primary wide" id="endBtn" type="button">End turn <kbd>E</kbd></button>
-        </div>
-        <div class="itembar" id="itemBar"></div>
-        <div class="hint" id="hint"></div>
-      </div>
       <div class="file" id="fileCard">
         <div class="label">SCP Foundation · Secure. Contain. Protect.</div>
         <h2>SCP-173 · The Sculpture</h2>
@@ -116,6 +102,21 @@ const TEMPLATE = `
         <div class="log" id="log" aria-live="polite"></div>
       </div>
     </aside>
+  </div>
+  <!-- the selected operative's actions sit along the bottom of the screen, as in XCOM, so the map stays in view -->
+  <div class="actionbar" id="actionBar" role="toolbar" aria-label="Actions">
+    <div class="hint" id="hint"></div>
+    <div class="actions">
+      <button class="act" id="stareBtn" type="button">Do not blink <kbd>B</kbd></button>
+      <button class="act" id="callBtn" type="button">Call the blink <kbd>C</kbd></button>
+      <button class="act" id="dragBtn" type="button">Drag <kbd>G</kbd></button>
+      <button class="act" id="sealBtn" type="button">Seal <kbd>S</kbd></button>
+      <button class="act" id="owBtn" type="button">Overwatch <kbd>O</kbd></button>
+      <button class="act" id="reloadBtn" type="button">Reload <kbd>R</kbd></button>
+      <span class="itembar" id="itemBar"></span>
+      <button class="act" id="nextBtn" type="button">Next <kbd>Tab</kbd></button>
+      <button class="act primary" id="endBtn" type="button">End turn <kbd>E</kbd></button>
+    </div>
   </div>
 </main>`;
 

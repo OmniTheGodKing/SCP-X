@@ -7,7 +7,7 @@ import { STAFF_EVENTS, answerStaff } from "../campaign/staff";
 import { HIST_CATS, type HistCat } from "../campaign/history";
 import { FIELDS, FIELD_BONUS, TRADES, syncStaff, type StaffKind } from "../campaign/people";
 import { AGENT, COOP, ETA10, NU7, SPECIALIST, TF_NAMES, agentsFree, attachNu7, borrow, canAttachNu7, canBorrow, canBringAmnestics, canBringResearcher, canCallNu7, canFormEta10, canHireAgent, canSellWeapons, formEta10, hireAgent, sellWeapons, siteOf, tfOf, type TaskForce } from "../campaign/taskforces";
-import { DISRUPT_INTEL, INQUIRY, PLANS, goalText, REVEAL_INTEL, THREAT_STEPS, canDisrupt, canInvestigateBreach, canReveal, disrupt, investigateBreach, reveal } from "../campaign/chaos";
+import { DISRUPT_INTEL, INQUIRY, PLANS, goalText, whenText, REVEAL_INTEL, THREAT_STEPS, canDisrupt, canInvestigateBreach, canReveal, disrupt, investigateBreach, reveal } from "../campaign/chaos";
 import { parseCampaign } from "../campaign/save";
 import type { Report } from "../campaign/reports";
 import { WEATHER, type Weather } from "../data/weather";
@@ -100,9 +100,38 @@ let tab: Tab = (() => { try { return (localStorage.getItem("site19-tab") as Tab)
 
 /** The night side of the world as SVG polygon points for the current hour. */
 const nightPointsOf = (c: Campaign) => nightPolygon(c).map(([lo, la]) => project(lo, la).map(n => n.toFixed(1)).join(",")).join(" ");
+/** Research tabs: anomalies, weapons and armor together, gear, facilities, personnel, the Insurgency. */
+type ResearchCat = "anomalies" | "arms" | "gear" | "facilities" | "personnel" | "insurgency";
+const RESEARCH_CATS: ResearchCat[] = ["anomalies", "arms", "gear", "facilities", "personnel", "insurgency"];
+const RESEARCH_CAT_NAMES: Record<ResearchCat, string> = { anomalies: "Anomalies", arms: "Weapons and armor", gear: "Gear", facilities: "Facilities and power", personnel: "Personnel", insurgency: "Insurgency" };
+const ARMOR_PROJECTS = ["padded_jacket", "nylon_liner", "plated_undersuit", "powered_harness"];
+function researchCat(id: string): ResearchCat {
+  const p = PROJECTS[id];
+  if (p.branch.startsWith("SCP-") || p.branch === "Objects") return "anomalies";
+  if (p.branch === "Weapons" || p.armorTier || p.weaponTier || p.ammo || p.attachment || ARMOR_PROJECTS.includes(id) || (p.unlocks && ITEMS[p.unlocks].armor)) return "arms";
+  if (p.branch === "Site") return "facilities";
+  if (p.branch === "Personnel") return "personnel";
+  if (p.branch === "Insurgency") return "insurgency";
+  return "gear";
+}
+
 export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let planning: string | null = null;
   const chosen = new Set<string>();
+  /** The research category tab open. */
+  let resCat: ResearchCat = "anomalies";
+  /** The equipment slot open on the personnel file. */
+  let eqSlot: string | null = "weapon";
+  /** Two-step confirmation inside the page (the claude.ai viewer blocks the browser's own confirm boxes): the first
+   *  click turns the button into a warning, a second click within four seconds goes ahead. */
+  let armedKey = "", armedTimer = 0;
+  const twice = (b: HTMLElement, key: string, warning: string) => {
+    if (armedKey === key) { armedKey = ""; clearTimeout(armedTimer); return true; }
+    armedKey = key; clearTimeout(armedTimer);
+    const before = b.textContent; b.textContent = warning; b.classList.add("armed");
+    armedTimer = window.setTimeout(() => { if (armedKey === key) { armedKey = ""; b.textContent = before; b.classList.remove("armed"); } }, 4000);
+    return false;
+  };
   /** The campaigns menu, when open. */
   let dlg: null | { view: "slots" } | { view: "new"; slot: Slot; difficulty: Difficulty; ironman: boolean; tutorial: boolean } = null;
   /** Which task force is being sent, and the support people and units going with it. */
@@ -353,10 +382,10 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       ${k.history.length ? `<details class="archived"><summary>Why it moved</summary><ul class="why">${k.history.slice(0, 12).map(h => `<li class="${h.n > 0 ? "warn" : ""}">${h.n > 0 ? "+" : ""}${h.n} · ${esc(h.why)} <span class="muted">(${dateText(h.day)})</span></li>`).join("")}</ul></details>` : ""}
       <div class="label" style="margin-top:10px">Operations this month</div>
       ${k.plans.length ? `<ul class="orders">${k.plans.map(p => { const d = PLANS[p.kind], cell = p.cell && c.incidents.find(i => i.id === p.cell);
-        if (!p.known) { const w = canReveal(c, p); return `<li><b>Unidentified operation</b>, due ${dateText(p.due)} <span class="muted">· aimed at ${esc(REGIONS[p.region].name)}? Field work there would uncover it.</span>
+        if (!p.known) { const w = canReveal(c, p); return `<li><b>Unidentified operation</b>, ${whenText(c, p)} <span class="muted">· aimed at ${esc(REGIONS[p.region].name)}? Field work there would uncover it.</span>
           <button class="act" type="button" data-reveal="${p.id}" ${w ? `disabled title="${esc(w)}"` : ""}>Identify · ${REVEAL_INTEL} Intel</button></li>`; }
         const w = canDisrupt(c, p);
-        return `<li><b>${esc(d.name)}</b>: ${esc(goalText(p.kind))}, ${dateText(p.due)} <span class="muted">· ${esc(d.desc(p.region))}</span>
+        return `<li><b>${esc(d.name)}</b>: ${esc(goalText(p.kind))}, ${whenText(c, p)} <span class="muted">· ${esc(d.desc(p.region))}</span>
           ${cell ? `<button class="linkbtn" type="button" data-mapinc="${cell.id}">A cell running it is located: strike it</button>` : ""}
           <button class="act" type="button" data-disrupt="${p.id}" ${w ? `disabled title="${esc(w)}"` : ""}>Disrupt · ${DISRUPT_INTEL} Intel</button></li>`; }).join("")}</ul>` : `<p class="muted">Nothing known. New operations are picked up on the first of the month.</p>`}
       ${k.active.length ? `<p class="warn">In force: ${k.active.map(a => `${esc(PLANS[a.kind].name)} until ${dateText(a.until)}`).join("; ")}.</p>` : ""}
@@ -497,7 +526,10 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     </div>`;
   }
 
+  /** An operative's kit: kept on them, so it's the same next time they deploy. */
   function gearOf(id: string) {
+    const o = c.roster.find(x => x.id === id);
+    if (o) return (o.kit ??= { armor: "", items: ["", "", ""] });
     let g = gear.get(id);
     if (!g) { g = { armor: "", items: ["", "", ""] }; gear.set(id, g); }
     return g;
@@ -636,7 +668,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         ${i.dispatch ? "" : `<p><b>If it's ignored:</b> ${esc(b.ignore)}</p>`}
         ${b.worse && !i.dispatch ? `<p class="warn"><b>While it waits:</b> ${esc(b.worse)}</p>` : ""}
         ${(() => { const notes: string[] = [], plan = i.plan && c.chaos.plans.find(p => p.id === i.plan);
-          if (plan) notes.push(`This cell is running ${PLANS[plan.kind].name} (${goalText(plan.kind)}, due ${dateText(plan.due)}). Breaking it stops the operation${c.chaos.commander ? `, and ${c.chaos.commander.rank} ${c.chaos.commander.name} leads it in person` : ""}.`);
+          if (plan) notes.push(`This cell is running ${PLANS[plan.kind].name} (${goalText(plan.kind)}, ${whenText(c, plan)}). Breaking it stops the operation${c.chaos.commander ? `, and ${c.chaos.commander.rank} ${c.chaos.commander.name} leads it in person` : ""}.`);
           if (i.gru) notes.push("GRU Division \"P\" agents are here for it too. They are Soviet, not Insurgency: whoever reaches it first keeps it.");
           if (i.first) notes.push(`Left too long, ${i.region === "europe" || i.region === "east_asia" ? "GRU Division \"P\" may take it east, or " : ""}the Global Occult Coalition may destroy it. Either way it would be gone for good.`);
           if ((i.kind === "strike" || i.kind === "retaliation") && c.chaos.threat >= 30) notes.push(`With the Insurgency's agenda at ${c.chaos.threat}, expect reinforcements around turn ${c.chaos.threat >= 70 ? 5 : 7} if the fight drags on.`);
@@ -725,15 +757,23 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       <div class="card">
         <div class="label">Research · ${c.researchers} researchers, ${researchersFree(c)} unassigned · lab space for ${researcherCapacity(c)}</div>
         <p class="muted">Put researchers on any projects you like; each one adds a day of work per day. A project's cost is paid when work starts.</p>
-        <p class="muted">Hire researchers at a research lab, and build equipment at the workshop, on the Site-19 tab.</p>
+        <p class="muted">Hire researchers at a research lab, and build equipment at the workshop, on the Site-19 tab. More research opens up as Site-19 learns: finished projects, won missions, new anomalies, things brought back from the field, and the years passing.</p>
       </div>
       ${bt.length ? `<div class="card plan"><div class="label">Breakthrough${offer && !c.research.paid.includes(offer.id) ? ` · on offer until ${dateText(offer.until)}` : ""}</div><div class="projects">${bt.map(projectRow).join("")}</div></div>` : ""}
       ${insp && !has(c, insp.id) ? `<p class="muted">Inspiration: <b>${esc(PROJECTS[insp.id].name)}</b> takes half the time${c.research.paid.includes(insp.id) ? "" : ` if started by ${dateText(insp.until)}`}.</p>` : ""}
-      ${branches.map(b => `<div class="card"><div class="label">${b}</div><div class="projects">${(() => { const ids = Object.keys(PROJECTS).filter(id => PROJECTS[id].branch === b && projectVisible(c, id)); return ids.length ? ids.map(projectRow).join("") : `<p class="muted">Nothing to research here yet.</p>`; })()}</div></div>`).join("")}
-      <p class="muted">More research opens up as Site-19 learns: finished projects lead to new ones, and so do won missions, new anomalies, things brought back from the field, and the years passing.</p>
+      ${(() => {
+        // projects sorted into categories, one tab each, the list scrolling inside its own panel
+        const visible = Object.keys(PROJECTS).filter(id => !PROJECTS[id].breakthrough && branches.includes(PROJECTS[id].branch) && projectVisible(c, id));
+        const cats = RESEARCH_CATS.map(k => ({ k, ids: visible.filter(id => researchCat(id) === k) }));
+        const cur = cats.find(x => x.k === resCat) ?? cats[0];
+        const running = Object.entries(c.research.assigned).filter(([id, n]) => n && PROJECTS[id]).map(([id]) => id);
+        return `${running.length ? `<div class="card"><div class="label">Under way</div><div class="projects">${running.map(projectRow).join("")}</div></div>` : ""}
+        <div class="card"><div class="row restabs">${cats.map(x => `<button class="act ${x.k === cur.k ? "on" : ""}" type="button" data-rescat="${x.k}" aria-pressed="${x.k === cur.k}">${RESEARCH_CAT_NAMES[x.k]} · ${x.ids.filter(id => !has(c, id)).length}</button>`).join("")}</div>
+          <div class="projects scrollpanel">${cur.ids.length ? [...cur.ids].sort((a, b) => Number(has(c, a)) - Number(has(c, b))).map(projectRow).join("") : `<p class="muted">Nothing to research here yet.</p>`}</div></div>`;
+      })()}
     </section>
     <section class="col">
-      <div class="file">
+      <div class="file scrollpanel tall">
         <div class="label">Tests on ${s.name}</div>
         <h2>Test log</h2>
         <p>Tests fill in ${s.name}'s file and open new research. Each is paid for up front and prepared by researchers like any other project; on the last day the D-Class go into the cell while the guards you chose watch. Riskier tests multiply the chance someone dies, and some can end in a breach. One test at a time.</p>
@@ -858,8 +898,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       ${damageReport()}
     </section>
     <section class="col">
-      ${sel ? slotDetail(sel.level, sel.slot) : `<div class="card"><div class="label">Facility</div><p class="muted">Select a slot to build, repair or inspect it.</p></div>`}
-      ${c.scps.map(containmentCard).join("")}
+      ${sel ? slotDetail(sel.level, sel.slot) : `<div class="card"><div class="label">Facility</div><p class="muted">Select a slot to build, repair or inspect it.</p>
+        ${c.scps.length ? `<ul class="memorial">${c.scps.map(s => { const w = wingOf(c, s); return `<li><b>${esc(s.name)}</b>: ${s.status === "contained" || s.status === "breach" ? (w ? `${esc(nameInText(w.type))}, level ${w.level + 1}. Select its wing to manage it.` : "") : s.status === "loose" ? "escaped, whereabouts unknown" : s.status === "away" ? `held at Site-17 until ${dateText(s.returnDay ?? c.day)}` : "on the road to another site"}</li>`; }).join("")}</ul>` : ""}</div>`}
     </section>
   </div>`;
   }
@@ -905,7 +945,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       ${f.disabled ? `<p class="warn">${esc(damageEffect(c, f))}</p>` : ""}
       ${f.disabled && f.repairDays === 0 ? `<div class="row"><button class="act primary" id="repairBtn" type="button" ${rw ? `disabled title="${esc(rw)}"` : ""}>${f.wrecked ? "Rebuild" : "Repair"} · $${repairOf(f).cost}k · ${plural(repairOf(f).days, "day")} · ${repairOf(f).engineers} engineers</button>${rw ? `<span class="muted">${esc(rw)}</span>` : ""}</div>` : ""}
       ${facilityPanel(f)}
-      ${occ ? `<p>Holds <b>${occ.name}</b>.</p>` : ""}
+      ${occ ? containmentCard(occ) : ""}
       ${isContainment(f.type) && !occ && operational(f) && s.status === "contained" ? `
         <p class="muted">Moving ${s.name} here takes D-Class to shift it, with guards watching if you post them, and $20k. The same risk as a cleaning applies.</p>
         ${watcherPicker()}
@@ -1132,6 +1172,53 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
   </div>`;
   }
 
+  /** XCOM-style equipment: a row of slots, and the one clicked opens below with its stats and what can go in it. */
+  function equipment(o: Operative) {
+    const g = gearOf(o.id), gun = gunFor(c, o), t = weaponOf(o), uni = uniformOf(c), slots = o.perks.includes("field_kit") ? 3 : 2;
+    const tile = (key: string, label: string, value: string, sub = "") => `<button type="button" class="eqslot ${eqSlot === key ? "on" : ""}" data-eqslot="${key}" aria-pressed="${eqSlot === key}"><span class="eqlabel">${label}</span><b>${esc(value)}</b>${sub ? `<span class="muted">${esc(sub)}</span>` : ""}</button>`;
+    const stat = (k: string, v: string) => `<span class="eqstat"><span class="muted">${k}</span> ${v}</span>`;
+    const pickCard = (attr: string, value: string, on: boolean, title: string, body: string, disabled = "") => `<button type="button" class="eqopt ${on ? "on" : ""}" ${attr}="${value}" ${disabled ? `disabled title="${esc(disabled)}"` : ""}><b>${esc(title)}</b><span class="muted">${body}</span></button>`;
+    const detail = (() => {
+      switch (eqSlot) {
+        case "weapon": return `<div class="eqstats">${stat("Damage", gun.dmg.join("–"))}${stat("Magazine", String(gun.mag))}${stat("Aim", `${gun.aim >= 0 ? "+" : ""}${gun.aim}`)}${stat("Move", `${TYPES[t].move >= 0 ? "+" : ""}${TYPES[t].move}`)}${stat("Crit", `+${TYPES[t].crit}%`)}${gun.pierce ? stat("Pierce", String(gun.pierce)) : ""}</div>
+          <p class="muted">${esc(TYPES[t].desc)}</p>
+          <div class="eqfitted"><div class="row"><span><span class="muted">Attachment</span> <b>${o.attachment ? esc(ATTACHMENTS[o.attachment].name) : "None"}</b>${o.attachment ? ` <span class="muted">· ${esc(ATTACHMENTS[o.attachment].desc)}</span>` : ""}</span><button class="act" type="button" data-eqslot="attachment">Change</button></div>
+            <div class="row"><span><span class="muted">Ammunition</span> <b>${o.ammoType ? esc(AMMO[o.ammoType].name) : "Standard ball"}</b>${o.ammoType ? ` <span class="muted">· ${esc(AMMO[o.ammoType].desc)}</span>` : ""}</span><button class="act" type="button" data-eqslot="ammo">Change</button></div></div>
+          <div class="eqopts">${weaponOptions(o).map(w => { const m = model(c.models[w]); return pickCard("data-setweapon", w, w === t, `${TYPES[w].name}: ${m.name}`, `${m.dmg.join("–")} damage · ${m.mag} rounds · aim ${m.aim >= 0 ? "+" : ""}${m.aim}. ${esc(TYPES[w].desc)}`); }).join("")}</div>
+          <p class="muted">Their class carries these two. Better models come from Weapons research and a workshop refit.</p>`;
+        case "attachment": return `<div class="eqopts">${pickCard("data-fitatt", "", !o.attachment, "None", "The weapon as issued.")}
+          ${(Object.keys(ATTACHMENTS) as AttachmentId[]).filter(a => o.attachment === a || (c.attachments[a] ?? 0) > 0).map(a => pickCard("data-fitatt", a, o.attachment === a, ATTACHMENTS[a].name, `${esc(ATTACHMENTS[a].desc)}${o.attachment === a ? " · fitted" : ` · ${c.attachments[a]} in stores`}`)).join("")}</div>
+          <p class="muted">Attachments are built in the workshop once researched. Fitting one takes it from stores; taking it off puts it back.</p>`;
+        case "ammo": return `<div class="eqopts">${pickCard("data-loadammo", "", !o.ammoType, "Standard ball", "Ordinary rounds.")}
+          ${(Object.keys(AMMO) as AmmoId[]).filter(a => o.ammoType === a || (c.ammo[a] ?? 0) > 0).map(a => pickCard("data-loadammo", a, o.ammoType === a, AMMO[a].name, `${esc(AMMO[a].desc)}${o.ammoType === a ? " · loaded" : ` · ${c.ammo[a]} in stores`}`)).join("")}</div>`;
+        case "armor": return `<div class="eqopts">${pickCard("data-kitarmor", "", !g.armor, "No armor slot", `Only the uniform: +${uni.hp} HP${uni.points ? `, +${uni.points} armor` : ""}.`)}
+          ${ARMOR_KINDS.filter(k => (c.inventory[k] ?? 0) > 0 || g.armor === k).map(k => { const st = armorStats(k, c.armorTier); return pickCard("data-kitarmor", k, g.armor === k, ITEMS[k].name, `+${st.hp} HP · ${st.points} armor${st.move ? ` · ${st.move > 0 ? "+" : ""}${st.move} move` : ""} · ${c.inventory[k] ?? 0} in stores. ${esc(ITEMS[k].desc)}`); }).join("")}</div>
+          <p class="muted">Their usual armor, taken from stores when they deploy (if there's one left). The uniform under it, ${esc(uni.name)}, is worn by everyone.</p>`;
+        case "uniform": return `<div class="eqstats">${stat("HP", `+${uni.hp}`)}${stat("Armor", `+${uni.points}`)}</div><p class="muted">${esc(uni.name)}: worn by every operative under any armor. Better uniforms come from Equipment research and apply to everyone at once.</p>`;
+        case "sidearm": return `<div class="eqstats">${stat("Damage", SIDEARM.dmg.join("–"))}${stat("Aim", String(SIDEARM.aim))}</div><p class="muted">${esc(SIDEARM.name)}: fired automatically when the main weapon is empty. Everyone carries one.</p>`;
+        default: {
+          const i = Number((eqSlot ?? "").slice(4));
+          if (!eqSlot?.startsWith("item") || i >= slots) return `<p class="muted">Click a slot to see it and change what goes in it.</p>`;
+          const carry = (Object.keys(ITEMS) as ItemId[]).filter(k => !ITEMS[k].armor && ((c.inventory[k] ?? 0) > 0 || g.items[i] === k));
+          return `<div class="eqopts">${pickCard("data-kititem", "", !g.items[i], "Empty", "Nothing in this slot.")}
+            ${carry.map(k => pickCard("data-kititem", k, g.items[i] === k, ITEMS[k].name, `${esc(ITEMS[k].desc)} · ${c.inventory[k] ?? 0} in stores${HEAVY.includes(k) ? " · heavy armor only" : ""}`, HEAVY.includes(k) && g.armor !== "armor_heavy" ? "Heavy weapons need heavy plate in the armor slot." : "")).join("")}</div>
+            <p class="muted">Items are built in the workshop. Used ones are gone; unused ones come back to stores.</p>`;
+        }
+      }
+    })();
+    return `<div class="label" style="margin-top:10px">Equipment</div>
+      <div class="eqgrid">
+        ${tile("weapon", "Primary weapon", gun.name, `${gun.dmg.join("–")} dmg · ${gun.mag} rounds`)}
+        ${tile("attachment", "Attachment", o.attachment ? ATTACHMENTS[o.attachment].name : "None")}
+        ${tile("ammo", "Ammunition", o.ammoType ? AMMO[o.ammoType].name : "Standard ball")}
+        ${tile("armor", "Armor", g.armor ? ITEMS[g.armor].name : "None", g.armor ? `+${armorStats(g.armor, c.armorTier).hp} HP` : "")}
+        ${tile("uniform", "Uniform", uni.name)}
+        ${tile("sidearm", "Sidearm", SIDEARM.name)}
+        ${Array.from({ length: slots }, (_, i) => tile(`item${i}`, `Utility ${i + 1}`, g.items[i] ? ITEMS[g.items[i] as ItemId].name : "Empty")).join("")}
+      </div>
+      <div class="eqdetail">${detail}</div>`;
+  }
+
   function opDetail() {
     const o = c.roster.find(x => x.id === opSel && x.alive);
     if (!o) return "";
@@ -1182,26 +1269,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       ${o.traits.length ? `<ul class="traits">${o.traits.map(t => `<li class="${TRAITS[t].bad ? "bad" : "good"}"><b>${TRAITS[t].name}</b>: ${esc(TRAITS[t].desc)} <span class="muted">${esc(TRAITS[t].how)}</span>
         ${TRAITS[t].bad && !o.busy ? `<span class="muted">Treatable at Psychological services.</span>` : ""}</li>`).join("")}</ul>
         ${bad.length && tw ? `<p class="muted">${esc(tw)}</p>` : ""}` : `<p class="muted">None yet. Traits come from what happens to them on missions.</p>`}
-      <div class="label" style="margin-top:10px">Weapon</div>
-      <div class="row">
-        ${weaponOptions(o).map(t => `<button type="button" class="act ${weaponOf(o) === t ? "on" : ""}" data-setweapon="${t}">${TYPES[t].name}: ${model(c.models[t]).name}</button>`).join("")}
-      </div>
-      <div class="specs">${esc(TYPES[weaponOf(o)].desc)} ${model(c.models[weaponOf(o)]).dmg.join("–")} damage, ${gunFor(c, o).mag} rounds.</div>
-      <div class="row">
-        <label for="att-${o.id}" class="specs">Attachment</label>
-        <select id="att-${o.id}" data-fit="${o.id}">
-          <option value="">None</option>
-          ${(Object.keys(ATTACHMENTS) as AttachmentId[]).filter(a => o.attachment === a || (c.attachments[a] ?? 0) > 0).map(a => `<option value="${a}" ${o.attachment === a ? "selected" : ""}>${ATTACHMENTS[a].name}: ${esc(ATTACHMENTS[a].desc)}</option>`).join("")}
-        </select>
-      </div>
-      <div class="row">
-        <label for="ammo-${o.id}" class="specs">Ammunition</label>
-        <select id="ammo-${o.id}" data-ammo="${o.id}">
-          <option value="">Standard ball</option>
-          ${(Object.keys(AMMO) as AmmoId[]).filter(a => o.ammoType === a || (c.ammo[a] ?? 0) > 0).map(a => `<option value="${a}" ${o.ammoType === a ? "selected" : ""}>${AMMO[a].name}: ${esc(AMMO[a].desc)}</option>`).join("")}
-        </select>
-      </div>
-      <div class="specs">Sidearm: ${SIDEARM.name}, ${SIDEARM.dmg.join("–")} damage, fired automatically when the main weapon is empty.</div>
+      ${equipment(o)}
       ${o.cls && !o.busy ? `<p class="muted">Retraining (a new class, keeping their rank) is arranged at the training range.</p>` : ""}
     </div>`;
   }
@@ -1255,11 +1323,11 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     root.querySelectorAll<HTMLSelectElement>("[data-armor]").forEach(b => b.onchange = () => {
       const g = gearOf(b.dataset.armor!); g.armor = b.value as ItemId | "";
       if (g.armor !== "armor_heavy") g.items = g.items.map(i => (i && HEAVY.includes(i) ? "" : i));
-      render();
+      act.save(); render();
     });
     root.querySelectorAll<HTMLSelectElement>("[data-gear]").forEach(b => b.onchange = () => {
       gearOf(b.dataset.gear!).items[Number(b.dataset.slotI)] = b.value as ItemId | "";
-      render();
+      act.save(); render();
     });
     root.querySelectorAll<SVGElement>("[data-region]").forEach(b => {
       const pickRegion = () => { if (dragMoved) return; regionSel = b.dataset.region as RegionId; mapSel = "region"; planning = null; zoomToRegion(regionSel); render(); };
@@ -1286,6 +1354,12 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     root.querySelectorAll<HTMLElement>("[data-retrain]").forEach(b => b.onclick = () => { const o = opById(b.dataset.retrain); if (o) change(() => startRetrain(c, o)); });
     root.querySelectorAll<HTMLElement>("[data-hireguard]").forEach(b => b.onclick = () => change(() => hireGuard(c, b.dataset.hireguard!)));
     root.querySelectorAll<HTMLElement>("[data-post]").forEach(b => b.onclick = () => { const g = c.guards.find(x => x.id === b.dataset.post); if (g) change(() => postGuard(c, g, b.dataset.station!)); });
+    root.querySelectorAll<HTMLElement>("[data-rescat]").forEach(b => b.onclick = () => { resCat = b.dataset.rescat as ResearchCat; render(); });
+    root.querySelectorAll<HTMLElement>("[data-eqslot]").forEach(b => b.onclick = () => { eqSlot = eqSlot === b.dataset.eqslot ? null : b.dataset.eqslot!; render(); });
+    root.querySelectorAll<HTMLElement>("[data-fitatt]").forEach(b => b.onclick = () => change(() => fitAttachment(c, opNow(), b.dataset.fitatt as AttachmentId | "")));
+    root.querySelectorAll<HTMLElement>("[data-loadammo]").forEach(b => b.onclick = () => change(() => loadAmmo(c, opNow(), b.dataset.loadammo as AmmoId | "")));
+    root.querySelectorAll<HTMLElement>("[data-kitarmor]").forEach(b => b.onclick = () => change(() => { const g = gearOf(opNow().id); g.armor = b.dataset.kitarmor as ItemId | ""; if (g.armor !== "armor_heavy") g.items = g.items.map(i => (i && HEAVY.includes(i) ? "" : i)); }));
+    root.querySelectorAll<HTMLElement>("[data-kititem]").forEach(b => b.onclick = () => change(() => { gearOf(opNow().id).items[Number((eqSlot ?? "item0").slice(4))] = b.dataset.kititem as ItemId | ""; }));
     root.querySelectorAll<HTMLElement>("[data-setweapon]").forEach(b => b.onclick = () => change(() => setWeapon(c, opNow(), b.dataset.setweapon as WeaponType)));
     root.querySelectorAll<HTMLSelectElement>("[data-ammo]").forEach(b => b.onchange = () => change(() => loadAmmo(c, opNow(), b.value as AmmoId | "")));
     root.querySelectorAll<HTMLElement>("[data-ammoorder]").forEach(b => b.onclick = () => change(() => orderAmmo(c, b.dataset.ammoorder as AmmoId)));
@@ -1326,7 +1400,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     root.querySelectorAll<HTMLElement>("[data-refine]").forEach(b => b.onclick = () => change(() => refine(c, b.dataset.refine as ItemId)));
     root.querySelectorAll<HTMLElement>("[data-sendaway]").forEach(b => b.onclick = () => {
       const s = c.scps.find(x => x.id === b.dataset.sendaway);
-      if (s && confirm(`Send ${s.name} to ${b.dataset.site} for good? Site-19 won't hold or study it again.`)) change(() => sendAway(c, s.id, b.dataset.site!));
+      if (s && twice(b, `away-${s.id}-${b.dataset.site}`, `Send ${s.name} away for good? Click again`)) change(() => sendAway(c, s.id, b.dataset.site!));
     });
     root.querySelectorAll<HTMLElement>("[data-contact]").forEach(b => b.onclick = () => change(() => makeContact(c, b.dataset.contact as RegionId)));
     root.querySelectorAll<HTMLElement>("[data-transfer]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.transfer); if (s) change(() => transferOut(c, s)); });
@@ -1457,14 +1531,14 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     on("dlgClose", () => { dlg = null; render(); });
     root.querySelectorAll<HTMLElement>("[data-slotload]").forEach(b => b.onclick = () => { dlg = null; act.loadSlot(Number(b.dataset.slotload) as Slot); });
     root.querySelectorAll<HTMLElement>("[data-slotnew]").forEach(b => b.onclick = () => { dlg = { view: "new", slot: Number(b.dataset.slotnew) as Slot, difficulty: "agent", ironman: false, tutorial: true }; render(); });
-    root.querySelectorAll<HTMLElement>("[data-slotdel]").forEach(b => b.onclick = () => { const s = Number(b.dataset.slotdel) as Slot; if (confirm(`Delete the campaign in slot ${s}? This can't be undone.`)) { clearSlot(s); render(); } });
+    root.querySelectorAll<HTMLElement>("[data-slotdel]").forEach(b => b.onclick = () => { const s = Number(b.dataset.slotdel) as Slot; if (twice(b, `del-${s}`, "Delete it for good? Click again")) { clearSlot(s); render(); } });
     root.querySelectorAll<HTMLInputElement>("[data-diff]").forEach(b => b.onchange = () => { if (dlg?.view === "new") dlg.difficulty = b.value as Difficulty; render(); });
     { const im = root.querySelector<HTMLInputElement>("#dlgIron"); if (im) im.onchange = () => { if (dlg?.view === "new") dlg.ironman = im.checked; }; }
     { const tu = root.querySelector<HTMLInputElement>("#dlgTut"); if (tu) tu.onchange = () => { if (dlg?.view === "new") dlg.tutorial = tu.checked; }; }
     on("dlgStart", () => {
       if (dlg?.view !== "new") return;
-      const filled = slotSummary(dlg.slot);
-      if (filled && !confirm(`Slot ${dlg.slot} holds a campaign at ${dateText(filled.day)}. Starting a new one erases it. Go ahead?`)) return;
+      const filled = slotSummary(dlg.slot) || dlg.slot === activeSlot();
+      if (filled && !twice($("dlgStart")!, `new-${dlg.slot}`, `Erase slot ${dlg.slot} and start? Click again`)) return;
       const d = dlg; dlg = null;
       act.newCampaign({ difficulty: d.difficulty, ironman: d.ironman, tutorial: d.tutorial }, d.slot);
     });
