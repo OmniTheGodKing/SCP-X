@@ -1,5 +1,6 @@
 // Site-19 Command: incidents and time, the base and its containment, and Epsilon-11's roster.
 import { STAFF_EVENTS, answerStaff } from "../campaign/staff";
+import { parseCampaign } from "../campaign/save";
 import type { Report } from "../campaign/reports";
 import { MEDALS } from "../data/bios";
 import { INSPECTION, inspectionChecks, inspectionSoon } from "../campaign/inspection";
@@ -44,6 +45,7 @@ export interface HubActions {
   save: () => void;
   deploy: (inc: Incident, loadouts: Loadout[], dCount: number) => void;
   newCampaign: () => void;
+  importCampaign: (c: Campaign) => void;
 }
 
 const KIND_NAMES = { raid: "Raid", riot: "Riot", outbreak: "SCP-610", breach: "Breach", recovery: "Manhunt", coverup: "Cover-up", strike: "Strike", escort: "Ambush", retaliation: "Retaliation" } as const;
@@ -113,6 +115,9 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <span class="pill ${pw ? "hot" : ""}">Power ${powerUse(c)}/${powerSupply(c)}</span>
       ${c.debug ? `<span class="pill hot">Debug save</span>` : ""}
       <button class="act" id="resetBtn" type="button">New campaign</button>
+      <button class="act" id="exportBtn" type="button" title="Download this campaign as a file, to keep or move to another browser">Export save</button>
+      <label class="act" for="importFile" title="Load a campaign from an exported file. It replaces the current one.">Import save</label>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
     </div>
   </header>
   <nav class="tabs" aria-label="Site-19 sections">
@@ -896,6 +901,17 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       act.newCampaign();
     });
     on("overBtn", act.newCampaign);
+    on("exportBtn", () => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(c)], { type: "application/json" }));
+      a.download = `site19-${dateText(c.day).replace(/ /g, "-").toLowerCase()}.json`;
+      a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+    { const f = root.querySelector<HTMLInputElement>("#importFile"); if (f) f.onchange = async () => {
+      const file = f.files?.[0]; if (!file) return;
+      const loaded = parseCampaign(await file.text());
+      if (loaded) act.importCampaign(loaded); else { flashMsg = "That file isn't a Site-19 save this version can read."; render(); }
+    }; }
   }
 
   // the clock loop runs until the hub is replaced by a mission or a fresh hub

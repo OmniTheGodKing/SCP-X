@@ -223,6 +223,7 @@ Late in the plan: move both layers from 2D to 3D.
 - Room upgrades and staffing facilities for bonuses; one-off experimental items.
 - Difficulty levels and an Ironman mode.
 - Art to replace the placeholder SCP-173 drawing, and sound.
-- Save export and import, multiple save slots.
+- (Done) Save export and import: download the campaign as a file and load it back (older saves are upgraded).
+- Multiple save slots.
 - A tutorial or first-mission walkthrough.
 - Mission layout on phones.

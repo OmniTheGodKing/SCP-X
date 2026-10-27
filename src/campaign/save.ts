@@ -13,11 +13,16 @@ const KEY = "site19-campaign-v2";
 
 /** Loads the saved campaign, bringing older saves up to date. Pass-one saves (v1) can't be carried over. */
 export function loadCampaign(): Campaign | null {
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(KEY); } catch { return null; }
+  return raw ? parseCampaign(raw) : null;
+}
+
+/** Reads a campaign from saved text (this browser's save or an exported file), bringing older saves up to date. */
+export function parseCampaign(raw: string): Campaign | null {
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return null;
-    const c = JSON.parse(raw) as { version: number } | null;
-    if (!c) return null;
+    const c = JSON.parse(raw) as { version: number; roster?: unknown; base?: unknown } | null;
+    if (!c || typeof c.version !== "number" || !Array.isArray(c.roster) || !c.base) return null;
     if (c.version === 2) {
       Object.assign(c, { version: 3, researchers: 0, research: newResearch(), inventory: {}, orders: [], knownNotes: [] });
     }
