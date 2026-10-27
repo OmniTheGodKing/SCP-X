@@ -69,7 +69,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   const SPEEDS = [1, 2, 4], DAY_MS = 4000;
   const hourText = () => `${String(Math.floor(c.hour ?? 0)).padStart(2, "0")}:00`;
   const clockBlocked = () => !!c.over || !!pendingBreach(c) || !!c.notices?.length;
-  const setSpeed = (n: number) => { if (n > 0 && clockBlocked()) return; speed = n; if (n) lastSpeed = n; render(); };
+  const setSpeed = (n: number) => { if (!(n > 0 && clockBlocked())) { speed = n; if (n) lastSpeed = n; } render(); };
 
   const ready = () => c.roster.filter(deployable);
   const watchPool = () => guardsReady(c);
@@ -87,7 +87,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   <header class="top">
     <div>
       <div class="eyebrow">SCP Foundation · Site-19 Command · Mobile Task Force Epsilon-11</div>
-      <h1>Site-19 <small>${dateText(c.day)} · <span id="clockHour">${hourText()}</span></small></h1>
+      <h1>Site-19 <small>${dateText(c.day)} · <span id="clockHour">${hourText()}</span> · ${speed ? `${speed}×` : "paused"}</small></h1>
     </div>
     <div class="turnbox">
       <span class="pill">Funds $${c.funds}k</span>
@@ -154,12 +154,8 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     <section class="col">
       <div class="card">
         <div class="label">Time · ${speed ? `running at ${speed}×` : "paused"}</div>
-        <div class="row speeds">
-          <button class="act ${speed ? "" : "on"}" type="button" data-speed="0" aria-pressed="${!speed}">Pause <kbd>Space</kbd></button>
-          ${SPEEDS.map((n, i) => `<button class="act ${speed === n ? "on" : ""}" type="button" data-speed="${n}" aria-pressed="${speed === n}" ${clockBlocked() ? "disabled" : ""}>${n}× <kbd>${i + 1}</kbd></button>`).join("")}
-        </div>
-        ${pendingBreach(c) ? `<p class="warn">A breach is under way. Deal with it before time moves on.</p>` : ""}
-        <p class="muted">At 1× a day passes every ${DAY_MS / 1000} seconds. The clock pauses itself when something needs you. Next month: $${monthlyFunding(c)}k from the fronts, $${monthlyUpkeep(c)}k upkeep, up to ${DCLASS_MONTHLY} D-Class. Operatives heal ${healPerDay(c)} HP and recover ${sanityPerDay(c)} sanity a day.</p>
+        <p class="muted">Time runs from the World tab. Space pauses or resumes from any tab.</p>
+        <button class="act" type="button" data-goto="world">Open the world map</button>
       </div>
       <div class="card">
         <div class="label">Alert level · Epsilon-11 reaches a breach on turn ${mtfArrival(c)}</div>
@@ -278,7 +274,16 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     }).join("");
     const r = regionSel, d = REGIONS[r], st = c.regions[r], cw = canCoverStory(c, r), lw = canLocate(c, r), t = travelDays(c, r);
     const here = c.incidents.filter(i => i.region === r);
-    return `<div class="card worldcard">
+    return `<div class="card timecard">
+        <div class="label">Time · ${speed ? `running at ${speed}×` : "paused"}</div>
+        <div class="row speeds">
+          <button class="act ${speed ? "" : "on"}" type="button" data-speed="0" aria-pressed="${!speed}">Pause <kbd>Space</kbd></button>
+          ${SPEEDS.map((n, i) => `<button class="act ${speed === n ? "on" : ""}" type="button" data-speed="${n}" aria-pressed="${speed === n}" ${clockBlocked() ? "disabled" : ""}>${n}× <kbd>${i + 1}</kbd></button>`).join("")}
+        </div>
+        ${pendingBreach(c) ? `<p class="warn">A breach is under way. Deal with it before time moves on.</p>` : ""}
+        <p class="muted">At 1× a day passes every ${DAY_MS / 1000} seconds. The clock pauses itself when something needs you. Next month: $${monthlyFunding(c)}k from the fronts, $${monthlyUpkeep(c)}k upkeep, up to ${DCLASS_MONTHLY} D-Class. Operatives heal ${healPerDay(c)} HP and recover ${sanityPerDay(c)} sanity a day.</p>
+      </div>
+    <div class="card worldcard">
         <div class="label">The world · ${dateText(c.day)} · global exposure ${c.exposure} · ${collapsedCount(c)} of ${COLLAPSE_LIMIT} fronts lost</div>
         <svg class="worldmap" viewBox="${x0} ${y0} ${w} ${h}" role="group" aria-label="World map of Foundation regions">
           <rect x="${x0}" y="${y0}" width="${w}" height="${h}" class="sea"></rect>

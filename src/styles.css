@@ -277,5 +277,6 @@ ul.traits button { margin-left: 6px; padding: 4px 8px; }
 
 /* ---------- clock ---------- */
 .speeds .act kbd { margin-left: 4px; }
+.timecard { margin-bottom: 14px; }
 .notice ul.debrief li.bad { color: #8a2a1c; }
 .notice ul.debrief li.good { color: #2f5a35; }
