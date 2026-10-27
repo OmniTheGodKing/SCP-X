@@ -57,7 +57,8 @@ export function loadCampaign(): Campaign | null {
       }
       Object.assign(c, { version: 9 });
     }
-    return c.version === 9 ? (c as unknown as Campaign) : null;
+    if (c.version === 9) Object.assign(c, { version: 10, materials: {}, purchases: [] });
+    return c.version === 10 ? (c as unknown as Campaign) : null;
   } catch {
     return null;
   }

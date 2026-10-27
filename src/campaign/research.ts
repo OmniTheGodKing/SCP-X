@@ -5,7 +5,13 @@ import type { Guard } from "./security";
 import { ATTACHMENTS, model, type AttachmentId } from "../data/weapons";
 import { cellWork, type ScpRecord } from "./containment";
 
-export type Branch = "SCP-173" | "SCP-049" | "SCP-106" | "Personnel" | "Weapons" | "Equipment" | "Site";
+export type Branch = "SCP-173" | "SCP-049" | "SCP-106" | "Insurgency" | "Personnel" | "Weapons" | "Equipment" | "Site" | "Breakthrough";
+/** Things brought back from missions that some studies need (like XCOM autopsies). */
+export type MaterialId = "ciWeapons" | "prisoners" | "intelTotal" | "tissue" | "survivors";
+export const MATERIALS: Record<MaterialId, string> = {
+  ciWeapons: "Insurgency weapons recovered", prisoners: "Insurgents taken prisoner", intelTotal: "Intel gathered",
+  tissue: "SCP-049-2 tissue samples", survivors: "people back from SCP-106's pocket dimension",
+};
 export type TestId = "endurance" | "material" | "movement";
 import type { ItemId } from "../game/types";
 export type { ItemId };
@@ -22,6 +28,10 @@ export interface ProjectDef {
   from?: number;
   /** Needs this anomaly held at Site-19. */
   needsScp?: string;
+  /** Needs this much of something brought back from missions. */
+  needsMaterial?: [MaterialId, number];
+  /** Only offered now and then, and only for a while (War of the Chosen breakthroughs). */
+  breakthrough?: boolean;
   /** A weapon model this project makes available for refitting. */
   model?: string;
   attachment?: AttachmentId;
@@ -61,10 +71,32 @@ export const PROJECTS: Record<string, ProjectDef> = {
   c119:               { name: "C-119 Flying Boxcar", branch: "Site", days: 40, cost: 120, desc: "A faster transport for Epsilon-11. Travel to other regions takes a quarter less time." },
   c130:               { name: "C-130 Hercules", branch: "Site", days: 60, cost: 180, from: 1954, needs: ["c119"], desc: "A long-range turboprop transport. Travel to other regions takes half the time a C-47 would." },
   pestilence_theory:  { name: "Pestilence theory", branch: "SCP-049", days: 30, cost: 60, needsScp: "049", desc: "Interviews with SCP-049 about the \"Pestilence\" it claims to see. Calming it holds for two turns instead of one." },
-  necrotic_study:     { name: "Necrotic tissue study", branch: "SCP-049", days: 40, cost: 80, needsScp: "049", desc: "Autopsies on SCP-049-2 tissue lead to better wound care. Operatives and guards heal 1 HP a day faster." },
+  necrotic_study:     { name: "Necrotic tissue study", branch: "SCP-049", days: 40, cost: 80, needsScp: "049", needsMaterial: ["tissue", 1], desc: "Autopsies on SCP-049-2 tissue lead to better wound care. Operatives and guards heal 1 HP a day faster." },
   keter_containment:  { name: "Keter-grade containment", branch: "Site", days: 50, cost: 150, desc: "Designs for cells that can hold the worst anomalies: lead-lined, suspended, and wired for electromagnets. Keter-grade wings can be built." },
   em_containment:     { name: "Electromagnetic containment", branch: "SCP-106", days: 40, cost: 120, needsScp: "106", needs: ["keter_containment"], desc: "Electromagnets around SCP-106's cell hold it in place. Its breach risk drops by 30%." },
-  pocket_study:       { name: "Pocket dimension study", branch: "SCP-106", days: 50, cost: 120, needsScp: "106", desc: "Interviews with the few who came back map parts of the pocket dimension. People SCP-106 takes come back half the time instead of a quarter." },
+  pocket_study:       { name: "Pocket dimension study", branch: "SCP-106", days: 50, cost: 120, needsScp: "106", needsMaterial: ["survivors", 1], desc: "Interviews with the few who came back map parts of the pocket dimension. People SCP-106 takes come back half the time instead of a quarter." },
+  // ---- the research expansion ----
+  psych_screening:    { name: "Psychological screening", branch: "Personnel", days: 30, cost: 70, desc: "Better selection and preparation. Operatives get +10 max sanity, and a quarter of new recruits arrive Steady." },
+  field_medicine:     { name: "Field medicine", branch: "Personnel", days: 30, cost: 60, desc: "Medkits heal 4 instead of 3, and a stabilized operative gets back on their feet at 1 HP." },
+  field_radios:       { name: "SCR-300 field radios", branch: "Equipment", days: 30, cost: 60, desc: "Backpack radios tie Site Security to Epsilon-11. Epsilon-11 reaches breaches 3 turns sooner, and overwatch shots lose only 10 aim." },
+  prc25:              { name: "AN/PRC-25 radios", branch: "Equipment", days: 40, cost: 120, from: 1962, needs: ["field_radios"], desc: "Lighter radios with better range. Epsilon-11 reaches breaches 2 more turns sooner." },
+  night_optics:       { name: "AN/PVS-2 night optics", branch: "Equipment", days: 50, cost: 150, from: 1962, desc: "Starlight scopes. Operatives see 2 tiles farther." },
+  classb_amnestics:   { name: "Class-B amnestics", branch: "Site", days: 40, cost: 90, desc: "A stronger, more targeted formula. Cover stories need 1 dose instead of 2, and amnestics labs make twice as many." },
+  auto_cleaning:      { name: "Automated cell cleaning", branch: "Site", days: 40, cost: 120, from: 1960, desc: "Remote scrubbing arms do the work. Cleanings no longer put D-Class at risk." },
+  cell_lock:          { name: "Cell lock override", branch: "Site", days: 30, cost: 70, desc: "The D-Class block stays locked when the breach alarm cuts the power. Only one D-Class gets loose in a breach instead of four." },
+  front_accounting:   { name: "Front company accounting", branch: "Site", days: 30, cost: 80, desc: "The fronts learn to hide more money. +10% funding from every region that hasn't collapsed." },
+  sigint:             { name: "Signals intelligence", branch: "Site", days: 40, cost: 100, desc: "Listening posts pick up Insurgency traffic. +1 Intel a month." },
+  interrogation:      { name: "Interrogation techniques", branch: "Insurgency", days: 30, cost: 60, needsMaterial: ["prisoners", 1], desc: "Prisoners give up Intel twice as fast." },
+  codebooks:          { name: "Insurgency codebooks", branch: "Insurgency", days: 30, cost: 70, needsMaterial: ["intelTotal", 5], desc: "Locating a cell costs 2 Intel instead of 3, and incidents show exactly how many Insurgents to expect." },
+  weapon_analysis:    { name: "Captured weapon analysis", branch: "Insurgency", days: 30, cost: 70, needsMaterial: ["ciWeapons", 3], desc: "Knowing their guns means knowing where armor helps. Insurgents get −5 aim against operatives wearing armor." },
+  // ---- breakthroughs: offered now and then, for 30 days ----
+  bt_barrels:         { name: "Breakthrough: lapped barrels", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Service rifles do +1 damage." },
+  bt_drills:          { name: "Breakthrough: drill instructors", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "The training range runs drills twice a week." },
+  bt_security:        { name: "Breakthrough: security contracts", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Security stations cost nothing to run." },
+  bt_guard_aim:       { name: "Breakthrough: range qualification", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Guards get +5 aim." },
+  bt_triage:          { name: "Breakthrough: triage protocol", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Everyone heals 1 more HP a day." },
+  bt_cold_storage:    { name: "Breakthrough: cold storage", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Each amnestics lab stores 5 more doses." },
+  bt_jigs:            { name: "Breakthrough: production jigs", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Workshop items cost half as much." },
   efficient_gen:      { name: "Efficient generators", branch: "Site", days: 30, cost: 70, desc: "Each generator supplies 15 power instead of 10." },
 };
 
@@ -102,6 +134,9 @@ export interface ResearchState {
   progress: Record<string, number>;
   assigned: Record<string, number>;
   tests: TestId[];
+  /** A breakthrough on offer, and a project inspired to take half the time, each until a day. */
+  offer?: { id: string; until: number };
+  inspired?: { id: string; until: number };
 }
 export interface Order { item?: ItemId; attachment?: AttachmentId; refit?: string; daysLeft: number; }
 export const REFIT = { cost: 100, days: 7 };
@@ -114,8 +149,20 @@ export const researchersAssigned = (c: Campaign) => Object.values(c.research.ass
 export const researchersFree = (c: Campaign) => c.researchers - researchersAssigned(c);
 export const unlockedItems = (c: Campaign) => Object.entries(PROJECTS).filter(([id, p]) => p.unlocks && has(c, id)).map(([, p]) => p.unlocks!);
 
+/** Researcher-days a project needs: halved while inspired, or once started under an inspiration. */
+export function projectDays(c: Campaign, id: string) {
+  const i = c.research.inspired;
+  return i?.id === id ? Math.ceil(PROJECTS[id].days / 2) : PROJECTS[id].days;
+}
+export const offered = (c: Campaign, id: string) => c.research.offer?.id === id || c.research.paid.includes(id);
+
 export function projectLock(c: Campaign, id: string): string | null {
   const p = PROJECTS[id];
+  if (p.breakthrough && !offered(c, id)) return "Not on offer.";
+  if (p.needsMaterial) {
+    const [m, n] = p.needsMaterial, got = c.materials[m] ?? 0;
+    if (got < n) return `Needs ${n} ${MATERIALS[m]} (${got} so far).`;
+  }
   if (p.from && yearOf(c.day) < p.from) return `Available from ${p.from}.`;
   if (p.needsScp && !c.scps.some(s => s.id === p.needsScp)) return `Needs ${p.needsScp === "049" ? "SCP-049" : p.needsScp === "106" ? "SCP-106" : p.needsScp} held at Site-19.`;
   if (p.needsTest && !c.research.tests.includes(p.needsTest)) return `Needs the ${TESTS[p.needsTest].name.toLowerCase()}.`;
@@ -161,8 +208,11 @@ export function tickResearch(c: Campaign) {
   for (const [id, n] of Object.entries(r.assigned)) {
     if (!n) continue;
     r.progress[id] = (r.progress[id] || 0) + n;
-    if (r.progress[id] >= PROJECTS[id].days) {
+    if (r.progress[id] >= projectDays(c, id)) {
       r.done.push(id); delete r.assigned[id];
+      if (r.inspired?.id === id) r.inspired = undefined;
+      if (id === "psych_screening") for (const o of c.roster) o.sanBonus = 10;
+      if (r.offer?.id === id) r.offer = undefined;
       const p = PROJECTS[id], u = p.unlocks;
       const next = u ? ` ${ITEMS[u].name} can now be built in the workshop.` : p.model || (p.armorTier ?? 0) > 1 ? " Refit the squad in the workshop." : p.attachment ? ` ${ATTACHMENTS[p.attachment].name} can now be built in the workshop.` : "";
       if (p.armorTier === 1) c.armorTier = Math.max(c.armorTier, 1);
@@ -229,17 +279,43 @@ export function orderAttachment(c: Campaign, a: AttachmentId) {
   c.orders.push({ attachment: a, daysLeft: ATTACHMENT_COST.days });
 }
 
+export const itemCost = (c: Campaign, item: ItemId) => has(c, "bt_jigs") ? Math.ceil(ITEMS[item].cost / 2) : ITEMS[item].cost;
 export function canOrder(c: Campaign, item: ItemId): string | null {
   if (!countOperational(c, "workshop")) return "Needs a working workshop.";
   if (!unlockedItems(c).includes(item)) return "Not researched yet.";
-  if (c.funds < ITEMS[item].cost) return `Needs $${ITEMS[item].cost}k.`;
+  if (c.funds < itemCost(c, item)) return `Needs $${itemCost(c, item)}k.`;
   if (engineersFree(c) < 1) return "Needs a free engineer.";
   return null;
 }
 export function order(c: Campaign, item: ItemId) {
   if (canOrder(c, item)) return;
-  c.funds -= ITEMS[item].cost;
+  c.funds -= itemCost(c, item);
   c.orders.push({ item, daysLeft: ITEMS[item].days });
+}
+
+// ---------- breakthroughs and inspirations (War of the Chosen) ----------
+const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
+/** On the first of each month: maybe offer a breakthrough, maybe inspire a project; and expire old ones. */
+export function monthlyResearch(c: Campaign) {
+  const r = c.research;
+  if (r.offer && r.offer.until < c.day && !r.paid.includes(r.offer.id)) { log(c, `${PROJECTS[r.offer.id].name} is no longer on offer.`); r.offer = undefined; }
+  if (r.inspired && r.inspired.until < c.day && !r.paid.includes(r.inspired.id)) r.inspired = undefined;
+  if (!r.offer && Math.random() < 0.5) {
+    const pool = Object.keys(PROJECTS).filter(id => PROJECTS[id].breakthrough && !has(c, id));
+    if (pool.length) {
+      const id = pool[rand(0, pool.length - 1)];
+      r.offer = { id, until: c.day + 30 };
+      log(c, `${PROJECTS[id].name} is on offer for 30 days: ${PROJECTS[id].desc}`, "good", "research");
+    }
+  }
+  if (!r.inspired && Math.random() < 0.4) {
+    const pool = Object.keys(PROJECTS).filter(id => !PROJECTS[id].breakthrough && !has(c, id) && !projectLock(c, id) && !r.paid.includes(id));
+    if (pool.length) {
+      const id = pool[rand(0, pool.length - 1)];
+      r.inspired = { id, until: c.day + 30 };
+      log(c, `Inspiration: a researcher has an idea for ${PROJECTS[id].name}. Started within 30 days, it takes half the time.`, "good", "research");
+    }
+  }
 }
 
 // ---------- tests ----------

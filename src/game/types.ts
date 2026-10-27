@@ -114,7 +114,10 @@ export interface SquadMember {
 }
 
 /** Effects of finished research that apply during missions. */
-export interface MissionMods { blinkBonus: number; recoverBonus: number; mtfDrag: number; track173: boolean; lockdownTurns: number; calmTurns: number; pocketReturn: number; }
+export interface MissionMods { blinkBonus: number; recoverBonus: number; mtfDrag: number; track173: boolean; lockdownTurns: number; calmTurns: number; pocketReturn: number;
+  /** Research expansion: medkit healing, stabilized operatives standing up, overwatch aim back, extra sight,
+   *  Insurgent aim against armor, and how many D-Class get loose in a breach. */
+  medkitHeal: number; standUp: boolean; reactionBonus: number; sightBonus: number; ciAnalysis: boolean; strays: number; }
 
 export interface MissionSetup {
   kind: MissionKind;
@@ -152,6 +155,9 @@ export interface MissionResult {
   }[];
   /** SCP-173 got out through the surface hatch. */
   escaped: boolean;
+  /** Material for studies: SCP-049-2 killed, and people who came back from SCP-106. */
+  zombiesKilled: number;
+  pocketReturned: number;
   aftercare: boolean;
   prisoners: number;
   civiliansKilled: number;

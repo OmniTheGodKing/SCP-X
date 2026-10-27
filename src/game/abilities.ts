@@ -97,8 +97,8 @@ export function useAbility(u: Unit, p: AbilityId, t: Unit) {
   S.mode = null; S.ability = null;
   switch (p) {
     case "medkit":
-      t.hp = Math.min(t.maxHp, t.hp + 3);
-      log(`${full(u)} patches up ${full(t)} (+3 HP).`, "good");
+      t.hp = Math.min(t.maxHp, t.hp + S.setup.mods.medkitHeal);
+      log(`${full(u)} patches up ${full(t)} (+${S.setup.mods.medkitHeal} HP).`, "good");
       break;
     case "calm_words":
       t.san = Math.min(maxSanOf(t), t.san + 20);
@@ -106,6 +106,8 @@ export function useAbility(u: Unit, p: AbilityId, t: Unit) {
       break;
     case "stabilize":
       t.stabilized = true;
+      // with field medicine they get back up, barely
+      if (S.setup.mods.standUp) { t.downed = false; t.hp = 1; t.ap = 0; t.bleed = undefined; log(`${full(t)} gets back on their feet with 1 HP.`, "good"); }
       log(`${full(u)} stabilizes ${full(t)}. They'll make it out.`, "good");
       break;
     case "sedative":

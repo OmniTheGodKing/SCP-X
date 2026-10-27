@@ -153,6 +153,24 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("log").innerHTML = S.log.map(l => `<p class="${l.kind}"><span>T${l.t}</span>${esc(l.text)}</p>`).join("");
   }
 
+  // the first time each situational action appears, say what it is
+  const FIRST: Record<string, string> = {
+    stareBtn: "New action: Do not blink. Holding SCP-173's gaze keeps it frozen; it costs an action and wears down sanity.",
+    callBtn: "New action: Call the blink. Everyone staring blinks together on purpose, so you choose when SCP-173 gets to move.",
+    dragBtn: "New action: Drag. Next to SCP-173 while someone else stares at it, you can drag it toward the container.",
+    sealBtn: "New action: Seal. The anomaly is in the container: shut the door.",
+  };
+  const seenActions: Set<string> = (() => { try { return new Set(JSON.parse(localStorage.getItem("site19-seen-actions") || "[]")); } catch { return new Set(); } })();
+  function ctxBtn(id: string, why: string | null, text?: string) {
+    if (!(S.has173 || id === "sealBtn") || (id === "sealBtn" && !(S.has173 || S.has049 || S.has106))) { $(id).hidden = true; return; }
+    setBtn(id, why, text);
+    $(id).hidden = !!why;
+    if (!why && !seenActions.has(id) && FIRST[id]) {
+      seenActions.add(id);
+      try { localStorage.setItem("site19-seen-actions", JSON.stringify([...seenActions])); } catch { /* fine */ }
+      setTimeout(() => flash(FIRST[id]), 0);
+    }
+  }
   function setBtn(id: string, why: string | null, text?: string) {
     const b = $(id) as HTMLButtonElement;
     b.disabled = !!why;
@@ -253,13 +271,14 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
 
     const sel = S.selected, can = canAct();
     const off = can ? null : "Wait for your turn.";
-    setBtn("stareBtn", off || (sel && sel.staring ? null : stareCheck(sel)), sel && sel.staring ? "Stop staring <kbd>B</kbd>" : "Do not blink <kbd>B</kbd>");
+    // situational actions only show when they can be used, to keep the bar clear
+    ctxBtn("stareBtn", off || (sel && sel.staring ? null : stareCheck(sel)), sel && sel.staring ? "Stop staring <kbd>B</kbd>" : "Do not blink <kbd>B</kbd>");
     $("stareBtn").classList.toggle("on", !!(sel && sel.staring));
-    setBtn("callBtn", off || callCheck());
+    ctxBtn("callBtn", off || callCheck());
     const dragWhy = sel && sel.staring && team().some(w => w !== sel && w.staring) ? null : dragCheck(sel);
-    setBtn("dragBtn", off || (S.mode === "drag" ? null : dragWhy), S.mode === "drag" ? "Cancel drag <kbd>G</kbd>" : "Drag <kbd>G</kbd>");
+    ctxBtn("dragBtn", off || (S.mode === "drag" ? null : dragWhy), S.mode === "drag" ? "Cancel drag <kbd>G</kbd>" : "Drag <kbd>G</kbd>");
     $("dragBtn").classList.toggle("on", S.mode === "drag");
-    setBtn("sealBtn", off || sealCheck(sel));
+    ctxBtn("sealBtn", off || sealCheck(sel));
     setBtn("owBtn", off || (!sel ? "Select someone." : sel.side !== "mtf" ? "D-Class are unarmed." : sel.ap < 1 ? "No actions left this turn." : null));
     setBtn("nextBtn", off);
     setBtn("reloadBtn", off || reloadCheck(sel));

@@ -92,8 +92,8 @@ export const dclassCapacity = (c: Campaign) => countOperational(c, "barracks") *
 export const SALARY = { operative: 10, guard: 5 };
 export const salaries = (c: Campaign) => c.roster.filter(o => o.alive).length * SALARY.operative + c.guards.filter(g => g.alive).length * SALARY.guard;
 /** Facility upkeep, the alert level's cost, and staff salaries, per month. */
-export const monthlyUpkeep = (c: Campaign) => c.base.facilities.reduce((a, f) => a + FACILITIES[f.type].upkeep, 0) + ALERTS[c.alert].upkeep + salaries(c);
-export const healPerDay = (c: Campaign) => (countOperational(c, "medical") && !powerShort(c) ? 2 : 1) + (has(c, "necrotic_study") ? 1 : 0);
+export const monthlyUpkeep = (c: Campaign) => c.base.facilities.reduce((a, f) => a + (f.type === "security" && has(c, "bt_security") ? 0 : FACILITIES[f.type].upkeep), 0) + ALERTS[c.alert].upkeep + salaries(c);
+export const healPerDay = (c: Campaign) => (countOperational(c, "medical") && !powerShort(c) ? 2 : 1) + (has(c, "necrotic_study") ? 1 : 0) + (has(c, "bt_triage") ? 1 : 0);
 export const sanityPerDay = (c: Campaign) => countOperational(c, "psych") && !powerShort(c) ? 20 : 10;
 
 export function canBuild(c: Campaign, type: FacilityType, level: number, slot: number): string | null {

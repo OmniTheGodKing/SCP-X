@@ -10,6 +10,8 @@ export interface RegionState { exposure: number; collapsed: boolean; lastCoverSt
 export const COLLAPSE_LIMIT = 3;           // fronts lost before the campaign ends
 export const COVER_STORY = { cost: 50, amnestics: 2, cut: 10, cooldown: 30 };
 export const LOCATE_INTEL = 3;
+export const locateIntel = (c: Campaign) => has(c, "codebooks") ? 2 : LOCATE_INTEL;
+export const coverDoses = (c: Campaign) => has(c, "classb_amnestics") ? 1 : COVER_STORY.amnestics;
 export const AMNESTIC_DAYS = 5, AMNESTICS_PER_LAB = 10;
 
 const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
@@ -76,14 +78,14 @@ export function spawnCoverup(c: Campaign, at?: RegionId) {
 
 export function canLocate(c: Campaign, r: RegionId) {
   if (c.regions[r].collapsed) return "The front there has collapsed.";
-  if (c.intel < LOCATE_INTEL) return `Needs ${LOCATE_INTEL} Intel.`;
+  if (c.intel < locateIntel(c)) return `Needs ${locateIntel(c)} Intel.`;
   if (c.incidents.some(i => i.kind === "strike" && i.region === r)) return "A cell there is already located.";
   return null;
 }
 /** Spend Intel to find an Insurgency cell in a region, creating a strike mission. */
 export function locateCell(c: Campaign, r: RegionId) {
   if (canLocate(c, r)) return;
-  c.intel -= LOCATE_INTEL;
+  c.intel -= locateIntel(c);
   const town = pick(REGIONS[r].towns);
   const inc = newIncident(c, {
     kind: "strike", region: r, map: "port", scpId: "", what: `Insurgency cell, ${town}`,
@@ -97,24 +99,24 @@ export function canCoverStory(c: Campaign, r: RegionId) {
   if (st.collapsed) return "The front there has collapsed.";
   if (st.lastCoverStory !== undefined && c.day - st.lastCoverStory < COVER_STORY.cooldown) return `A cover story was run there recently; wait ${COVER_STORY.cooldown - (c.day - st.lastCoverStory)} days.`;
   if (c.funds < COVER_STORY.cost) return `Needs $${COVER_STORY.cost}k.`;
-  if (c.amnestics < COVER_STORY.amnestics) return `Needs ${COVER_STORY.amnestics} amnestics.`;
+  if (c.amnestics < coverDoses(c)) return `Needs ${coverDoses(c)} amnestics.`;
   return null;
 }
 /** Plant a cover story: money and amnestics to bring a region's exposure down. */
 export function coverStory(c: Campaign, r: RegionId) {
   if (canCoverStory(c, r)) return;
-  c.funds -= COVER_STORY.cost; c.amnestics -= COVER_STORY.amnestics;
+  c.funds -= COVER_STORY.cost; c.amnestics -= coverDoses(c);
   c.regions[r].lastCoverStory = c.day;
   addExposure(c, r, -COVER_STORY.cut);
   log(c, `${REGIONS[r].front} plants a cover story in ${REGIONS[r].name} (−${COVER_STORY.cut} exposure there).`, "good");
 }
 
-export const amnesticsCapacity = (c: Campaign) => Math.max(4, countOperational(c, "amnestics") * AMNESTICS_PER_LAB);
+export const amnesticsCapacity = (c: Campaign) => Math.max(4, countOperational(c, "amnestics") * (AMNESTICS_PER_LAB + (has(c, "bt_cold_storage") ? 5 : 0)));
 
 /** One day in the world: amnestics production, cover-ups appearing and expiring. */
 export function tickWorld(c: Campaign) {
   const labs = countOperational(c, "amnestics");
-  if (labs && c.day % AMNESTIC_DAYS === 0 && c.amnestics < amnesticsCapacity(c)) c.amnestics = Math.min(amnesticsCapacity(c), c.amnestics + labs);
+  if (labs && c.day % AMNESTIC_DAYS === 0 && c.amnestics < amnesticsCapacity(c)) c.amnestics = Math.min(amnesticsCapacity(c), c.amnestics + labs * (has(c, "classb_amnestics") ? 2 : 1));
   if (c.day >= c.nextCoverupDay) { spawnCoverup(c); c.nextCoverupDay = c.day + rand(25, 60); }
   for (const inc of [...c.incidents]) {
     if (inc.id === c.activeIncident || (inc.kind !== "coverup" && inc.kind !== "strike") || c.day <= inc.expires) continue;

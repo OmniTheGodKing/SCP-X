@@ -36,7 +36,7 @@ export const ALERTS: Record<Alert, { name: string; turn: number; sanity: number;
   heightened: { name: "Heightened", turn: 20, sanity: 1, upkeep: 0, desc: "Half the task force stays on station. Epsilon-11 reaches a breach on turn 20." },
   full:       { name: "Full alert", turn: 12, sanity: 0.5, upkeep: 20, desc: "Everyone fit is on station. Epsilon-11 reaches a breach on turn 12, but sanity recovers at half speed and it costs $20k a month." },
 };
-export const mtfArrival = (c: Campaign) => Math.max(5, ALERTS[c.alert].turn - (has(c, "rapid_response") ? 5 : 0));
+export const mtfArrival = (c: Campaign) => Math.max(5, ALERTS[c.alert].turn - (has(c, "rapid_response") ? 5 : 0) - (has(c, "field_radios") ? 3 : 0) - (has(c, "prc25") ? 2 : 0));
 
 const NAMES = ["Brennan", "Kowalczyk", "Delgado", "Fairweather", "Haskins", "Lundgren", "Mabry", "Ostrowski", "Pruett", "Quinlan", "Raskin", "Szabo", "Tolliver", "Upshaw", "Vance", "Wexler", "Yeager", "Zielinski", "Ambrose", "Battaglia", "Corcoran", "Dunleavy", "Esposito", "Gallo"];
 const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
@@ -97,13 +97,14 @@ export function tickGuards(c: Campaign, heal: number, calm: number) {
 /** A guard as they go into a mission. */
 export function guardMember(c: Campaign, g: Guard): SquadMember {
   const m = model(c.models.carbine);
-  let aim = g.aim, blink = GUARD.blink, san = g.san;
+  const drilled = c.purchases.includes("guard_training");
+  let aim = g.aim + (has(c, "bt_guard_aim") ? 5 : 0) + (c.purchases.includes("guard_training") ? 10 : 0), blink = GUARD.blink, san = g.san;
   if (g.traits.includes("gunshy")) aim -= 10;
   if (g.traits.includes("twitchy")) blink += 0.03;
   if (g.traits.includes("steady")) blink = Math.max(0.02, blink - 0.02);
   if (g.traits.includes("nightmares")) san = Math.max(1, san - 15);
   return {
-    opId: g.id, name: g.name, call: "SEC", guard: true, hp: g.hp, maxHp: g.maxHp, san, maxSan: GUARD.maxSan, aim, blinkFull: blink,
+    opId: g.id, name: g.name, call: "SEC", guard: true, hp: g.hp, maxHp: g.maxHp, san: drilled ? san + 10 : san, maxSan: GUARD.maxSan + (drilled ? 10 : 0), aim, blinkFull: blink,
     armor: 0, hasArmor: false, items: [], perks: [], traits: [...g.traits],
     gun: { name: m.name, type: "carbine", dmg: [...m.dmg] as [number, number], mag: m.mag, ammo: m.mag, aim: m.aim },
   };
@@ -180,6 +181,28 @@ export function rollTrait(c: Campaign, g: Guard, t: TraitId, hit: boolean) {
   if (!hit || g.traits.includes(t) || Math.random() >= 0.5) return null;
   g.traits.push(t);
   return `Guard ${g.name} is now ${TRAITS[t].bad ? "marked by" : "known for"} ${TRAITS[t].name.toLowerCase()}: ${TRAITS[t].desc}`;
+}
+
+// ---------- training range purchases (like XCOM 2's Guerrilla Tactics School) ----------
+export const TRAINING: Record<string, { name: string; cost: number; desc: string; needs?: string; captain?: boolean }> = {
+  officer_school: { name: "Officer school", cost: 150, desc: "Squad leaders trained to run a fifth operative. Squad size 5." },
+  command_staff:  { name: "Command staff", cost: 300, needs: "officer_school", captain: true, desc: "A field command structure under a Captain. Squad size 6." },
+  guard_training: { name: "Guard training program", cost: 100, desc: "Site Security trains on the range every week. Guards get +10 aim and +10 sanity." },
+};
+export const squadSize = (c: Campaign) => 4 + (c.purchases.includes("officer_school") ? 1 : 0) + (c.purchases.includes("command_staff") ? 1 : 0);
+export function canTrain(c: Campaign, id: string) {
+  const t = TRAINING[id];
+  if (c.purchases.includes(id)) return "Already done.";
+  if (!countOperational(c, "training")) return "Needs a working training range.";
+  if (t.needs && !c.purchases.includes(t.needs)) return `Needs ${TRAINING[t.needs].name}.`;
+  if (t.captain && !c.roster.some(o => o.alive && o.rank >= 4)) return "Needs a Captain on the roster.";
+  if (c.funds < t.cost) return `Needs $${t.cost}k.`;
+  return null;
+}
+export function train(c: Campaign, id: string) {
+  if (canTrain(c, id)) return;
+  c.funds -= TRAINING[id].cost; c.purchases.push(id);
+  log(c, `Training range: ${TRAINING[id].name}. ${TRAINING[id].desc}`, "good");
 }
 
 export const securityUpkeep = (c: Campaign) => ALERTS[c.alert].upkeep;
