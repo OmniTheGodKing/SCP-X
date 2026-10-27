@@ -403,7 +403,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
   const sec = kind === "breach" ? breachGuards(c, inc) : { first: [], late: [] };
   const amnestics = kind === "coverup" ? c.amnestics : 0;
   return {
-    kind, scp: (inc.scpId || "173") as ScpId, map: inc.map, amnestics, guards: sec.first, lateGuards: sec.late, mtfTurn: mtfArrival(c), witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
+    kind, scp: (inc.scpId || "173") as ScpId, map: inc.map, amnestics, guards: sec.first, lateGuards: sec.late, mtfTurn: mtfArrival(c, inc), witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
     incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: Math.max(0, inc.insurgents - (inc.weakened ?? 0)), squad, dclass,
     year: yearOf(c.day),
     known: [...c.knownNotes],

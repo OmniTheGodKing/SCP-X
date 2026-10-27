@@ -56,10 +56,10 @@ Part 3: armor and kit
   +1 Intel per prisoner), amnestic darts (Dose from 4 tiles).
 - Facility upgrade: expanded barracks (15 D-Class).
 
-Proposed, waiting for approval
-- Deconstructing facilities: 1 engineer, half the build time, 25% refund; not Command or an occupied wing.
-- Depth bonus: containment wings 10% less likely to breach per level below the top, and less likely to escape when the
-  guards handle a breach alone, but Epsilon-11 takes a turn longer per level to arrive.
+Done alongside part 1
+- Tearing down facilities: 1 engineer, half the build time, 25% salvage; not Command or an occupied wing.
+- Depth bonus: containment wings are 10% less likely to breach per level below the top, and 5 points less likely to
+  escape when the guards handle a breach alone, but Epsilon-11 takes a turn longer per level to arrive.
 
 ## Phase 3C: tactical depth
 
@@ -145,6 +145,14 @@ From the XCOM 2 comparison, plus harder breaches.
 - Covert actions: field agents sent on off-screen jobs (infiltration, surveillance, procurement) with injury risk.
 - Scanning leads on the world map for supplies, Intel or recruits.
 - Requests, transfers and calls for help from other sites; selling captured gear to them (black market).
+
+## Phase 4: 3D, XCOM style
+
+Late in the plan: move both layers from 2D to 3D.
+- Tactical: a 3D map with an isometric camera you can rotate and zoom, units and anomalies as models, cover and
+  sightlines shown in 3D, multi-storey buildings (which brings elevation and high ground with it).
+- Strategic: a 3D globe for the world map, and a cutaway "ant farm" view of Site-19 like the Avenger.
+- Likely built on three.js inside the same browser game, keeping the rules code as it is and replacing the drawing.
 
 ## Later
 

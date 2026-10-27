@@ -55,6 +55,7 @@ export interface Facility {
   daysLeft: number;    // > 0 while under construction
   disabled: boolean;   // damaged by a breach
   repairDays: number;  // > 0 while being repaired
+  demolishDays?: number;  // > 0 while being torn down
 }
 
 export interface Base {
@@ -67,7 +68,7 @@ export interface Base {
 export const isContainment = (t: FacilityType) => FACILITIES[t].grade !== undefined;
 export const facilityAt = (c: Campaign, level: number, slot: number) =>
   c.base.facilities.find(f => f.level === level && f.slot === slot) || null;
-export const operational = (f: Facility) => f.daysLeft === 0 && !f.disabled;
+export const operational = (f: Facility) => f.daysLeft === 0 && !f.disabled && !f.demolishDays;
 export const countOperational = (c: Campaign, type: FacilityType) =>
   c.base.facilities.filter(f => f.type === type && operational(f)).length;
 
@@ -83,7 +84,7 @@ export const powerUse = (c: Campaign) =>
 export const powerShort = (c: Campaign) => powerUse(c) > powerSupply(c);
 
 export const engineersBusy = (c: Campaign) =>
-  c.base.facilities.reduce((a, f) => a + (f.daysLeft > 0 ? FACILITIES[f.type].engineers : 0) + (f.repairDays > 0 ? REPAIR.engineers : 0), 0)
+  c.base.facilities.reduce((a, f) => a + (f.daysLeft > 0 ? FACILITIES[f.type].engineers : 0) + (f.repairDays > 0 ? REPAIR.engineers : 0) + (f.demolishDays ? 1 : 0), 0)
   + (c.base.excavation > 0 ? EXCAVATE.engineers : 0) + c.orders.length;
 export const engineersFree = (c: Campaign) => c.engineers - engineersBusy(c);
 
@@ -115,6 +116,24 @@ export function build(c: Campaign, type: FacilityType, level: number, slot: numb
   const f: Facility = { id: "f" + c.base.nextId++, type, level, slot, daysLeft: d.days, disabled: false, repairDays: 0 };
   c.base.facilities.push(f);
   return f;
+}
+
+// ---------- tearing facilities down ----------
+export const DEMOLISH = { refund: 0.25, engineers: 1 };
+export const demolishDays = (f: Facility) => Math.max(1, Math.ceil(FACILITIES[f.type].days / 2));
+export function canDemolish(c: Campaign, f: Facility): string | null {
+  if (f.type === "command") return "Command can't be torn down.";
+  if (f.demolishDays) return "Already being torn down.";
+  if (f.daysLeft > 0 || f.repairDays > 0) return "Wait until the engineers are finished with it.";
+  if (isContainment(f.type) && c.scps.some(s => s.wingId === f.id && s.status !== "loose")) return "Something is held here. Move it out first.";
+  if (engineersFree(c) < DEMOLISH.engineers) return "Needs a free engineer.";
+  return null;
+}
+/** What tearing this down would cost in power, for a warning. */
+export const demolishLeavesShort = (c: Campaign, f: Facility) => f.type === "generator" && powerUse(c) > powerSupply(c) - generatorOutput(c);
+export function demolish(c: Campaign, f: Facility) {
+  if (canDemolish(c, f)) return;
+  f.demolishDays = demolishDays(f);
 }
 
 export function canRepair(c: Campaign, f: Facility): string | null {
@@ -149,6 +168,14 @@ export function tickConstruction(c: Campaign): string[] {
   for (const f of c.base.facilities) {
     if (f.daysLeft > 0 && --f.daysLeft === 0) done.push(`${FACILITIES[f.type].name} on level ${f.level + 1} is complete.`);
     if (f.repairDays > 0 && --f.repairDays === 0) { f.disabled = false; done.push(`${FACILITIES[f.type].name} on level ${f.level + 1} is repaired.`); }
+  }
+  for (const f of [...c.base.facilities]) if (f.demolishDays && --f.demolishDays === 0) {
+    c.base.facilities = c.base.facilities.filter(x => x !== f);
+    const back = Math.round(FACILITIES[f.type].cost * DEMOLISH.refund);
+    c.funds += back;
+    done.push(`The ${nameInText(f.type)} on level ${f.level + 1} has been torn down (+$${back}k in salvage).`);
+    // anyone it housed has to go somewhere
+    if (c.dclass > dclassCapacity(c)) { done.push(`${c.dclass - dclassCapacity(c)} D-Class were transferred out for lack of beds.`); c.dclass = dclassCapacity(c); }
   }
   if (c.base.excavation > 0 && --c.base.excavation === 0) { c.base.levels++; done.push(`Level ${c.base.levels} has been excavated.`); }
   return done;
