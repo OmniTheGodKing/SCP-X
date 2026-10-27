@@ -126,6 +126,8 @@ export interface Unit {
   minHp?: number;
   streak?: number;
   bestStreak?: number;
+  medals?: string[];
+  returned?: boolean;
 }
 
 export interface LogEntry { t: number; text: string; kind: string; }
@@ -145,6 +147,7 @@ export interface SquadMember {
   cls?: ClassId; perks: PerkId[]; traits: TraitId[];
   gun: Gun;
   guard?: boolean;
+  medals?: string[];
 }
 
 /** Effects of finished research that apply during missions. */
@@ -194,6 +197,8 @@ export interface MissionResult {
     opId: string; alive: boolean; hp: number; san: number; kills: number; sealed: boolean; hasArmor: boolean; items: Carried[];
     armorKind?: ItemId; armorHp?: number;
     witnessed: number; panics: number; minHp: number; bestStreak: number;
+    /** Came back alive from SCP-106's pocket dimension. */
+    returned?: boolean;
     /** Reinforcements who never reached the map before it ended. */
     absent?: boolean;
   }[];

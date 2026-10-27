@@ -59,6 +59,7 @@ export function shotInfo(sh: Unit, tg: Unit, reaction = false): ShotInfo {
   if (reaction && !hasPerk(sh, "covering_fire")) mods.push(["Reaction shot", (gun?.type === "mg" ? -5 : -15) + (sh.side === "mtf" ? Math.min(S.setup.mods.reactionBonus ?? 0, gun?.type === "mg" ? 5 : 15) : 0)]);
   if (sh.side === "raider" && tg.hasArmor && S.setup.mods.ciAnalysis) mods.push(["Known weapons", -5]);
   if (sh.side === "mtf" && sh.san <= 30) mods.push(["Shaken", -10]);
+  if (sh.medals?.includes("sealed_in") && (tg.side === "anomaly" || (tg.side === "zombie" && !tg.rioter))) mods.push(["Sealed in", 5]);
   if (cover === 0 && hasPerk(sh, "hunter")) mods.push(["Hunter", 20]);
   if (dist <= 3 && hasPerk(sh, "shotgun_drills")) mods.push(["Shotgun drills", 20]);
   if ((sh.suppressedUntil ?? -1) >= S.turn) mods.push(["Suppressed", -30]);

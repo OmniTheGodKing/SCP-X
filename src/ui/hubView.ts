@@ -1,6 +1,7 @@
 // Site-19 Command: incidents and time, the base and its containment, and Epsilon-11's roster.
 import { STAFF_EVENTS, answerStaff } from "../campaign/staff";
 import type { Report } from "../campaign/reports";
+import { MEDALS } from "../data/bios";
 import { INSPECTION, inspectionChecks, inspectionSoon } from "../campaign/inspection";
 import {
   UPGRADE, canUpgrade, upgradeFacility, RECREATION, canAddRecreation, addRecreation, DEMOLISH, canDemolish, demolish, demolishDays, demolishLeavesShort, ENGINEER_COST, EXCAVATE, FACILITIES, nameInText, GRADE_NAMES, MAX_LEVELS, REPAIR, SLOTS, build, canBuild, canExcavate, canRepair,
@@ -669,6 +670,13 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <div class="label">${esc(o.call)} · ${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}</div>
       <h3 class="fac">${esc(o.name)}</h3>
       ${o.busy ? `<p class="warn">${o.busy.kind === "therapy" ? "In therapy" : o.busy.kind === "travel" ? "Flying home" : "Retraining"}: ${plural(o.busy.daysLeft, "day")} left. Can't deploy until then.</p>` : ""}
+      ${o.bio ? `<p class="muted">Age ${o.bio.age + Math.floor((c.day - 1) / 365)}, from ${esc(o.bio.home)}. ${esc(o.bio.story)}</p>` : ""}
+      <div class="specs">Service: ${plural(o.missions, "mission")} · ${plural(o.kills, "kill")} · wounded ${o.wounds ?? 0}× · ${(o.seals ?? 0) === 1 ? "1 anomaly" : `${o.seals ?? 0} anomalies`} sealed${o.faced?.length ? ` · faced ${esc(o.faced.join(", "))}` : ""}</div>
+      ${o.medals?.length ? `<ul class="traits">${o.medals.map(m => `<li class="good"><b>${MEDALS[m].name}</b>: ${esc(MEDALS[m].bonus)} <span class="muted">${esc(MEDALS[m].how)}</span></li>`).join("")}</ul>` : ""}
+      <details class="archived"><summary>Rename</summary><div class="row">
+        <label class="specs" for="renameName">Name</label><input id="renameName" maxlength="24" value="${esc(o.name)}">
+        <label class="specs" for="renameCall">Callsign</label><input id="renameCall" maxlength="12" value="${esc(o.call)}">
+        <button class="act" type="button" id="renameBtn">Save</button></div></details>
       ${promotionDue(o) && !o.cls ? `<p><b>Choose a class.</b> It decides the abilities they learn from here on.</p>
         <div class="classpick">${(Object.keys(CLASSES) as ClassId[]).map(k => `<button type="button" class="classopt" data-class="${k}">
           <b>${CLASSES[k].name}</b><span class="muted">${CLASSES[k].role}</span>
@@ -801,6 +809,10 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     root.querySelectorAll<HTMLElement>("[data-transfer]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.transfer); if (s) change(() => transferOut(c, s)); });
     root.querySelectorAll<HTMLElement>("[data-clean]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.clean); if (s) change(() => cleanCell(c, s)); });
     root.querySelectorAll<HTMLElement>("[data-alert]").forEach(b => b.onclick = () => change(() => { c.alert = b.dataset.alert as Alert; }));
+    on("renameBtn", () => {
+      const o = c.roster.find(x => x.id === opSel), n = root.querySelector<HTMLInputElement>("#renameName")!.value.trim(), k = root.querySelector<HTMLInputElement>("#renameCall")!.value.trim();
+      if (o && n && k) change(() => { o.name = n.slice(0, 24); o.call = k.slice(0, 12); });
+    });
     root.querySelectorAll<HTMLElement>("[data-staff]").forEach(b => b.onclick = () => change(() => answerStaff(c, Number(b.dataset.staff) as 0 | 1)));
     root.querySelectorAll<HTMLElement>("[data-guards]").forEach(b => b.onclick = () => { const inc = c.incidents.find(i => i.id === b.dataset.guards); if (inc) change(() => inc.kind === "riot" ? letGuardsHandleRiot(c, inc) : letGuardsHandle(c, inc)); });
     root.querySelectorAll<HTMLElement>("[data-train]").forEach(b => b.onclick = () => change(() => train(c, b.dataset.train!)));
