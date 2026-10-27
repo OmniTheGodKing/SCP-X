@@ -21,10 +21,15 @@ import {
   ITEMS, PROJECTS, TESTS, assign, canHireResearcher, canOrder, canTest, has, hireResearcher, order, projectLock,
   researcherCapacity, researchersFree, runTest, unlockedItems, type Branch, type ItemId, type TestId,
 } from "../campaign/research";
+import { HOME, LAND, REGIONS, REGION_IDS, SITE19, project, type RegionId } from "../data/regions";
+import {
+  COLLAPSE_LIMIT, COVER_STORY, LOCATE_INTEL, amnesticsCapacity, canCoverStory, canLocate, collapsedCount, coverStory, locateCell,
+  regionFunding, transportName, travelBlock, travelDays,
+} from "../campaign/world";
 import { esc } from "./util";
 
 const MAX_SQUAD = 4, MAX_DCLASS = 4, MAX_WATCHERS = 2;
-type Tab = "command" | "site" | "research" | "personnel";
+type Tab = "command" | "world" | "site" | "research" | "personnel";
 
 export interface HubActions {
   save: () => void;
@@ -32,6 +37,13 @@ export interface HubActions {
   newCampaign: () => void;
 }
 
+const KIND_NAMES = { breach: "Breach", recovery: "Manhunt", coverup: "Cover-up", strike: "Strike" } as const;
+const KIND_BRIEF = {
+  breach: "SCP-173 is loose in its wing. Get it into the transport container and seal it.",
+  recovery: "SCP-173 is loose among civilians. Every death there raises exposure. Get it into the truck's container and seal it.",
+  coverup: "Witnesses need amnestics before they talk. Dose each one; anyone who reaches the edge of the map undosed adds exposure.",
+  strike: "Raid the Insurgency cell's warehouse and neutralise everyone inside. Wounded Insurgents can be taken prisoner.",
+} as const;
 const pctText = (p: number) => p < 0.01 ? (p * 100).toFixed(1) + "%" : Math.round(p * 100) + "%";
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 let tab: Tab = (() => { try { return (localStorage.getItem("site19-tab") as Tab) || "command"; } catch { return "command"; } })();
@@ -46,6 +58,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let dCount = 2;
   let sel: { level: number; slot: number } | null = null;
   let resetArmed = 0;
+  let regionSel: RegionId = HOME;
 
   const ready = () => c.roster.filter(deployable);
   const watchPool = () => c.roster.filter(o => o.alive && o.hp > 0);
@@ -69,6 +82,8 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <span class="pill">Funds $${c.funds}k</span>
       <span class="pill">D-Class ${c.dclass}/${dclassCapacity(c)}</span>
       <span class="pill">Intel ${c.intel}</span>
+      <span class="pill">Amnestics ${c.amnestics}/${amnesticsCapacity(c)}</span>
+      <span class="pill ${c.exposure >= 60 || collapsedCount(c) ? "hot" : ""}">Exposure ${c.exposure}${collapsedCount(c) ? ` · ${collapsedCount(c)} lost` : ""}</span>
       <span class="pill">Engineers ${engineersFree(c)}/${c.engineers} free</span>
       <span class="pill">Researchers ${researchersFree(c)}/${c.researchers} free</span>
       <span class="pill ${pw ? "hot" : ""}">Power ${powerUse(c)}/${powerSupply(c)}</span>
@@ -77,12 +92,13 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   </header>
   <nav class="tabs" aria-label="Site-19 sections">
     ${tabBtn("command", `Command${c.incidents.length ? ` · ${c.incidents.length} open` : ""}`)}
+    ${tabBtn("world", "World")}
     ${tabBtn("site", "Site-19")}
     ${tabBtn("research", `Research${researchersFree(c) > 0 && c.researchers ? ` · ${researchersFree(c)} idle` : ""}`)}
     ${tabBtn("personnel", "Personnel")}
   </nav>
   ${flashMsg ? `<p class="warn-box" role="status">${esc(flashMsg)}</p>` : ""}
-  ${tab === "command" ? commandTab() : tab === "site" ? siteTab() : tab === "research" ? researchTab() : personnelTab()}
+  ${tab === "command" ? commandTab() : tab === "world" ? worldTab() : tab === "site" ? siteTab() : tab === "research" ? researchTab() : personnelTab()}
   ${c.over ? `<div class="overlay fixed"><div class="sheet">
     <div class="stampmark lose">Command relieved</div>
     <h3>Site-19 has fallen.</h3>
@@ -111,9 +127,10 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       </div>
       ${inc ? planPanel(inc) : ""}
       <div class="card">
-        <div class="label">Public exposure</div>
+        <div class="label">Global exposure</div>
         <div class="exposure"><div class="exp-bar"><span style="width:${c.exposure}%"></span></div><b>${c.exposure} / 100</b></div>
-        <p class="muted">At 100 the O5 Council relieves Site-19's command. Breaches that escape add 10 to 15, failed missions 20, and an anomaly on the loose adds 1 every 4 days. Each recontainment removes 5, and exposure eases by 3 each month.</p>
+        <p class="muted">The average of the six regions, with a collapsed front counting as 100. A region at 100 collapses: its front stops funding Site-19 for good. If ${COLLAPSE_LIMIT} collapse, the O5 Council relieves Site-19's command. See the World tab.</p>
+        <button class="act" type="button" data-goto="world">Open the world map</button>
       </div>
     </section>
     <section class="col">
@@ -123,7 +140,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
           <button class="act" id="dayBtn" type="button" ${c.over ? "disabled" : ""}>Next day</button>
           <button class="act primary" id="waitBtn" type="button" ${c.over ? "disabled" : ""}>Advance until something happens</button>
         </div>
-        <p class="muted">"Advance" skips quiet stretches and stops when something needs you or a new month starts. Next month: $${monthlyFunding(c)}k from the O5 Council, $${monthlyUpkeep(c)}k upkeep, up to ${DCLASS_MONTHLY} D-Class. Operatives heal ${healPerDay(c)} HP and recover ${sanityPerDay(c)} sanity a day.</p>
+        <p class="muted">"Advance" skips quiet stretches and stops when something needs you or a new month starts. Next month: $${monthlyFunding(c)}k from the fronts, $${monthlyUpkeep(c)}k upkeep, up to ${DCLASS_MONTHLY} D-Class. Operatives heal ${healPerDay(c)} HP and recover ${sanityPerDay(c)} sanity a day.</p>
       </div>
       <div class="card">
         <div class="label">Site log · ${c.stats.won} recontained · ${c.stats.lost} failed · ${c.stats.missed} unanswered</div>
@@ -147,18 +164,23 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   }
 
   function incidentCard(i: Incident) {
-    const left = i.expires - c.day;
+    const left = i.expires - c.day, t = travelDays(c, i.region), block = travelBlock(c, i);
+    const where = i.kind === "breach" ? "Inside Site-19" : `${REGIONS[i.region].name} · ${t ? `${plural(t, "day")} away` : "a drive from Site-19"}`;
     return `<div class="incident ${planning === i.id ? "sel" : ""}">
-      <div><b>${esc(i.title)}</b></div>
-      <div class="muted">${left <= 0 ? "Last day to respond" : `${plural(left, "day")} left to respond`} · ${i.kind === "breach" ? "Inside Site-19" : "Off site"} · Insurgency activity: ${i.insurgents >= 4 ? "heavy" : i.insurgents >= 2 ? "reported" : i.insurgents ? "light" : "none reported"}</div>
-      <button class="act ${planning === i.id ? "on" : ""}" type="button" data-plan="${i.id}" ${c.over ? "disabled" : ""}>${planning === i.id ? "Planning response" : "Plan response"}</button>
+      <div><b>${esc(i.title)}</b> <span class="flag">${KIND_NAMES[i.kind]}</span></div>
+      <div class="muted">${left <= 0 ? "Last day to respond" : `${plural(left, "day")} left to respond`} · ${where} · Insurgency activity: ${i.insurgents >= 4 ? "heavy" : i.insurgents >= 2 ? "reported" : i.insurgents ? "light" : "none reported"}${i.witnesses ? ` · ${i.witnesses} witnesses` : ""}</div>
+      ${block ? `<div class="warn">${esc(block)}</div>` : ""}
+      <button class="act ${planning === i.id ? "on" : ""}" type="button" data-plan="${i.id}" ${c.over || block ? "disabled" : ""}>${planning === i.id ? "Planning response" : "Plan response"}</button>
     </div>`;
   }
 
   function planPanel(inc: Incident) {
-    const ops = ready();
+    const ops = ready(), t = travelDays(c, inc.region), noD = inc.kind === "strike";
     return `<div class="card plan">
       <div class="label">Deploy to ${esc(inc.title.split(":")[0])}</div>
+      <p>${esc(KIND_BRIEF[inc.kind])}</p>
+      ${t ? `<p class="muted">The ${transportName(c)} takes ${plural(t, "day")} to reach ${REGIONS[inc.region].name}; time at Site-19 passes while the squad is in the air, and the survivors spend as long again flying home.</p>` : ""}
+      ${inc.kind === "coverup" ? `<p class="${c.amnestics < (inc.witnesses ?? 0) ? "warn" : "muted"}">The squad carries all ${c.amnestics} amnestic doses in storage, for ${plural(inc.witnesses ?? 0, "witness")}.</p>` : ""}
       ${inc.insurgents ? `<div class="row"><span>Insurgents expected: <b>${inc.insurgents - (inc.weakened ?? 0)}</b>${inc.weakened ? ` (${inc.weakened} intercepted)` : ""}</span>
         <button class="act" type="button" id="intelBtn" ${canWeaken(c, inc) ? `disabled title="${esc(canWeaken(c, inc)!)}"` : ""}>Spend 1 Intel: intercept one</button></div>` : ""}
       <p class="muted">Pick up to ${MAX_SQUAD} operatives. Only fully healed operatives can deploy; sanity carries over, so watch it.</p>
@@ -167,15 +189,15 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         <span><b>${esc(o.call)} ${esc(o.name)}</b> · ${RANKS[o.rank]} · SAN ${o.san}/${maxSanOf(o)}</span></label>`).join("") : `<p class="muted">Nobody is fit to deploy. Wait for the wounded to heal or recruit.</p>`}</div>
       ${chosen.size ? `<div class="loadouts"><div class="specs">Loadout: weapon, one armor slot and two item slots each. Unused items come back; gear on anyone killed is lost.</div>
         ${[...chosen].map(id => loadoutRow(c.roster.find(o => o.id === id)!)).join("")}</div>` : ""}
-      <div class="row dpick">
+      ${noD ? "" : `<div class="row dpick">
         <span>D-Class work detail</span>
         <button class="act" type="button" id="dMinus" ${dCount <= 0 ? "disabled" : ""}>−</button>
         <b>${dCount}</b>
         <button class="act" type="button" id="dPlus" ${dCount >= Math.min(c.dclass, MAX_DCLASS) ? "disabled" : ""}>+</button>
         <span class="muted">of ${c.dclass} in holding</span>
-      </div>
+      </div>`}
       <div class="row">
-        <button class="act primary" type="button" id="launchBtn" ${chosen.size ? "" : "disabled"}>Deploy ${plural(chosen.size, "operative")} and ${dCount} D-Class</button>
+        <button class="act primary" type="button" id="launchBtn" ${chosen.size ? "" : "disabled"}>Deploy ${plural(chosen.size, "operative")}${noD ? "" : ` and ${dCount} D-Class`}</button>
         <button class="act" type="button" id="cancelPlan">Cancel</button>
       </div>
     </div>`;
@@ -209,6 +231,59 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       ${weaponOptions(o).length > 1 ? `<select id="wpn-${o.id}" data-weapon="${o.id}" aria-label="${esc(o.name)} weapon">${weaponOptions(o).map(t => `<option value="${t}" ${weaponOf(o) === t ? "selected" : ""}>${TYPES[t].name}: ${model(c.models[t]).name}</option>`).join("")}</select>` : ""}
       <label class="armorpick"><input type="checkbox" id="armor-${o.id}" data-armor="${o.id}" ${g.armor ? "checked" : ""} ${!g.armor && (armorLeft < 1 || !c.armorTier) ? "disabled" : ""}> ${c.armorTier ? ARMOR_TIERS[c.armorTier].name : "Flak vest (research it first)"}${(c.inventory.armor || 0) ? ` (${Math.max(0, armorLeft - (g.armor ? 1 : 0))} spare)` : c.armorTier ? " (none built)" : ""}</label>
       ${slot(0)}${slot(1)}${o.perks.includes("field_kit") ? slot(2) : ""}</div>`;
+  }
+
+  // ---------- World ----------
+  function worldTab() {
+    const [x0, y0, w, h] = [8, 14, 344, 124];
+    const path = (poly: [number, number][]) => "M" + poly.map(([lo, la]) => project(lo, la).map(v => v.toFixed(1)).join(",")).join("L") + "Z";
+    const [sx, sy] = project(SITE19.lon, SITE19.lat);
+    const pins = REGION_IDS.map(r => {
+      const d = REGIONS[r], st = c.regions[r], [px, py] = project(d.lon, d.lat);
+      const here = c.incidents.filter(i => i.region === r && i.kind !== "breach");
+      return `<g class="region ${st.collapsed ? "lost" : ""} ${regionSel === r ? "on" : ""}" data-region="${r}" tabindex="0" role="button" aria-label="${esc(d.name)}, exposure ${st.exposure}${st.collapsed ? ", collapsed" : ""}">
+        <circle cx="${px}" cy="${py}" r="8" class="halo" style="--heat:${st.collapsed ? 100 : st.exposure}"></circle>
+        <rect x="${px - 10}" y="${py + 9.5}" width="20" height="2" class="bar-bg"></rect>
+        <rect x="${px - 10}" y="${py + 9.5}" width="${(st.collapsed ? 100 : st.exposure) / 5}" height="2" class="bar"></rect>
+        <text x="${px}" y="${py + 16.5}" class="rname">${esc(d.name.replace("Western ", "W. ").replace("Eastern ", "E. ").replace("United States", "US").replace(" and the Middle East", " & M.E."))}</text>
+        ${here.map((i, k) => `<g class="pin ${i.kind}"><circle cx="${px - 4 + k * 5}" cy="${py - 11}" r="2.4"></circle></g>`).join("")}
+      </g>`;
+    }).join("");
+    const r = regionSel, d = REGIONS[r], st = c.regions[r], cw = canCoverStory(c, r), lw = canLocate(c, r), t = travelDays(c, r);
+    const here = c.incidents.filter(i => i.region === r);
+    return `<div class="card worldcard">
+        <div class="label">The world · ${dateText(c.day)} · global exposure ${c.exposure} · ${collapsedCount(c)} of ${COLLAPSE_LIMIT} fronts lost</div>
+        <svg class="worldmap" viewBox="${x0} ${y0} ${w} ${h}" role="group" aria-label="World map of Foundation regions">
+          <rect x="${x0}" y="${y0}" width="${w}" height="${h}" class="sea"></rect>
+          ${[-60, -30, 0, 30, 60].map(la => `<line x1="0" x2="360" y1="${90 - la}" y2="${90 - la}" class="grat"></line>`).join("")}
+          ${[-120, -60, 0, 60, 120].map(lo => `<line y1="${y0}" y2="${y0 + h}" x1="${lo + 180}" x2="${lo + 180}" class="grat"></line>`).join("")}
+          ${LAND.map(p => `<path d="${path(p)}" class="land"></path>`).join("")}
+          <g class="site19"><rect x="${sx - 2.2}" y="${sy - 2.2}" width="4.4" height="4.4" transform="rotate(45 ${sx} ${sy})"></rect>
+            <text x="${sx + 4}" y="${sy - 3}">Site-19</text><title>Site-19 · exact location classified</title></g>
+          ${pins}
+        </svg>
+        <div class="legend"><span style="--c:var(--alert)">Exposure</span><span style="--c:var(--manila)">Cover-up</span><span style="--c:var(--raider)">Insurgency cell</span><span style="--c:var(--subject)">Sighting</span><span>Select a region for details</span></div>
+      </div>
+    <div class="hubgrid">
+    <section class="col">
+      <div class="card ${st.collapsed ? "status danger" : ""}">
+        <div class="label">${esc(d.name)}</div>
+        <p>Front: <b>${esc(d.front)}</b>${st.collapsed ? " (collapsed)" : ""}</p>
+        <div class="exposure"><div class="exp-bar"><span style="width:${st.collapsed ? 100 : st.exposure}%"></span></div><b>${st.collapsed ? "Lost" : `${st.exposure} / 100`}</b></div>
+        <p class="muted">Funding: $${regionFunding(c, r)}k a month. ${t ? `${plural(t, "day")} away by ${transportName(c)}.` : "Site-19 is here; teams go by road."}</p>
+        ${here.length ? `<p>Open here: ${here.map(i => esc(i.title)).join("; ")}</p>` : ""}
+        ${st.collapsed ? `<p class="warn">The public knows too much here. This region sends nothing and can't be recovered.</p>` : `
+        <div class="row"><button class="act" type="button" id="coverBtn" ${cw ? `disabled title="${esc(cw)}"` : ""}>Cover story · $${COVER_STORY.cost}k · ${COVER_STORY.amnestics} amnestics</button><span class="muted">${esc(cw || `${d.front} plants a story: −${COVER_STORY.cut} exposure here. Once every ${COVER_STORY.cooldown} days.`)}</span></div>
+        <div class="row"><button class="act" type="button" id="locateBtn" ${lw ? `disabled title="${esc(lw)}"` : ""}>Locate an Insurgency cell · ${LOCATE_INTEL} Intel</button><span class="muted">${esc(lw || "Creates a strike mission here. Breaking the cell pays $80k and lowers exposure.")}</span></div>`}
+      </div>
+    </section>
+    <section class="col">
+      <div class="card">
+        <div class="label">How exposure works</div>
+        <p class="muted">Each region tracks its own exposure. Unanswered cover-ups add 12 there, failed missions 20, witnesses who get away undosed 5 each, and civilians killed 3 each. Breaches at Site-19 and an escaped anomaly count against the Eastern United States. Exposure eases by 3 everywhere each month; cover stories and won missions bring it down faster. Amnestics labs on the Site-19 tab brew the doses.</p>
+      </div>
+    </section>
+  </div>`;
   }
 
   // ---------- Research ----------
@@ -439,7 +514,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     return `<div class="card plan">
       <div class="label">${esc(o.call)} · ${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}</div>
       <h3 class="fac">${esc(o.name)}</h3>
-      ${o.busy ? `<p class="warn">${o.busy.kind === "therapy" ? "In therapy" : "Retraining"}: ${plural(o.busy.daysLeft, "day")} left. Can't deploy until then.</p>` : ""}
+      ${o.busy ? `<p class="warn">${o.busy.kind === "therapy" ? "In therapy" : o.busy.kind === "travel" ? "Flying home" : "Retraining"}: ${plural(o.busy.daysLeft, "day")} left. Can't deploy until then.</p>` : ""}
       ${promotionDue(o) && !o.cls ? `<p><b>Choose a class.</b> It decides the abilities they learn from here on.</p>
         <div class="classpick">${(Object.keys(CLASSES) as ClassId[]).map(k => `<button type="button" class="classopt" data-class="${k}">
           <b>${CLASSES[k].name}</b><span class="muted">${CLASSES[k].role}</span>
@@ -478,7 +553,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   function opRow(o: Operative) {
     const next = RANK_XP[o.rank + 1], heal = healPerDay(c);
     const days = Math.ceil((o.maxHp - o.hp) / heal);
-    const status = o.busy ? `<span class="flag">${o.busy.kind === "therapy" ? "Therapy" : "Retraining"} · ${plural(o.busy.daysLeft, "day")}</span>`
+    const status = o.busy ? `<span class="flag">${o.busy.kind === "therapy" ? "Therapy" : o.busy.kind === "travel" ? "In transit" : "Retraining"} · ${plural(o.busy.daysLeft, "day")}</span>`
       : promotionDue(o) ? `<span class="flag stare">Promotion</span>`
       : deployable(o) ? `<span class="flag">Ready</span>` : `<span class="flag bad">Wounded · ${plural(days, "day")}</span>`;
     const ms = maxSanOf(o);
@@ -522,6 +597,13 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       gearOf(b.dataset.gear!).items[Number(b.dataset.slotI)] = b.value as ItemId | "";
       render();
     });
+    root.querySelectorAll<SVGElement>("[data-region]").forEach(b => {
+      const pickRegion = () => { regionSel = b.dataset.region as RegionId; render(); };
+      b.onclick = pickRegion;
+      b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickRegion(); } };
+    });
+    on("coverBtn", () => change(() => coverStory(c, regionSel)));
+    on("locateBtn", () => change(() => locateCell(c, regionSel)));
     on("dayBtn", () => change(() => advanceDay(c)));
     on("waitBtn", () => change(() => advanceToEvent(c)));
     on("recruitBtn", () => change(() => recruit(c)));
@@ -579,7 +661,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         const g = gearOf(id);
         return { opId: id, armor: g.armor, items: g.items.filter((i): i is ItemId => !!i) };
       });
-      act.deploy(inc, loadouts, dCount);
+      act.deploy(inc, loadouts, inc.kind === "strike" ? 0 : dCount);
     });
     on("resetBtn", () => {
       const b = $("resetBtn")!;

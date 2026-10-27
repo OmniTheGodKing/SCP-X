@@ -3,14 +3,14 @@ import { cheb } from "../core/grid";
 import { hasPerk, spend, usesLeft } from "./perks";
 import { maxSanOf } from "./profiles";
 import { S, alive, canAct, canSee, computeVis, full, hooks, isPanicked, log, seen, team } from "./state";
-import type { AbilityId, Unit } from "./types";
+import type { AbilityId, PerkId, Unit } from "./types";
 import { PERKS } from "../data/classes";
 
 export interface AbilityDef {
   perk: AbilityId;
   label: string;
   desc?: string;
-  target: "ally" | "downed" | "panicked" | "enemy" | "self" | "captive";
+  target: "ally" | "downed" | "panicked" | "enemy" | "self" | "captive" | "witness";
   endsTurn?: boolean;
   /** Uses per mission, if limited. */
   uses?: (u: Unit) => number;
@@ -25,13 +25,17 @@ export const ABILITIES: AbilityDef[] = [
   { perk: "mark_target", label: "Mark target", target: "enemy" },
   { perk: "run_and_gun", label: "Run and gun", target: "self", uses: () => 1 },
   { perk: "secure", label: "Secure prisoner", target: "captive", desc: "Restrain an adjacent wounded Insurgent so they're taken prisoner even if the mission fails." },
+  { perk: "dose", label: "Dose with amnestics", target: "witness", desc: "Give an adjacent witness amnestics. They forget what they saw and stop running." },
 ];
 
-const knows = (u: Unit, p: AbilityId) => p === "secure" ? u.side === "mtf" && abilityTargets(u, "secure").length > 0 : hasPerk(u, p);
+const UNIVERSAL: AbilityId[] = ["secure", "dose"];
+const knows = (u: Unit, p: AbilityId) => UNIVERSAL.includes(p)
+  ? u.side === "mtf" && abilityTargets(u, p).length > 0 && (p !== "dose" || S.amnestics > 0)
+  : hasPerk(u, p as PerkId);
 export const abilitiesOf = (u: Unit | null) => u ? ABILITIES.filter(a => knows(u, a.perk)) : [];
 const def = (p: AbilityId) => ABILITIES.find(a => a.perk === p)!;
-export const abilityName = (p: AbilityId) => p === "secure" ? def(p).label : PERKS[p].name;
-export const abilityDesc = (p: AbilityId) => p === "secure" ? def(p).desc! : PERKS[p].desc;
+export const abilityName = (p: AbilityId) => UNIVERSAL.includes(p) ? def(p).label : PERKS[p as PerkId].name;
+export const abilityDesc = (p: AbilityId) => UNIVERSAL.includes(p) ? def(p).desc! : PERKS[p as PerkId].desc;
 const adjacent = (a: Unit, b: Unit) => cheb(a.x, a.y, b.x, b.y) <= 1;
 /** Combat medic: one free medkit per turn. */
 const freeHeal = (u: Unit) => hasPerk(u, "combat_medic") && !(u.used?.["cm" + S.turn]);
@@ -41,6 +45,7 @@ export function abilityTargets(u: Unit, p: AbilityId): Unit[] {
   const d = def(p);
   switch (d.target) {
     case "captive": return S.units.filter(a => a.side === "raider" && a.alive && a.downed && !a.secured && adjacent(u, a));
+    case "witness": return S.units.filter(a => a.witness && a.alive && !a.saved && !a.dosed && adjacent(u, a));
     case "self": return [u];
     case "ally": return team().filter(a => adjacent(u, a) && (p === "medkit" ? a.hp < a.maxHp && a.side === "mtf" : a.san < maxSanOf(a)));
     case "downed": return S.units.filter(a => a.alive && a.downed && !a.stabilized && adjacent(u, a));
@@ -104,6 +109,10 @@ export function useAbility(u: Unit, p: AbilityId, t: Unit) {
     case "mark_target":
       t.markedUntil = S.turn;
       log(`${full(u)} marks an Insurgent: everyone gets +15 aim against it for the rest of this turn.`, "good");
+      break;
+    case "dose":
+      t.dosed = true; S.amnestics--;
+      log(`${full(u)} doses ${t.name} with amnestics. They won't remember any of this.`, "good");
       break;
     case "secure":
       t.secured = true;

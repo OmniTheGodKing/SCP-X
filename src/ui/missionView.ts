@@ -13,6 +13,12 @@ import { abilitiesOf, abilityCheck, abilityDesc, abilityName, startAbility } fro
 import { usesLeft } from "../game/perks";
 import { CLASSES, PERKS } from "../data/classes";
 
+const OBJECTIVES = {
+  breach: "",
+  manhunt: "SCP-173 is loose among civilians. Get it into the truck's open container, with nobody else inside, then have an operative seal it. Every civilian it kills adds exposure in the region.",
+  coverup: "Reach every witness (marked W) and give them amnestics with Dose: 1 action, from the next tile. A witness who spots the team runs for the map edge; any who escape undosed add exposure. Dose at least half of them for the mission to count as a success. Other civilians can be ignored.",
+  strike: "Neutralise every Insurgent in the warehouse. Use Secure on a wounded one to take them prisoner.",
+} as const;
 const ITEM_NAMES: Record<ItemId, string> = { armor: "Flak vest", eyedrops: "Eye drops", flashbang: "Stun grenade", smoke: "M18 smoke", tracker: "Seismic sensor", frag: "M26 frag" };
 import type { MissionResult, Unit } from "../game/types";
 import { esc } from "./util";
@@ -23,7 +29,7 @@ const TEMPLATE = `
   <header class="top">
     <div>
       <div class="eyebrow" id="mEyebrow"></div>
-      <h1>SCP-173 Recontainment <small>“The Sculpture” · Euclid</small></h1>
+      <h1 id="mTitle">SCP-173 Recontainment <small>“The Sculpture” · Euclid</small></h1>
     </div>
     <div class="turnbox">
       <span class="pill" id="turnPill">Turn 1</span>
@@ -38,6 +44,7 @@ const TEMPLATE = `
       <div class="legend">
         <span style="--c: var(--mtf)">MTF Epsilon-11</span>
         <span style="--c: var(--subject)">D-Class</span>
+        <span class="sq" style="--c: #cfc6a8">Civilian · W = witness</span>
         <span class="sq" style="--c: var(--raider)">Chaos Insurgency</span>
         <span class="sq" style="--c: var(--concrete)">SCP-173</span>
         <span class="sq" style="--c: var(--steel)">Transport container</span>
@@ -47,7 +54,7 @@ const TEMPLATE = `
       </div>
       <details class="rules" open>
         <summary>How this works</summary>
-        <div><b>Objective.</b> Get SCP-173 into the transport container at the dock in the southwest staging room, with nobody else inside, then have an operative seal it.</div>
+        <div id="objRule"><b>Objective.</b> Get SCP-173 into the transport container at the dock in the southwest staging room, with nobody else inside, then have an operative seal it.</div>
         <div><b>Do not blink.</b> Anyone on your team locks eyes on SCP-173 when they first see it, which costs 1 action. While staring they get one action per turn and can move anywhere that keeps sight of it. Looking away is free.</div>
         <div><b>Blinks.</b> Everyone has a chance to blink each turn. D-Class blink more than operatives, and everyone blinks more as sanity falls. SCP-173 can only move when nobody with their eyes open can see it.</div>
         <div><b>SCP-173 hunts.</b> It moves up to 8 tiles a turn and freezes the moment it steps into anyone's sight. It kills anyone it reaches while unseen (someone mid-blink, looking away or with their eyes shut) and keeps going. It can't see through walls, but it hears gunfire. It passes straight through the container, so drag it in.</div>
@@ -64,7 +71,7 @@ const TEMPLATE = `
 
     <aside class="side">
       <div class="card status" id="statusCard">
-        <div class="label">SCP-173 status</div>
+        <div class="label" id="statusLabel">SCP-173 status</div>
         <div class="status-line" id="statusLine"></div>
       </div>
       <div class="card">
@@ -85,7 +92,7 @@ const TEMPLATE = `
         <div class="itembar" id="itemBar"></div>
         <div class="hint" id="hint"></div>
       </div>
-      <div class="file">
+      <div class="file" id="fileCard">
         <div class="label">SCP Foundation · Secure. Contain. Protect.</div>
         <h2>SCP-173 · The Sculpture</h2>
         <ol id="notes"></ol>
@@ -103,6 +110,17 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   root.innerHTML = TEMPLATE;
   const $ = (id: string) => root.querySelector<HTMLElement>("#" + id)!;
   $("mEyebrow").textContent = `SCP Foundation · ${S.setup.title}`;
+  const has173 = S.has173, kind = S.setup.kind;
+  if (kind !== "breach") {
+    $("mTitle").innerHTML = { manhunt: "SCP-173 Manhunt <small>Field recovery</small>", coverup: "Cover-up <small>Class-A amnestics</small>", strike: "Strike <small>Chaos Insurgency cell</small>", breach: "" }[kind];
+    $("objRule").innerHTML = `<b>Objective.</b> ${esc(OBJECTIVES[kind])}`;
+  }
+  if (!has173) {
+    for (const id of ["stareBtn", "callBtn", "dragBtn", "sealBtn"]) $(id).hidden = true;
+    $("fileCard").hidden = true;
+    root.querySelectorAll<HTMLElement>(".rules > div").forEach(d => { if (d.id !== "objRule" && /SCP-173|Do not blink|Dragging|Blinks\./.test(d.textContent || "")) d.hidden = true; });
+    $("statusLabel").textContent = "Objective";
+  }
   const cv = $("cv") as HTMLCanvasElement;
   const draw = createRenderer(cv);
 
@@ -162,7 +180,19 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("phasePill").className = "pill" + (S.phase === "anomaly" ? " hot" : "");
 
     const sc = $("statusCard"), line = $("statusLine");
-    if (S.sealed) {
+    if (!has173) {
+      const civ = S.units.filter(u => u.side === "civilian");
+      if (kind === "coverup") {
+        const w = civ.filter(u => u.witness), dosed = w.filter(u => u.dosed).length, gone = w.filter(u => u.saved && !u.dosed).length;
+        const loose = w.filter(u => u.alive && !u.dosed && !u.saved).length;
+        sc.className = "card status " + (loose ? "danger" : "done");
+        line.innerHTML = `<b>Witnesses: ${dosed} dosed, ${loose} still loose${gone ? `, ${gone} got away` : ""}.</b><br>Amnestics carried: ${S.amnestics}. Dose takes 1 action next to a witness.`;
+      } else {
+        const up = S.units.filter(u => u.side === "raider" && u.alive && !u.downed).length;
+        sc.className = "card status " + (up ? "danger" : "done");
+        line.innerHTML = `<b>Insurgents still fighting: ${up} of ${S.setup.insurgents}.</b><br>Neutralised: ${S.stats.raidersDown}. Wounded ones can be secured as prisoners.`;
+      }
+    } else if (S.sealed) {
       sc.className = "card status done";
       line.innerHTML = "<b>Sealed in the transport container.</b>";
     } else if (seen(st.x, st.y)) {
@@ -178,7 +208,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
       }
     } else {
       sc.className = "card status danger";
-      const tracked = S.setup.mods.track173 ? ` Movement study puts it in the <b>${area(st.x, st.y)}</b>.` : ` ${S.lastSeen ? `Last seen turn ${S.lastSeen.turn}, ${area(S.lastSeen.x, S.lastSeen.y)}.` : "Somewhere in the north rooms."}`;
+      const tracked = S.setup.mods.track173 ? ` Movement study puts it in the <b>${area(st.x, st.y)}</b>.` : ` ${S.lastSeen ? `Last seen turn ${S.lastSeen.turn}, ${area(S.lastSeen.x, S.lastSeen.y)}.` : (S.setup.kind === "manhunt" ? "Somewhere nearby." : "Somewhere in the north rooms.")}`;
       line.innerHTML = `<b>Not in sight.</b>${tracked}<br>It is hunting. Anyone it catches not looking is in danger.`;
     }
 
@@ -229,11 +259,11 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
         h = `<b>${sel.call} → Insurgent: ${s.chance}% to hit</b>${s.crit ? `, ${s.crit}% crit` : ""}${sel.gun ? ` · ${sel.gun.name}, ${sel.gun.dmg[0]}–${sel.gun.dmg[1]} damage` : ""}${fw ? `\n<b>${esc(fw)}</b>` : ""}\n` + s.mods.map(m => `${m[0]} ${m[1] >= 0 ? "+" : ""}${m[1]}`).join(" · ");
       } else if (!sealCheck(sel)) h = `<b>${sel.call} can seal the container now.</b> Press S.`;
       else if (sel.staring) h = `<b>${esc(full(sel))} is staring</b>, ${sel.ap} action${sel.ap === 1 ? "" : "s"}.\nThey can move anywhere that keeps sight of SCP-173. Press B to look away (free).`;
-      else h = `<b>${esc(full(sel))}</b>, ${sel.ap} action${sel.ap === 1 ? "" : "s"}.\nClick a tile to move (blue costs 1, amber costs 2).${sel.side === "mtf" ? " Click a visible Insurgent to fire." : " D-Class are unarmed."} Next to SCP-173, press G to drag it.${matchMedia("(pointer: coarse)").matches ? " Tap twice to confirm." : ""}`;
+      else h = `<b>${esc(full(sel))}</b>, ${sel.ap} action${sel.ap === 1 ? "" : "s"}.\nClick a tile to move (blue costs 1, amber costs 2).${sel.side === "mtf" ? " Click a visible Insurgent to fire." : " D-Class are unarmed."}${S.has173 ? " Next to SCP-173, press G to drag it." : ""}${matchMedia("(pointer: coarse)").matches ? " Tap twice to confirm." : ""}`;
     } else h = "No one has actions left. End the turn.";
     $("hint").innerHTML = h;
 
-    $("notes").innerHTML = NOTES_173.map(n => {
+    if (has173) $("notes").innerHTML = NOTES_173.map(n => {
       const cls = [n.cls || "", S.fresh.has(n.id) ? "new" : ""].join(" ").trim();
       if (S.known.has(n.id)) return `<li class="${cls}">${esc(n.text)}</li>`;
       const words = n.text.split(" ").map(w => "█".repeat(Math.max(2, Math.min(9, w.length)))).join(" ");

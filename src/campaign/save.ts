@@ -3,6 +3,8 @@
 import type { Campaign } from "./campaign";
 
 import { newResearch } from "./research";
+import { HOME } from "../data/regions";
+import { newRegions } from "./world";
 import { startingModels } from "../data/weapons";
 
 const KEY = "site19-campaign-v2";
@@ -26,7 +28,12 @@ export function loadCampaign(): Campaign | null {
       const old = c as unknown as Campaign;
       Object.assign(c, { version: 5, models: startingModels(), armorTier: old.research.done.includes("body_armor") ? 1 : 0, attachments: {}, prisoners: [], intel: 0, cleaningOrder: true });
     }
-    return c.version === 5 ? (c as unknown as Campaign) : null;
+    if (c.version === 5) {
+      const old = c as unknown as Campaign;
+      for (const i of old.incidents) Object.assign(i, { region: HOME, map: i.kind === "breach" ? "wingC" : "town", civilians: i.kind === "breach" ? 0 : 3 });
+      Object.assign(c, { version: 6, regions: newRegions(old.exposure), amnestics: 4, nextCoverupDay: old.day + 20 });
+    }
+    return c.version === 6 ? (c as unknown as Campaign) : null;
   } catch {
     return null;
   }

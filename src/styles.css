@@ -239,3 +239,23 @@ ol.tree, ul.traits { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 5p
 ul.traits li.bad b { color: var(--alert); }
 ul.traits li.good b { color: var(--ok); }
 ul.traits button { margin-left: 6px; padding: 4px 8px; }
+
+/* ---------- world map ---------- */
+.worldcard { margin-bottom: 14px; }
+.worldmap { display: block; width: 100%; height: auto; border: 1px solid var(--line); }
+.worldmap .sea { fill: #10171d; }
+.worldmap .grat { stroke: #1d2830; stroke-width: .3; }
+.worldmap .land { fill: #26303a; stroke: #3a4652; stroke-width: .4; stroke-linejoin: round; }
+.worldmap .site19 rect { fill: var(--manila); }
+.worldmap .site19 text { fill: var(--manila); font: 4px var(--font-mono); }
+.worldmap .region { cursor: pointer; outline: none; }
+.worldmap .region .halo { fill: color-mix(in srgb, var(--alert) calc(var(--heat) * 1%), transparent); fill-opacity: .55; stroke: var(--muted); stroke-width: .5; }
+.worldmap .region.on .halo, .worldmap .region:focus-visible .halo { stroke: var(--ink); stroke-width: 1; }
+.worldmap .region.lost .halo { fill: #000; stroke: var(--alert); stroke-dasharray: 1.5 1; }
+.worldmap .region .bar-bg { fill: #0b0f13; }
+.worldmap .region .bar { fill: var(--alert); }
+.worldmap .region .rname { fill: var(--ink); font: 4.4px var(--font-mono); text-anchor: middle; paint-order: stroke; stroke: #10171d; stroke-width: 1.2px; }
+.worldmap .pin circle { stroke: #0b0f13; stroke-width: .6; }
+.worldmap .pin.coverup circle { fill: var(--manila); }
+.worldmap .pin.strike circle { fill: var(--raider); }
+.worldmap .pin.recovery circle { fill: var(--subject); }
