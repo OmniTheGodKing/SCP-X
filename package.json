@@ -1,0 +1,18 @@
+{
+  "name": "site19",
+  "version": "0.2.0",
+  "description": "Turn-based SCP Foundation containment tactics with a Site-19 strategy layer.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build && node scripts/artifact.mjs",
+    "typecheck": "tsc"
+  },
+  "license": "CC-BY-SA-3.0",
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vite-plugin-singlefile": "^2.0.3"
+  },
+  "private": true,
+  "type": "module"
+}
