@@ -3,7 +3,7 @@
 import type { ClassId, PerkId, TraitId } from "../data/classes";
 export type { ClassId, PerkId, TraitId };
 /** Class abilities plus Secure, which every operative can do. */
-export type AbilityId = PerkId | "secure" | "dose" | "lockdown" | "calm" | "restrain" | "pickup" | "drop" | "exfil" | "hunker";
+export type AbilityId = PerkId | "secure" | "dose" | "lockdown" | "doors" | "siren" | "calm" | "restrain" | "pickup" | "drop" | "exfil" | "hunker";
 
 import type { AmmoId, AttachmentId, WeaponType } from "../data/weapons";
 export type { AmmoId, AttachmentId, WeaponType };
@@ -235,7 +235,7 @@ export interface MissionState {
   busy: boolean;
   over: boolean;
   called: boolean;
-  mode: "drag" | "throw" | "ability" | "lead" | null;
+  mode: "drag" | "throw" | "ability" | "lead" | "doors" | null;
   ability: AbilityId | null;
   units: Unit[];
   statue: Unit;
@@ -258,6 +258,9 @@ export interface MissionState {
   effects: Effect[];
   stats: { mtfLost: number; dLost: number; escaped: number; raidersDown: number };
   smoke: { x: number; y: number; until: number }[];
+  /** Site-19 breaches: the alarm siren, and doorways sealed with blast doors from the panel. */
+  siren: boolean;
+  lockedDoors: number[];
   /** Escorts: the Insurgency got the truck open. */
   stolen?: boolean;
   /** Flares burning on the ground at night. */

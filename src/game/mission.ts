@@ -133,6 +133,7 @@ export function createMission(setup: MissionSetup) {
       ...(setup.squad.length ? [{ turn: setup.mtfTurn ?? 30, members: setup.squad }] : []),
     ] : [],
     escapeDrive: 0, lockedUntil: 0, escaped: false, photos: [],
+    siren: setup.kind === "breach", lockedDoors: [],
   };
   setMission(state);
   setSmoke([]);
