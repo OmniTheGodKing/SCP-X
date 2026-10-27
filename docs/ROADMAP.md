@@ -104,8 +104,10 @@ retaliation (done); (5) doors and sirens (done).
 
 - (Done) Security stations defend their whole level; two ranks above the perk tree. Ranks follow the 1951 US Army
   enlisted ladder: Private, Private First Class, Corporal, Sergeant, Sergeant First Class, Master Sergeant, Sergeant Major.
-- (Done) Guards who pass Epsilon-11 selection join as Privates; the Selection cadre course (training range) makes them
-  Privates First Class.
+- (Done) Guards who pass Epsilon-11 selection join as Privates; Selection cadre research makes them Privates First
+  Class.
+- (Done) SCP-173 tests are paid up front ($20k/$30k/$50k) and take researcher-days (5/8/12) like other research; the
+  cell work happens on the last day, watched by the guards chosen at the start. One test at a time.
 - (Done) D-Class morale: overcrowding, deaths and termination orders lower it, a recreation room raises it, and below
   30 the block can riot. A riot is a guards-only mission on the D-Class block map (restrain or kill the rioters), or
   can be left to Site Security for a few D-Class dead.
@@ -139,7 +141,22 @@ retaliation (done); (5) doors and sirens (done).
 - Guard equipment: vests and better weapons for Site Security through research.
 - (Done early) Guard posts: each guard is posted to a Security station and hired there.
 
-## Phase 3G: the O5 Council and strategic choices
+## Phase 3G: recruiting Epsilon-11 (XCOM style)
+
+- A recruit pool in the Command facility's panel: 4 to 6 candidates, refreshed monthly, men and women. Each has a name,
+  age, nationality, home unit, backstory, a stat lean and sometimes a starting trait. Better candidates cost more.
+- Recruited from special forces around the world, opening by year: from 1951 US Army Ranger companies, Navy Underwater
+  Demolition Teams, Royal Marines Commandos, the SAS (Malayan Scouts), French Foreign Legion paratroopers, Gurkha
+  regiments and the Special Boat Service; later US Army Special Forces (1952), New Zealand SAS (1955), Sayeret Matkal
+  and the Australian SASR (1957), the Danish Jægerkorps (1961) and Navy SEALs (1962). Each unit gives a small lean
+  (Gurkhas steadier, SAS better shots, UDT frogmen faster).
+- Individual designs: a generated portrait for every operative (face, skin tone, hair, facial hair, scars, headgear by
+  unit), editable as in XCOM. Flat drawn style for now, built from layered parts so the style can be replaced later;
+  the same design data carries into the 3D models in Phase 4.
+- Liaison research (and later O5 standing) opens more units and better candidates.
+- The memorial keeps each fallen operative's portrait and unit.
+
+## Phase 3H: the O5 Council and strategic choices
 
 - Monthly O5 orders (objectives with rewards or penalties).
 - Council standing, separate from exposure, that affects funding and requests.
@@ -152,7 +169,7 @@ retaliation (done); (5) doors and sirens (done).
   escort it in. Outbound transfers by your choice (a damaged wing, or a research site paying for an anomaly).
 - Trading held anomalies with other sites for funding or research.
 
-## Phase 3H: Insurgency threat and other groups
+## Phase 3I: Insurgency threat and other groups
 
 - An Insurgency threat level that grows as cells go unchecked (the doom clock).
 - Insurgency operations announced in advance that can be countered (XCOM 2 dark events).
@@ -166,7 +183,7 @@ retaliation (done); (5) doors and sirens (done).
 - GRU Division "P": the Soviet anomalous unit as a Cold War rival in Europe and East Asia.
 - A campaign ending: what winning looks like, and the final mission.
 
-## Phase 3I: more task forces, field work and other sites
+## Phase 3J: more task forces, field work and other sites
 
 - MTF Eta-10 "See No Evil" (blindfolds and video goggles) assigned by the Council once you hold two or more anomalies
   or reach a standing threshold: a second squad, so two incidents can be answered at once.

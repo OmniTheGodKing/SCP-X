@@ -23,7 +23,7 @@ import {
 import {
   ARMOR_KINDS, ARMOR_TIERS, armorStats, ATTACHMENT_COST, REFIT, canOrderAmmo, orderAmmo, unlockedAmmo, canOrderAttachment, canRefit, orderAttachment, orderRefit, pendingRefits, unlockedAttachments,
   ITEMS, PROJECTS, TESTS, assign, canHireResearcher, canOrder, canTest, has, hireResearcher, order, projectLock,
-  researcherCapacity, projectCost, researchersFree, runTest, offered, projectDays, unlockedItems, type Branch, type ItemId, type TestId,
+  researcherCapacity, projectCost, researchersFree, startTest, testKey, offered, projectDays, unlockedItems, type Branch, type ItemId, type TestId,
 } from "../campaign/research";
 import { HOME, LAND, REGIONS, REGION_IDS, SITE19, project, type RegionId } from "../data/regions";
 import {
@@ -392,7 +392,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <div class="file">
         <div class="label">Tests on ${s.name}</div>
         <h2>Test log</h2>
-        <p>Tests fill in ${s.name}'s file and open new research. A D-Class goes in while operatives watch; riskier tests multiply the chance someone dies, and some can end in a breach.</p>
+        <p>Tests fill in ${s.name}'s file and open new research. Each is paid for up front and prepared by researchers like any other project; on the last day the D-Class go into the cell while the guards you chose watch. Riskier tests multiply the chance someone dies, and some can end in a breach. One test at a time.</p>
         ${(Object.keys(TESTS) as TestId[]).map(t => testRow(t)).join("")}
         ${watcherPicker()}
       </div>
@@ -420,15 +420,22 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   }
 
   function testRow(t: TestId) {
-    const d = TESTS[t], why = canTest(c, scp173(), t), done = c.research.tests.includes(t);
+    const d = TESTS[t], why = canTest(c, scp173(), t), done = c.research.tests.includes(t), r = c.research;
+    const running = r.testing?.id === t, key = testKey(t), n = r.assigned[key] || 0, prog = r.progress[key] || 0;
     const opens = Object.values(PROJECTS).filter(p => p.needsTest === t).map(p => p.name).join(", ");
-    const w = watchPool().filter(o => watchers.has(o.id));
+    const w = running ? c.guards.filter(g => g.alive && r.testing!.watchers.includes(g.id)) : watchPool().filter(o => watchers.has(o.id));
     const death = Math.min(0.95, workRisk(w) * d.risk);
     return `<div class="test ${done ? "done" : ""}">
-      <div class="ptop"><b>${esc(d.name)}</b>${done ? `<span class="flag">Done</span>` : ""}</div>
+      <div class="ptop"><b>${esc(d.name)}</b>${done ? `<span class="flag">Done</span>` : running ? `<span class="flag stare">${n ? `${plural(n, "researcher")} · ${plural(Math.ceil((d.days - prog) / n), "day")} left` : "Paused"}</span>` : ""}</div>
       <p>${esc(d.desc)}</p>
-      <div class="specs">${d.dclass} D-Class · death risk ×${d.risk} (${pctText(death)} with current watchers)${d.breach ? ` · ${pctText(d.breach)} chance of a breach` : ""} · opens ${esc(opens)}</div>
-      ${done ? "" : `<div class="row"><button class="act" type="button" data-test="${t}" ${why ? `disabled title="${esc(why)}"` : ""}>Run the test</button>${why ? `<span>${esc(why)}</span>` : ""}</div>`}
+      <div class="specs">$${d.cost}k · ${d.days} researcher-days · ${d.dclass} D-Class · death risk ×${d.risk} (${pctText(death)} with ${running ? "the chosen" : "current"} watchers)${d.breach ? ` · ${pctText(d.breach)} chance of a breach` : ""} · opens ${esc(opens)}</div>
+      ${running ? `<div class="pbar"><div class="exp-bar"><span style="width:${Math.min(100, (prog / d.days) * 100)}%"></span></div><span class="specs">${prog}/${d.days} researcher-days · watching: ${w.length ? w.map(g => esc(g.name)).join(", ") : "two D-Class only"}</span></div>
+        <div class="row assign">
+          <button class="act" type="button" data-unassign="${key}" ${n ? "" : "disabled"} aria-label="Remove a researcher">−</button>
+          <b>${n}</b>
+          <button class="act" type="button" data-assign="${key}" ${researchersFree(c) < 1 ? "disabled" : ""} aria-label="Add a researcher">+</button>
+        </div>`
+      : done ? "" : `<div class="row"><button class="act" type="button" data-test="${t}" ${why ? `disabled title="${esc(why)}"` : ""}>Start the test · $${d.cost}k</button>${why ? `<span>${esc(why)}</span>` : ""}</div>`}
     </div>`;
   }
 
@@ -634,7 +641,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         ${workshopCard()}`); }
       case "lab": { const rw = canHireResearcher(c); return box(`Research lab · ${c.researchers} researchers, ${researchersFree(c)} unassigned, room for ${researcherCapacity(c)}`, `
         <div class="row"><button class="act" id="hireResBtn" type="button" ${rw ? `disabled title="${esc(rw)}"` : ""}>Hire researcher · $60k</button>${rw ? `<span class="muted">${esc(rw)}</span>` : ""}</div>
-        <p class="muted">Working on: ${Object.entries(c.research.assigned).filter(([, n]) => n).map(([id, n]) => `${esc(PROJECTS[id].name)} (${n})`).join(", ") || "nothing"}.</p>
+        <p class="muted">Working on: ${Object.entries(c.research.assigned).filter(([, n]) => n).map(([id, n]) => `${esc(PROJECTS[id]?.name ?? (TESTS[id.slice(5) as TestId]?.name || id))} (${n})`).join(", ") || "nothing"}.</p>
         <button class="act" type="button" data-goto="research">Open the Research tab</button>`); }
       case "amnestics": return box(`Amnestics · ${c.amnestics} of ${amnesticsCapacity(c)} doses`, `<p class="muted">Each lab brews ${has(c, "classb_amnestics") ? 2 : 1} dose every 5 days. Doses go on cover-ups and cover stories.</p>`);
       case "medical": { const hurt = c.roster.filter(o => o.alive && o.hp < o.maxHp); return box(`Medical bay · ${healPerDay(c)} HP a day`, hurt.length ? `<ul class="memorial">${hurt.map(o => `<li>${esc(o.call)} ${esc(o.name)} · HP ${o.hp}/${o.maxHp}</li>`).join("")}</ul>` : `<p class="muted">Nobody is wounded.</p>`); }
@@ -772,7 +779,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     on("hireResBtn", () => change(() => hireResearcher(c)));
     root.querySelectorAll<HTMLElement>("[data-assign]").forEach(b => b.onclick = () => tryDo(() => assign(c, b.dataset.assign!, 1)));
     root.querySelectorAll<HTMLElement>("[data-unassign]").forEach(b => b.onclick = () => tryDo(() => assign(c, b.dataset.unassign!, -1)));
-    root.querySelectorAll<HTMLElement>("[data-test]").forEach(b => b.onclick = () => change(() => runTest(c, scp173(), b.dataset.test as TestId, chosenWatchers())));
+    root.querySelectorAll<HTMLElement>("[data-test]").forEach(b => b.onclick = () => change(() => startTest(c, scp173(), b.dataset.test as TestId, chosenWatchers())));
     root.querySelectorAll<HTMLElement>("[data-order]").forEach(b => b.onclick = () => change(() => order(c, b.dataset.order as ItemId)));
     root.querySelectorAll<HTMLSelectElement>("[data-armor]").forEach(b => b.onchange = () => {
       const g = gearOf(b.dataset.armor!); g.armor = b.value as ItemId | "";
