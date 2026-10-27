@@ -440,7 +440,7 @@ export function useItem(idx: number, flash: (t: string) => void) {
 
 function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y: number) {
   item.uses--; u.ap = 0;
-  breakConcealment(item.id === "smoke" ? "a smoke canister hissing" : "an explosion");
+  breakConcealment(item.id === "smoke" ? "a smoke canister hissing" : item.id === "flare" ? "a flare lighting up the area" : "an explosion");
   S.mode = null; S.throwing = null; S.pending = null;
   const area = blastArea(x, y);
   const inArea = (v: Unit) => area.some(([a, b]) => a === v.x && b === v.y);
@@ -463,6 +463,9 @@ function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y
     log(`${full(u)} throws a flashbang.${theirs.length ? ` ${theirs.length} Insurgent${theirs.length > 1 ? "s" : ""} blinded.` : ""}${ours.length ? ` ${ours.map(label).join(", ")} ${ours.length > 1 ? "are" : "is"} blinded too.` : ""}`, ours.length ? "bad" : "good");
     if (ours.some(v => v.hadLos)) log("Anyone blinded can't hold SCP-173 until next turn.", "bad");
     if (!hasPerk(u, "quiet_steps")) S.mem.set("bang-" + u.id, { x, y, turn: S.turn });   // SCP-173 hears it
+  } else if (item.id === "flare") {
+    S.flares.push({ x, y, until: S.turn + 2 });
+    log(`${full(u)} throws a flare. Everything within 2 tiles of it can be seen for 3 turns.`, "key");
   } else if (item.id === "csgas") {
     const hit = S.units.filter(v => v.alive && !v.saved && (v.side === "raider" || v.side === "civilian")).filter(inArea);
     for (const v of hit) v.suppressedUntil = S.turn + 1;
@@ -526,6 +529,7 @@ async function anomalyPhase() {
 /** Witnesses still out there: not dosed, not gone, not dead. */
 export const looseWitnesses = () => S.units.filter(u => u.witness && u.alive && !u.saved && !u.dosed);
 
+export const ESCORT_TURNS = 8;
 export function checkEnd() {
   if (S.over) return true;
   const k = S.setup.kind;
@@ -535,7 +539,11 @@ export function checkEnd() {
     const w = S.units.filter(u => u.witness);
     finish(w.filter(u => u.dosed).length * 2 >= w.length, false); return true;
   }
-  if (k === "strike" && !alive("raider").length) { finish(true, false); return true; }
+  if ((k === "strike" || k === "retaliation") && !alive("raider").length) { finish(true, false); return true; }
+  if (k === "escort") {
+    if (S.stolen) { finish(false, false); return true; }
+    if (!alive("raider").length || (S.turn >= ESCORT_TURNS && S.phase === "subjects")) { finish(true, false); return true; }
+  }
   if (S.escaped) { finish(false, false); return true; }
   // nobody left on the map: either everyone got out through an exit, or nobody is left at all
   if (!alive("mtf").length && !S.reinforce.length) { finish(false, S.units.some(u => u.side === "mtf" && u.saved && u.alive)); return true; }

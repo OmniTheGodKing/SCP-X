@@ -118,10 +118,25 @@ export function tickWorld(c: Campaign) {
   const labs = countOperational(c, "amnestics");
   if (labs && c.day % AMNESTIC_DAYS === 0 && c.amnestics < amnesticsCapacity(c)) c.amnestics = Math.min(amnesticsCapacity(c), c.amnestics + labs * (has(c, "classb_amnestics") ? 2 : 1));
   if (c.day >= c.nextCoverupDay) { spawnCoverup(c); c.nextCoverupDay = c.day + rand(25, 60); }
+  for (const due of (c.retaliations ?? []).filter(x => x.day <= c.day)) {
+    c.retaliations = c.retaliations!.filter(x => x !== due);
+    if (c.regions[due.region].collapsed) continue;
+    const town = pick(REGIONS[due.region].towns);
+    const inc = newIncident(c, {
+      kind: "retaliation", region: due.region, map: Math.random() < 0.5 ? "town" : "farm", scpId: "",
+      what: `Insurgency attack on ${town}`, expires: c.day + travelDays(c, due.region) + 3,
+      insurgents: Math.min(7, 4 + Math.floor((yearOf(c.day) - 1951) / 3)), witnesses: 0, civilians: 6,
+    });
+    log(c, `${inc.title}. The Insurgency is punishing the town for helping the Foundation. Respond within ${inc.expires - c.day} days.`, "bad", "command");
+  }
   for (const inc of [...c.incidents]) {
-    if (inc.id === c.activeIncident || (inc.kind !== "coverup" && inc.kind !== "strike") || c.day <= inc.expires) continue;
+    if (inc.id === c.activeIncident || (inc.kind !== "coverup" && inc.kind !== "strike" && inc.kind !== "retaliation") || c.day <= inc.expires) continue;
     c.incidents = c.incidents.filter(i => i !== inc);
-    if (inc.kind === "coverup") {
+    if (inc.kind === "retaliation") {
+      c.stats.missed++;
+      addExposure(c, inc.region, 12);
+      log(c, `Nobody answered ${inc.title.split(":")[0]}. People died in the streets (+12 exposure in ${REGIONS[inc.region].name}).`, "bad", "command");
+    } else if (inc.kind === "coverup") {
       c.stats.missed++;
       addExposure(c, inc.region, 12);
       log(c, `${inc.title.split(":")[0]} went unanswered. The story is out in ${REGIONS[inc.region].name} (+12 exposure there).`, "bad", "command");
@@ -133,6 +148,7 @@ export function tickWorld(c: Campaign) {
 
 /** Why the squad can't reach an incident in time, if it can't. */
 export function travelBlock(c: Campaign, inc: Incident) {
+  if (inc.kind === "escort") return null;   // the squad is already there
   const t = travelDays(c, inc.region);
   return c.day + t > inc.expires ? `The ${transportName(c)} needs ${t} day${t > 1 ? "s" : ""} to get there, and the window closes sooner.` : null;
 }

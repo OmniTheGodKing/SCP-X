@@ -1,5 +1,5 @@
 // Building a mission from what Site-19 sends, and turning its outcome into a result.
-import { FLOOR, L, Level, floorTiles, tileAt, useLevel, type Pt } from "../core/grid";
+import { FLOOR, L, Level, floorTiles, nearContainer, tileAt, useLevel, type Pt } from "../core/grid";
 import { MAPS } from "../data/maps";
 import { varyMap } from "../data/plots";
 
@@ -61,8 +61,11 @@ export function createMission(setup: MissionSetup) {
   const near: Pt[] = [];
   for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++)
     if (tileAt(x, y) === FLOOR && def.squadSpawns.some(([sx, sy]) => Math.max(Math.abs(sx - x), Math.abs(sy - y)) <= 2)) near.push([x, y]);
+  // an escort is ambushed at the truck: the squad starts around the container
+  const truck: Pt[] = [];
+  if (setup.kind === "escort") for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) if (tileAt(x, y) === FLOOR && nearContainer(x, y)) truck.push([x, y]);
   first.forEach((m, i) => {
-    const [x, y] = i < def.squadSpawns.length ? def.squadSpawns[i] : claim(near);
+    const [x, y] = setup.kind === "escort" && truck.length ? claim(truck) : i < def.squadSpawns.length ? def.squadSpawns[i] : claim(near);
     taken.add(x + "," + y);
     units.push(spawnMember(m, x, y, setup.mods));
   });
@@ -81,8 +84,9 @@ export function createMission(setup: MissionSetup) {
   const arsenal = insurgentGuns(setup.year);
   for (let i = 0; i < setup.insurgents; i++) {
     // on a strike the cell is spread through the building; elsewhere a team arrives together
-    const room = setup.kind === "strike" ? Math.floor(i / 2) % ciRooms.length : 0;   // fire teams of two
-    const [x, y] = claim(floorTiles(setup.kind === "strike" ? ciRooms[room] : ciRoom));
+    const spread = setup.kind === "strike" || setup.kind === "escort" || setup.kind === "retaliation";
+    const room = spread ? Math.floor(i / 2) % ciRooms.length : 0;   // fire teams of two
+    const [x, y] = claim(floorTiles(spread ? ciRooms[room] : ciRoom));
     const g = pick(arsenal);
     units.push(mk({ id: "r" + (i + 1), side: "raider", name: "Insurgent", x, y, pod: room, hp: 4, maxHp: 4, aim: 60, san: PROFILE.raider.maxSan, armor: setup.insurgentArmor,
       gun: { name: g.name, type: g.type, dmg: g.dmg, mag: g.mag, ammo: g.mag, aim: 0 } }));
@@ -105,7 +109,7 @@ export function createMission(setup: MissionSetup) {
     const [x, y] = claim(floorTiles(strayRooms[i % strayRooms.length]));
     const witness = i < setup.witnesses;
     units.push(mk({ id: "c" + (i + 1), side: "civilian", call: names[i % names.length], name: names[i % names.length], x, y, hp: 4, maxHp: 4, san: 50, witness,
-      spooked: setup.kind === "manhunt" }));
+      spooked: setup.kind === "manhunt" || setup.kind === "retaliation" }));
   }
   const statue = has049
     ? mk({ id: "scp049", side: "anomaly", name: "SCP-049", x: sx, y: sy, hp: 1, maxHp: 1, san: 0 })
@@ -119,9 +123,11 @@ export function createMission(setup: MissionSetup) {
     units, statue, sealed: false, selected: null, hover: null, pending: null,
     vis: new Uint8Array(W * H), explored: new Uint8Array(W * H),
     lastSeen: null, raidersActive: false, mem: new Map(), checked: new Set(),
-    concealed: setup.kind === "strike" || setup.kind === "coverup", activePods: [],
+    concealed: setup.kind === "strike" || setup.kind === "coverup",
+    // ambushes and attacks on towns start with every Insurgent already moving
+    activePods: setup.kind === "escort" || setup.kind === "retaliation" ? [0, 1, 2, 3, 4, 5] : [],
     known: new Set([...STARTING_NOTES, ...setup.known]), fresh: new Set(), log: [], effects: [],
-    stats: { mtfLost: 0, dLost: 0, escaped: 0, raidersDown: 0 }, smoke: [], throwing: null, ability: null,
+    stats: { mtfLost: 0, dLost: 0, escaped: 0, raidersDown: 0 }, smoke: [], flares: [], throwing: null, ability: null,
     reinforce: setup.kind === "breach" ? [
       ...(setup.lateGuards?.length ? [{ turn: 2, members: setup.lateGuards }] : []),
       ...(setup.squad.length ? [{ turn: setup.mtfTurn ?? 30, members: setup.squad }] : []),
@@ -140,6 +146,8 @@ export const BRIEFINGS: Record<MissionKind, (s: MissionSetup) => string> = {
   breach: s => s.scp === "106" ? `SCP-106 is out of its cell. It walks through walls, and anyone it reaches is dragged into its pocket dimension. Shooting it only sends it under the floor for a turn. The only way to recontain it is bait: put a D-Class (or a secured Insurgent) in the transport container in the staging room. It will go straight for them and stay a turn to feed. Seal it in during that turn.${s.squad.length ? ` Epsilon-11 arrives on turn ${s.mtfTurn}.` : ""}` : s.scp === "049" ? `SCP-049 is out of its cell in the north rooms and looking for patients. Its touch kills, and it will raise anyone who dies as SCP-049-2. Gunfire only staggers it. Talk it down (Calm, within ${3} tiles) and lead it into the transport container in the staging room, then seal it.${s.squad.length ? ` Epsilon-11 arrives on turn ${s.mtfTurn}.` : ""}` : `SCP-173 is out of its cell in the north rooms. Site Security is first on the scene${s.lateGuards?.length ? `, with ${s.lateGuards.length} more guard${s.lateGuards.length > 1 ? "s" : ""} arriving next turn` : ""}. ${s.squad.length ? `Epsilon-11 arrives on turn ${s.mtfTurn}.` : "Epsilon-11 isn't coming: nobody is available."} The transport container is open at the dock in the staging room: get it inside and seal it. If it reaches the surface hatch in the east lab, it's gone; the panel at the east end of the corridor locks the hatch down.${s.dclass.length ? ` ${s.dclass.join(" and ")} ${s.dclass.length > 1 ? "are" : "is"} assigned to you.` : ""}`,
   manhunt: s => s.scp === "106" ? "An old man who walks through walls is loose among the locals, and people are disappearing into the floor. That is SCP-106. Shooting only drives it under for a turn. Put a D-Class in the truck's container as bait; it goes straight for them and stays a turn to feed. Seal it in then." : s.scp === "049" ? "A man in a plague doctor's mask is walking among the locals, and some of them have stopped breathing. That is SCP-049. Its touch kills, and the dead get back up. Talk it down (Calm) and lead it into the truck's open container, then seal it. Keep people from dying near it." : "SCP-173 is somewhere nearby, and the locals are out. Every civilian it kills makes the cover story harder. A truck with an open container is waiting: get it inside and seal it.",
   coverup: s => `${s.witnesses} witness${s.witnesses === 1 ? "" : "es"} saw something they shouldn't have. Reach each one and give them amnestics (Dose, 1 action, adjacent) before they get away. Anyone who spots the team will run for the edge of the map. Dose at least half for the job to count.`,
+  escort: s => `The convoy carrying ${s.scp === "049" ? "SCP-049" : s.scp === "106" ? "SCP-106" : "the anomaly"} home has been ambushed. Insurgents are coming for the truck: one who stays next to it for a turn gets it open. Neutralise them, or hold for 8 turns until the convoy can move.${s.night ? " It's dark: everyone sees 4 tiles less." : ""}`,
+  retaliation: s => `The Insurgency is attacking the town to punish the locals and draw you out. They will shoot civilians as well as you; every civilian killed adds exposure. Neutralise them.${s.night ? " It's dark: everyone sees 4 tiles less." : ""}`,
   strike: () => "An Insurgency cell is holed up here. Neutralise every Insurgent. Wounded ones can be secured as prisoners.",
 };
 

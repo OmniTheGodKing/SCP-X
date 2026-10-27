@@ -18,15 +18,18 @@ const OBJECTIVES = {
   breach: "",
   manhunt: "SCP-173 is loose among civilians. Get it into the truck's open container, with nobody else inside, then have an operative seal it. Every civilian it kills adds exposure in the region.",
   coverup: "Reach every witness (marked W) and give them amnestics with Dose: 1 action, from the next tile. A witness who spots the team runs for the map edge; any who escape undosed add exposure. Dose at least half of them for the mission to count as a success. Other civilians can be ignored.",
+  escort: "Keep the Insurgents away from the truck. One who stays next to it for a turn gets it open and the anomaly is lost. Neutralise them all, or hold for 8 turns.",
+  retaliation: "Neutralise every Insurgent. They shoot civilians too, and every civilian killed adds exposure in the region.",
   strike: "Neutralise every Insurgent in the warehouse. Use Secure on a wounded one to take them prisoner.",
 } as const;
 const ITEM_NAMES: Record<ItemId, string> = { armor: "Flak vest", armor_light: "Recon smock", armor_heavy: "Heavy plate", hazmat: "Hazmat suit", leadsuit: "Lead-lined suit",
-  eyedrops: "Eye drops", flashbang: "Stun grenade", smoke: "M18 smoke", tracker: "Seismic sensor", frag: "M26 frag", csgas: "CS gas", bazooka: "M20 bazooka", law: "M72 LAW",
+  flare: "Signal flare", eyedrops: "Eye drops", flashbang: "Stun grenade", smoke: "M18 smoke", tracker: "Seismic sensor", frag: "M26 frag", csgas: "CS gas", bazooka: "M20 bazooka", law: "M72 LAW",
   medkit: "Medkit", camera: "Field camera", restraints: "Restraint kit", darts: "Amnestic darts" };
 import type { MissionResult, Unit } from "../game/types";
 import { esc } from "./util";
 import { createRenderer } from "./render";
 import { ESCAPE_AT, escaping } from "../game/scp173";
+import { ESCORT_TURNS } from "../game/turn";
 import { freshBodies, isCalm, isStaggered } from "../game/scp049";
 import { bait, isFeeding } from "../game/scp106";
 import { MAPS } from "../data/maps";
@@ -41,6 +44,7 @@ const TEMPLATE = `
     <div class="turnbox">
       <span class="pill" id="turnPill">Turn 1</span>
       <span class="pill" id="phasePill">Your move</span>
+      <span class="pill" id="nightPill" hidden title="Night: everyone sees 4 tiles less, except inside a flare's light.">Night</span>
       <span class="pill" id="concealPill" hidden title="Insurgents haven't noticed the team. They only spot you within 4 tiles. Firing or throwing anything gives you away.">Concealed</span>
       <button class="act" id="evacBtn" type="button" title="Ends the mission. Anyone who hasn't left through an exit is left behind.">Abort mission</button>
     </div>
@@ -122,7 +126,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   $("mEyebrow").textContent = `SCP Foundation · ${S.setup.title}`;
   const has173 = S.has173, kind = S.setup.kind;
   if (kind !== "breach") {
-    $("mTitle").innerHTML = { manhunt: "SCP-173 Manhunt <small>Field recovery</small>", coverup: "Cover-up <small>Class-A amnestics</small>", strike: "Strike <small>Chaos Insurgency cell</small>", breach: "" }[kind];
+    $("mTitle").innerHTML = { escort: "Convoy Ambush <small>Escort</small>", retaliation: "Retaliation <small>Insurgency attack</small>", manhunt: "SCP-173 Manhunt <small>Field recovery</small>", coverup: "Cover-up <small>Class-A amnestics</small>", strike: "Strike <small>Chaos Insurgency cell</small>", breach: "" }[kind];
     $("objRule").innerHTML = `<b>Objective.</b> ${esc(OBJECTIVES[kind])}`;
   }
   if (!has173) {
@@ -236,6 +240,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("phasePill").textContent = ph;
     $("phasePill").className = "pill" + (S.phase === "anomaly" ? " hot" : "");
     $("concealPill").hidden = !S.concealed;
+    $("nightPill").hidden = !S.setup.night;
 
     const sc = $("statusCard"), line = $("statusLine");
     if (S.has106) {
@@ -257,6 +262,8 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
         line.innerHTML = `<b>Witnesses: ${dosed} dosed, ${loose} still loose${gone ? `, ${gone} got away` : ""}.</b><br>Amnestics carried: ${S.amnestics}. Dose takes 1 action next to a witness.`;
       } else {
         const up = S.units.filter(u => u.side === "raider" && u.alive && !u.downed).length;
+        if (kind === "escort") line.innerHTML = `<b>Insurgents still fighting: ${up}.</b> Hold until turn ${ESCORT_TURNS}: ${Math.max(0, ESCORT_TURNS - S.turn)} more.<br>${S.units.some(u => u.side === "raider" && u.alive && u.stealTurn === S.turn) ? "<b>Someone is at the truck.</b>" : "Nobody at the truck."}`;
+        else
         sc.className = "card status " + (up ? "danger" : "done");
         line.innerHTML = `<b>Insurgents still fighting: ${up} of ${S.setup.insurgents}.</b><br>Neutralised: ${S.stats.raidersDown}. Wounded ones can be secured as prisoners.`;
       }
@@ -440,6 +447,8 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   const loop = (now: number) => { if (!running) return; draw(now); requestAnimationFrame(loop); };
   function stop() {
     running = false;
+    // this screen is going away: stop the game from writing into it
+    hooks.update = () => {}; hooks.log = () => {}; hooks.finished = () => {};
     document.removeEventListener("keydown", onKey);
     clearTimeout(hintTimer);
   }

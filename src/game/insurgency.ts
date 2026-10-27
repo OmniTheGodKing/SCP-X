@@ -1,6 +1,6 @@
 // Chaos Insurgency AI: hold SCP-173 with their eyes when they see it, fight from cover,
 // and push toward the Foundation team.
-import { L, area, bfs, cheb, pathTo } from "../core/grid";
+import { L, area, bfs, cheb, nearContainer, pathTo } from "../core/grid";
 import { sightFrom } from "../core/sight";
 import { coverAgainst, fire, moveUnit, shotInfo } from "./combat";
 import { prof } from "./profiles";
@@ -79,11 +79,19 @@ export async function raiderPhase(checkEnd: () => boolean) {
   }
   for (const r of alive("raider")) {
     if (!podActive(r) || !r.alive || !alive("mtf").length || isPanicked(r)) continue;
+    if (S.setup.kind === "escort" && nearContainer(r.x, r.y)) { workTruck(r); if (checkEnd()) return; continue; }
     if (isBlind(r)) { if (seen(r.x, r.y)) log("A blinded Insurgent stumbles and can't fire."); continue; }
     r.ap = 2;
     await raiderAct(r);
     if (checkEnd()) return;
   }
+}
+
+/** An Insurgent at the truck spends their turn forcing it; a second turn there and it's open. */
+function workTruck(r: Unit) {
+  if (r.stealTurn === S.turn - 1) { S.stolen = true; log("The Insurgents have the truck open. The anomaly is gone.", "bad"); return; }
+  r.stealTurn = S.turn;
+  log("An Insurgent is working the truck's door open. Stop them before next turn.", "bad");
 }
 
 /** The best place within reach to fight from: in cover, flanking if possible, at a middling distance. */
@@ -105,6 +113,8 @@ function bestSpot(r: Unit, t: Unit[]) {
     const pd = md[i] < 0 ? 40 : md[i];
     sc -= Math.abs(pd - 6) * 4;
     if (!S.sealed && st.alive && cheb(st.x, st.y, x, y) <= 2) sc -= 40;
+    // on an escort, the truck is what they came for
+    if (S.setup.kind === "escort") sc -= Math.min(...L.contTiles.map(([cx, cy]) => cheb(cx, cy, x, y))) * 7;
     sc -= res.dist[i] * 0.5 + Math.random() * 3;
     if (sc > bestScore) { bestScore = sc; bestT = [x, y]; }
   }
@@ -118,9 +128,11 @@ async function raiderAct(r: Unit) {
     if (!t.length) return;
     if (r.gun && r.gun.ammo < 1) { r.gun.ammo = r.gun.mag; r.ap--; if (seen(r.x, r.y)) log(`An Insurgent reloads their ${r.gun.name}.`); continue; }
     let best: { m: Unit; s: ReturnType<typeof shotInfo>; score: number } | null = null;
-    for (const m of t) if (canSee(r, m.x, m.y)) {
+    // in a retaliation, the locals are targets too
+    const targets = S.setup.kind === "retaliation" ? [...t, ...alive("civilian")] : t;
+    for (const m of targets) if (canSee(r, m.x, m.y)) {
       const s = shotInfo(r, m);
-      const score = s.chance + (m.side === "mtf" ? 10 : 0);
+      const score = s.chance + (m.side === "mtf" ? 10 : 0) - (m.side === "civilian" ? 15 : 0);
       if (!best || score > best.score) best = { m, s, score };
     }
     if (best && (best.s.chance >= 45 || (r.ap === 1 && best.s.chance >= 20))) { r.ap = 0; await fire(r, best.m, false); return; }

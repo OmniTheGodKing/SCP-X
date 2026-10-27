@@ -52,7 +52,9 @@ export interface Operative {
 
 export interface Incident {
   id: string;
-  kind: "breach" | "recovery" | "coverup" | "strike";
+  kind: "breach" | "recovery" | "coverup" | "strike" | "escort" | "retaliation";
+  /** Escorts: the survivors of the capture, who defend the convoy. */
+  squad?: string[];
   scpId: string;
   /** Where in the world it is, and which field map the mission uses. */
   region: RegionId;
@@ -78,6 +80,8 @@ export interface Loadout { opId: string; armor: ItemId | ""; items: ItemId[]; }
 
 export interface Campaign {
   version: 13;
+  /** Insurgency attacks on towns, due after captures in a region. */
+  retaliations?: { region: RegionId; day: number }[];
   /** Guards issued flak vests through the workshop. */
   guardVests?: boolean;
   /** Material brought back from missions, for studies (like XCOM autopsies). */
@@ -292,7 +296,8 @@ export function advanceDay(c: Campaign) {
   return c.incidents.length > incidentsBefore || c.log.length !== logBefore || !!c.over;
 }
 
-export const pendingBreach = (c: Campaign) => c.incidents.find(i => i.kind === "breach" && i.id !== c.activeIncident) ?? null;
+/** Something that has to be answered before time can move: a breach, or an ambushed convoy. */
+export const pendingBreach = (c: Campaign) => c.incidents.find(i => (i.kind === "breach" || i.kind === "escort") && i.id !== c.activeIncident) ?? null;
 
 /** Advance until something needs attention. */
 export function advanceToEvent(c: Campaign) {
@@ -423,6 +428,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
   const amnestics = kind === "coverup" ? c.amnestics : 0;
   return {
     kind, scp: (inc.scpId || "173") as ScpId, map: inc.map, amnestics,
+    night: inc.map !== "wingC" && ((c.hour ?? 0) < 6 || (c.hour ?? 0) >= 20),
     // a breach at Site-19 catches researchers in the wing and opens the D-Class block
     researchers: kind === "breach" ? Math.min(c.researchers, rand(1, 3)) : 0, strayPool: kind === "breach" ? c.dclass : 0, guards: sec.first, lateGuards: sec.late, mtfTurn: mtfArrival(c, inc), witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
     incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: Math.max(0, inc.insurgents - (inc.weakened ?? 0)), squad, dclass,
@@ -536,12 +542,13 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   c.amnestics = Math.max(0, c.amnestics - r.amnesticsUsed);
   if (r.win) {
     c.stats.won++;
-    const bonus = kind === "recovery" ? 100 : kind === "strike" ? 80 : kind === "breach" ? 50 : 0;
+    const bonus = kind === "recovery" ? 100 : kind === "strike" ? 80 : kind === "breach" ? 50 : kind === "retaliation" ? 40 : 0;
     const cut = kind === "coverup" ? 10 : 5;
     addExposure(c, region, -cut);
     c.funds += bonus;
     const anomaly = scpName(inc?.scpId || "173");
-    const what = kind === "coverup" ? "The witnesses remember nothing worth repeating." : kind === "strike" ? "The Insurgency cell is broken up." : inc?.first ? `${anomaly} is in Foundation hands.` : `${anomaly} is back in its cell.`;
+    const what = kind === "coverup" ? "The witnesses remember nothing worth repeating." : kind === "strike" ? "The Insurgency cell is broken up."
+      : kind === "escort" ? `The convoy got ${anomaly} through.` : kind === "retaliation" ? "The Insurgency attack on the town is broken." : inc?.first ? `${anomaly} is in Foundation hands.` : `${anomaly} is back in its cell.`;
     lines.unshift(`${name} closed. ${what}${bonus ? ` The O5 Council approves a $${bonus}k bonus;` : ""} exposure in ${where} −${cut}.`);
   } else {
     c.stats.lost++;
@@ -553,9 +560,12 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   if (r.amnesticsUsed) lines.push(`Amnestics used: ${r.amnesticsUsed}.`);
   if (r.dSent || r.dRecruited) lines.push(`D-Class: ${r.dSent} sent, ${r.dLost} lost, ${r.dReturned} back in holding${r.dRecruited ? ` (including ${r.dRecruited} picked up on site)` : ""}.`);
   if (r.insurgentsTotal) lines.push(`Insurgents neutralised: ${r.insurgentsDown} of ${r.insurgentsTotal}.`);
+  // a capture far from home has to get back: the convoy may be ambushed on the way (XCOM-style follow-up)
+  const capture = r.win && inc && inc.kind === "recovery" && inc.scpId;
+  const ambush = capture && travelDays(c, inc!.region) > 0 && r.squad.some(s => s.alive && !s.absent) && Math.random() < 0.3;
   // the squad flies home from abroad
   const away = inc ? travelDays(c, inc.region) : 0;
-  if (away && r.squad.some(s => s.alive)) {
+  if (away && r.squad.some(s => s.alive) && !ambush) {
     for (const s of r.squad) { const o = c.roster.find(x => x.id === s.opId); if (o?.alive) o.busy = { kind: "travel", daysLeft: away }; }
     lines.push(`The survivors fly back to Site-19: ${away} day${away > 1 ? "s" : ""}.`);
   }
@@ -564,6 +574,20 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     resolveScp(c, inc, r.win);
     if (!r.win) lines.push(`${scpName(inc.scpId)} got away. It will turn up again somewhere, in its own time.`);
   }
+  if (ambush && c.scps.some(s => s.id === inc!.scpId && s.status === "contained")) {
+    const esc: Incident = {
+      id: "inc" + c.nextIncident, kind: "escort", scpId: inc!.scpId, region: inc!.region, map: Math.random() < 0.5 ? "town" : "farm",
+      title: `Incident ${String(c.nextIncident).padStart(3, "0")}: Convoy ambushed carrying ${scpName(inc!.scpId)}`,
+      appeared: c.day, expires: c.day, insurgents: Math.min(6, 3 + Math.floor((yearOf(c.day) - 1951) / 3)),
+      squad: r.squad.filter(s => s.alive && !s.absent).map(s => s.opId),
+    };
+    c.nextIncident++;
+    c.incidents.push(esc);
+    const msg = `On the road to the airfield, the convoy carrying ${scpName(inc!.scpId)} is ambushed by the Insurgency. The squad has to hold the truck.`;
+    lines.push(msg); log(c, msg, "bad", "command");
+  }
+  // the Insurgency punishes towns that helped the Foundation
+  if (capture && Math.random() < 0.25) (c.retaliations ??= []).push({ region: inc!.region, day: c.day + rand(3, 10) });
   checkOver(c);
   return { lines, promotions };
 }

@@ -42,8 +42,10 @@ export interface HubActions {
   newCampaign: () => void;
 }
 
-const KIND_NAMES = { breach: "Breach", recovery: "Manhunt", coverup: "Cover-up", strike: "Strike" } as const;
+const KIND_NAMES = { breach: "Breach", recovery: "Manhunt", coverup: "Cover-up", strike: "Strike", escort: "Ambush", retaliation: "Retaliation" } as const;
 const KIND_BRIEF = {
+  escort: "The convoy home is under attack. The squad that made the capture has to hold the truck: neutralise the Insurgents or last 8 turns. Wounds carry over.",
+  retaliation: "The Insurgency is shooting up a town that helped you. Neutralise them; every civilian killed adds exposure.",
   breach: "SCP-173 is loose in its wing. Get it into the transport container and seal it.",
   recovery: "SCP-173 is loose among civilians. Every death there raises exposure. Get it into the truck's container and seal it.",
   coverup: "Witnesses need amnestics before they talk. Dose each one; anyone who reaches the edge of the map undosed adds exposure.",
@@ -73,12 +75,14 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   const setSpeed = (n: number) => { if (n > 0 && tab !== "world") { render(); return; } if (!(n > 0 && clockBlocked())) { speed = n; if (n) lastSpeed = n; } render(); };
 
   const ready = () => c.roster.filter(deployable);
+  // an ambushed convoy is defended by whoever made the capture, wounded or not
+  const readyFor = (inc: Incident) => inc.kind === "escort" && inc.squad ? c.roster.filter(o => o.alive && inc.squad!.includes(o.id)) : ready();
   const watchPool = () => guardsReady(c);
   const scp173 = () => c.scps.find(s => s.id === "173")!;
 
   function render() {
     if (planning && !c.incidents.some(i => i.id === planning)) planning = null;
-    for (const id of [...chosen]) if (!ready().some(o => o.id === id)) chosen.delete(id);
+    { const pl = c.incidents.find(i => i.id === planning); for (const id of [...chosen]) if (!(pl ? readyFor(pl) : ready()).some(o => o.id === id)) chosen.delete(id); }
     for (const id of [...watchers]) if (!watchPool().some(o => o.id === id)) watchers.delete(id);
     dCount = Math.max(0, Math.min(dCount, c.dclass, MAX_DCLASS));
     const pw = powerShort(c);
@@ -198,10 +202,11 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   }
 
   function planPanel(inc: Incident) {
-    const ops = ready(), t = travelDays(c, inc.region), noD = inc.kind === "strike" || inc.kind === "coverup";
+    const ops = readyFor(inc), t = inc.kind === "escort" ? 0 : travelDays(c, inc.region), noD = inc.kind === "strike" || inc.kind === "coverup" || inc.kind === "escort" || inc.kind === "retaliation";
     return `<div class="card plan">
       <div class="label">Deploy to ${esc(inc.title.split(":")[0])}</div>
       <p>${esc(KIND_BRIEF[inc.kind])}</p>
+      ${inc.map !== "wingC" && ((c.hour ?? 0) < 6 || (c.hour ?? 0) >= 20) ? `<p class="warn">Night: deploying now means fighting in the dark (everyone sees 4 tiles less). Flares help. Wait for daylight on the World tab if you'd rather.</p>` : ""}
       ${inc.kind === "breach" ? (() => { const g = breachGuards(c, inc); return `<p>Site Security: <b>${g.first.length}</b> on the scene${g.late.length ? `, ${g.late.length} more on turn 2` : ""}${g.first.length + g.late.length ? ` (${[...g.first, ...g.late].map(m => esc(m.name)).join(", ")})` : ". Nobody is fit to respond"}. Operatives you pick arrive on turn <b>${mtfArrival(c, inc)}</b>; D-Class are on site from the start.</p>`; })() : ""}
       ${t ? `<p class="muted">The ${transportName(c)} takes ${plural(t, "day")} to reach ${REGIONS[inc.region].name}; time at Site-19 passes while the squad is in the air, and the survivors spend as long again flying home.</p>` : ""}
       ${inc.kind === "coverup" ? `<p class="${c.amnestics < (inc.witnesses ?? 0) ? "warn" : "muted"}">The squad carries all ${c.amnestics} amnestic doses in storage, for ${plural(inc.witnesses ?? 0, "witness")}.</p>` : ""}
@@ -285,7 +290,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
           <button class="act ${speed ? "" : "on"}" type="button" data-speed="0" aria-pressed="${!speed}">Pause <kbd>Space</kbd></button>
           ${SPEEDS.map((n, i) => `<button class="act ${speed === n ? "on" : ""}" type="button" data-speed="${n}" aria-pressed="${speed === n}" ${clockBlocked() ? "disabled" : ""}>${n}× <kbd>${i + 1}</kbd></button>`).join("")}
         </div>
-        ${pendingBreach(c) ? `<p class="warn">A breach is under way. Deal with it before time moves on.</p>` : ""}
+        ${pendingBreach(c) ? `<p class="warn">${pendingBreach(c)!.kind === "escort" ? "A convoy is under attack" : "A breach is under way"}. Deal with it before time moves on.</p>` : ""}
         <p class="muted">At 1× a day passes every ${DAY_MS / 1000} seconds. The clock pauses itself when something needs you. Next month: $${monthlyFunding(c)}k from the fronts, $${monthlyUpkeep(c)}k upkeep and salaries, up to ${DCLASS_MONTHLY} D-Class. Operatives heal ${healPerDay(c)} HP and recover ${sanityPerDay(c)} sanity a day.</p>
       </div>
     <div class="card worldcard">
@@ -755,7 +760,9 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     root.querySelectorAll<HTMLElement>("[data-plan]").forEach(b => b.onclick = () => {
       planning = planning === b.dataset.plan ? null : b.dataset.plan!;
       if (planning) speed = 0;   // nothing expires while a plan is being made
-      if (planning && !chosen.size) for (const o of ready().slice(0, squadSize(c))) chosen.add(o.id);
+      const pl = c.incidents.find(i => i.id === planning);
+      if (planning && pl?.kind === "escort") chosen.clear();
+      if (planning && !chosen.size && pl) for (const o of readyFor(pl).slice(0, squadSize(c))) chosen.add(o.id);
       render();
     });
     root.querySelectorAll<HTMLInputElement>("[data-pick]").forEach(b => b.onchange = () => {
@@ -773,7 +780,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         const g = gearOf(id);
         return { opId: id, armor: g.armor, items: g.items.filter((i): i is ItemId => !!i) };
       });
-      act.deploy(inc, loadouts, inc.kind === "strike" || inc.kind === "coverup" ? 0 : dCount);
+      act.deploy(inc, loadouts, ["strike", "coverup", "escort", "retaliation"].includes(inc.kind) ? 0 : dCount);
     });
     on("resetBtn", () => {
       const b = $("resetBtn")!;

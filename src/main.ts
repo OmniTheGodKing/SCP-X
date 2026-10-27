@@ -24,6 +24,8 @@ const WIN: Record<MissionKind, [string, string]> = {
   manhunt: ["Recovered", "%s is sealed in the truck's container."],
   coverup: ["Contained", "Every witness has been dosed."],
   strike: ["Cell broken", "The Insurgency cell is out of action."],
+  escort: ["Convoy safe", "The convoy is moving again with its cargo."],
+  retaliation: ["Town held", "The Insurgency attack is broken."],
 };
 function debriefHtml(r: MissionResult, d: Debrief, kind: MissionKind, scp: string) {
   return `
@@ -50,7 +52,7 @@ function showHub() {
       if (travelBlock(campaign, inc)) return;
       const setup = buildSetup(campaign, inc, loadouts, dCount);
       // the flight out: days pass at Site-19 while the squad is in the air
-      const t = travelDays(campaign, inc.region);
+      const t = inc.kind === "escort" ? 0 : travelDays(campaign, inc.region);
       if (t) {
         log(campaign, `Epsilon-11 flies out to ${REGIONS[inc.region].name} on the ${transportName(campaign)}: ${t} day${t > 1 ? "s" : ""}.`);
         for (let i = 0; i < t && !campaign.over; i++) {
