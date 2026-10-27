@@ -1,6 +1,7 @@
 // Gunfire, cover, damage and movement.
+import { BOND_AIM } from "../campaign/condition";
 import { charmTurns, officerNear } from "./ciTactics";
-import { DIRS, DRUM, FULL, HALF, STEEL, TS, WALL, L, bfs, tileAt, type Pt } from "../core/grid";
+import { DIRS, DRUM, FULL, HALF, STEEL, TS, WALL, L, bfs, cheb, tileAt, type Pt } from "../core/grid";
 import { bestView, type View } from "../core/sight";
 import { hasPerk, rangeOf } from "./perks";
 import { TYPES, rangeMod } from "../data/weapons";
@@ -60,6 +61,7 @@ export function shotInfo(sh: Unit, tg: Unit, reaction = false): ShotInfo {
   if (reaction && !hasPerk(sh, "covering_fire")) mods.push(["Reaction shot", (gun?.type === "mg" ? -5 : -15) + (sh.side === "mtf" ? Math.min(S.setup.mods.reactionBonus ?? 0, gun?.type === "mg" ? 5 : 15) : 0)]);
   if (sh.side === "raider" && tg.hasArmor && S.setup.mods.ciAnalysis) mods.push(["Known weapons", -5]);
   if (officerNear(sh)) mods.push(["Officer nearby", 10]);
+  { const mate = bondmateNear(sh); if (mate) mods.push([`Bond: ${mate.name.split(" ").pop()}`, BOND_AIM[sh.bonds![mate.opId!]]]); }
   if (sh.side === "mtf" && sh.san <= 30) mods.push(["Shaken", -10]);
   if (sh.medals?.includes("sealed_in") && (tg.side === "anomaly" || (tg.side === "zombie" && !tg.rioter))) mods.push(["Sealed in", 5]);
   if (cover === 0 && hasPerk(sh, "hunter")) mods.push(["Hunter", 20]);
@@ -81,6 +83,15 @@ export const center = (u: { x: number; y: number }): Pt => [u.x * TS + TS / 2, u
 function why(info: ReturnType<typeof shotInfo>, gunName?: string) {
   const r = info.mods.filter(([n, v], k) => k > 0 && v && n !== gunName);
   return r.length ? `: ${r.slice(0, 3).map(([n, v]) => `${n.toLowerCase()} ${v > 0 ? "+" : ""}${v}`).join(", ")}` : "";
+}
+
+/** The strongest bondmate of the shooter within 4 tiles and in sight, if any. */
+function bondmateNear(sh: Unit) {
+  if (!sh.bonds) return null;
+  let best: Unit | null = null;
+  for (const m of team()) if (m !== sh && m.opId && sh.bonds[m.opId] && cheb(m.x, m.y, sh.x, sh.y) <= 4 && canSee(sh, m.x, m.y))
+    if (!best || sh.bonds[m.opId] > sh.bonds[best.opId!]) best = m;
+  return best;
 }
 
 export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
@@ -161,6 +172,7 @@ function goDown(u: Unit) {
   if (u.carrying) dropCarried(u);
   u.hp = 0; u.downed = true; u.bleed = BLEED_TURNS; u.staring = false; u.overwatch = false; u.ap = 0;
   if (S.selected === u) S.selected = null;
+  for (const m of team()) if (m !== u && u.opId && m.bonds?.[u.opId]) loseSanity(m, 5 * m.bonds[u.opId], "witness");
   log(`${full(u)} is down and bleeding out: ${BLEED_TURNS} turns to stabilize them${team().some(m => hasPerk(m, "stabilize")) ? "" : ". Nobody on the squad can; win the mission before they bleed out"}.`, "bad");
   for (const m of team()) if (m !== u && canSee(m, u.x, u.y)) m.witnessed = (m.witnessed ?? 0) + 1;
 }

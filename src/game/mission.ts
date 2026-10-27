@@ -31,7 +31,7 @@ export function spawnMember(m: SquadMember, x: number, y: number, mods: MissionS
     armor: m.armor + (m.perks.includes("plated") ? 1 : 0), hasArmor: m.hasArmor, armorKind: m.armorKind, moveBonus: m.moveBonus, blinkMod: mods.blinkBonus,
     items: m.items.map(it => ({ ...it, uses: it.uses + (m.perks.includes("grenadier") && (it.id === "flashbang" || it.id === "smoke" || it.id === "frag") ? 1 : 0) })),
     cls: m.cls, perks: [...m.perks], traits: [...m.traits], medals: m.medals, minHp: m.hp, gun: { ...m.gun }, witnessed: 0, panics: 0, streak: 0, bestStreak: 0,
-    goggles: m.goggles, specialist: m.specialist });
+    goggles: m.goggles, specialist: m.specialist, bonds: m.bonds });
 }
 
 /** Free floor tiles within 2 of the squad's entry points, nearest first. */

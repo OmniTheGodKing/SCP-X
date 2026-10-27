@@ -1,9 +1,9 @@
 import "./styles.css";
 import { briefing } from "./campaign/geo";
-import { advanceDay, applyResult, buildSetup, log, newCampaign, refreshRecruits, resolveInterrupted, type Campaign, type Debrief } from "./campaign/campaign";
+import { advanceDay, applyResult, buildSetup, log, newCampaign, refreshRecruits, resolveInterrupted, type Campaign, type Debrief, type Incident } from "./campaign/campaign";
 import { clearCampaign, loadCampaign, saveCampaign } from "./campaign/save";
 import { REGIONS } from "./data/regions";
-import { missionWeather } from "./campaign/geo";
+import { missionWeather, nightAt } from "./campaign/geo";
 import { forfeitGroup } from "./campaign/council";
 import { flightOut, stormDelay, travelBlock, transportName } from "./campaign/world";
 import { letGuardsHandle } from "./campaign/security";
@@ -11,7 +11,7 @@ import { scpName } from "./campaign/containment";
 import { pendingBreach } from "./campaign/campaign";
 import { createMission } from "./game/mission";
 import { S } from "./game/state";
-import type { MissionKind, MissionResult } from "./game/types";
+import type { MissionKind, MissionResult, MissionSetup } from "./game/types";
 import { mountHub, openTab } from "./ui/hubView";
 import { L } from "./core/grid";
 import { sightFrom } from "./core/sight";
@@ -55,6 +55,17 @@ function debriefHtml(r: MissionResult, d: Debrief, kind: MissionKind, scp: strin
 }
 
 let screen: "hub" | "mission" = "hub";
+/** Start a mission now and come back to the World Map after its debrief. */
+function launch(setup: MissionSetup, inc: Incident) {
+  saveCampaign(campaign);
+  createMission(setup);
+  screen = "mission";
+  mountMission(root, () => { openTab("world", "reg:" + inc.region); showHub(); }, result => {
+    const d = applyResult(campaign, result);
+    saveCampaign(campaign);
+    return debriefHtml(result, d, setup.kind, scpName(setup.scp ?? "173"));
+  });
+}
 function showHub() {
   screen = "hub";
   mountHub(root, campaign, {
@@ -67,27 +78,30 @@ function showHub() {
       forfeitGroup(campaign, inc);
       { const b = briefing(campaign, inc); const first = (t: string) => t.split(/(?<=\.) /)[0];
         inc.briefed = [...b.known.map(first), ...b.estimated.map(t => `Estimated: ${first(t)}`), ...b.unknown.map(t => `Unknown: ${first(t)}`)].join(" "); }
-      // the flight out: days pass at Site-19 while the squad is in the air
       // a storm over the destination holds the flight back a day
       const storm = inc.kind !== "escort" && stormDelay(campaign, inc.region), t = flightOut(campaign, inc);
-      if (t) {
-        log(campaign, `Epsilon-11 flies out to ${REGIONS[inc.region].name} on the ${transportName(campaign)}: ${t} day${t > 1 ? "s" : ""}${storm ? " (a storm there adds a day)" : ""}.`);
-        for (let i = 0; i < t && !campaign.over; i++) {
-          advanceDay(campaign);
-          // a breach while the squad is in the air is Site Security's problem
-          const b = pendingBreach(campaign);
-          if (b) { log(campaign, "Epsilon-11 is in the air. Site Security has to handle the breach alone.", "bad"); letGuardsHandle(campaign, b); }
-        }
-      }
-      setup.weather = missionWeather(campaign, inc); // the sky they land under
+      if (!t) { launch(setup, inc); return; }
+      // the flight out: the squad takes off, the plane crosses the World Map while time runs, and the mission
+      // starts when it lands. Anything at Site-19 meanwhile is Site Security's problem.
+      const depart = campaign.day + (campaign.hour ?? 0) / 24, tf = setup.squad.some(m => m.goggles) ? "Eta-10" : "Epsilon-11";
+      campaign.outbound = { incId: inc.id, region: inc.region, depart, arrive: depart + t, setup, tf };
+      for (const m of setup.squad) { const o = campaign.roster.find(x => x.id === m.opId); if (o) o.busy = { kind: "travel", daysLeft: t, out: true }; }
+      log(campaign, `${tf} takes off for ${REGIONS[inc.region].name} on the ${transportName(campaign)}: ${t} day${t > 1 ? "s" : ""}${storm ? " (a storm there adds a day)" : ""}. Let time run on the World Map to get them there.`, "key");
       saveCampaign(campaign);
-      createMission(setup);
-      screen = "mission";
-      mountMission(root, () => { openTab("world", "reg:" + inc.region); showHub(); }, result => {
-        const d = applyResult(campaign, result);
-        saveCampaign(campaign);
-        return debriefHtml(result, d, setup.kind, scpName(setup.scp ?? "173"));
-      });
+      openTab("world", "inc:" + inc.id);
+      showHub();
+    },
+    arrive: () => {
+      const o = campaign.outbound;
+      if (!o) return;
+      campaign.outbound = undefined;
+      for (const m of o.setup.squad) { const op = campaign.roster.find(x => x.id === m.opId); if (op?.busy?.out) op.busy = undefined; }
+      const inc = campaign.incidents.find(i => i.id === o.incId);
+      if (!inc) { log(campaign, "The incident was over before the squad landed. They turn around.", "key"); saveCampaign(campaign); showHub(); return; }
+      log(campaign, `${o.tf} has landed in ${REGIONS[inc.region].name}.`, "key");
+      o.setup.weather = missionWeather(campaign, inc);   // the sky they land under
+      o.setup.night = inc.kind === "emergency" ? true : nightAt(campaign, inc);
+      launch(o.setup, inc);
     },
   });
 }

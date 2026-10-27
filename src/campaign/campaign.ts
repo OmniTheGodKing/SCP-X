@@ -1,4 +1,5 @@
 // Site-19 between missions: the roster, time passing, funding, public exposure and incidents.
+import { FATIGUE, afterMission, bondsOf, restDay, tiredness } from "./condition";
 import { announceHire, hirePerson, losePeople, someone, syncStaff, type Lost, type Person } from "./people";
 import { GOGGLES, NU7, canBringAmnestics, canBringResearcher, canCallNu7, nu7Troopers, otherSiteOutcome, scanOutcome, SPECIALIST, tfOf } from "./taskforces";
 import { newTf, tickTf, type TaskForce, type TfState } from "./taskforces";
@@ -17,7 +18,7 @@ import { reachMilestone, type Milestone } from "./research";
 import { ITEMS, PROJECTS, armorStats, uniformOf, has, projectLock, monthlyResearch, newResearch, tickResearch, type MaterialId, type ItemId, type Order, type ResearchState } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, collapsedCount, COLLAPSE_LIMIT, isContacted, newRegions, regionFunding, tickWorld, travelDays, type RegionState } from "./world";
-import { RAID, raidArrival, raidLoss, tickRaids, ALERTS, breachGuards, guardMember, guardsReady, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
+import { letGuardsHandle, letGuardsHandleRaid, letGuardsHandleRiot, RAID, raidArrival, raidLoss, tickRaids, ALERTS, breachGuards, guardMember, guardsReady, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
 import { MEDALS, rollBio, type MedalId } from "../data/bios";
 import { QUALITY, UNITS, rollCandidate, type Candidate, type UnitId } from "../data/units";
 import { fitLook, rollLook, type Look } from "../data/looks";
@@ -53,6 +54,12 @@ export interface Operative {
   traits: TraitId[];
   /** Times they have broken down (shut their eyes at zero sanity), across missions. */
   breakdowns: number;
+  /** Phase 3K: fatigue (0 to 100), a serious injury and when it heals, shared missions with each squadmate, and
+   *  the bondmates they've lost. */
+  fatigue?: number;
+  injury?: { name: string; until: number };
+  bonds?: Record<string, number>;
+  lostBonds?: string[];
   /** Which task force they serve with (unset: Epsilon-11). */
   tf?: TaskForce;
   /** Given on making Corporal; the player can change it. */
@@ -60,7 +67,7 @@ export interface Operative {
   /** Part-XP banked from drills. */
   drill?: number;
   /** Away from duty: in therapy or retraining. */
-  busy?: { kind: "therapy" | "retrain" | "travel"; daysLeft: number; trait?: TraitId; from?: RegionId; total?: number };
+  busy?: { kind: "therapy" | "retrain" | "travel"; daysLeft: number; trait?: TraitId; from?: RegionId; total?: number; out?: boolean };
   /** Chosen weapon type (one of their class's two) and the attachment fitted to it. */
   weapon?: WeaponType;
   attachment?: AttachmentId;
@@ -163,6 +170,9 @@ export interface Loadout { opId: string; armor: ItemId | ""; items: ItemId[]; }
 
 export interface Campaign {
   version: 23;
+  /** A squad in the air on its way to an incident: the mission waits for it to land (times are days, hours as
+   *  fractions). */
+  outbound?: { incId: string; region: RegionId; depart: number; arrive: number; setup: MissionSetup; tf: string };
   /** Eta-10 and Nu-7, field agents, and relations with the other Foundation sites. */
   tf: TfState;
   /** The Chaos Insurgency's global agenda, operations, commander and moles. */
@@ -270,7 +280,7 @@ export const aimOf = (o: Operative) => o.aimBase + o.rank * 4 + (o.rank >= 5 ? 5
 export const maxSanOf = (o: Operative) => 100 + o.rank * 5 + (o.sanBonus ?? 0) + (o.rank >= 6 ? 10 : 0) + (medal(o, "survivor") ? 10 : 0);
 export const blinkFullOf = (o: Operative) => Math.max(0.03, 0.10 - Math.min(o.rank, 4) * 0.01 - (o.rank >= 6 ? 0.02 : 0) - (medal(o, "iron_nerve") ? 0.02 : 0));
 export const newBio = rollBio;
-export const deployable = (o: Operative) => o.alive && o.hp >= o.maxHp && !o.busy;
+export const deployable = (c: Campaign, o: Operative) => o.alive && o.hp >= o.maxHp && !o.busy && (o.fatigue ?? 0) < FATIGUE.exhausted && !(o.injury && o.injury.until > c.day);
 /** An operative who has ranked up but not yet picked their class or perk. */
 export const promotionDue = (o: Operative) => o.alive && o.rank > 0 && o.perks.length < Math.min(o.rank, PERK_RANKS);
 export const perkChoices = (o: Operative): [PerkId, PerkId] | null =>
@@ -423,6 +433,8 @@ export const monthlyFunding = (c: Campaign) => councilGrant(c) + frontsFunding(c
 /** Advance one day. Returns true if something happened that needs the player's attention. */
 export function advanceDay(c: Campaign) {
   if (c.over) return false;
+  // with a squad in the air, anything at Site-19 is Site Security's problem
+  answerWhileAway(c);
   // a breach is answered on the spot: time stands still until it's dealt with
   if (pendingBreach(c)) return true;
   const incidentsBefore = c.incidents.length, logBefore = c.log.length;
@@ -433,9 +445,10 @@ export function advanceDay(c: Campaign) {
   const drill = countOperational(c, "training") > 0 && (c.day % 7 === 0 || (has(c, "bt_drills") && c.day % 7 === 3));
   for (const o of c.roster) if (o.alive) {
     o.hp = Math.min(o.maxHp, o.hp + heal);
+    restDay(c, o);
     const rest = (o.traits.includes("hollow") ? calm / 2 : calm) + ((o.aftercareUntil ?? 0) >= c.day ? 10 : 0);
     o.san = Math.min(maxSanOf(o), o.san + rest);
-    if (o.busy && --o.busy.daysLeft <= 0) {
+    if (o.busy && !o.busy.out && --o.busy.daysLeft <= 0) {
       if (o.busy.kind === "therapy" && o.busy.trait) {
         o.traits = o.traits.filter(t => t !== o.busy!.trait);
         log(c, `${o.call} ${o.name} finished therapy. ${TRAITS[o.busy.trait].name} is gone.`, "good", "personnel");
@@ -490,6 +503,20 @@ export function advanceDay(c: Campaign) {
   }
   checkOver(c);
   return c.incidents.length > incidentsBefore || c.log.length !== logBefore || !!c.over;
+}
+
+/** While a squad is in the air, anything at Site-19 that needs an answer is left to Site Security. */
+export function answerWhileAway(c: Campaign) {
+  if (!c.outbound) return;
+  const b = pendingBreach(c);
+  if (b) { log(c, "Epsilon-11 is in the air. Site Security has to handle it alone.", "bad"); guardsAnswer(c, b); }
+}
+/** Site Security answers whatever it is on its own. */
+function guardsAnswer(c: Campaign, b: Incident) {
+  if (b.kind === "riot") letGuardsHandleRiot(c, b);
+  else if (b.kind === "raid") letGuardsHandleRaid(c, b);
+  else if (b.kind === "breach") letGuardsHandle(c, b);
+  else c.incidents = c.incidents.filter(i => i !== b);   // an ambush with nobody to answer it is lost
 }
 
 /** Something that has to be answered before time can move: a breach, or an ambushed convoy. */
@@ -680,10 +707,13 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
       opId: o.id, name: fieldName(o), call: o.call, hp: o.hp + bonus, maxHp: o.maxHp + bonus, san: Math.min(o.san, maxSanOf(o)),
       rankShort: RANK_SHORT[o.rank], maxSan: maxSanOf(o), aim: aimOf(o) + (has(c, "marksmanship") ? 5 : 0), blinkFull: blinkFullOf(o), medals: [...(o.medals ?? [])],
       armor: st.points + uni.points, hasArmor: !!kind || uni.points > 0, armorKind: kind || undefined, armorHp: st.hp + uni.hp, moveBonus: st.move + (o.fleet ? 1 : 0), items: items.map(id => ({ id, uses: ITEMS[id].uses ?? 1 })),
-      cls: o.cls, perks: [...o.perks], traits: [...o.traits], gun: gunFor(c, o), goggles: tfOf(o) === "eta10",
+      cls: o.cls, perks: [...o.perks], traits: [...o.traits], gun: gunFor(c, o), goggles: tfOf(o) === "eta10", bonds: undefined as Record<string, number> | undefined,
     };
   }).map(m => {
     if (m.goggles) m.aim += GOGGLES.aim;
+    const op = c.roster.find(x => x.id === m.opId);
+    if (op && tiredness(op) === "tired") { m.aim += FATIGUE.aim; m.san = Math.max(1, m.san - FATIGUE.san); }
+    if (op) m.bonds = Object.fromEntries(bondsOf(op).filter(b => loadouts.some(l => l.opId === b.id)).map(b => [b.id, b.level]));
     // traits and the Marksman perk adjust the numbers they deploy with
     if (m.perks.includes("marksman")) m.aim += 10;
     if (m.traits.includes("gunshy")) m.aim -= 10;
@@ -918,6 +948,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     for (const s of r.squad) { const o = c.roster.find(x => x.id === s.opId); if (o?.alive) o.busy = { kind: "travel", daysLeft: away, from: inc!.region, total: away }; }
     lines.push(`The survivors fly back to Site-19: ${away} day${away > 1 ? "s" : ""}.`);
   }
+  lines.push(...afterMission(c, r));
   for (const l of [...lines, ...promotions]) log(c, l, r.win ? "good" : "bad");
   if (inc?.transfer) lines.push(transferFought(c, inc.transfer, r.win));
   else if (inc?.scpId && inc.kind !== "emergency") {   // another site's anomaly stays theirs
@@ -962,7 +993,8 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
 
 /** A mission interrupted by closing the page counts as a failure with no rewards. */
 export function resolveInterrupted(c: Campaign) {
-  if (!c.activeIncident) return;
+  // a squad still in the air hasn't started its mission: the flight just carries on
+  if (!c.activeIncident || c.outbound?.incId === c.activeIncident) return;
   const inc = c.incidents.find(i => i.id === c.activeIncident);
   c.incidents = c.incidents.filter(i => i.id !== c.activeIncident);
   c.activeIncident = undefined;
