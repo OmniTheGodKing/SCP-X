@@ -51,6 +51,7 @@ function showHub() {
   mountHub(root, campaign, {
     save: () => saveCampaign(campaign),
     newCampaign: () => { clearCampaign(); campaign = newCampaign(); saveCampaign(campaign); showHub(); },
+    importCampaign: (c: Campaign) => { campaign = c; resolveInterrupted(campaign); saveCampaign(campaign); log(campaign, "Campaign loaded from an exported save.", "key"); showHub(); },
     deploy: (inc, loadouts, dCount) => {
       if (travelBlock(campaign, inc)) return;
       const setup = buildSetup(campaign, inc, loadouts, dCount);
