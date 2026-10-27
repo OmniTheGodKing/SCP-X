@@ -23,7 +23,9 @@ export interface Carried { id: ItemId; uses: number; }
 export type Side = "mtf" | "dclass" | "subject" | "civilian" | "raider" | "anomaly" | "zombie";
 /** Anomalies a mission can be about. */
 export type ScpId = "173" | "049" | "106";
-export type MissionKind = "breach" | "manhunt" | "coverup" | "strike" | "escort" | "retaliation" | "outbreak" | "riot";
+/** Raids: the Insurgency pulls back if the lift still holds at the end of this turn. */
+export const RAID_TURNS = 14;
+export type MissionKind = "breach" | "manhunt" | "coverup" | "strike" | "escort" | "retaliation" | "outbreak" | "riot" | "raid";
 export type Phase = "player" | "anomaly" | "hand" | "subjects" | "over";
 
 export interface Unit {
@@ -157,13 +159,15 @@ export interface SquadMember {
 export interface MissionMods { blinkBonus: number; recoverBonus: number; mtfDrag: number; track173: boolean; lockdownTurns: number; calmTurns: number; pocketReturn: number;
   /** Research expansion: medkit healing, stabilized operatives standing up, overwatch aim back, extra sight,
    *  Insurgent aim against armor, and how many D-Class get loose in a breach. */
-  medkitHeal: number; standUp: boolean; m79: boolean; reactionBonus: number; sightBonus: number; ciAnalysis: boolean; strays: number; }
+  medkitHeal: number; standUp: boolean; m79: boolean; reactionBonus: number; sightBonus: number; ciAnalysis: boolean; strays: number;
+  /** Raids: perimeter alarms put Site Security on overwatch from the start. */
+  alarms?: boolean; }
 
 export interface MissionSetup {
   kind: MissionKind;
   /** Which anomaly a breach or manhunt is about (SCP-173 if not set). */
   scp?: ScpId;
-  map: "wingC" | "town" | "farm" | "port" | "dblock";
+  map: "wingC" | "town" | "farm" | "port" | "dblock" | "gate";
   /** Riots: how many D-Class are rioting. */
   rioters?: number;
   amnestics: number;

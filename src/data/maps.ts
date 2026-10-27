@@ -173,5 +173,44 @@ export const DBLOCK: MapDef = {
   strayRooms: [[1, 13, 20, 16], [21, 9, 26, 11]],
 };
 
-export const MAPS = { wingC: WING_C, town: TOWN, farm: FARM, port: PORT, dblock: DBLOCK };
+// Site-19's surface compound: the Insurgency comes through the wire from the west, and the lift down into the
+// site is in the lift house on the east side. Epsilon-11 comes up the lift.
+export const GATE: MapDef = {
+  name: "Site-19 surface compound",
+  rows: [
+    "############################",
+    "#...h.#.......#.....#.h...##",
+    "#.....#####...#.hh..+.....##",
+    "#.HH..##h.#...#.....#...h.##",
+    "#.....##..#...#.....#.h...##",
+    "#.....###+#...###+##########",
+    "#.....#............#########",
+    "#...h.......H......#.h..SS##",
+    "#..................+.....C##",
+    "#.......h.....h....+.....C##",
+    "#...h.......H......#.h..SS##",
+    "#.....#............#########",
+    "#.HH..#..HH...###+##########",
+    "#.....#.......#...........##",
+    "#.............#.h..h......##",
+    "#h....#....D..#.h..h....h.##",
+    "#.....#.......#...........##",
+    "############################",
+  ],
+  area(x, y) {
+    if (x <= 5) return "approach road";
+    if (x >= 7 && x <= 10 && y >= 2 && y <= 5) return "gatehouse";
+    if (x >= 14 && y <= 5) return x <= 19 ? "west office" : "records office";
+    if (x >= 14 && y >= 12) return "barracks";
+    if (x >= 19 && y >= 6 && y <= 11) return "lift house";
+    return y >= 11 ? "motor pool" : "courtyard";
+  },
+  squadSpawns: [[22, 8], [22, 9], [23, 8], [23, 9]],
+  scpRooms: [],
+  insurgentRooms: [[1, 1, 5, 5], [1, 6, 5, 11], [1, 12, 5, 16]],
+  strayRooms: [],
+  fixedFurniture: true,
+};
+
+export const MAPS = { wingC: WING_C, town: TOWN, farm: FARM, port: PORT, dblock: DBLOCK, gate: GATE };
 export type MapId = keyof typeof MAPS;

@@ -9,7 +9,7 @@ import {
   callBlink, callCheck, doOverwatch, doSeal, dragCheck, endTurn, evacuate, onTap, sealCheck, select, selectNext,
   doReload, fireCheck, reloadCheck, useCheck, useItem, stareCheck, startPlayerTurn, throwCheck, toggleDrag, toggleStare, toggleThrow,
 } from "../game/turn";
-import { HEAVY, THROWN, type AbilityId, type ItemId } from "../game/types";
+import { HEAVY, RAID_TURNS, THROWN, type AbilityId, type ItemId } from "../game/types";
 import { abilitiesOf, abilityCheck, abilityDesc, abilityName, startAbility } from "../game/abilities";
 import { usesLeft } from "../game/perks";
 import { CLASSES, PERKS } from "../data/classes";
@@ -18,6 +18,7 @@ const OBJECTIVES = {
   breach: "",
   manhunt: "SCP-173 is loose among civilians. Get it into the truck's open container, with nobody else inside, then have an operative seal it. Every civilian it kills adds exposure in the region.",
   coverup: "Reach every witness (marked W) and give them amnestics with Dose: 1 action, from the next tile. A witness who spots the team runs for the map edge; any who escape undosed add exposure. Dose at least half of them for the mission to count as a success. Other civilians can be ignored.",
+  raid: "Keep the Insurgents away from the lift doors in the lift house. Guards standing in the doorway keep them from forcing it. One who spends a turn at the doors forces them open on the next. Kill or drive them all off, or hold until they pull back.",
   riot: "Restrain the rioting D-Class (next to them, 1 action) or put them down. Every one killed is a D-Class lost from storage.",
   outbreak: "Burn out SCP-610's core with fire (incendiaries, the flamethrower, fuel drums). Anyone who ends a turn on the flesh without a sealed containment suit is infected and turns 5 turns later. Nothing saves them.",
   escort: "Keep the Insurgents away from the truck. One who stays next to it for a turn gets it open and the anomaly is lost. Neutralise them all, or hold for 8 turns.",
@@ -129,7 +130,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   $("mEyebrow").textContent = `SCP Foundation · ${S.setup.title}`;
   const has173 = S.has173, kind = S.setup.kind;
   if (kind !== "breach") {
-    $("mTitle").innerHTML = { riot: "Riot <small>D-Class block</small>", outbreak: "SCP-610 Outbreak <small>“The Flesh that Hates” · Keter</small>", escort: "Convoy Ambush <small>Escort</small>", retaliation: "Retaliation <small>Insurgency attack</small>", manhunt: "SCP-173 Manhunt <small>Field recovery</small>", coverup: "Cover-up <small>Class-A amnestics</small>", strike: "Strike <small>Chaos Insurgency cell</small>", breach: "" }[kind];
+    $("mTitle").innerHTML = { raid: "Raid <small>Site-19 surface compound</small>", riot: "Riot <small>D-Class block</small>", outbreak: "SCP-610 Outbreak <small>“The Flesh that Hates” · Keter</small>", escort: "Convoy Ambush <small>Escort</small>", retaliation: "Retaliation <small>Insurgency attack</small>", manhunt: "SCP-173 Manhunt <small>Field recovery</small>", coverup: "Cover-up <small>Class-A amnestics</small>", strike: "Strike <small>Chaos Insurgency cell</small>", breach: "" }[kind];
     $("objRule").innerHTML = `<b>Objective.</b> ${esc(OBJECTIVES[kind])}`;
   }
   if (!has173) {
@@ -277,10 +278,13 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
         line.innerHTML = `<b>Witnesses: ${dosed} dosed, ${loose} still loose${gone ? `, ${gone} got away` : ""}.</b><br>Amnestics carried: ${S.amnestics}. Dose takes 1 action next to a witness.`;
       } else {
         const up = S.units.filter(u => u.side === "raider" && u.alive && !u.downed).length;
-        if (kind === "escort") line.innerHTML = `<b>Insurgents still fighting: ${up}.</b> Hold until turn ${ESCORT_TURNS}: ${Math.max(0, ESCORT_TURNS - S.turn)} more.<br>${S.units.some(u => u.side === "raider" && u.alive && u.stealTurn === S.turn) ? "<b>Someone is at the truck.</b>" : "Nobody at the truck."}`;
-        else
+        const forcing = S.units.some(u => u.side === "raider" && u.alive && u.stealTurn === S.turn);
         sc.className = "card status " + (up ? "danger" : "done");
-        line.innerHTML = `<b>Insurgents still fighting: ${up} of ${S.setup.insurgents}.</b><br>Neutralised: ${S.stats.raidersDown}. Wounded ones can be secured as prisoners.`;
+        if (kind === "escort") line.innerHTML = `<b>Insurgents still fighting: ${up}.</b> Hold until turn ${ESCORT_TURNS}: ${Math.max(0, ESCORT_TURNS - S.turn)} more.<br>${forcing ? "<b>Someone is at the truck.</b>" : "Nobody at the truck."}`;
+        else if (kind === "raid") {
+          const mtf = S.reinforce.find(r => !r.members[0]?.guard);
+          line.innerHTML = `<b>Insurgents still fighting: ${up} of ${S.setup.insurgents}.</b> They pull back after turn ${RAID_TURNS}: ${Math.max(0, RAID_TURNS - S.turn)} more.${mtf ? ` Epsilon-11 comes up the lift on turn ${mtf.turn}.` : ""}<br>${forcing ? "<b>Someone is forcing the lift doors.</b>" : "Nobody at the lift doors."}`;
+        } else line.innerHTML = `<b>Insurgents still fighting: ${up} of ${S.setup.insurgents}.</b><br>Neutralised: ${S.stats.raidersDown}. Wounded ones can be secured as prisoners.`;
       }
     } else if (S.sealed) {
       sc.className = "card status done";

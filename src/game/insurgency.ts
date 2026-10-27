@@ -79,7 +79,7 @@ export async function raiderPhase(checkEnd: () => boolean) {
   }
   for (const r of alive("raider")) {
     if (!podActive(r) || !r.alive || !alive("mtf").length || isPanicked(r)) continue;
-    if (S.setup.kind === "escort" && nearContainer(r.x, r.y)) { workTruck(r); if (checkEnd()) return; continue; }
+    if ((S.setup.kind === "escort" || S.setup.kind === "raid") && nearContainer(r.x, r.y)) { workTruck(r); if (checkEnd()) return; continue; }
     if (isBlind(r)) { if (seen(r.x, r.y)) log("A blinded Insurgent stumbles and can't fire."); continue; }
     r.ap = 2;
     await raiderAct(r);
@@ -89,9 +89,10 @@ export async function raiderPhase(checkEnd: () => boolean) {
 
 /** An Insurgent at the truck spends their turn forcing it; a second turn there and it's open. */
 function workTruck(r: Unit) {
-  if (r.stealTurn === S.turn - 1) { S.stolen = true; log("The Insurgents have the truck open. The anomaly is gone.", "bad"); return; }
+  const raid = S.setup.kind === "raid";
+  if (r.stealTurn === S.turn - 1) { S.stolen = true; log(raid ? "The Insurgents have the lift doors open and are going down into Site-19." : "The Insurgents have the truck open. The anomaly is gone.", "bad"); return; }
   r.stealTurn = S.turn;
-  log("An Insurgent is working the truck's door open. Stop them before next turn.", "bad");
+  log(raid ? "An Insurgent is forcing the lift doors. Stop them before next turn." : "An Insurgent is working the truck's door open. Stop them before next turn.", "bad");
 }
 
 /** The best place within reach to fight from: in cover, flanking if possible, at a middling distance. */
@@ -114,7 +115,7 @@ function bestSpot(r: Unit, t: Unit[]) {
     sc -= Math.abs(pd - 6) * 4;
     if (!S.sealed && st.alive && cheb(st.x, st.y, x, y) <= 2) sc -= 40;
     // on an escort, the truck is what they came for
-    if (S.setup.kind === "escort") sc -= Math.min(...L.contTiles.map(([cx, cy]) => cheb(cx, cy, x, y))) * 7;
+    if (S.setup.kind === "escort" || S.setup.kind === "raid") sc -= Math.min(...L.contTiles.map(([cx, cy]) => cheb(cx, cy, x, y))) * 7;
     sc -= res.dist[i] * 0.5 + Math.random() * 3;
     if (sc > bestScore) { bestScore = sc; bestT = [x, y]; }
   }

@@ -21,6 +21,8 @@ export interface MapDef {
   /** Site-19 maps: the surface hatch SCP-173 can escape through, and the panel that locks it. */
   hatch?: Pt;
   panel?: Pt;
+  /** Keep the furniture as drawn (outdoor maps whose spawn areas aren't rooms). */
+  fixedFurniture?: boolean;
 }
 
 export class Level {

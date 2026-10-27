@@ -32,7 +32,7 @@ import {
 } from "../campaign/world";
 import {
   ALERTS, GUARD, PROMOTE, canHireGuard, canPromote, guardCapacity, guardOdds, guardsAlive, guardsReady, hireGuard, letGuardsHandle, mtfArrival,
-  promoteGuard, breachGuards, letGuardsHandleRiot, postedAt, postGuard, unposted, TRAINING, canTrain, squadSize, train, type Alert, type Guard,
+  promoteGuard, breachGuards, letGuardsHandleRiot, letGuardsHandleRaid, raidArrival, raidOdds, postedAt, postGuard, unposted, TRAINING, canTrain, squadSize, train, type Alert, type Guard,
 } from "../campaign/security";
 import { HEAVY } from "../game/types";
 import { esc } from "./util";
@@ -46,8 +46,9 @@ export interface HubActions {
   newCampaign: () => void;
 }
 
-const KIND_NAMES = { riot: "Riot", outbreak: "SCP-610", breach: "Breach", recovery: "Manhunt", coverup: "Cover-up", strike: "Strike", escort: "Ambush", retaliation: "Retaliation" } as const;
+const KIND_NAMES = { raid: "Raid", riot: "Riot", outbreak: "SCP-610", breach: "Breach", recovery: "Manhunt", coverup: "Cover-up", strike: "Strike", escort: "Ambush", retaliation: "Retaliation" } as const;
 const KIND_BRIEF = {
+  raid: "The Chaos Insurgency is attacking Site-19's surface compound to reach the lift down into the site. Site Security holds the wire; Epsilon-11 can come up the lift to help.",
   riot: "The D-Class block is rioting. Only Site Security answers: restrain the rioters or put them down. Every one killed is a D-Class lost.",
   outbreak: "Burn out SCP-610's core with fire. Bring incendiaries or the flamethrower, and containment suits for anyone going near the flesh: anyone infected turns 5 turns later and is lost for good. Each win brings the outbreak down a stage.",
   escort: "The convoy home is under attack. The squad that made the capture has to hold the truck: neutralise the Insurgents or last 8 turns. Wounds carry over.",
@@ -238,12 +239,12 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       ${i.kind === "breach" ? `<p class="muted">Happening now. ${guardsReady(c).length} guard${guardsReady(c).length === 1 ? "" : "s"} can respond; Epsilon-11 would arrive on turn ${mtfArrival(c, i)} (${ALERTS[c.alert].name.toLowerCase()} alert).</p>` : ""}
       <div class="row"><button class="act ${planning === i.id ? "on" : ""}" type="button" data-plan="${i.id}" ${c.over || block ? "disabled" : ""}>${planning === i.id ? "Planning response" : i.kind === "breach" ? "Take command" : "Plan response"}</button>
       ${i.kind === "breach" ? `<button class="act" type="button" data-guards="${i.id}" ${c.over ? "disabled" : ""}>Let the guards handle it · ${pctText(guardOdds(c, i))} chance</button>` : ""}
-      ${i.kind === "riot" ? `<button class="act" type="button" data-guards="${i.id}" ${c.over ? "disabled" : ""}>Let the guards handle it</button>` : ""}</div>
+      ${i.kind === "riot" || i.kind === "raid" ? `<button class="act" type="button" data-guards="${i.id}" ${c.over ? "disabled" : ""}>Let the guards handle it${i.kind === "raid" ? ` (${Math.round(raidOdds(c, i) * 100)}%)` : ""}</button>` : ""}</div>
     </div>`;
   }
 
   function planPanel(inc: Incident) {
-    const ops = readyFor(inc), t = inc.kind === "escort" ? 0 : travelDays(c, inc.region), noD = inc.kind === "strike" || inc.kind === "coverup" || inc.kind === "escort" || inc.kind === "retaliation" || inc.kind === "outbreak" || inc.kind === "riot";
+    const ops = readyFor(inc), t = inc.kind === "escort" ? 0 : travelDays(c, inc.region), noD = inc.kind === "strike" || inc.kind === "coverup" || inc.kind === "escort" || inc.kind === "retaliation" || inc.kind === "outbreak" || inc.kind === "riot" || inc.kind === "raid";
     return `<div class="card plan">
       <div class="label">Deploy to ${esc(inc.title.split(":")[0])}</div>
       <p>${esc(KIND_BRIEF[inc.kind])}</p>
@@ -253,6 +254,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       ${inc.kind === "coverup" ? `<p class="${c.amnestics < (inc.witnesses ?? 0) ? "warn" : "muted"}">The squad carries all ${c.amnestics} amnestic doses in storage, for ${plural(inc.witnesses ?? 0, "witness")}.</p>` : ""}
       ${inc.insurgents ? `<div class="row"><span>Insurgents expected: <b>${inc.insurgents - (inc.weakened ?? 0)}</b>${inc.weakened ? ` (${inc.weakened} intercepted)` : ""}</span>
         <button class="act" type="button" id="intelBtn" ${canWeaken(c, inc) ? `disabled title="${esc(canWeaken(c, inc)!)}"` : ""}>Spend 1 Intel: intercept one</button></div>` : ""}
+      ${inc.kind === "raid" ? (() => { const g = guardsReady(c).slice(0, 8); return `<p>Site Security: <b>${g.length}</b> ${g.length === 1 ? "guard holds" : "guards hold"} the compound${g.length ? ` (${g.map(x => esc(x.name)).join(", ")})` : ""}${has(c, "perimeter_alarms") ? ", already on overwatch" : ""}. Insurgents: about <b>${inc.insurgents}</b>. Operatives you pick come up the lift on turn <b>${raidArrival(c)}</b>.</p>`; })() : ""}
       ${inc.kind === "riot" ? (() => { const g = guardsReady(c).slice(0, 8); return `<p>Site Security: <b>${g.length}</b> ${g.length === 1 ? "guard answers" : "guards answer"}${g.length ? ` (${g.map(x => esc(x.name)).join(", ")})` : ". Nobody is fit to respond"}. D-Class left: <b>${c.dclass}</b>.</p>`; })() : `
       <p class="muted">Pick up to ${squadSize(c)} operatives. Only fully healed operatives can deploy; sanity carries over, so watch it.${inc.kind === "breach" ? " You can also send nobody and play it with the guards alone." : ""}</p>
       <div class="pick">${ops.length ? ops.map(o => `<label class="pickop ${chosen.has(o.id) ? "on" : ""}">
@@ -268,7 +270,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         <span class="muted">of ${c.dclass} in holding</span>
       </div>`}
       <div class="row">
-        <button class="act primary" type="button" id="launchBtn" ${chosen.size || ((inc.kind === "breach" || inc.kind === "riot") && guardsReady(c).length) ? "" : "disabled"}>${inc.kind === "riot" ? `Send in ${plural(Math.min(8, guardsReady(c).length), "guard")}` : `Deploy ${plural(chosen.size, "operative")}`}${noD ? "" : ` and ${dCount} D-Class`}</button>
+        <button class="act primary" type="button" id="launchBtn" ${chosen.size || ((inc.kind === "breach" || inc.kind === "riot" || inc.kind === "raid") && guardsReady(c).length) ? "" : "disabled"}>${inc.kind === "riot" ? `Send in ${plural(Math.min(8, guardsReady(c).length), "guard")}` : `Deploy ${plural(chosen.size, "operative")}`}${noD ? "" : ` and ${dCount} D-Class`}</button>
         <button class="act" type="button" id="cancelPlan">Cancel</button>
       </div>
     </div>`;
@@ -833,7 +835,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       if (o && n && k) change(() => { o.name = n.slice(0, 24); o.call = k.slice(0, 12); });
     });
     root.querySelectorAll<HTMLElement>("[data-staff]").forEach(b => b.onclick = () => change(() => answerStaff(c, Number(b.dataset.staff) as 0 | 1)));
-    root.querySelectorAll<HTMLElement>("[data-guards]").forEach(b => b.onclick = () => { const inc = c.incidents.find(i => i.id === b.dataset.guards); if (inc) change(() => inc.kind === "riot" ? letGuardsHandleRiot(c, inc) : letGuardsHandle(c, inc)); });
+    root.querySelectorAll<HTMLElement>("[data-guards]").forEach(b => b.onclick = () => { const inc = c.incidents.find(i => i.id === b.dataset.guards); if (inc) change(() => inc.kind === "riot" ? letGuardsHandleRiot(c, inc) : inc.kind === "raid" ? letGuardsHandleRaid(c, inc) : letGuardsHandle(c, inc)); });
     root.querySelectorAll<HTMLElement>("[data-train]").forEach(b => b.onclick = () => change(() => train(c, b.dataset.train!)));
     root.querySelectorAll<HTMLElement>("[data-promote]").forEach(b => b.onclick = () => { const g = c.guards.find(x => x.id === b.dataset.promote); if (g) change(() => promoteGuard(c, g)); });
     on("recBtn", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) change(() => addRecreation(c, f)); });
@@ -875,13 +877,13 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     on("cancelPlan", () => { planning = null; render(); });
     on("launchBtn", () => {
       const inc = c.incidents.find(i => i.id === planning);
-      if (!inc || (!chosen.size && !((inc.kind === "breach" || inc.kind === "riot") && guardsReady(c).length))) return;
+      if (!inc || (!chosen.size && !((inc.kind === "breach" || inc.kind === "riot" || inc.kind === "raid") && guardsReady(c).length))) return;
       if (inc.kind === "riot") chosen.clear();   // only Site Security answers a riot
       const loadouts: Loadout[] = [...chosen].map(id => {
         const g = gearOf(id);
         return { opId: id, armor: g.armor, items: g.items.filter((i): i is ItemId => !!i) };
       });
-      act.deploy(inc, inc.kind === "riot" ? [] : loadouts, ["strike", "coverup", "escort", "retaliation", "outbreak", "riot"].includes(inc.kind) ? 0 : dCount);
+      act.deploy(inc, inc.kind === "riot" ? [] : loadouts, ["strike", "coverup", "escort", "retaliation", "outbreak", "riot", "raid"].includes(inc.kind) ? 0 : dCount);
     });
     on("resetBtn", () => {
       const b = $("resetBtn")!;

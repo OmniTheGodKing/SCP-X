@@ -7,7 +7,7 @@ import { countOperational, neighbors, operational, nameInText, stationsOnLevel }
 import { addExposure } from "./world";
 import { HOME } from "../data/regions";
 import { has } from "./research";
-import { RANKS, RANK_XP, log, makeOperative, type Campaign, type Incident } from "./campaign";
+import { RANKS, RANK_XP, log, makeOperative, yearOf, type Campaign, type Incident } from "./campaign";
 import { DEPTH, goDark, wingLevel, wingOf, wreckFacility } from "./containment";
 
 export interface Guard {
@@ -116,7 +116,8 @@ export function tickGuards(c: Campaign, heal: number, calm: number) {
 
 /** A guard as they go into a mission. */
 export function guardMember(c: Campaign, g: Guard): SquadMember {
-  const m = model(c.models.carbine);
+  // with Guard rifles researched, Site Security carries the squad's current service rifle instead of a carbine
+  const rifles = has(c, "guard_rifles"), m = model(rifles ? c.models.rifle : c.models.carbine);
   const drilled = c.purchases.includes("guard_training");
   let aim = g.aim + (has(c, "bt_guard_aim") ? 5 : 0) + (c.purchases.includes("guard_training") ? 10 : 0), blink = GUARD.blink, san = g.san;
   if (g.traits.includes("gunshy")) aim -= 10;
@@ -127,7 +128,7 @@ export function guardMember(c: Campaign, g: Guard): SquadMember {
   return {
     opId: g.id, name: g.name, call: "SEC", guard: true, hp: g.hp + (c.guardVests ? 1 : 0), maxHp: g.maxHp + (c.guardVests ? 1 : 0), armorHp: c.guardVests ? 1 : 0, san: drilled ? san + 10 : san, maxSan: GUARD.maxSan + (drilled ? 10 : 0), aim, blinkFull: blink,
     armor: c.guardVests ? 1 : 0, hasArmor: false, items: [], perks: [], traits: [...g.traits],
-    gun: { name: m.name, type: "carbine", dmg: [...m.dmg] as [number, number], mag: m.mag, ammo: m.mag, aim: m.aim },
+    gun: { name: m.name, type: rifles ? "rifle" : "carbine", dmg: [...m.dmg] as [number, number], mag: m.mag, ammo: m.mag, aim: m.aim },
   };
 }
 
@@ -164,6 +165,55 @@ export function letGuardsHandleRiot(c: Campaign, inc: Incident) {
   const hurt = g.length ? g[rand(0, g.length - 1)] : null;
   if (hurt && Math.random() < 0.5) hurt.hp = Math.max(1, hurt.hp - 2);
   log(c, `Site Security put the riot down with clubs and gas. ${dead} D-Class ${dead > 1 ? "were" : "was"} killed${hurt && hurt.hp < hurt.maxHp ? `, and guard ${hurt.name} was hurt` : ""}.`, "key");
+}
+
+// ---- Insurgency raids on Site-19 ----
+export const RAID = { from: 200, cooldown: 90, base: 0.003, perPrisoner: 0.002, afterStrike: 0.004, bonus: 60 };
+export const raidSize = (c: Campaign) => Math.min(10, 4 + Math.floor((yearOf(c.day) - 1951) / 2));
+/** Epsilon-11 comes up the lift from the barracks: a quarter of the time it takes to reach a breach, sooner with alarms. */
+export const raidArrival = (c: Campaign) => Math.max(3, Math.round(mtfArrival(c) / 4) - (has(c, "perimeter_alarms") ? 2 : 0));
+
+/** Every day: the Insurgency may hit Site-19 itself, more often with its people in holding or a cell recently broken. */
+export function tickRaids(c: Campaign) {
+  if (c.day < RAID.from || c.incidents.some(i => i.kind === "raid") || (c.lastRaid !== undefined && c.day - c.lastRaid < RAID.cooldown)) return;
+  const recentStrike = c.lastStrike !== undefined && c.day - c.lastStrike <= 30;
+  if (Math.random() < RAID.base + RAID.perPrisoner * c.prisoners.length + (recentStrike ? RAID.afterStrike : 0)) startRaid(c);
+}
+export function startRaid(c: Campaign) {
+  c.lastRaid = c.day;
+  c.incidents.push({ id: "inc" + c.nextIncident, kind: "raid", scpId: "", region: HOME, map: "gate", appeared: c.day, expires: c.day, insurgents: raidSize(c),
+    title: `Incident ${String(c.nextIncident).padStart(3, "0")}: Insurgency raid on Site-19` });
+  c.nextIncident++;
+  log(c, `Gunfire at the wire: the Chaos Insurgency is attacking Site-19's surface compound, about ${raidSize(c)} of them. Site Security is holding; Epsilon-11 can come up the lift.`, "bad", "command");
+}
+/** What the Insurgency gets when it reaches the lift: its people out of holding, or the payroll and a wrecked building. */
+export function raidLoss(c: Campaign): string[] {
+  const out: string[] = [];
+  if (c.prisoners.length) { out.push(`They broke ${c.prisoners.length > 1 ? `all ${c.prisoners.length} prisoners` : "the prisoner"} out of holding.`); c.prisoners = []; }
+  else {
+    const took = Math.min(60, Math.max(0, c.funds));
+    c.funds -= took;
+    if (took) out.push(`They emptied the payroll safe ($${took}k).`);
+  }
+  const hit = c.base.facilities.filter(f => f.level === 0 && f.type !== "command" && f.type !== "generator" && !f.disabled && f.daysLeft === 0);
+  if (hit.length) { const f = hit[rand(0, hit.length - 1)]; wreckFacility(c, f, "Demolition charges went off on the way out."); out.push(`The ${nameInText(f.type)} on level 1 was wrecked.`); }
+  addExposure(c, HOME, 5); out.push("Locals heard the shooting (+5 exposure in the Eastern US).");
+  return out;
+}
+/** Leave the raid to Site Security. More guards (and alarms) make it likelier they hold. */
+export function raidOdds(c: Campaign, inc: Incident) {
+  return Math.max(0.1, Math.min(0.9, 0.2 + 0.08 * guardsReady(c).length + (has(c, "perimeter_alarms") ? 0.1 : 0) + (has(c, "guard_rifles") ? 0.1 : 0) - 0.05 * (inc.insurgents - 5)));
+}
+export function letGuardsHandleRaid(c: Campaign, inc: Incident) {
+  c.incidents = c.incidents.filter(i => i !== inc);
+  const ready = guardsReady(c), won = Math.random() < raidOdds(c, inc);
+  const dead: string[] = [];
+  for (let i = won ? rand(0, 1) : rand(1, 3); i > 0; i--) { const pool = ready.filter(g => g.alive); if (!pool.length) break; const g = pool[rand(0, pool.length - 1)]; g.alive = false; g.hp = 0; g.diedDay = c.day; dead.push(g.name); }
+  for (const g of ready) if (g.alive) g.breaches++;
+  const lost = dead.length ? ` ${dead.join(" and ")} ${dead.length > 1 ? "were" : "was"} killed.` : "";
+  if (won) { c.stats.won++; log(c, `Site Security held the compound and drove the Insurgency back through the wire.${lost}`, "good"); return; }
+  c.stats.lost++;
+  log(c, `Site Security couldn't hold the lift.${lost} ${raidLoss(c).join(" ")}`, "bad");
 }
 
 /** Leave the breach to Site Security without playing it. */

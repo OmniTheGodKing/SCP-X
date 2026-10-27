@@ -10,7 +10,7 @@ import { reachMilestone, type Milestone } from "./research";
 import { ITEMS, PROJECTS, armorStats, has, projectLock, monthlyResearch, newResearch, tickResearch, type MaterialId, type ItemId, type Order, type ResearchState } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, collapsedCount, COLLAPSE_LIMIT, newRegions, regionFunding, tickWorld, travelDays, type RegionState } from "./world";
-import { ALERTS, breachGuards, guardMember, guardsReady, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
+import { RAID, raidArrival, raidLoss, tickRaids, ALERTS, breachGuards, guardMember, guardsReady, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
 import { MEDALS, rollBio, type MedalId } from "../data/bios";
 import { monthlyStaff, tickStaff, type StaffEvent } from "./staff";
 import { tickInspection } from "./inspection";
@@ -76,7 +76,7 @@ export interface Retiree { name: string; call: string; rank: number; missions: n
 
 export interface Incident {
   id: string;
-  kind: "breach" | "recovery" | "coverup" | "strike" | "escort" | "retaliation" | "outbreak" | "riot";
+  kind: "breach" | "recovery" | "coverup" | "strike" | "escort" | "retaliation" | "outbreak" | "riot" | "raid";
   /** Escorts: the survivors of the capture, who defend the convoy. */
   squad?: string[];
   scpId: string;
@@ -177,6 +177,9 @@ export interface Campaign {
   /** Incident reports, newest first. */
   archive?: Report[];
   retired?: Retiree[];
+  /** The last raid on Site-19 and the last Insurgency cell broken (raids follow strikes). */
+  lastRaid?: number;
+  lastStrike?: number;
   /** Things that have happened at least once, which open up research. */
   milestones?: Milestone[];
 }
@@ -346,6 +349,7 @@ export function advanceDay(c: Campaign) {
   }
   tickGuards(c, heal, sanityPerDay(c));
   tickMorale(c);
+  tickRaids(c);
   tickStaff(c);
   tickInspection(c);
   if (c.guards.some(g => g.alive && g.breaches >= 3)) reachMilestone(c, "guard_veteran");
@@ -372,7 +376,7 @@ export function advanceDay(c: Campaign) {
 }
 
 /** Something that has to be answered before time can move: a breach, or an ambushed convoy. */
-export const pendingBreach = (c: Campaign) => c.incidents.find(i => (i.kind === "breach" || i.kind === "escort" || i.kind === "riot") && i.id !== c.activeIncident) ?? null;
+export const pendingBreach = (c: Campaign) => c.incidents.find(i => (i.kind === "breach" || i.kind === "escort" || i.kind === "riot" || i.kind === "raid") && i.id !== c.activeIncident) ?? null;
 
 // ---------- the D-Class block ----------
 export const MORALE = { start: 60, riotBelow: 30, perDeath: 5, terminate: 15, keep: 10, retainCost: 2 };
@@ -536,7 +540,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
   c.dclass -= dCount;
   c.activeIncident = inc.id;
   const kind = inc.kind === "recovery" ? "manhunt" : inc.kind;
-  const sec = kind === "breach" ? breachGuards(c, inc) : kind === "riot" ? { first: guardsReady(c).slice(0, 8).map(g => guardMember(c, g)), late: [] } : { first: [], late: [] };
+  const sec = kind === "breach" ? breachGuards(c, inc) : kind === "riot" || kind === "raid" ? { first: guardsReady(c).slice(0, 8).map(g => guardMember(c, g)), late: [] } : { first: [], late: [] };
   const amnestics = kind === "coverup" ? c.amnestics : 0;
   return {
     kind, scp: (inc.scpId || "173") as ScpId, map: inc.map, amnestics,
@@ -544,7 +548,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     severity: inc.kind === "outbreak" ? c.outbreak?.severity ?? 2 : undefined,
     rioters: inc.kind === "riot" ? riotSize(c) : undefined,
     // a breach at Site-19 catches researchers in the wing and opens the D-Class block
-    researchers: kind === "breach" ? Math.min(c.researchers, rand(1, 3)) : 0, strayPool: kind === "breach" ? c.dclass : 0, guards: sec.first, lateGuards: sec.late, mtfTurn: mtfArrival(c, inc), witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
+    researchers: kind === "breach" ? Math.min(c.researchers, rand(1, 3)) : 0, strayPool: kind === "breach" ? c.dclass : 0, guards: sec.first, lateGuards: sec.late, mtfTurn: kind === "raid" ? raidArrival(c) : mtfArrival(c, inc), witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
     incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: Math.max(0, inc.insurgents - (inc.weakened ?? 0)), squad, dclass,
     year: yearOf(c.day),
     known: [...c.knownNotes],
@@ -564,6 +568,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
       sightBonus: has(c, "night_optics") ? 2 : 0,
       ciAnalysis: has(c, "weapon_analysis"),
       strays: has(c, "cell_lock") ? 1 : 4,
+      alarms: has(c, "perimeter_alarms"),
     },
   };
 }
@@ -674,17 +679,18 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   c.amnestics = Math.max(0, c.amnestics - r.amnesticsUsed);
   if (r.win) {
     c.stats.won++;
-    const bonus = kind === "riot" ? 0 : kind === "recovery" ? 100 : kind === "strike" ? 80 : kind === "breach" ? 50 : kind === "retaliation" ? 40 : kind === "outbreak" ? 120 : 0;
-    const cut = kind === "coverup" ? 10 : kind === "riot" ? 0 : 5;
+    const bonus = kind === "riot" ? 0 : kind === "raid" ? RAID.bonus : kind === "recovery" ? 100 : kind === "strike" ? 80 : kind === "breach" ? 50 : kind === "retaliation" ? 40 : kind === "outbreak" ? 120 : 0;
+    const cut = kind === "coverup" ? 10 : kind === "riot" || kind === "raid" ? 0 : 5;
     addExposure(c, region, -cut);
     c.funds += bonus;
     const anomaly = scpName(inc?.scpId || "173");
     const what = kind === "coverup" ? "The witnesses remember nothing worth repeating." : kind === "strike" ? "The Insurgency cell is broken up."
-      : kind === "riot" ? "The D-Class block is quiet again." : kind === "outbreak" ? "The flesh here is burned out." : kind === "escort" ? `The convoy got ${anomaly} through.` : kind === "retaliation" ? "The Insurgency attack on the town is broken." : inc?.first ? `${anomaly} is in Foundation hands.` : `${anomaly} is back in its cell.`;
+      : kind === "riot" ? "The D-Class block is quiet again." : kind === "raid" ? "The Insurgency raid on Site-19 is beaten off." : kind === "outbreak" ? "The flesh here is burned out." : kind === "escort" ? `The convoy got ${anomaly} through.` : kind === "retaliation" ? "The Insurgency attack on the town is broken." : inc?.first ? `${anomaly} is in Foundation hands.` : `${anomaly} is back in its cell.`;
     lines.unshift(`${name} closed. ${what}${bonus ? ` The O5 Council approves a $${bonus}k bonus${cut ? ";" : "."}` : ""}${cut ? ` exposure in ${where} −${cut}.` : ""}`);
   } else {
     c.stats.lost++;
-    if (kind === "riot") lines.unshift(`${name} failed. Site Security lost the block; it took a gas-and-baton sweep by the whole garrison to retake it.`);
+    if (kind === "raid") lines.unshift(`${name} failed. The Insurgency reached the lift. ${raidLoss(c).join(" ")}`);
+    else if (kind === "riot") lines.unshift(`${name} failed. Site Security lost the block; it took a gas-and-baton sweep by the whole garrison to retake it.`);
     else { addExposure(c, region, 20);
     lines.unshift(`${name} failed${r.escaped ? `: SCP-173 got out through the surface hatch` : r.evacuated ? " after the team evacuated" : ""}. ${REGIONS[region].front} has to clean up after it (+20 exposure in ${where}).`); }
   }
@@ -740,6 +746,8 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   if (capture && Math.random() < 0.25) (c.retaliations ??= []).push({ region: inc!.region, day: c.day + rand(3, 10) });
   (c.archive ??= []).unshift(buildReport(c, inc, r));
   if (r.insurgentsTotal) reachMilestone(c, "insurgents");
+  if (kind === "raid") reachMilestone(c, "raid");
+  if (kind === "strike" && r.win) c.lastStrike = c.day;
   if (r.hadFire) reachMilestone(c, "fire");
   checkOver(c);
   return { lines, promotions };

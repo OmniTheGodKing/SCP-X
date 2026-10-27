@@ -79,6 +79,7 @@ export function varyMap(base: MapDef, canMirror: boolean): MapDef {
   for (const [x, y] of def.squadSpawns) hold(x, y, 1);
   if (def.hatch) hold(def.hatch[0], def.hatch[1], 1);
   if (def.panel) hold(def.panel[0], def.panel[1], 1);
+  if (def.fixedFurniture) return def;
   for (let attempt = 0; attempt < 25; attempt++) {
     const grid = def.rows.map(r => [...r]);
     for (const [x0, y0, x1, y1] of rooms)
