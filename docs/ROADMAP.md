@@ -470,7 +470,7 @@ retaliation (done); (5) doors and sirens (done).
   an anomaly left loose costs exposure and leaves that site's custody. Ignoring a call costs 15 relations, 4 standing
   and 6 exposure.
 
-## Phase 3K: personnel, mission variety, usability and balance (planned)
+## Phase 3K: personnel, mission variety, usability and balance (done; verified in source and in-game)
 
 - **Fatigue:** repeated deployments accumulate fatigue, with understandable performance or availability consequences and recovery over time; encourage squad rotation. Show fatigue and recovery in existing personnel/deployment interfaces.
 - **Persistent injuries and recovery:** wounds carry over between missions and require recovery/medical support; injured personnel are not automatically fresh after debrief. Integrate with existing personnel/medical systems.
@@ -484,6 +484,39 @@ retaliation (done); (5) doors and sirens (done).
 - **Tutorial/onboarding:** first-mission guidance explaining selection, movement, cover, reaction fire, objectives, extraction and basic Geoscape deployment/time controls; teach through the game without burying players in text.
 - **Difficulty and Ironman:** difficulty presets and optional Ironman after full-loop balance work; clarify their impact. Test economy, recruitment, injury/casualty rates, anomaly capture, travel, deadlines, global threat growth, Council pressure and long-campaign stability.
 - **Acceptance:** the player can manage a recognizable roster and run a long 2D campaign with varied missions, understandable risks, persistent consequences, reliable saves and no requirement to complete a final story mission.
+
+### As built
+
+- **Named staff (XCOM-style):** every researcher and engineer is a person with a name, a face, a field (anomalous
+  biology, theoretical physics, psychology, materials science, signals) or trade (mason, electrician, machinist, rigger)
+  and a line of background. A specialist on staff speeds projects in their field by 25%; each trade sometimes gets its
+  work (building, repairs and refits, workshop orders, excavation) a day ahead. They're listed in the lab and workshop
+  panels and on the Personnel tab; losses (breaches, SCP-049, field work, quitting) are named and remembered. Field
+  researchers sent on missions are real staff members.
+- **Fatigue:** +20 per mission (+10 if wounded, +10 if they broke), −4 a day at Site-19 (−6 with psychological
+  services). Tired at 40 (−5 aim, −10 sanity going in); exhausted at 70 (can't deploy).
+- **Serious injuries:** going down in a mission means a named injury (broken arm, concussion...) and 10 to 32 days off
+  the roster, shortened by a medical bay.
+- **Bonds:** pairs who come back from missions together become comrades (3), close (6) and inseparable (10): +3, +5 or
+  +8 aim with the bondmate within 4 tiles and in sight. A bondmate going down costs sanity; losing one costs more and
+  may leave nightmares. Bonds and lost bondmates show on the personnel file.
+- **Roster at deployment:** each pick shows rank, class, XP, sanity, fatigue (with the tired penalty) and bonds with
+  others already picked; the roster shows injuries, exhaustion, wounds and tiredness first.
+- **Optional objectives:** strikes have the cell's ledger (+2 Intel) and a radio to cut before reinforcements are
+  called (strikes now always have a radio timer); retaliations: keep half the townspeople alive; manhunts: no civilian
+  deaths; cover-ups: dose every witness; ambushes and raids: lose nobody; breaches: every researcher out. Shown live on
+  the objective card and in the debrief; each met one has its own reward. Lost-team rescues, site emergencies (power,
+  records, holding, partial outcomes) and escorts/raids (holding for set turns) cover the other objective types.
+- **Flights on the World Map:** deploying far away puts the squad in the air; the plane crosses the map as time runs and
+  the mission starts when it lands (weather and darkness as they are on arrival). Return flights move smoothly too.
+- **Campaigns:** three save slots (slot 1 is the original save), a campaigns menu to load, start or delete, with warnings
+  before anything is erased. Export and import stay.
+- **Difficulty and Ironman:** Recruit, Agent, Director, Overseer, each shown with exactly what it changes (starting
+  money, Council grant, Insurgents per fight, enemy aim, breach rate, agenda growth). Ironman blocks importing a save
+  over the campaign.
+- **Tutorial:** on by default for a first visit and offered for every new campaign: one tip per screen (Command, World,
+  deploying, Site-19, Research, Personnel) and six steps through the first mission. Each can be dismissed, or the whole
+  thing turned off.
 
 ## Phase 3L: anomaly procedures, research, facility consequences and history (done; verified in source and in-game)
 
@@ -532,7 +565,12 @@ retaliation (done); (5) doors and sirens (done).
 - Play a stable long-term campaign from Site-19 through the interactive Geoscape, deploy to readable 2D tactical missions, recover/contain/research SCPs, manage persistent operatives, respond to independent facilities, engage with O5 choices and a global Insurgency, and observe consistent world/facility consequences.
 - Confirm implemented/partial/missing status against source **and** in-game behavior before declaring an item done. Campaign victory/final mission and 3D presentation are deliberately deferred.
 
-## Phase 4: 3D, XCOM style
+## Phase 4: to be defined
+
+The original Phase 4 (moving to 3D) is now Phase 5: it's too early in the project for 3D. A new Phase 4 will be written
+here once its scope is agreed.
+
+## Phase 5: 3D, XCOM style
 
 Late in the plan: move both layers from 2D to 3D.
 - Tactical: a 3D map with an isometric camera you can rotate and zoom, units and anomalies as models, cover and

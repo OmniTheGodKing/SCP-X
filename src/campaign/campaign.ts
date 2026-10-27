@@ -1,4 +1,5 @@
 // Site-19 between missions: the roster, time passing, funding, public exposure and incidents.
+import { DIFFICULTIES, diffOf, type Difficulty, type NewCampaignOptions } from "./difficulty";
 import { FATIGUE, afterMission, bondsOf, restDay, tiredness } from "./condition";
 import { announceHire, hirePerson, losePeople, someone, syncStaff, type Lost, type Person } from "./people";
 import { GOGGLES, NU7, canBringAmnestics, canBringResearcher, canCallNu7, nu7Troopers, otherSiteOutcome, scanOutcome, SPECIALIST, tfOf } from "./taskforces";
@@ -258,6 +259,11 @@ export interface Campaign {
   retired?: Retiree[];
   /** Anomalies destroyed by the GOC or taken by the Soviets: they never turn up again. */
   lostScps?: string[];
+  /** Phase 3K: the difficulty chosen at the start, Ironman (no loading another save over this one), and the
+   *  tutorial's progress (unset: off). */
+  difficulty?: Difficulty;
+  ironman?: boolean;
+  tutorial?: { on: boolean; seen: string[] };
   /** The researchers and engineers by name, and the ones lost. */
   people?: Person[];
   staffLost?: Lost[];
@@ -392,12 +398,12 @@ export function makeOperative(c: Campaign, given?: string): Operative {
   return { sanBonus: has(c, "psych_screening") ? 10 : 0, id: "op" + n, name, call: `E11-${String(n).padStart(2, "0")}`, rank: trained ? 1 : 0, xp: trained ? RANK_XP[1] : 0, hp: 7, maxHp: 7, san: 100, aimBase: rand(64, 74), missions: 0, kills: 0, alive: true, perks: [], traits: steady ? ["steady"] : [], breakdowns: 0, bio: newBio(), medals: [], wounds: 0, seals: 0, faced: [] };
 }
 
-export function newCampaign(): Campaign {
+export function newCampaign(opts: NewCampaignOptions = { difficulty: "agent", ironman: false, tutorial: false }): Campaign {
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
     version: 23, tf: newTf(1), chaos: newChaos(), council: newCouncil(1), morale: 60, dPolicy: "terminate", outbreakDay: rand(945, 1310), materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
-    day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
+    day: 1, funds: 400 + DIFFICULTIES[opts.difficulty].funds, exposure: 10, difficulty: opts.difficulty, ironman: opts.ironman || undefined, tutorial: opts.tutorial ? { on: true, seen: [] } : undefined, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
     inventory: {}, orders: [], knownNotes: [], nextD: 9101, nextOp: 1, nextIncident: 1,
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
   };
@@ -751,7 +757,8 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     rioters: inc.kind === "riot" ? riotSize(c) : undefined,
     // a breach at Site-19 catches researchers in the wing and opens the D-Class block
     researchers: kind === "breach" ? Math.min(c.researchers, rand(1, 3)) : away ? inc.survivors ?? 2 : 0, strayPool: kind === "breach" ? c.dclass : 0, guards: away ? siteGuards : sec.first, lateGuards: sec.late, mtfTurn: kind === "raid" ? raidArrival(c) : mtfArrival(c, inc), witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
-    incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: Math.max(0, inc.insurgents - (inc.weakened ?? 0)) + (inc.insurgents && inc.kind !== "breach" ? threatExtra(c) : 0), squad, dclass,
+    incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: Math.max(0, Math.max(0, inc.insurgents - (inc.weakened ?? 0)) + (inc.insurgents && inc.kind !== "breach" ? threatExtra(c) + diffOf(c).insurgents : 0)), squad, dclass,
+    enemyAim: diffOf(c).aim, tutorial: !!c.tutorial?.on && !c.tutorial.seen.includes("mission"),
     ciRoles: inc.kind === "breach" || inc.kind === "riot" || inc.kind === "outbreak" || inc.kind === "coverup" ? undefined : ciRoles(c),
     commander: commanderJoins(c, inc) ? `${c.chaos.commander!.rank} ${c.chaos.commander!.name}` : undefined,
     // strikes always have a radio to call for help on; attacks only once the Insurgency's agenda is high
@@ -957,6 +964,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     lines.push(`Optional objective met: ${o.text.replace(/ \([A-Z]\)/g, "")} (${got}).`);
   }
   lines.push(...afterMission(c, r));
+  if (c.tutorial?.on && !c.tutorial.seen.includes("mission")) c.tutorial.seen.push("mission");
   for (const l of [...lines, ...promotions]) log(c, l, r.win ? "good" : "bad");
   if (inc?.transfer) lines.push(transferFought(c, inc.transfer, r.win));
   else if (inc?.scpId && inc.kind !== "emergency") {   // another site's anomaly stays theirs

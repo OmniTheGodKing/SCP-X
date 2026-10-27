@@ -217,6 +217,9 @@ export interface MissionSetup {
   /** Phase 3I: which Insurgent specialists turn up, the named commander leading them, the turn reinforcements land
    *  (strikes and attacks only), and GRU Division "P" in place of the Insurgency. */
   ciRoles?: { sniper: boolean; demo: boolean; officer: boolean; charm: boolean };
+  /** Difficulty: added to every Insurgent's aim. Tutorial: show the first-mission guidance. */
+  enemyAim?: number;
+  tutorial?: boolean;
   /** Phase 3J: the independent site (emergencies), records to recover, survivors waiting, what got loose, and
    *  Nu-7's troopers if called. */
   site?: string;

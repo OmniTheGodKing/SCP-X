@@ -401,3 +401,9 @@ details.archived summary { cursor: pointer; font-family: var(--font-mono); font-
 .worldmap .flight.out path { fill: var(--manila); stroke: #0f1317; stroke-width: .3; }
 .worldmap .flight.out line { stroke: var(--manila); opacity: .7; }
 .optional { margin-top: 8px; font-size: 13px; color: var(--muted); } .optional .ok { color: #6fae7c; } .optional .label { margin-bottom: 2px; }
+.sheet.campaigns { max-width: 640px; display: grid; gap: 10px; }
+.slotrow { display: grid; gap: 4px; padding: 8px; border: 1px solid var(--line); background: var(--panel-2); }
+.slotrow.on { border-color: var(--manila); }
+.act.disabled { opacity: .45; cursor: not-allowed; }
+.coach { border-color: var(--manila); background: color-mix(in srgb, var(--manila) 8%, var(--panel)); }
+.coach p { margin: 6px 0; }

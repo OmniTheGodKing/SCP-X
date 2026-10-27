@@ -13,7 +13,26 @@ import { firstSightings } from "./containment";
 import { issueDirectives, newCouncil } from "./council";
 import { startingModels } from "../data/weapons";
 
-const KEY = "site19-campaign-v2";
+// Three campaign slots. Slot 1 keeps the original key, so saves from before slots existed load into it.
+export const SLOTS = [1, 2, 3] as const;
+export type Slot = typeof SLOTS[number];
+const keyOf = (s: Slot) => s === 1 ? "site19-campaign-v2" : `site19-campaign-v2-s${s}`;
+const SLOT_KEY = "site19-slot";
+export function activeSlot(): Slot { try { const n = Number(localStorage.getItem(SLOT_KEY)); return (SLOTS as readonly number[]).includes(n) ? n as Slot : 1; } catch { return 1; } }
+export function setSlot(s: Slot) { try { localStorage.setItem(SLOT_KEY, String(s)); } catch { /* fine */ } }
+let KEY = keyOf(activeSlot());
+/** What a slot holds, for the campaigns menu (null if empty). */
+export function slotSummary(s: Slot): { day: number; funds: number; won: number; difficulty?: string; ironman?: boolean; over?: string } | null {
+  try {
+    const raw = localStorage.getItem(keyOf(s));
+    if (!raw) return null;
+    const c = JSON.parse(raw) as Campaign;
+    return { day: c.day, funds: c.funds, won: c.stats?.won ?? 0, difficulty: c.difficulty, ironman: c.ironman, over: c.over };
+  } catch { return null; }
+}
+/** Switch to a slot and load what's there (null if it's empty or unreadable). */
+export function useSlot(s: Slot): Campaign | null { setSlot(s); KEY = keyOf(s); return loadCampaign(); }
+export function clearSlot(s: Slot) { try { localStorage.removeItem(keyOf(s)); } catch { /* fine */ } }
 
 /** Loads the saved campaign, bringing older saves up to date. Pass-one saves (v1) can't be carried over. */
 export function loadCampaign(): Campaign | null {

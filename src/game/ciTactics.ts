@@ -14,7 +14,7 @@ export function assignRoles(units: Unit[], setup: MissionSetup) {
   const rs = units.filter(u => u.side === "raider");
   if (!rs.length) return;
   const gru = !!setup.gru;
-  for (const r of rs) { r.role = "rifleman"; if (gru) r.name = "GRU-P operative"; }
+  for (const r of rs) { r.role = "rifleman"; r.aim += setup.enemyAim ?? 0; if (gru) r.name = "GRU-P operative"; }
   const roles = setup.ciRoles;
   const free = () => rs.find(r => r.role === "rifleman");
   if (setup.commander && !gru) { const r = free()!; Object.assign(r, { role: "commander", name: setup.commander, hp: 8, maxHp: 8, aim: 72, armor: (r.armor ?? 0) + 1 }); }

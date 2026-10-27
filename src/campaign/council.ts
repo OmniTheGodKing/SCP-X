@@ -1,6 +1,7 @@
 // The O5 Council: Site-19's standing with it, its monthly orders, what it can be asked for, and the transfers of
 // anomalies it arranges between sites. Standing is separate from exposure: exposure is what the public knows,
 // standing is what the Council thinks of Site-19's command.
+import { diffOf } from "./difficulty";
 import { addRel, siteOf } from "./taskforces";
 import { planActive } from "./chaos";
 import { chronicle } from "./history";
@@ -68,7 +69,7 @@ export function addStanding(c: Campaign, n: number, why: string) {
 }
 
 /** The Council's own monthly grant to Site-19, on top of what the fronts pass on. */
-export const councilGrant = (c: Campaign) => 60 + c.council.standing + c.council.grantBonus;
+export const councilGrant = (c: Campaign) => Math.max(20, 60 + c.council.standing + c.council.grantBonus + diffOf(c).grant);
 
 /** An incident went unanswered: it counts against Site-19 everywhere. */
 export function noteMissed(c: Campaign, what: string) {

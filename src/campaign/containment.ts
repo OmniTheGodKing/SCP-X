@@ -1,4 +1,5 @@
 // Anomalies held at Site-19: daily breach risk, cell cleaning, breaches, and escapes.
+import { diffOf } from "./difficulty";
 import { losePeople } from "./people";
 import { openInquiry, rivalTakes } from "./chaos";
 import { chronicle } from "./history";
@@ -74,6 +75,8 @@ export function breachRisk(c: Campaign, s: ScpRecord) {
   if (powerShort(c) && !has(c, "backup_gen")) { const k = s.id === "106" ? 3 : 2; p *= k; why.push(`Power shortage: ×${k}${s.id === "106" ? " (its cell depends on power)" : ""}`); }
   // the deeper a wing sits, the harder it is to get anywhere from it
   if (wing.level > 0) { p *= 1 - DEPTH.risk * wing.level; why.push(`Level ${wing.level + 1}, deep underground: ×${(1 - DEPTH.risk * wing.level).toFixed(1)}`); }
+  const d = diffOf(c).breach;
+  if (d !== 1) { p *= d; why.push(`Difficulty: ×${d}`); }
   return { p: Math.min(0.9, p), why };
 }
 

@@ -2,6 +2,7 @@
 // unchecked (like XCOM 2's Avatar Project), monthly operations Site-19 can find and disrupt (like dark events), a named
 // field commander who keeps coming back, and the moles behind some "accidents". The other groups, the Global Occult
 // Coalition and GRU Division "P", are separate and act on their own (see rivalTakes).
+import { diffOf } from "./difficulty";
 import { REGIONS, REGION_IDS, HOME, type RegionId } from "../data/regions";
 import { cultureOfFamily, fullName } from "../data/names";
 import { dateText, log, yearOf, type Campaign, type Incident } from "./campaign";
@@ -68,6 +69,7 @@ export const THREAT_STEPS = [
 ];
 
 export function addThreat(c: Campaign, n: number, why: string) {
+  if (n > 0) n = Math.max(1, Math.round(n * diffOf(c).agenda));
   const k = c.chaos, before = k.threat;
   k.threat = Math.max(0, Math.min(100, k.threat + n));
   if (k.threat === before) return;

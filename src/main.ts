@@ -1,7 +1,7 @@
 import "./styles.css";
 import { briefing } from "./campaign/geo";
 import { advanceDay, applyResult, buildSetup, log, newCampaign, refreshRecruits, resolveInterrupted, type Campaign, type Debrief, type Incident } from "./campaign/campaign";
-import { clearCampaign, loadCampaign, saveCampaign } from "./campaign/save";
+import { clearCampaign, loadCampaign, saveCampaign, slotSummary, useSlot } from "./campaign/save";
 import { REGIONS } from "./data/regions";
 import { missionWeather, nightAt } from "./campaign/geo";
 import { forfeitGroup } from "./campaign/council";
@@ -21,7 +21,7 @@ import { esc } from "./ui/util";
 import { mountDebug } from "./ui/debug";
 
 const root = document.getElementById("app")!;
-let campaign: Campaign = loadCampaign() ?? newCampaign();
+let campaign: Campaign = loadCampaign() ?? newCampaign({ difficulty: "agent", ironman: false, tutorial: true });   // a first visit starts with the tutorial on
 resolveInterrupted(campaign);
 if (!campaign.recruits) refreshRecruits(campaign);   // saves from before the recruit pool
 saveCampaign(campaign);
@@ -70,7 +70,14 @@ function showHub() {
   screen = "hub";
   mountHub(root, campaign, {
     save: () => saveCampaign(campaign),
-    newCampaign: () => { clearCampaign(); campaign = newCampaign(); saveCampaign(campaign); showHub(); },
+    newCampaign: (opts, slot) => { useSlot(slot); clearCampaign(); campaign = newCampaign(opts); saveCampaign(campaign); openTab("command"); showHub(); },
+    loadSlot: slot => {
+      if (!slotSummary(slot)) return;   // nothing there: stay put
+      saveCampaign(campaign);
+      const c = useSlot(slot);
+      if (c) { campaign = c; resolveInterrupted(campaign); saveCampaign(campaign); }
+      openTab("command"); showHub();
+    },
     importCampaign: (c: Campaign) => { campaign = c; resolveInterrupted(campaign); saveCampaign(campaign); log(campaign, "Campaign loaded from an exported save.", "key"); showHub(); },
     deploy: (inc, loadouts, dCount, extras) => {
       if (travelBlock(campaign, inc)) return;
