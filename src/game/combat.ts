@@ -97,6 +97,11 @@ export const BLEED_TURNS = 3;
 
 export function damage(u: Unit, dmg: number, by?: Unit) {
   if (dmg <= 0) return;
+  // SCP-049 can't be hurt, only knocked back a step in its plans
+  if (u.side === "anomaly") {
+    if (S.has049) { u.staggeredUntil = S.turn; log("SCP-049 staggers under the hit but isn't hurt. It loses its next move.", "key"); }
+    return;
+  }
   u.hp -= dmg;
   if (u.side === "mtf") u.minHp = Math.min(u.minHp ?? u.hp, Math.max(0, u.hp));
   if (u.hp <= 0 && u.side === "mtf" && !u.downed) { goDown(u); return; }
@@ -131,6 +136,8 @@ export function kill(u: Unit, by173 = false) {
   } else if (u.side === "raider") {
     S.stats.raidersDown++;
     if (!by173) log("Insurgent down.", "good");
+  } else if (u.side === "zombie") {
+    log("SCP-049-2 goes down and stays down.", "good");
   } else {
     S.stats.dLost++;
     if (wasTeam) log(`${u.name} is dead.`, "bad");

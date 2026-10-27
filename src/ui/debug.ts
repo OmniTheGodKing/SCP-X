@@ -3,7 +3,7 @@
 import { advanceDay, dateText, log, maxSanOf, pendingBreach, type Campaign } from "../campaign/campaign";
 import { tickConstruction } from "../campaign/base";
 import { PROJECTS, tickResearch } from "../campaign/research";
-import { resurface, startBreach } from "../campaign/containment";
+import { captureNow, firstSighting, resurface, startBreach } from "../campaign/containment";
 import { addExposure, locateCell, spawnCoverup, LOCATE_INTEL } from "../campaign/world";
 import { newGuard, type Alert } from "../campaign/security";
 import { REGIONS, REGION_IDS, type RegionId } from "../data/regions";
@@ -70,6 +70,8 @@ export function mountDebug(host: DebugHost) {
       group(`World · ${esc(REGIONS[region].name)} (exposure ${c.regions[region].exposure}${c.regions[region].collapsed ? ", collapsed" : ""})`,
         btn("exp-10", "−10 exposure") + btn("exp+10", "+10 exposure") + btn("exp0", "Set to 0") + btn("collapse", "Collapse") + btn("restore", "Restore")),
       group(`SCP-173 (${c.scps[0].status})`, btn("s-contained", "Contained") + btn("s-breach", "Breach now") + btn("s-loose", "Loose")),
+      group(`SCP-049 (${c.scps.find(s => s.id === "049")?.status ?? (c.sightings["049"] ? `first sighting ${dateText(c.sightings["049"])}` : "not held")})`,
+        btn("see049", "First sighting now") + btn("get049", "Capture into a free wing") + btn("breach049", "Breach now")),
       group("Save", `<span class="muted">${c.debug ? "This campaign is marked as a debug save." : "Untouched by debug so far."}</span>`),
     ].join("");
   }
@@ -140,6 +142,9 @@ export function mountDebug(host: DebugHost) {
         s.status = "contained"; s.resurfaceDay = undefined; s.maintenance = 100;
         c.incidents = c.incidents.filter(i => i.scpId !== s.id || i.id === c.activeIncident);
         break;
+      case "see049": if (!c.scps.some(x => x.id === "049")) { delete c.sightings["049"]; firstSighting(c, "049"); } else note = "SCP-049 is already known."; break;
+      case "get049": if (!c.scps.some(x => x.id === "049")) { delete c.sightings["049"]; captureNow(c, "049"); } else note = "SCP-049 is already known."; break;
+      case "breach049": { const d = c.scps.find(x => x.id === "049"); if (d?.status === "contained") startBreach(c, d, "Debug:"); else note = "SCP-049 has to be contained first."; break; }
       case "s-breach": if (s.status === "contained") startBreach(c, s, "Debug:"); break;
       case "s-loose":
         c.incidents = c.incidents.filter(i => i.scpId !== s.id || i.id === c.activeIncident);

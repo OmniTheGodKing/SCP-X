@@ -49,7 +49,8 @@ export function createMission(setup: MissionSetup) {
     return t;
   };
   const units: Unit[] = [];
-  const has173 = setup.kind === "breach" || setup.kind === "manhunt";
+  const contain = setup.kind === "breach" || setup.kind === "manhunt";
+  const has173 = contain && (setup.scp ?? "173") === "173", has049 = contain && setup.scp === "049";
 
   // On a breach, Site Security is first on the scene and Epsilon-11 follows later; elsewhere the squad goes in together.
   const first = setup.kind === "breach" ? setup.guards ?? [] : setup.squad;
@@ -69,7 +70,7 @@ export function createMission(setup: MissionSetup) {
 
   // SCP-173 (if present) and the Insurgency start in different rooms.
   // a breach starts at the cell itself (the middle north room on wing C); a manhunt could be anywhere
-  const scpRoom = !has173 ? null : setup.kind === "breach" && def.scpRooms.length > 1 ? def.scpRooms[1] : pick(def.scpRooms);
+  const scpRoom = !contain ? null : setup.kind === "breach" && def.scpRooms.length > 1 ? def.scpRooms[1] : pick(def.scpRooms);
   const [sx, sy] = scpRoom ? claim(floorTiles(scpRoom)) : [0, 0];
   const ciRooms = def.insurgentRooms.filter(r => r !== scpRoom);
   const ciRoom = pick(ciRooms);
@@ -95,12 +96,14 @@ export function createMission(setup: MissionSetup) {
     units.push(mk({ id: "c" + (i + 1), side: "civilian", call: names[i % names.length], name: names[i % names.length], x, y, hp: 4, maxHp: 4, san: 50, witness,
       spooked: setup.kind === "manhunt" }));
   }
-  const statue = mk({ id: "scp173", side: "anomaly", name: "SCP-173", x: sx, y: sy, hp: 1, maxHp: 1, san: 0, sightBound: true, alive: has173 });
+  const statue = has049
+    ? mk({ id: "scp049", side: "anomaly", name: "SCP-049", x: sx, y: sy, hp: 1, maxHp: 1, san: 0 })
+    : mk({ id: "scp173", side: "anomaly", name: "SCP-173", x: sx, y: sy, hp: 1, maxHp: 1, san: 0, sightBound: true, alive: has173 });
   units.push(statue);
 
   const W = def.rows[0].length, H = def.rows.length;
   const state: MissionState = {
-    setup, has173, amnestics: setup.amnestics, turn: 1, phase: "player", busy: false, over: false, called: false, mode: null,
+    setup, has173, has049, calmUntil: 0, amnestics: setup.amnestics, turn: 1, phase: "player", busy: false, over: false, called: false, mode: null,
     units, statue, sealed: false, selected: null, hover: null, pending: null,
     vis: new Uint8Array(W * H), explored: new Uint8Array(W * H),
     lastSeen: null, raidersActive: setup.kind === "strike", mem: new Map(), checked: new Set(),
@@ -121,8 +124,8 @@ export function createMission(setup: MissionSetup) {
 }
 
 export const BRIEFINGS: Record<MissionKind, (s: MissionSetup) => string> = {
-  breach: s => `SCP-173 is out of its cell in the north rooms. Site Security is first on the scene${s.lateGuards?.length ? `, with ${s.lateGuards.length} more guard${s.lateGuards.length > 1 ? "s" : ""} arriving next turn` : ""}. ${s.squad.length ? `Epsilon-11 arrives on turn ${s.mtfTurn}.` : "Epsilon-11 isn't coming: nobody is available."} The transport container is open at the dock in the staging room: get it inside and seal it. If it reaches the surface hatch in the east lab, it's gone; the panel at the east end of the corridor locks the hatch down.${s.dclass.length ? ` ${s.dclass.join(" and ")} ${s.dclass.length > 1 ? "are" : "is"} assigned to you.` : ""}`,
-  manhunt: () => "SCP-173 is somewhere nearby, and the locals are out. Every civilian it kills makes the cover story harder. A truck with an open container is waiting: get it inside and seal it.",
+  breach: s => s.scp === "049" ? `SCP-049 is out of its cell in the north rooms and looking for patients. Its touch kills, and it will raise anyone who dies as SCP-049-2. Gunfire only staggers it. Talk it down (Calm, within ${3} tiles) and lead it into the transport container in the staging room, then seal it.${s.squad.length ? ` Epsilon-11 arrives on turn ${s.mtfTurn}.` : ""}` : `SCP-173 is out of its cell in the north rooms. Site Security is first on the scene${s.lateGuards?.length ? `, with ${s.lateGuards.length} more guard${s.lateGuards.length > 1 ? "s" : ""} arriving next turn` : ""}. ${s.squad.length ? `Epsilon-11 arrives on turn ${s.mtfTurn}.` : "Epsilon-11 isn't coming: nobody is available."} The transport container is open at the dock in the staging room: get it inside and seal it. If it reaches the surface hatch in the east lab, it's gone; the panel at the east end of the corridor locks the hatch down.${s.dclass.length ? ` ${s.dclass.join(" and ")} ${s.dclass.length > 1 ? "are" : "is"} assigned to you.` : ""}`,
+  manhunt: s => s.scp === "049" ? "A man in a plague doctor's mask is walking among the locals, and some of them have stopped breathing. That is SCP-049. Its touch kills, and the dead get back up. Talk it down (Calm) and lead it into the truck's open container, then seal it. Keep people from dying near it." : "SCP-173 is somewhere nearby, and the locals are out. Every civilian it kills makes the cover story harder. A truck with an open container is waiting: get it inside and seal it.",
   coverup: s => `${s.witnesses} witness${s.witnesses === 1 ? "" : "es"} saw something they shouldn't have. Reach each one and give them amnestics (Dose, 1 action, adjacent) before they get away. Anyone who spots the team will run for the edge of the map. Dose at least half for the job to count.`,
   strike: () => "An Insurgency cell is holed up here. Neutralise every Insurgent. Wounded ones can be secured as prisoners.",
 };

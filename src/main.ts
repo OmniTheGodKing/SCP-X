@@ -19,15 +19,15 @@ resolveInterrupted(campaign);
 saveCampaign(campaign);
 
 const WIN: Record<MissionKind, [string, string]> = {
-  breach: ["Recontained", "SCP-173 is sealed in the transport container."],
-  manhunt: ["Recovered", "SCP-173 is sealed in the truck's container."],
+  breach: ["Recontained", "%s is sealed in the transport container."],
+  manhunt: ["Recovered", "%s is sealed in the truck's container."],
   coverup: ["Contained", "Every witness has been dosed."],
   strike: ["Cell broken", "The Insurgency cell is out of action."],
 };
-function debriefHtml(r: MissionResult, d: Debrief, kind: MissionKind) {
+function debriefHtml(r: MissionResult, d: Debrief, kind: MissionKind, scp: string) {
   return `
     <div class="stampmark ${r.win ? "win" : "lose"}">${r.win ? WIN[kind][0] : r.evacuated ? "Evacuated" : "Mission failed"}</div>
-    <h3>${r.win ? WIN[kind][1] : r.evacuated ? "Epsilon-11 pulled out." : "Epsilon-11 did not come back."}</h3>
+    <h3>${r.win ? WIN[kind][1].replace("%s", scp) : r.evacuated ? "Epsilon-11 pulled out." : "Epsilon-11 did not come back."}</h3>
     <ul class="debrief">${[...d.lines, ...d.promotions].map(l => `<li>${esc(l)}</li>`).join("")}</ul>
     <dl>
       <dt>Turns</dt><dd>${r.turns}</dd>
@@ -65,7 +65,7 @@ function showHub() {
       mountMission(root, showHub, result => {
         const d = applyResult(campaign, result);
         saveCampaign(campaign);
-        return debriefHtml(result, d, setup.kind);
+        return debriefHtml(result, d, setup.kind, setup.scp === "049" ? "SCP-049" : "SCP-173");
       });
     },
   });

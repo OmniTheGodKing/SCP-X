@@ -19,7 +19,8 @@ Order and contents are open to change.
 New anomalies turn up as incidents in the world. Capture one and it moves into a cell at Site-19.
 Each author is checked on the SCP Wiki and credited under CC BY-SA 3.0.
 
-1. SCP-049, "The Plague Doctor" (Euclid). Slow, and its touch kills. It stops to "cure" bodies, which rise as
+1. (Done) SCP-049, "The Plague Doctor" (Euclid). First sighted at a random point in 1952. Raising a body takes it one
+   turn, and it goes for any fresh body it can see before the living. Slow, and its touch kills. It stops to "cure" bodies, which rise as
    SCP-049-2 to fight for it. Gunfire staggers it but doesn't hurt it. An operative within 3 tiles can keep it calm
    (sanity cost) so it follows them into containment.
 2. SCP-106, "The Old Man" (Keter). Walks through walls, corrodes the floor, and takes victims to its pocket dimension.

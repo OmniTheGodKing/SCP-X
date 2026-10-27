@@ -10,6 +10,7 @@ import { insurgentsStare, raiderPhase } from "./insurgency";
 import { entryTiles, missionResult, spawnMember } from "./mission";
 import { maxSanOf, prof } from "./profiles";
 import { release, rollBlinks } from "./scp173";
+import { leadOptions, leadTo, plaguePhase, zombiePhase } from "./scp049";
 import {
   S, alive, canAct, canSee, computeVis, full, fx, hooks, humans, isPanicked, isTeam, label, log, loseSanity,
   occupied, reveal, seen, sleep, starers, team, unitAt,
@@ -118,11 +119,11 @@ export function sealCheck(u: Unit | null) {
   const st = S.statue;
   if (S.sealed) return "Already sealed.";
   if (!u || u.side !== "mtf") return "Only an operative can seal the container.";
-  if (!inContainer(st.x, st.y)) return "SCP-173 isn't in the container yet.";
+  if (!inContainer(st.x, st.y)) return `${st.name} isn't in the container yet.`;
   if (u.ap < 1) return "No actions left this turn.";
   if (!nearContainer(u.x, u.y)) return "Stand at the container door to close it.";
   if (humans().some(h => inContainer(h.x, h.y))) return "Get everyone out of the container first.";
-  if (!starers().length) return "Someone must be staring at SCP-173 while the door closes.";
+  if (S.has173 && !starers().length) return "Someone must be staring at SCP-173 while the door closes.";
   return null;
 }
 
@@ -191,6 +192,13 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
     if (S.pending && S.pending.x === x && S.pending.y === y) return true;
     S.pending = { x, y }; S.hover = { x, y }; hooks.update(); return false;
   };
+  if (S.mode === "lead") {
+    if (!leadOptions().has(y * L.W + x)) { flash("SCP-049 can be led up to 3 tiles along open floor."); return; }
+    if (!confirm()) return;
+    S.busy = true; S.mode = null;
+    await leadTo(x, y);
+    S.busy = false; afterAction(); return;
+  }
   // while aiming a grenade, a click always picks the target, even on top of someone
   if (S.mode === "ability" && S.ability && sel) {
     const t = S.units.find(v => v.alive && v.x === x && v.y === y && abilityTargets(sel, S.ability!).includes(v));
@@ -215,12 +223,21 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
     await doDrag(sel, path);
     return;
   }
+  if (u && u.side === "anomaly" && S.has049 && seen(x, y) && sel.side === "mtf" && sel.ap > 0) {
+    if (!canSee(sel, x, y)) { flash(`${sel.call} has no line of sight to SCP-049.`); return; }
+    const fw = fireCheck(sel);
+    if (fw) { flash(fw); return; }
+    if (!confirm()) return;
+    S.busy = true; S.pending = null; sel.ap = sel.gun?.type === "smg" ? sel.ap - 1 : 0;
+    await fire(sel, u, false);
+    S.busy = false; afterAction(); return;
+  }
   if (u && u.side === "anomaly" && seen(x, y)) {
     reveal("arms");
     log("Rounds would do nothing to SCP-173. It has to go in the container.");
     hooks.update(); return;
   }
-  if (u && u.side === "raider" && seen(x, y)) {
+  if (u && (u.side === "raider" || u.side === "zombie") && seen(x, y)) {
     if (sel.side !== "mtf") { flash("D-Class are unarmed."); return; }
     if (!canSee(sel, x, y)) { flash(`${sel.call} has no line of sight to that target.`); return; }
     const fw = fireCheck(sel);
@@ -337,7 +354,7 @@ export function doSeal(flash: (t: string) => void) {
   if (why || !u) { flash(why || "Select an operative."); return; }
   u.ap = hasPerk(u, "procedure") ? u.ap - 1 : 0; u.sealed = true; S.sealed = true;
   for (const m of team()) m.staring = false;
-  log(`${full(u)} swings the container door shut and locks it. SCP-173 is sealed.`, "good");
+  log(`${full(u)} swings the container door shut and locks it. ${st173name()} is sealed.`, "good");
   const [cx, cy] = L.contTiles[1] || L.contTiles[0];
   fx({ type: "text", x: cx * TS + 16, y: cy * TS - 4, text: "SEALED", color: "#86c193", dur: 1600 });
   afterAction();
@@ -431,6 +448,8 @@ export async function endTurn() {
 }
 
 async function anomalyPhase() {
+  if (S.has049 && !S.debug?.freeze173) await plaguePhase();
+  await zombiePhase();
   if (!S.has173 || S.sealed || S.debug?.freeze173) return;
   for (const m of starers()) { loseSanity(m, prof(m).drain, "sight"); reveal("mind"); }
   insurgentsStare();
@@ -472,6 +491,8 @@ export function evacuate() {
   log(S.has173 ? "Epsilon-11 pulls out. SCP-173 is still loose." : "Epsilon-11 pulls out before the job is done.", "bad");
   finish(false, true);
 }
+
+const st173name = () => S.statue.name;
 
 // ---------- debug menu hooks ----------
 function debugTap(x: number, y: number) {

@@ -4,6 +4,7 @@ import { has } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, travelDays } from "./world";
 import { log, type Campaign, type Incident } from "./campaign";
+import type { ScpId } from "../game/types";
 import { GUARD, type Guard } from "./security";
 
 export type ScpClass = "Safe" | "Euclid" | "Keter";
@@ -21,7 +22,7 @@ export const RECOVERY_WINDOW = 3;        // days to answer a sighting
 export const MOVE_COST = 20;
 
 export interface ScpRecord {
-  id: string;
+  id: ScpId;
   name: string;
   title: string;
   cls: ScpClass;
@@ -108,6 +109,8 @@ export function resurface(c: Campaign, s: ScpRecord, at?: RegionId) {
 
 /** One day of containment: wear, breaches, unanswered breaches spreading or escaping, sightings. */
 export function tickContainment(c: Campaign) {
+  for (const [id, day] of Object.entries(c.sightings) as [ScpId, number][])
+    if (c.day >= day) { delete c.sightings[id]; firstSighting(c, id); }
   for (const s of c.scps) {
     if (s.status === "contained") {
       s.maintenance = Math.max(0, s.maintenance - decay(c));
@@ -120,6 +123,13 @@ export function tickContainment(c: Campaign) {
   }
   for (const inc of [...c.incidents]) {
     const s = c.scps.find(x => x.id === inc.scpId);
+    if (inc.first && c.day > inc.expires && inc.id !== c.activeIncident) {
+      // a new anomaly nobody went for: it moves on, and turns up somewhere else later
+      c.incidents = c.incidents.filter(i => i !== inc); addExposure(c, inc.region, 10); c.stats.missed++;
+      c.sightings[inc.scpId as ScpId] = c.day + rand(60, 150);
+      log(c, `${inc.title.split(":")[0]} went unanswered (+10 exposure in ${REGIONS[inc.region].name}). Whatever it was has moved on.`, "bad", "command");
+      continue;
+    }
     if (!s || inc.appeared === c.day || inc.id === c.activeIncident) continue;
     const drop = () => { c.incidents = c.incidents.filter(i => i !== inc); };
     // breaches are answered on the spot, so only sightings can run out of time
@@ -133,6 +143,7 @@ export function tickContainment(c: Campaign) {
 
 /** Mission outcome for the anomaly an incident was about. */
 export function resolveScp(c: Campaign, inc: Incident, recovered: boolean) {
+  if (inc.first) { firstContact(c, inc, recovered); return; }
   const s = c.scps.find(x => x.id === inc.scpId);
   if (!s) return;
   if (recovered) {
@@ -201,6 +212,57 @@ export function moveScp(c: Campaign, s: ScpRecord, to: Facility, watchers: Guard
     log(c, `${s.name} now held in the ${nameInText(to.type)} on level ${to.level + 1}.`, "key");
   }
 }
+
+// ---- new anomalies: first sightings in the world ----
+
+export const SCP_DEFS: Record<ScpId, { name: string; title: string; cls: ScpClass; sighting: string }> = {
+  "173": { name: "SCP-173", title: "The Sculpture", cls: "Euclid", sighting: "" },
+  "049": { name: "SCP-049", title: "The Plague Doctor", cls: "Euclid", sighting: "a man in a plague doctor's mask, and patients who stopped breathing" },
+};
+/** The first sighting of each anomaly not yet found: SCP-049 turns up some time in 1952. */
+export const firstSightings = (): Partial<Record<ScpId, number>> => ({ "049": rand(215, 580) });
+export const TRANSFER_BONUS = 100;
+
+export function firstSighting(c: Campaign, id: ScpId) {
+  const open = REGION_IDS.filter(r => !c.regions[r].collapsed);
+  const region = open[rand(0, open.length - 1)] ?? HOME;
+  const towns = REGIONS[region].towns, where = towns[rand(0, towns.length - 1)];
+  const d = SCP_DEFS[id];
+  const inc: Incident = {
+    id: "inc" + c.nextIncident, kind: "recovery", scpId: id, first: true,
+    title: `Incident ${String(c.nextIncident).padStart(3, "0")}: Anomalous sighting near ${where}`,
+    appeared: c.day, expires: c.day + travelDays(c, region) + 4,
+    insurgents: rand(0, 2), region, map: Math.random() < 0.5 ? "town" : "farm", civilians: rand(3, 4),
+  };
+  c.nextIncident++;
+  c.incidents.push(inc);
+  log(c, `Reports from ${where}: ${d.sighting}. Something new. Capture it within ${inc.expires - c.day} days.`, "bad", "command");
+}
+
+/** Wings an anomaly could move into: working, empty, and at least its grade. */
+export const freeWings = (c: Campaign, cls: ScpClass) => c.base.facilities.filter(f =>
+  isContainment(f.type) && operational(f) && !occupantOf(c, f) && (FACILITIES[f.type].grade ?? 0) >= CLASS_GRADE[cls]);
+
+/** A newly found anomaly was caught (or not). Returns a line for the debrief. */
+function firstContact(c: Campaign, inc: Incident, caught: boolean) {
+  const id = inc.scpId as ScpId, d = SCP_DEFS[id];
+  if (caught) {
+    const wing = freeWings(c, d.cls)[0];
+    if (wing) {
+      c.scps.push({ id, name: d.name, title: d.title, cls: d.cls, status: "contained", wingId: wing.id, maintenance: 100, lastCleaned: c.day });
+      log(c, `${d.name}, "${d.title}", is now held at Site-19 in the ${nameInText(wing.type)} on level ${wing.level + 1}. New research is open.`, "good");
+    } else {
+      c.funds += TRANSFER_BONUS;
+      log(c, `Site-19 has no free ${d.cls}-grade wing, so ${d.name} was handed to another site (+$${TRANSFER_BONUS}k). The chance to study it is gone.`, "key");
+    }
+  } else {
+    c.scps.push({ id, name: d.name, title: d.title, cls: d.cls, status: "loose", wingId: "", maintenance: 0, lastCleaned: c.day, resurfaceDay: c.day + rand(30, 90) });
+    log(c, `${d.name} slipped away. It will turn up again.`, "bad");
+  }
+}
+
+/** Debug: capture an anomaly as if a first-contact mission had been won. */
+export const captureNow = (c: Campaign, id: ScpId) => firstContact(c, { scpId: id, first: true } as Incident, true);
 
 export function startingScps(wingId: string): ScpRecord[] {
   return [{ id: "173", name: "SCP-173", title: "The Sculpture", cls: "Euclid", status: "contained", wingId, maintenance: 100, lastCleaned: 1 }];
