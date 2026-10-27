@@ -20,6 +20,7 @@ export const lookOf = (o: { id: string; sex?: "m" | "f"; look?: Look }) => fitLo
 import { monthlyStaff, tickStaff, type StaffEvent } from "./staff";
 import { tickInspection } from "./inspection";
 import { buildReport, type Report } from "./reports";
+import { tickGeo, type FieldOp } from "./geo";
 import { newsFor } from "./news";
 import { CLASS_WEAPONS, WEAPON_TIERS, model, startingModels, type AmmoId, type AttachmentId, type WeaponType } from "../data/weapons";
 
@@ -44,7 +45,7 @@ export interface Operative {
   /** Times they have broken down (shut their eyes at zero sanity), across missions. */
   breakdowns: number;
   /** Away from duty: in therapy or retraining. */
-  busy?: { kind: "therapy" | "retrain" | "travel"; daysLeft: number; trait?: TraitId };
+  busy?: { kind: "therapy" | "retrain" | "travel"; daysLeft: number; trait?: TraitId; from?: RegionId };
   /** Chosen weapon type (one of their class's two) and the attachment fitted to it. */
   weapon?: WeaponType;
   attachment?: AttachmentId;
@@ -107,6 +108,10 @@ export interface Incident {
   insurgents: number;
   /** Insurgents removed from this incident by spending Intel. */
   weakened?: number;
+  /** Geoscape: investigated (exact opposition, anomaly identified), a field agent's report due, and how far it has worsened. */
+  recon?: boolean;
+  reconDue?: number;
+  grown?: number;
 }
 
 export interface Prisoner { name: string; days: number; intel: number; }
@@ -196,6 +201,8 @@ export interface Campaign {
   lastStrike?: number;
   /** Things that have happened at least once, which open up research. */
   milestones?: Milestone[];
+  /** Field operations under way on the World Map. */
+  ops?: FieldOp[];
   /** This month's recruit pool in the Command facility. */
   recruits?: Candidate[];
 }
@@ -378,6 +385,7 @@ export function advanceDay(c: Campaign) {
   if (c.guards.some(g => g.alive && g.breaches >= 3)) reachMilestone(c, "guard_veteran");
   tickContainment(c);
   tickWorld(c);
+  tickGeo(c);
   for (const s of c.scps) if (s.status === "contained" && c.day - s.lastCleaned === CLEAN_EVERY)
     log(c, `${s.name}'s cell is due for cleaning. Skipping it lets debris build up and raises the breach risk.`, "key");
   tickPrisoners(c);
@@ -777,7 +785,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   // the squad flies home from abroad
   const away = inc ? travelDays(c, inc.region) : 0;
   if (away && r.squad.some(s => s.alive) && !ambush) {
-    for (const s of r.squad) { const o = c.roster.find(x => x.id === s.opId); if (o?.alive) o.busy = { kind: "travel", daysLeft: away }; }
+    for (const s of r.squad) { const o = c.roster.find(x => x.id === s.opId); if (o?.alive) o.busy = { kind: "travel", daysLeft: away, from: inc!.region }; }
     lines.push(`The survivors fly back to Site-19: ${away} day${away > 1 ? "s" : ""}.`);
   }
   for (const l of [...lines, ...promotions]) log(c, l, r.win ? "good" : "bad");

@@ -317,3 +317,6 @@ details.archived summary { cursor: pointer; font-family: var(--font-mono); font-
 .inclist li.on { outline: 1px solid var(--manila); outline-offset: 2px; }
 .linkbtn { background: none; border: none; color: var(--ink); font: inherit; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .file.brief { margin-bottom: 12px; }
+.worldmap .fieldop circle { fill: var(--mtf); }
+.worldmap .fieldop .wave { fill: none; stroke: var(--mtf); stroke-width: .5; animation: mpulse 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .worldmap .fieldop .wave { animation: none; } }

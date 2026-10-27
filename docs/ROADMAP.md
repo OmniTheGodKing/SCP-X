@@ -158,7 +158,7 @@ retaliation (done); (5) doors and sirens (done).
 - **Phase boundary:** finish the playable 2D tactical and strategic foundations in Phase 3. A 3D globe, 3D tactical environments, multi-floor elevation and the campaign's final mission remain outside Phase 3.
 - **Integration:** world actions, missions, research, Site-19, personnel, economy, exposure, Council standing and the global Insurgency threat should share consequences. Avoid isolated minigames or duplicate menus.
 
-## Phase 3 priority: interactive 2D World Map / Geoscape (in progress)
+## Phase 3 priority: interactive 2D World Map / Geoscape (done for Phase 3 scope; later phases add actions to it)
 
 **Purpose:** the World Map is the primary strategic hub and the place the player starts field missions, not merely an exposure dashboard or a separate list of missions.
 
@@ -187,8 +187,15 @@ retaliation (done); (5) doors and sirens (done).
   selection on the World tab and launches from there; after the debrief the player returns to the World Map on that
   region. An incident list sorted by urgency sits beside the map. The Command tab's incident cards now open the
   incident on the map instead of planning separately.
-- **Still to come:** noncombat world actions (investigate, scan, surveillance, contacts), intelligence that can be
-  improved before committing, incidents that worsen while they wait, and showing squads in transit.
+- **Chunk 2 (done):** investigate an incident from its briefing (1 Intel now, or a field agent for $15k who reports
+  the next day): exact opposition, and a first sighting's anomaly identified. Waiting makes things worse, stated in the
+  briefing: Insurgency cells take in another Insurgent every 3 days (up to 3), retaliations cost a civilian and 2
+  exposure every 2 days, cover-up witnesses spread the story every 3 days (up to 2 more). Field operations from a
+  region's card, shown on the map while they run: Scan for leads ($20k, 4 days: Intel, money, a strong recruit added
+  to the pool, or a cell) and Surveillance ($30k, 6 days: usually a cell to strike, else 2 Intel). Squads flying home
+  and running operations are listed with the time controls.
+- **Belongs to later phases:** establishing contacts and fronts (3H), covert teams and procurement (3J), rivals
+  intervening in ignored incidents (3I). The Geoscape is where they will appear.
 
 ## Phase 3 priority: tactical map readability and feedback (planned)
 

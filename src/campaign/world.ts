@@ -85,15 +85,16 @@ export function canLocate(c: Campaign, r: RegionId) {
   return null;
 }
 /** Spend Intel to find an Insurgency cell in a region, creating a strike mission. */
-export function locateCell(c: Campaign, r: RegionId) {
-  if (canLocate(c, r)) return;
-  c.intel -= locateIntel(c);
+/** `found`: a field operation found it, so no Intel is spent. */
+export function locateCell(c: Campaign, r: RegionId, found = false) {
+  if (found ? c.incidents.some(i => i.kind === "strike" && i.region === r) : canLocate(c, r)) return;
+  if (!found) c.intel -= locateIntel(c);
   const town = pick(REGIONS[r].towns);
   const inc = newIncident(c, {
     kind: "strike", region: r, map: "port", scpId: "", what: `Insurgency cell, ${town}`,
     expires: c.day + travelDays(c, r) + 7, insurgents: Math.min(7, 4 + Math.floor((yearOf(c.day) - 1951) / 3)), witnesses: 0, civilians: 0,
   });
-  log(c, `Intel points to an Insurgency cell operating out of a warehouse near ${town}. Strike within ${inc.expires - c.day} days, before they move.`, "key");
+  log(c, `${found ? "Field work in " + REGIONS[r].name + " found" : "Intel points to"} an Insurgency cell operating out of a warehouse near ${town}. Strike within ${inc.expires - c.day} days, before they move.`, "key", found ? "world" : undefined);
 }
 
 export function canCoverStory(c: Campaign, r: RegionId) {
