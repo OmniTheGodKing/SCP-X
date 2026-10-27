@@ -1,21 +1,21 @@
-// Nicknames, as XCOM gives its soldiers: handed out when an operative makes Corporal, picked from what they do,
-// and changeable on their personnel file.
-import type { ClassId } from "./classes";
-
-export const NICKS: Record<ClassId | "any", string[]> = {
-  rifleman: ["Deadeye", "Longshot", "Crosshair", "Steady", "Hawk", "Zero", "Trigger", "Range", "Bullseye", "Ghost"],
-  breacher: ["Sledge", "Doorknock", "Bulldog", "Rhino", "Tank", "Boom", "Crowbar", "Rampart", "Hammer", "Brick"],
-  recon: ["Owl", "Whisper", "Shadow", "Scout", "Lynx", "Radar", "Tracker", "Fox", "Eyes", "Moth"],
-  containment: ["Warden", "Lockjaw", "Padlock", "Keeper", "Chain", "Vault", "Shepherd", "Latch", "Gatekeeper", "Bolt"],
-  medic: ["Doc", "Patch", "Stitches", "Saint", "Sawbones", "Angel", "Splint", "Mercy", "Tonic", "Iodine"],
-  any: ["Lucky", "Ace", "Smokey", "Red", "Tex", "Dutch", "Buck", "Sparky", "Chief", "Mac"],
-};
-/** A nickname nobody on the roster already has. */
-export function pickNick(cls: ClassId | undefined, taken: Set<string>): string {
-  const pool = [...(cls ? NICKS[cls] : []), ...NICKS.any].filter(n => !taken.has(n));
-  return pool.length ? pool[Math.floor(Math.random() * pool.length)] : NICKS.any[Math.floor(Math.random() * NICKS.any.length)];
+// Nicknames, as a unit hands them out: handed over when an operative makes Corporal, owing nothing to their job and
+// usually a little stupid. Changeable on their personnel file.
+export const NICKS = [
+  "Biscuit", "Tadpole", "Sunshine", "Mumbles", "Lefty", "Noodles", "Taters", "Toast", "Hambone", "Goose",
+  "Peaches", "Spuds", "Gravy", "Pickles", "Muffin", "Scooter", "Cupcake", "Wrong Way", "Two Socks", "Cornbread",
+  "Meatball", "Bambi", "Nugget", "Sleepy", "Chatty", "Squeaky", "Duck", "Pockets", "Crash", "Tiny",
+  "Moose", "Beans", "Waffles", "Skillet", "Buttons", "Ketchup", "Dumbo", "Shorty", "Stretch", "Chef",
+  "Radio", "Butterfingers", "Snooze", "Pretzel", "Lumpy", "Hiccup", "Sparrow", "Pork Chop", "Frosty", "Grandpa",
+  "Kid", "Rookie", "Professor", "Mouse", "Tank", "Bingo", "Jellybean", "Tumbles", "Mittens", "Gopher",
+  "Soapy", "Doughboy", "Mothball", "Cheese", "Blinky", "Popcorn", "Bucket", "Lucky", "Crumbs", "Socks",
+];
+/** A nickname nobody alive on the roster already has. */
+export function pickNick(taken: Set<string>): string {
+  const pool = NICKS.filter(n => !taken.has(n));
+  const from = pool.length ? pool : NICKS;
+  return from[Math.floor(Math.random() * from.length)];
 }
-/** Given name, nickname in quotes, family name: Robert "Doc" Bishop. */
+/** Given name, nickname in quotes, family name: Robert "Biscuit" Bishop. */
 export function withNick(name: string, nick?: string) {
   if (!nick) return name;
   const i = name.indexOf(" ");

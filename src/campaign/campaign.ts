@@ -281,10 +281,10 @@ function checkPromotion(c: Campaign, o: Operative, out?: string[]) {
   }
 }
 
-/** Nicknames come with Corporal, as in XCOM. */
+/** Nicknames come with Corporal, and have nothing to do with the job. */
 export const NICK_RANK = 2;
 export function giveNick(c: Campaign, o: Operative) {
-  o.nick = pickNick(o.cls, new Set(c.roster.filter(x => x.alive && x.nick).map(x => x.nick!)));
+  o.nick = pickNick(new Set(c.roster.filter(x => x.alive && x.nick).map(x => x.nick!)));
 }
 /** How an operative is known in the field: with their nickname, once they have one. */
 export const fieldName = (o: Operative) => withNick(o.name, o.nick);
