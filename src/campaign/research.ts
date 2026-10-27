@@ -48,6 +48,7 @@ export const PROJECTS: Record<string, ProjectDef> = {
   containment_rev:    { name: "Containment procedure revision", branch: "SCP-173", days: 40, cost: 80, needsTest: "material", desc: "SCP-173's breach risk −25%, and its cell gets dirty half as fast." },
   rapid_response:     { name: "Rapid response protocol", branch: "SCP-173", days: 30, cost: 50, needs: ["movement_study"], desc: "Epsilon-11 reaches a breach 5 turns sooner at every alert level." },
   ocular_lubricant:   { name: "Ocular lubricant", branch: "Personnel", days: 20, cost: 40, needsTest: "endurance", unlocks: "eyedrops", desc: "Unlocks eye drops: the carrier ignores one blink while staring." },
+  selection_cadre:    { name: "Selection cadre", branch: "Personnel", days: 20, cost: 60, desc: "A permanent cadre runs Epsilon-11 selection for Site Security. Guards who pass join as Privates First Class instead of Privates." },
   trauma_counseling:  { name: "Trauma counseling", branch: "Personnel", days: 30, cost: 60, desc: "Operatives recover 3 more sanity on quiet turns during missions." },
   marksmanship:       { name: "Advanced marksmanship", branch: "Personnel", days: 30, cost: 60, desc: "+5 aim for every operative." },
   body_armor:         { name: "M1951 flak vest", branch: "Equipment", days: 25, cost: 50, unlocks: "armor", armorTier: 1, desc: "Issue the Korean War flak vest: +2 HP and 1 armor point, which cuts the damage of every hit by 1." },
@@ -133,13 +134,13 @@ export const PROJECTS: Record<string, ProjectDef> = {
   backup_gen:         { name: "Backup generators", branch: "Site", days: 25, cost: 60, desc: "Containment wings get their own backup supply: a power shortage no longer doubles breach risk or lets cells fail." },
 };
 
-export interface TestDef { name: string; risk: number; breach: number; dclass: number; desc: string; notes: string[]; }
+export interface TestDef { name: string; cost: number; days: number; risk: number; breach: number; dclass: number; desc: string; notes: string[]; }
 export const TESTS: Record<TestId, TestDef> = {
-  endurance: { name: "Observation endurance test", risk: 1, breach: 0, dclass: 1, notes: ["blink", "mind"],
+  endurance: { name: "Observation endurance test", cost: 20, days: 5, risk: 1, breach: 0, dclass: 1, notes: ["blink", "mind"],
     desc: "Staff take turns holding SCP-173's gaze while a D-Class sits in the cell. Measures how long people can stare before they slip." },
-  material:  { name: "Material analysis", risk: 2, breach: 0.05, dclass: 1, notes: ["arms"],
+  material:  { name: "Material analysis", cost: 30, days: 8, risk: 2, breach: 0.05, dclass: 1, notes: ["arms"],
     desc: "A D-Class scrapes samples from its surface while it is watched. Close contact doubles the danger." },
-  movement:  { name: "Controlled movement trial", risk: 4, breach: 0.2, dclass: 2, notes: ["hunt", "hear"],
+  movement:  { name: "Controlled movement trial", cost: 50, days: 12, risk: 4, breach: 0.2, dclass: 2, notes: ["hunt", "hear"],
     desc: "Everyone blinks on purpose while two D-Class stand at marked distances, and the team measures how far it gets. Dangerous, and it can end in a breach." },
 };
 
@@ -195,6 +196,8 @@ export interface ResearchState {
   progress: Record<string, number>;
   assigned: Record<string, number>;
   tests: TestId[];
+  /** The test under way: its D-Class are already in holding for it, and these guards will watch the cell work. */
+  testing?: { id: TestId; watchers: string[] };
   /** A breakthrough on offer, and a project inspired to take half the time, each until a day. */
   offer?: { id: string; until: number };
   inspired?: { id: string; until: number };
@@ -211,7 +214,12 @@ export const researchersFree = (c: Campaign) => c.researchers - researchersAssig
 export const unlockedItems = (c: Campaign) => Object.entries(PROJECTS).filter(([id, p]) => p.unlocks && has(c, id)).map(([, p]) => p.unlocks!);
 
 /** Researcher-days a project needs: halved while inspired, or once started under an inspiration. */
+export const testKey = (t: TestId) => `test_${t}`;
+const testOf = (key: string) => key.startsWith("test_") ? key.slice(5) as TestId : null;
+
 export function projectDays(c: Campaign, id: string) {
+  const t = testOf(id);
+  if (t) return TESTS[t].days;
   const i = c.research.inspired, p = PROJECTS[id];
   const days = i?.id === id ? Math.ceil(p.days / 2) : p.days;
   return p.branch === "Weapons" && newsActive(dateOf(c.day), "tonkin") ? Math.ceil(days * 0.8) : days;
@@ -239,6 +247,12 @@ export function projectLock(c: Campaign, id: string): string | null {
 export function assign(c: Campaign, id: string, delta: 1 | -1): string | null {
   const r = c.research, cur = r.assigned[id] || 0;
   if (delta < 0) { if (cur > 0) r.assigned[id] = cur - 1; return null; }
+  if (testOf(id)) {
+    if (r.testing?.id !== testOf(id)) return "That test isn't under way.";
+    if (researchersFree(c) < 1) return "No free researchers.";
+    r.assigned[id] = cur + 1;
+    return null;
+  }
   if (has(c, id)) return "Already finished.";
   const lock = projectLock(c, id);
   if (lock) return lock;
@@ -272,6 +286,7 @@ export function tickResearch(c: Campaign) {
   for (const [id, n] of Object.entries(r.assigned)) {
     if (!n) continue;
     r.progress[id] = (r.progress[id] || 0) + n;
+    if (testOf(id)) { if (r.progress[id] >= projectDays(c, id)) finishTest(c, testOf(id)!); continue; }
     if (r.progress[id] >= projectDays(c, id)) {
       r.done.push(id); delete r.assigned[id];
       if (r.inspired?.id === id) r.inspired = undefined;
@@ -406,22 +421,39 @@ export function monthlyResearch(c: Campaign) {
   }
 }
 
-// ---------- tests ----------
+// ---------- tests: paid for up front, worked on by researchers, and the cell work happens on the last day ----------
 export function canTest(c: Campaign, s: ScpRecord, t: TestId): string | null {
+  const d = TESTS[t];
   if (c.research.tests.includes(t)) return "Already done.";
+  if (c.research.testing) return c.research.testing.id === t ? "Under way." : `The ${TESTS[c.research.testing.id].name.toLowerCase()} is already under way.`;
   if (!countOperational(c, "lab")) return "Needs a working research lab.";
   if (s.status !== "contained") return `${s.name} isn't in its cell.`;
-  if (c.dclass < TESTS[t].dclass) return `Needs ${TESTS[t].dclass} D-Class.`;
+  if (researchersFree(c) < 1) return "Needs a free researcher.";
+  if (c.dclass < d.dclass) return `Needs ${d.dclass} D-Class.`;
+  if (c.funds < d.cost) return `Needs $${d.cost}k.`;
   return null;
 }
-export function runTest(c: Campaign, s: ScpRecord, t: TestId, watchers: Guard[]) {
+export function startTest(c: Campaign, s: ScpRecord, t: TestId, watchers: Guard[]) {
   if (canTest(c, s, t)) return;
   const d = TESTS[t];
-  const ok = cellWork(c, s, watchers, `the ${d.name.toLowerCase()}`, d.risk, d.dclass, d.breach);
+  c.funds -= d.cost; c.dclass -= d.dclass;
+  c.research.testing = { id: t, watchers: watchers.map(g => g.id) };
+  c.research.assigned[testKey(t)] = 1;
+  log(c, `The ${d.name.toLowerCase()} on ${s.name} begins: ${d.days} researcher-days of preparation, then the cell work.`);
+}
+/** The last day: the D-Class go into the cell while the chosen guards watch. */
+function finishTest(c: Campaign, t: TestId) {
+  const r = c.research, d = TESTS[t], key = testKey(t);
+  const ids = r.testing?.watchers ?? [], watching = c.guards.filter(g => g.alive && ids.includes(g.id));
+  delete r.assigned[key]; delete r.progress[key]; r.testing = undefined;
+  const s = c.scps.find(x => x.id === "173");
+  c.dclass += d.dclass;   // the D-Class held back for it
+  if (!s || s.status !== "contained") { log(c, `The ${d.name.toLowerCase()} was called off: SCP-173 isn't in its cell. The money is spent.`, "bad", "research"); return; }
+  const ok = cellWork(c, s, watching, `the ${d.name.toLowerCase()}`, d.risk, d.dclass, d.breach);
   if (ok) {
-    c.research.tests.push(t);
+    r.tests.push(t);
     for (const n of d.notes) if (!c.knownNotes.includes(n)) c.knownNotes.push(n);
-    log(c, `${d.name} complete. SCP-173's file has been updated and new research is available.`, "good");
+    log(c, `${d.name} complete. SCP-173's file has been updated and new research is available.`, "good", "research");
   }
 }
 

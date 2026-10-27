@@ -2,7 +2,7 @@
 // Anything it does to a campaign marks that save as a debug save.
 import { RANK_XP, RANKS, advanceDay, dateText, gainIntel, log, maxSanOf, pendingBreach, startRiot, type Campaign } from "../campaign/campaign";
 import { tickConstruction } from "../campaign/base";
-import { PROJECTS, tickResearch } from "../campaign/research";
+import { PROJECTS, projectDays, tickResearch } from "../campaign/research";
 import { captureNow, firstSighting, resurface, startBreach, wreckFacility } from "../campaign/containment";
 import { addExposure, locateCell, spawnCoverup, locateIntel } from "../campaign/world";
 import { newGuard, type Alert } from "../campaign/security";
@@ -118,7 +118,7 @@ export function mountDebug(host: DebugHost) {
       case "coverup": spawnCoverup(c, region); setIns(c); break;
       case "strike": c.intel += locateIntel(c); locateCell(c, region); setIns(c); break;
       case "research": {
-        for (const [p, n] of Object.entries(c.research.assigned)) if (n) c.research.progress[p] = Math.max(c.research.progress[p] || 0, PROJECTS[p].days - n);
+        for (const [p, n] of Object.entries(c.research.assigned)) if (n) c.research.progress[p] = Math.max(c.research.progress[p] || 0, projectDays(c, p) - n);
         tickResearch(c); break;
       }
       case "materials": for (const m of ["ciWeapons", "prisoners", "intelTotal", "tissue", "survivors"] as const) c.materials[m] = (c.materials[m] ?? 0) + 5; break;

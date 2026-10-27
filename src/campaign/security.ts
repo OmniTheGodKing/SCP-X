@@ -104,7 +104,7 @@ export function tickGuards(c: Campaign, heal: number, calm: number) {
       c.guards = c.guards.filter(x => x !== g);
       const o = makeOperative(c, g.name);
       // guards come in as Privates; the selection cadre brings them in a step higher (recruiting trainers don't apply)
-      const pfc = c.purchases.includes("selection_cadre");
+      const pfc = has(c, "selection_cadre");
       o.rank = pfc ? 1 : 0; o.xp = pfc ? RANK_XP[1] : 0;
       o.traits = [...g.traits];
       o.kills = g.kills;
@@ -220,7 +220,6 @@ export function rollTrait(c: Campaign, g: Guard, t: TraitId, hit: boolean) {
 export const TRAINING: Record<string, { name: string; cost: number; desc: string; needs?: string; captain?: boolean }> = {
   officer_school: { name: "NCO academy", cost: 150, desc: "Squad leaders trained to run a fifth operative. Squad size 5." },
   command_staff:  { name: "Command staff", cost: 300, needs: "officer_school", captain: true, desc: "A field command structure under a Sergeant First Class. Squad size 6." },
-  selection_cadre: { name: "Selection cadre", cost: 80, desc: "A permanent cadre runs Epsilon-11 selection for Site Security. Guards who pass join as Privates First Class instead of Privates." },
   guard_training: { name: "Guard training program", cost: 100, desc: "Site Security trains on the range every week. Guards get +10 aim and +10 sanity." },
 };
 export const squadSize = (c: Campaign) => 4 + (c.purchases.includes("officer_school") ? 1 : 0) + (c.purchases.includes("command_staff") ? 1 : 0);
