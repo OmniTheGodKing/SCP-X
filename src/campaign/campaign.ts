@@ -10,7 +10,7 @@ import { ITEMS, armorOf, has, monthlyResearch, newResearch, tickResearch, type M
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, collapsedCount, COLLAPSE_LIMIT, newRegions, regionFunding, tickWorld, travelDays, type RegionState } from "./world";
 import { ALERTS, breachGuards, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
-import { CLASS_WEAPONS, model, startingModels, type AttachmentId, type WeaponType } from "../data/weapons";
+import { CLASS_WEAPONS, WEAPON_TIERS, model, startingModels, type AmmoId, type AttachmentId, type WeaponType } from "../data/weapons";
 
 export const RANKS = ["Operative", "Specialist", "Sergeant", "Lieutenant", "Captain"];
 export const RANK_XP = [0, 3, 7, 12, 18];
@@ -31,6 +31,7 @@ export interface Operative {
   /** Chosen weapon type (one of their class's two) and the attachment fitted to it. */
   weapon?: WeaponType;
   attachment?: AttachmentId;
+  ammoType?: AmmoId;
   aftercareUntil?: number;
   /** Extra max sanity from Psychological screening. */
   sanBonus?: number;
@@ -75,7 +76,7 @@ export interface SiteLogEntry { day: number; text: string; kind: string; }
 export interface Loadout { opId: string; armor: boolean; items: ItemId[]; }
 
 export interface Campaign {
-  version: 10;
+  version: 11;
   /** Material brought back from missions, for studies (like XCOM autopsies). */
   materials: Partial<Record<MaterialId, number>>;
   /** One-off training range purchases (like XCOM's Guerrilla Tactics School). */
@@ -94,6 +95,9 @@ export interface Campaign {
   models: Record<WeaponType, string>;
   armorTier: number;
   attachments: Partial<Record<AttachmentId, number>>;
+  /** Spare loads of special ammunition, and the weapon tier issued (1 service, 2 Foundation, 3 coil). */
+  ammo: Partial<Record<AmmoId, number>>;
+  weaponTier: number;
   prisoners: Prisoner[];
   intel: number;
   /** Site staff clean containment cells on schedule. */
@@ -212,7 +216,7 @@ export function newCampaign(): Campaign {
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
-    version: 10, materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, prisoners: [], intel: 0, cleaningOrder: true,
+    version: 11, materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
     day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
     inventory: {}, orders: [], knownNotes: [], nextD: 9101, nextOp: 1, nextIncident: 1,
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
@@ -332,8 +336,16 @@ export function fitAttachment(c: Campaign, o: Operative, a: AttachmentId | "") {
 }
 export function gunFor(c: Campaign, o: Operative) {
   const t = weaponOf(o), m = model(c.models[t]), a = o.attachment;
-  const mag = m.mag + (a === "extmag" ? 1 : 0), extra = t === "rifle" && has(c, "bt_barrels") ? 1 : 0;
-  return { name: m.name, type: t, dmg: [m.dmg[0] + extra, m.dmg[1] + extra] as [number, number], mag, ammo: mag, aim: m.aim, attachment: a };
+  const tier = WEAPON_TIERS[c.weaponTier ?? 1];
+  const mag = m.mag + (a === "extmag" ? 1 : 0), extra = (t === "rifle" && has(c, "bt_barrels") ? 1 : 0) + tier.dmg;
+  return { name: tier.name ? `${tier.name} ${m.name}` : m.name, type: t, dmg: [m.dmg[0] + extra, m.dmg[1] + extra] as [number, number], mag, ammo: mag, aim: m.aim + tier.aim,
+    attachment: a, ammoType: o.ammoType, pierce: tier.pierce + (o.ammoType === "ap" ? 1 : 0) };
+}
+export function loadAmmo(c: Campaign, o: Operative, a: AmmoId | "") {
+  if (a && !(c.ammo[a] ?? 0)) return;
+  if (o.ammoType) c.ammo[o.ammoType] = (c.ammo[o.ammoType] ?? 0) + 1;
+  o.ammoType = a || undefined;
+  if (a) c.ammo[a]!--;
 }
 
 function checkOver(c: Campaign) {
@@ -413,6 +425,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
       recoverBonus: has(c, "trauma_counseling") ? 3 : 0,
       mtfDrag: has(c, "powered_jack") ? 2 : 1,
       track173: has(c, "movement_study"),
+      m79: has(c, "m79"),
       lockdownTurns: has(c, "early_warning") ? 8 : 5,
       calmTurns: has(c, "pestilence_theory") ? 2 : 1,
       pocketReturn: has(c, "pocket_study") ? 0.5 : 0.25,

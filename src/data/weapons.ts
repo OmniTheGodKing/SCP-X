@@ -3,7 +3,24 @@
 import type { ClassId } from "./classes";
 
 export type WeaponType = "rifle" | "marksman" | "shotgun" | "mg" | "carbine" | "smg";
-export type AttachmentId = "scope" | "trigger" | "extmag" | "stock";
+export type AttachmentId = "scope" | "trigger" | "extmag" | "stock" | "suppressor" | "bayonet" | "sights";
+/** Special ammunition, one type per operative, built in the workshop (like XCOM's experimental ammo). */
+export type AmmoId = "ap" | "tracer" | "hollow" | "sedative";
+export const AMMO: Record<AmmoId, { name: string; desc: string }> = {
+  ap:       { name: "Armor-piercing rounds", desc: "Hits ignore 1 armor point." },
+  tracer:   { name: "Tracer rounds", desc: "+10 aim on overwatch shots." },
+  hollow:   { name: "Hollow-point rounds", desc: "Critical hits do 1 more damage." },
+  sedative: { name: "Sedative rounds", desc: "Non-lethal: Insurgents, civilians and loose D-Class brought to 0 HP are knocked out, not killed." },
+};
+/** Weapon tiers, like XCOM's conventional, magnetic and beam weapons. */
+export const WEAPON_TIERS = [
+  { name: "", dmg: 0, aim: 0, pierce: 0 },
+  { name: "", dmg: 0, aim: 0, pierce: 0 },
+  { name: "Foundation", dmg: 1, aim: 5, pierce: 0 },
+  { name: "Coil", dmg: 2, aim: 5, pierce: 1 },
+];
+/** Everyone's sidearm, fired when the main weapon is empty. It never needs reloading. */
+export const SIDEARM = { name: "M1911 pistol", dmg: [2, 3] as [number, number], aim: -5 };
 
 export interface WeaponModel {
   id: string;
@@ -69,6 +86,9 @@ export const ATTACHMENTS: Record<AttachmentId, AttachmentDef> = {
   trigger: { name: "Match trigger group", desc: "+10% crit." },
   extmag:  { name: "Extended magazine", desc: "+1 round." },
   stock:   { name: "Padded stock", desc: "A miss still does 1 damage." },
+  suppressor: { name: "Suppressor", desc: "Shots make no noise: nothing hears where they came from." },
+  bayonet: { name: "Bayonet", desc: "Against an adjacent enemy, a sure thrust for 3 damage that uses no ammo." },
+  sights:  { name: "Improved sights", desc: "+10 aim." },
 };
 
 // The Chaos Insurgency's arsenal by year.

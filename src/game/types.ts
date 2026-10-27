@@ -5,13 +5,15 @@ export type { ClassId, PerkId, TraitId };
 /** Class abilities plus Secure, which every operative can do. */
 export type AbilityId = PerkId | "secure" | "dose" | "lockdown" | "calm";
 
-import type { AttachmentId, WeaponType } from "../data/weapons";
-export type { AttachmentId, WeaponType };
+import type { AmmoId, AttachmentId, WeaponType } from "../data/weapons";
+export type { AmmoId, AttachmentId, WeaponType };
 
 export type ItemId = "armor" | "eyedrops" | "flashbang" | "smoke" | "tracker" | "frag";
 
 /** The weapon a unit carries into a mission. */
-export interface Gun { name: string; type: WeaponType; dmg: [number, number]; mag: number; ammo: number; aim: number; attachment?: AttachmentId; }
+export interface Gun { name: string; type: WeaponType; dmg: [number, number]; mag: number; ammo: number; aim: number; attachment?: AttachmentId;
+  /** Armor points every hit ignores (coil weapons, armor-piercing rounds), and special ammunition loaded. */
+  pierce?: number; ammoType?: AmmoId; }
 export interface Carried { id: ItemId; uses: number; }
 
 export type Side = "mtf" | "dclass" | "subject" | "civilian" | "raider" | "anomaly" | "zombie";
@@ -117,7 +119,7 @@ export interface SquadMember {
 export interface MissionMods { blinkBonus: number; recoverBonus: number; mtfDrag: number; track173: boolean; lockdownTurns: number; calmTurns: number; pocketReturn: number;
   /** Research expansion: medkit healing, stabilized operatives standing up, overwatch aim back, extra sight,
    *  Insurgent aim against armor, and how many D-Class get loose in a breach. */
-  medkitHeal: number; standUp: boolean; reactionBonus: number; sightBonus: number; ciAnalysis: boolean; strays: number; }
+  medkitHeal: number; standUp: boolean; m79: boolean; reactionBonus: number; sightBonus: number; ciAnalysis: boolean; strays: number; }
 
 export interface MissionSetup {
   kind: MissionKind;

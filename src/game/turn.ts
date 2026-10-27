@@ -1,7 +1,7 @@
 // Player actions and the turn cycle: your move, SCP-173, the Insurgency, then loose D-Class.
 import { FLOOR, HALF, L, TS, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, setSlow, setVault, tileAt, DIRS, type Pt } from "../core/grid";
 import { setSmoke, sightFrom } from "../core/sight";
-import { damage, fire, kill, moveUnit } from "./combat";
+import { activeGun, damage, fire, kill, moveUnit } from "./combat";
 import { TYPES } from "../data/weapons";
 import { abilityTargets, useAbility } from "./abilities";
 import { hasPerk, rangeOf, spend, usesLeft } from "./perks";
@@ -42,8 +42,8 @@ export const moveCost = (u: Unit, d: number) => d <= moveOf(u) ? 1 : 2;
 /** Why this unit can't fire right now, or null. */
 export function fireCheck(u: Unit) {
   if (!u.gun) return null;
-  if (u.gun.ammo < 1) return "Out of ammo. Reload first (R).";
-  if (u.gun.type === "marksman" && u.ap < 2) return "A marksman rifle takes both actions to fire.";
+  if (u.gun.ammo < 1 && u.side !== "mtf") return "Out of ammo. Reload first (R).";
+  if (u.gun.ammo >= 1 && u.gun.type === "marksman" && u.ap < 2) return "A marksman rifle takes both actions to fire.";
   return null;
 }
 export function reloadCheck(u: Unit | null) {
@@ -230,7 +230,7 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
     const fw = fireCheck(sel);
     if (fw) { flash(fw); return; }
     if (!confirm()) return;
-    S.busy = true; S.pending = null; sel.ap = sel.gun?.type === "smg" ? sel.ap - 1 : 0;
+    S.busy = true; S.pending = null; sel.ap = activeGun(sel)?.type === "smg" ? sel.ap - 1 : 0;
     await fire(sel, u, false);
     S.busy = false; afterAction(); return;
   }
@@ -246,7 +246,14 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
     if (fw) { flash(fw); return; }
     if (!confirm()) return;
     S.busy = true; S.pending = null;
-    if (sel.gun?.type === "smg") sel.ap -= 1;
+    // a bayonet settles an adjacent fight without a roll or a round
+    if (sel.gun?.attachment === "bayonet" && cheb(sel.x, sel.y, u.x, u.y) <= 1) {
+      S.busy = false; sel.ap = 0;
+      log(`${full(sel)} drives the bayonet home (3 damage).`, "good");
+      fx({ type: "text", x: u.x * TS + TS / 2, y: u.y * TS - 2, text: "3", color: "#ffffff", dur: 800 });
+      damage(u, 3, sel); afterAction(); return;
+    }
+    if (activeGun(sel)?.type === "smg") sel.ap -= 1;
     else if (hasPerk(sel, "double_tap") && sel.ap >= 2 && sel.gun?.type !== "marksman" && usesLeft(sel, "double_tap", 1) > 0) { spend(sel, "double_tap"); sel.ap = 1; log(`${full(sel)}: double tap.`, "key"); }
     else sel.ap = 0;
     await fire(sel, u, false);
@@ -364,7 +371,7 @@ export function doSeal(flash: (t: string) => void) {
 
 // ---------- grenades ----------
 export const THROW_RANGE = 6;
-export const throwRange = (u: Unit) => THROW_RANGE + (hasPerk(u, "grenadier") ? 3 : 0);
+export const throwRange = (u: Unit) => THROW_RANGE + (hasPerk(u, "grenadier") ? 3 + (S.setup.mods.m79 ? 4 : 0) : 0);
 /** Tiles the unit can throw to: within range and in sight. */
 export function throwOptions(u: Unit) {
   const out = new Set<number>();

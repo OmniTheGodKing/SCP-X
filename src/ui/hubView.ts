@@ -7,17 +7,17 @@ import {
 import {
   DCLASS_COST, DCLASS_MONTHLY, RANKS, RANK_XP, RECRUIT_COST, advanceDay, aimOf, blinkFullOf, buyDClass,
   canBuyDClass, canHireEngineer, dayOfMonth, deployable, hireEngineer, maxSanOf, monthOf, monthlyFunding, recruit,
-  INTEL_PER_PRISONER, INTERROGATION_DAYS, PRISONER_BOUNTY, holdingCapacity, canRetrain, canTherapy, canWeaken, dateText, fitAttachment, gunFor, setWeapon, weaken, weaponOf, weaponOptions, chooseClass, choosePerk, perkChoices, promotionDue, startRetrain, startTherapy,
+  INTEL_PER_PRISONER, INTERROGATION_DAYS, PRISONER_BOUNTY, holdingCapacity, canRetrain, canTherapy, canWeaken, dateText, fitAttachment, gunFor, loadAmmo, setWeapon, weaken, weaponOf, weaponOptions, chooseClass, choosePerk, perkChoices, promotionDue, startRetrain, startTherapy,
   pendingBreach, type Campaign, type Incident, type Loadout, type Operative,
 } from "../campaign/campaign";
 import { CLASSES, PERKS, TRAITS, type ClassId, type PerkId, type TraitId } from "../data/classes";
-import { ATTACHMENTS, TYPES, model, type AttachmentId, type WeaponType } from "../data/weapons";
+import { AMMO, ATTACHMENTS, SIDEARM, TYPES, model, type AmmoId, type AttachmentId, type WeaponType } from "../data/weapons";
 import {
   CLEAN_CREW, CLEAN_EVERY, CLEAN_RISK, breachRisk, canClean, canMove, cleanCell, moveScp, occupantOf, wingOf, workRisk,
   type ScpRecord,
 } from "../campaign/containment";
 import {
-  ARMOR_TIERS, ATTACHMENT_COST, REFIT, canOrderAttachment, canRefit, orderAttachment, orderRefit, pendingRefits, unlockedAttachments,
+  ARMOR_TIERS, ATTACHMENT_COST, REFIT, canOrderAmmo, orderAmmo, unlockedAmmo, canOrderAttachment, canRefit, orderAttachment, orderRefit, pendingRefits, unlockedAttachments,
   ITEMS, PROJECTS, TESTS, assign, canHireResearcher, canOrder, canTest, has, hireResearcher, order, projectLock,
   researcherCapacity, researchersFree, runTest, offered, projectDays, unlockedItems, type Branch, type ItemId, type TestId,
 } from "../campaign/research";
@@ -250,7 +250,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     </select>`;
     const armorLeft = spare("armor", o.id);
     return `<div class="loadrow"><b>${esc(o.call)} ${esc(o.name)}</b>
-      <span class="specs">${esc(gunFor(c, o).name)}${o.attachment ? ` + ${ATTACHMENTS[o.attachment].name}` : ""}</span>
+      <span class="specs">${esc(gunFor(c, o).name)}${o.attachment ? ` + ${ATTACHMENTS[o.attachment].name}` : ""}${o.ammoType ? ` · ${AMMO[o.ammoType].name}` : ""}</span>
       ${weaponOptions(o).length > 1 ? `<select id="wpn-${o.id}" data-weapon="${o.id}" aria-label="${esc(o.name)} weapon">${weaponOptions(o).map(t => `<option value="${t}" ${weaponOf(o) === t ? "selected" : ""}>${TYPES[t].name}: ${model(c.models[t]).name}</option>`).join("")}</select>` : ""}
       <label class="armorpick"><input type="checkbox" id="armor-${o.id}" data-armor="${o.id}" ${g.armor ? "checked" : ""} ${!g.armor && (armorLeft < 1 || !c.armorTier) ? "disabled" : ""}> ${c.armorTier ? ARMOR_TIERS[c.armorTier].name : "Flak vest (research it first)"}${(c.inventory.armor || 0) ? ` (${Math.max(0, armorLeft - (g.armor ? 1 : 0))} spare)` : c.armorTier ? " (none built)" : ""}</label>
       ${slot(0)}${slot(1)}${o.perks.includes("field_kit") ? slot(2) : ""}</div>`;
@@ -401,7 +401,13 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
           <div class="muted">${esc(ATTACHMENTS[a].desc)} Fit one per operative on the Personnel tab.</div>
           <div class="row"><button class="act" type="button" data-att="${a}" ${why ? `disabled title="${esc(why)}"` : ""}>Build · $${ATTACHMENT_COST.cost}k · ${plural(ATTACHMENT_COST.days, "day")}</button>${why ? `<span class="muted">${esc(why)}</span>` : ""}</div></div>`;
       }).join("")}</div>` : ""}
-      ${c.orders.length ? `<div class="specs">In production: ${c.orders.map(o => `${o.item ? ITEMS[o.item].name : o.attachment ? ATTACHMENTS[o.attachment].name : o.refit!.startsWith("armor:") ? `${ARMOR_TIERS[Number(o.refit!.slice(6))].name} refit` : `${model(o.refit!).name} refit`} (${plural(o.daysLeft, "day")})`).join(", ")}</div>` : ""}
+      ${unlockedAmmo(c).length ? `<div class="label" style="margin-top:10px">Special ammunition</div><div class="projects">${unlockedAmmo(c).map(a => {
+        const why = canOrderAmmo(c, a), loaded = c.roster.filter(o => o.alive && o.ammoType === a).length;
+        return `<div class="proj"><div class="ptop"><b>${AMMO[a].name}</b><span class="flag">${c.ammo[a] ?? 0} spare · ${loaded} loaded</span></div>
+          <div class="muted">${esc(AMMO[a].desc)} Load one per operative on the Personnel tab.</div>
+          <div class="row"><button class="act" type="button" data-ammoorder="${a}" ${why ? `disabled title="${esc(why)}"` : ""}>Build · $${ATTACHMENT_COST.cost}k · ${plural(ATTACHMENT_COST.days, "day")}</button>${why ? `<span class="muted">${esc(why)}</span>` : ""}</div></div>`;
+      }).join("")}</div>` : ""}
+      ${c.orders.length ? `<div class="specs">In production: ${c.orders.map(o => `${o.item ? ITEMS[o.item].name : o.attachment ? ATTACHMENTS[o.attachment].name : o.ammo ? AMMO[o.ammo].name : o.refit!.startsWith("tier:") ? "Weapon refit" : o.refit!.startsWith("armor:") ? `${ARMOR_TIERS[Number(o.refit!.slice(6))].name} refit` : `${model(o.refit!).name} refit`} (${plural(o.daysLeft, "day")})`).join(", ")}</div>` : ""}
     </div>`;
   }
 
@@ -610,6 +616,14 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
           ${(Object.keys(ATTACHMENTS) as AttachmentId[]).filter(a => o.attachment === a || (c.attachments[a] ?? 0) > 0).map(a => `<option value="${a}" ${o.attachment === a ? "selected" : ""}>${ATTACHMENTS[a].name}: ${esc(ATTACHMENTS[a].desc)}</option>`).join("")}
         </select>
       </div>
+      <div class="row">
+        <label for="ammo-${o.id}" class="specs">Ammunition</label>
+        <select id="ammo-${o.id}" data-ammo="${o.id}">
+          <option value="">Standard ball</option>
+          ${(Object.keys(AMMO) as AmmoId[]).filter(a => o.ammoType === a || (c.ammo[a] ?? 0) > 0).map(a => `<option value="${a}" ${o.ammoType === a ? "selected" : ""}>${AMMO[a].name}: ${esc(AMMO[a].desc)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="specs">Sidearm: ${SIDEARM.name}, ${SIDEARM.dmg.join("–")} damage, fired automatically when the main weapon is empty.</div>
       ${o.cls && !o.busy ? `<div class="row"><button class="act" type="button" id="retrainBtn" ${rw ? `disabled title="${esc(rw)}"` : ""}>Retrain · $50k · 5 days</button><span class="muted">${esc(rw || "Clears their class and perks; they choose again, keeping their rank.")}</span></div>` : ""}
     </div>`;
   }
@@ -680,6 +694,8 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     root.querySelectorAll<HTMLElement>("[data-therapy]").forEach(b => b.onclick = () => change(() => startTherapy(c, opNow(), b.dataset.therapy as TraitId)));
     on("retrainBtn", () => change(() => startRetrain(c, opNow())));
     root.querySelectorAll<HTMLElement>("[data-setweapon]").forEach(b => b.onclick = () => change(() => setWeapon(c, opNow(), b.dataset.setweapon as WeaponType)));
+    root.querySelectorAll<HTMLSelectElement>("[data-ammo]").forEach(b => b.onchange = () => change(() => loadAmmo(c, opNow(), b.value as AmmoId | "")));
+    root.querySelectorAll<HTMLElement>("[data-ammoorder]").forEach(b => b.onclick = () => change(() => orderAmmo(c, b.dataset.ammoorder as AmmoId)));
     root.querySelectorAll<HTMLSelectElement>("[data-fit]").forEach(b => b.onchange = () => change(() => fitAttachment(c, opNow(), b.value as AttachmentId | "")));
     root.querySelectorAll<HTMLSelectElement>("[data-weapon]").forEach(b => b.onchange = () => change(() => { const o = c.roster.find(x => x.id === b.dataset.weapon); if (o) setWeapon(c, o, b.value as WeaponType); }));
     root.querySelectorAll<HTMLElement>("[data-refit]").forEach(b => b.onclick = () => change(() => orderRefit(c, b.dataset.refit!)));

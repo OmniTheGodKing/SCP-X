@@ -2,7 +2,7 @@
 import { countOperational, engineersFree } from "./base";
 import { log, yearOf, type Campaign } from "./campaign";
 import type { Guard } from "./security";
-import { ATTACHMENTS, model, type AttachmentId } from "../data/weapons";
+import { AMMO, ATTACHMENTS, WEAPON_TIERS, model, type AmmoId, type AttachmentId } from "../data/weapons";
 import { cellWork, type ScpRecord } from "./containment";
 
 export type Branch = "SCP-173" | "SCP-049" | "SCP-106" | "Insurgency" | "Personnel" | "Weapons" | "Equipment" | "Site" | "Breakthrough";
@@ -36,6 +36,8 @@ export interface ProjectDef {
   model?: string;
   attachment?: AttachmentId;
   armorTier?: number;
+  weaponTier?: number;
+  ammo?: AmmoId;
   desc: string;
 }
 
@@ -89,6 +91,17 @@ export const PROJECTS: Record<string, ProjectDef> = {
   interrogation:      { name: "Interrogation techniques", branch: "Insurgency", days: 30, cost: 60, needsMaterial: ["prisoners", 1], desc: "Prisoners give up Intel twice as fast." },
   codebooks:          { name: "Insurgency codebooks", branch: "Insurgency", days: 30, cost: 70, needsMaterial: ["intelTotal", 5], desc: "Locating a cell costs 2 Intel instead of 3, and incidents show exactly how many Insurgents to expect." },
   weapon_analysis:    { name: "Captured weapon analysis", branch: "Insurgency", days: 30, cost: 70, needsMaterial: ["ciWeapons", 3], desc: "Knowing their guns means knowing where armor helps. Insurgents get −5 aim against operatives wearing armor." },
+  // ---- weapons: tiers, the M79, special ammunition and attachments ----
+  foundation_arms:    { name: "Foundation special issue", branch: "Weapons", days: 50, cost: 200, needs: ["weapon_analysis"], weaponTier: 2, desc: "Foundation armorers hand-fit every weapon, using what was learned from Insurgency guns. All weapons: +1 damage, +5 aim. Refit in the workshop." },
+  coil_weapons:       { name: "Electromagnetic coil weapons", branch: "Weapons", days: 90, cost: 350, needs: ["foundation_arms", "em_containment"], weaponTier: 3, desc: "SCP-106's electromagnets, scaled down to a rifle. All weapons: +2 damage, +5 aim, and every hit ignores 1 armor point. Refit in the workshop." },
+  m79:                { name: "M79 grenade launcher", branch: "Weapons", days: 40, cost: 120, from: 1959, desc: "Grenadiers fire grenades 4 tiles farther." },
+  ammo_ap:            { name: "Armor-piercing rounds", branch: "Weapons", days: 25, cost: 60, ammo: "ap", desc: "Special ammunition: hits ignore 1 armor point. Built in the workshop, loaded on the Personnel tab." },
+  ammo_tracer:        { name: "Tracer rounds", branch: "Weapons", days: 20, cost: 40, ammo: "tracer", desc: "Special ammunition: +10 aim on overwatch shots." },
+  ammo_hollow:        { name: "Hollow-point rounds", branch: "Weapons", days: 25, cost: 50, ammo: "hollow", desc: "Special ammunition: critical hits do 1 more damage." },
+  ammo_sedative:      { name: "Sedative rounds", branch: "Weapons", days: 35, cost: 80, ammo: "sedative", desc: "Foundation special ammunition: Insurgents, civilians and loose D-Class brought to 0 HP are knocked out instead of killed." },
+  att_suppressor:     { name: "Suppressors", branch: "Weapons", days: 25, cost: 50, attachment: "suppressor", desc: "Weapon attachment: shots make no noise." },
+  att_bayonet:        { name: "Bayonets", branch: "Weapons", days: 15, cost: 20, attachment: "bayonet", desc: "Weapon attachment: a sure 3-damage thrust against an adjacent enemy, using no ammo." },
+  att_sights:         { name: "Improved sights", branch: "Weapons", days: 30, cost: 70, needs: ["att_scope"], attachment: "sights", desc: "Weapon attachment: +10 aim." },
   // ---- breakthroughs: offered now and then, for 30 days ----
   bt_barrels:         { name: "Breakthrough: lapped barrels", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Service rifles do +1 damage." },
   bt_drills:          { name: "Breakthrough: drill instructors", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "The training range runs drills twice a week." },
@@ -138,7 +151,7 @@ export interface ResearchState {
   offer?: { id: string; until: number };
   inspired?: { id: string; until: number };
 }
-export interface Order { item?: ItemId; attachment?: AttachmentId; refit?: string; daysLeft: number; }
+export interface Order { item?: ItemId; attachment?: AttachmentId; ammo?: AmmoId; refit?: string; daysLeft: number; }
 export const REFIT = { cost: 100, days: 7 };
 
 export const newResearch = (): ResearchState => ({ done: [], paid: [], progress: {}, assigned: {}, tests: [] });
@@ -230,6 +243,12 @@ export function tickResearch(c: Campaign) {
       } else if (o.attachment) {
         c.attachments[o.attachment] = (c.attachments[o.attachment] || 0) + 1;
         log(c, `Workshop: ${ATTACHMENTS[o.attachment].name} ready. Fit it on the Personnel tab.`, "good", "research");
+      } else if (o.ammo) {
+        c.ammo[o.ammo] = (c.ammo[o.ammo] || 0) + 1;
+        log(c, `Workshop: a load of ${AMMO[o.ammo].name.toLowerCase()} is ready. Load it on the Personnel tab.`, "good", "research");
+      } else if (o.refit?.startsWith("tier:")) {
+        c.weaponTier = Number(o.refit.slice(5));
+        log(c, `Workshop: every weapon refitted to ${WEAPON_TIERS[c.weaponTier].name} pattern.`, "good", "research");
       } else if (o.refit?.startsWith("armor:")) {
         c.armorTier = Number(o.refit.slice(6));
         log(c, `Workshop: every vest refitted as ${ARMOR_TIERS[c.armorTier].name}.`, "good", "research");
@@ -246,7 +265,8 @@ export function tickResearch(c: Campaign) {
 export function pendingRefits(c: Campaign): { key: string; name: string }[] {
   const out: { key: string; name: string }[] = [];
   for (const [id, p] of Object.entries(PROJECTS)) {
-    if (!has(c, id) || c.orders.some(o => o.refit === (p.model ?? `armor:${p.armorTier}`))) continue;
+    if (!has(c, id) || c.orders.some(o => o.refit === (p.model ?? (p.weaponTier ? `tier:${p.weaponTier}` : `armor:${p.armorTier}`)))) continue;
+    if (p.weaponTier && (c.weaponTier ?? 1) < p.weaponTier) out.push({ key: `tier:${p.weaponTier}`, name: `${WEAPON_TIERS[p.weaponTier].name} pattern weapons` });
     if (p.model && c.models[model(p.model).type] !== p.model && model(c.models[model(p.model).type]).year < model(p.model).year) out.push({ key: p.model, name: model(p.model).name });
     if ((p.armorTier ?? 0) > 1 && c.armorTier < p.armorTier!) out.push({ key: `armor:${p.armorTier}`, name: ARMOR_TIERS[p.armorTier!].name });
   }
@@ -266,6 +286,19 @@ export function orderRefit(c: Campaign, key: string) {
 export const unlockedAttachments = (c: Campaign) =>
   Object.entries(PROJECTS).filter(([id, p]) => p.attachment && has(c, id)).map(([, p]) => p.attachment!);
 export const ATTACHMENT_COST = { cost: 30, days: 3 };
+export const unlockedAmmo = (c: Campaign) => Object.entries(PROJECTS).filter(([id, p]) => p.ammo && has(c, id)).map(([, p]) => p.ammo!);
+export function canOrderAmmo(c: Campaign, a: AmmoId): string | null {
+  if (!countOperational(c, "workshop")) return "Needs a working workshop.";
+  if (!unlockedAmmo(c).includes(a)) return "Not researched yet.";
+  if (c.funds < ATTACHMENT_COST.cost) return `Needs $${ATTACHMENT_COST.cost}k.`;
+  if (engineersFree(c) < 1) return "Needs a free engineer.";
+  return null;
+}
+export function orderAmmo(c: Campaign, a: AmmoId) {
+  if (canOrderAmmo(c, a)) return;
+  c.funds -= ATTACHMENT_COST.cost;
+  c.orders.push({ ammo: a, daysLeft: ATTACHMENT_COST.days });
+}
 export function canOrderAttachment(c: Campaign, a: AttachmentId): string | null {
   if (!countOperational(c, "workshop")) return "Needs a working workshop.";
   if (!unlockedAttachments(c).includes(a)) return "Not researched yet.";

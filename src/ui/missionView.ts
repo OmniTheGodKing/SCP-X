@@ -1,6 +1,7 @@
 // The mission screen: map, SCP-173 status, squad, actions, containment file and incident log.
 import { L, area, inContainer } from "../core/grid";
-import { shotInfo } from "../game/combat";
+import { activeGun, shotInfo } from "../game/combat";
+import { AMMO } from "../data/weapons";
 import { NOTES_173 } from "../game/notes";
 import { blinkChance, maxSanOf, pct } from "../game/profiles";
 import { S, canAct, canSee, full, hooks, isBlind, isPanicked, isTeam, label, seen, starers, team, unitAt } from "../game/state";
@@ -188,6 +189,8 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     if (m.alive && m.downed) flags.push(`<span class="flag bad">${m.stabilized ? "Down · stabilized" : `Bleeding out · ${m.bleed} turn${m.bleed === 1 ? "" : "s"}`}</span>`);
     if (m.cls) flags.push(`<span class="flag">${CLASSES[m.cls].name}</span>`);
     if (m.gun) flags.push(`<span class="flag ${m.gun.ammo ? "" : "bad"}">${esc(m.gun.name)} ${"●".repeat(m.gun.ammo)}${"○".repeat(Math.max(0, m.gun.mag - m.gun.ammo))}</span>`);
+    if (m.gun && !m.gun.ammo && m.side === "mtf") flags.push(`<span class="flag">Sidearm</span>`);
+    if (m.gun?.ammoType) flags.push(`<span class="flag">${esc(AMMO[m.gun.ammoType].name)}</span>`);
     if (m.armor) flags.push(`<span class="flag">Armor ${m.armor}</span>`);
     for (const it of m.items || []) if (it.uses > 0 || it.id === "tracker") flags.push(`<span class="flag">${ITEM_NAMES[it.id]}${it.id === "tracker" ? "" : ` ×${it.uses}`}</span>`);
     if (m.alive && m.san <= ms * 0.3) flags.push(`<span class="flag bad">Shaken</span>`);
@@ -311,7 +314,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
       else if (hv && hv.side === "raider" && seen(hv.x, hv.y) && sel.side === "mtf" && sel.ap > 0 && canSee(sel, hv.x, hv.y)) {
         const s = shotInfo(sel, hv);
         const fw = fireCheck(sel);
-        h = `<b>${sel.call} → Insurgent: ${s.chance}% to hit</b>${s.crit ? `, ${s.crit}% crit` : ""}${sel.gun ? ` · ${sel.gun.name}, ${sel.gun.dmg[0]}–${sel.gun.dmg[1]} damage` : ""}${fw ? `\n<b>${esc(fw)}</b>` : ""}\n` + s.mods.map(m => `${m[0]} ${m[1] >= 0 ? "+" : ""}${m[1]}`).join(" · ");
+        h = `<b>${sel.call} → Insurgent: ${s.chance}% to hit</b>${s.crit ? `, ${s.crit}% crit` : ""}${activeGun(sel) ? ` · ${activeGun(sel)!.name}, ${activeGun(sel)!.dmg[0]}–${activeGun(sel)!.dmg[1]} damage` : ""}${sel.gun?.attachment === "bayonet" && Math.max(Math.abs(sel.x - hv.x), Math.abs(sel.y - hv.y)) <= 1 ? " · bayonet: a sure 3" : ""}${fw ? `\n<b>${esc(fw)}</b>` : ""}\n` + s.mods.map(m => `${m[0]} ${m[1] >= 0 ? "+" : ""}${m[1]}`).join(" · ");
       } else if (!sealCheck(sel)) h = `<b>${sel.call} can seal the container now.</b> Press S.`;
       else if (sel.staring) h = `<b>${esc(full(sel))} is staring</b>, ${sel.ap} action${sel.ap === 1 ? "" : "s"}.\nThey can move anywhere that keeps sight of SCP-173. Press B to look away (free).`;
       else h = `<b>${esc(full(sel))}</b>, ${sel.ap} action${sel.ap === 1 ? "" : "s"}.\nClick a tile to move (blue costs 1, amber costs 2).${sel.side === "mtf" ? " Click a visible Insurgent to fire." : " D-Class are unarmed."}${S.has173 ? " Next to SCP-173, press G to drag it." : ""}${matchMedia("(pointer: coarse)").matches ? " Tap twice to confirm." : ""}`;

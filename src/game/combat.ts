@@ -5,7 +5,8 @@ import { hasPerk, rangeOf } from "./perks";
 import { TYPES, rangeMod } from "../data/weapons";
 import { prof } from "./profiles";
 import { S, alive, canSee, full, fx, hooks, isPanicked, team, isTeam, log, loseSanity, rand, reveal, seen, sleep, computeVis } from "./state";
-import type { Unit } from "./types";
+import type { Gun, Unit } from "./types";
+import { SIDEARM } from "../data/weapons";
 import { shotAt106 } from "./scp106";
 
 export function coverAgainst(tx: number, ty: number, sx: number, sy: number) {
@@ -26,16 +27,25 @@ export interface ShotInfo { chance: number; mods: [string, number][]; crit: numb
 
 // Shots come from the shooter's best spot (leaning out if needed), with a penalty if the
 // target is only partly visible from there.
+/** The weapon a unit actually fires: its sidearm once an operative's main weapon is empty. */
+export function activeGun(u: Unit): Gun | undefined {
+  if (u.side === "mtf" && u.gun && u.gun.ammo < 1) return { name: SIDEARM.name, type: "smg", dmg: SIDEARM.dmg, mag: 0, ammo: 0, aim: SIDEARM.aim };
+  return u.gun;
+}
+export const usingSidearm = (u: Unit) => u.side === "mtf" && !!u.gun && u.gun.ammo < 1;
+
 export function shotInfo(sh: Unit, tg: Unit, reaction = false): ShotInfo {
   const v = bestView(sh.x, sh.y, tg.x, tg.y, rangeOf(sh)) || { f: 0, x: sh.x, y: sh.y };
   const dist = Math.hypot(tg.x - v.x, tg.y - v.y);
   const cover = coverAgainst(tg.x, tg.y, v.x, v.y);
   const leaning = v.x !== sh.x || v.y !== sh.y;
   const partial = v.f < 0.5 || leaning;
-  const gun = sh.gun;
+  const gun = activeGun(sh);
   const mods: [string, number][] = [["Aim", sh.aim]];
   if (gun?.aim) mods.push([gun.name, gun.aim]);
   if (gun?.attachment === "scope") mods.push(["Telescopic sight", 5]);
+  if (gun?.attachment === "sights") mods.push(["Improved sights", 10]);
+  if (reaction && gun?.ammoType === "tracer") mods.push(["Tracer rounds", 10]);
   if (cover === 40) mods.push(["Full cover", -40]);
   else if (cover === 20) mods.push(["Half cover", -20]);
   else mods.push(["Flanked", 10]);
@@ -61,13 +71,14 @@ export const center = (u: { x: number; y: number }): Pt => [u.x * TS + TS / 2, u
 
 export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
   const info = shotInfo(sh, tg, reaction);
-  if (sh.gun) sh.gun.ammo = Math.max(0, sh.gun.ammo - 1);
+  const gun = activeGun(sh), sidearm = usingSidearm(sh);
+  if (sh.gun && !sidearm) sh.gun.ammo = Math.max(0, sh.gun.ammo - 1);
   const hit = Math.random() * 100 < info.chance;
   const [x0, y0] = center(info.from), [x1, y1] = center(tg);
   const ox = hit ? 0 : (Math.random() - .5) * 26, oy = hit ? 0 : (Math.random() - .5) * 26;
   fx({ type: "line", x0, y0, x1: x1 + ox, y1: y1 + oy, color: sh.side === "mtf" ? "#9cc4e4" : "#d0a6e6", dur: 260 });
   const visibleShot = sh.side === "mtf" || seen(sh.x, sh.y) || isTeam(tg);
-  if (!hasPerk(sh, "quiet_steps")) {   // SCP-173 hears the shot, but only roughly where it came from
+  if (!hasPerk(sh, "quiet_steps") && gun?.attachment !== "suppressor") {   // SCP-173 hears the shot, but only roughly where it came from
     const near = bfs([[sh.x, sh.y]], 3).dist, spots: number[] = [];
     for (let i = 0; i < L.W * L.H; i++) if (near[i] >= 0) spots.push(i);
     const i = spots[Math.floor(Math.random() * spots.length)];
@@ -76,17 +87,17 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
   if (sh.side === "mtf") reveal("hear");
   if (hit) {
     const crit = Math.random() * 100 < info.crit;
-    let dmg = sh.gun ? rand(sh.gun.dmg[0], sh.gun.dmg[1]) : rand(3, 4);
-    if (crit) dmg += 2;
+    let dmg = gun ? rand(gun.dmg[0], gun.dmg[1]) : rand(3, 4);
+    if (crit) dmg += gun?.ammoType === "hollow" ? 3 : 2;
     if (hasPerk(sh, "shotgun_drills") && Math.hypot(tg.x - info.from.x, tg.y - info.from.y) <= 3) dmg += 2;
-    const soak = Math.min(tg.armor ?? 0, dmg);   // each armor point cuts the hit by 1
+    const soak = Math.min(Math.max(0, (tg.armor ?? 0) - (gun?.pierce ?? 0)), dmg);   // each armor point cuts the hit by 1
     dmg -= soak;
     fx({ type: "text", x: x1, y: y1 - 14, text: (crit ? `${dmg}!` : `${dmg}`) + (soak ? ` (−${soak})` : ""), color: crit ? "#f0c060" : "#ffffff", dur: 900 });
-    if (visibleShot) log(`${reaction ? "Overwatch: " : ""}${full(sh)} hits ${full(tg)} for ${dmg}${crit ? ", critical" : ""}${soak ? `; armor absorbed ${soak}` : ""} (${info.chance}%).`, sh.side === "mtf" ? "good" : "bad");
+    if (visibleShot) log(`${reaction ? "Overwatch: " : ""}${sidearm ? "Sidearm: " : ""}${full(sh)} hits ${full(tg)} for ${dmg}${crit ? ", critical" : ""}${soak ? `; armor absorbed ${soak}` : ""} (${info.chance}%).`, sh.side === "mtf" ? "good" : "bad");
     if (hasPerk(sh, "shredder") && (tg.armor ?? 0) > 0) { tg.armor!--; log("The hit shreds a point of armor.", "good"); }
     damage(tg, dmg, sh);
   } else {
-    const graze = sh.gun?.attachment === "stock" ? Math.max(0, 1 - (tg.armor ?? 0)) : 0;
+    const graze = gun?.attachment === "stock" ? Math.max(0, 1 - (tg.armor ?? 0)) : 0;
     fx({ type: "text", x: x1, y: y1 - 14, text: graze ? "graze 1" : "miss", color: "#8b939b", dur: 800 });
     if (visibleShot) log(`${reaction ? "Overwatch: " : ""}${full(sh)} misses ${full(tg)} (${info.chance}%)${graze ? ", but the round grazes for 1" : ""}.`);
     if (graze) damage(tg, 1, sh);
@@ -108,6 +119,14 @@ export function damage(u: Unit, dmg: number, by?: Unit) {
   u.hp -= dmg;
   if (u.side === "mtf") u.minHp = Math.min(u.minHp ?? u.hp, Math.max(0, u.hp));
   if (u.hp <= 0 && u.side === "mtf" && !u.downed) { goDown(u); return; }
+  // sedative rounds knock people out instead of killing them
+  if (u.hp <= 0 && by && activeGun(by)?.ammoType === "sedative" && !usingSidearm(by) && ["raider", "subject", "civilian"].includes(u.side) && !u.downed) {
+    u.hp = 0; u.downed = true; u.stabilized = true; by.kills++;
+    if (u.side === "raider") { S.stats.raidersDown++; log("The sedative drops an Insurgent. Secure them to take a prisoner.", "good"); }
+    else if (u.side === "subject") { u.side = "dclass"; u.joined = true; log(`${u.name} goes down, sedated. They'll be carried back to holding.`, "good"); }
+    else log(`${u.name} goes down, sedated but alive.`, "key");
+    return;
+  }
   if (u.hp <= 0 && u.side === "raider" && !u.downed && Math.random() < 0.15) {
     // sometimes an Insurgent is left alive but out of the fight: a possible prisoner
     u.hp = 0; u.downed = true; S.stats.raidersDown++; if (by) by.kills++;
