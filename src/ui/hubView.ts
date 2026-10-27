@@ -345,11 +345,13 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     const shape = (g: MarkerGroup, x: number, y: number) => g === "site" ? `<path d="M${x} ${y - 3}L${x + 3} ${y + 2}L${x - 3} ${y + 2}Z"/>`
       : g === "insurgency" ? `<rect x="${x - 2.2}" y="${y - 2.2}" width="4.4" height="4.4" transform="rotate(45 ${x} ${y})"/>`
       : g === "coverup" ? `<rect x="${x - 2.2}" y="${y - 2.2}" width="4.4" height="4.4"/>` : `<circle cx="${x}" cy="${y}" r="2.4"/>`;
-    const stacked = new Map<string, number>();   // incidents in the same place fan out so each can be clicked
+    const placed: [number, number][] = [[sx, sy]];   // markers near each other (or Site-19) spread out so each can be clicked
     const markers = c.incidents.filter(i => mapShow.has(groupOf(i))).map(i => {
       const pl = incidentPlace(i), [px0, py0] = project(pl.lon, pl.lat), st = incidentState(c, i);
-      const key = `${Math.round(px0)},${Math.round(py0)}`, n = stacked.get(key) ?? 0; stacked.set(key, n + 1);
-      const mx = px0 + (n ? Math.cos(n * 2.1) * 5 : 0), my = py0 + (n ? Math.sin(n * 2.1) * 5 : 0);
+      // step out around the true spot until this marker clears every marker already placed
+      let mx = px0, my = py0;
+      for (let k = 1; k < 24 && placed.some(([qx, qy]) => Math.hypot(qx - mx, qy - my) < 6.5); k++) { mx = px0 + Math.cos(k * 2.4) * (3 + k * 0.9); my = py0 + Math.sin(k * 2.4) * (3 + k * 0.9); }
+      placed.push([mx, my]);
       return `<g class="marker ${groupOf(i)} ${st} ${mapSel === "inc:" + i.id ? "on" : ""}" data-mapinc="${i.id}" tabindex="0" role="button" aria-label="${esc(i.title)}, ${st}">
         <circle cx="${mx}" cy="${my}" r="4.2" class="ring"/>${shape(groupOf(i), mx, my)}<title>${esc(i.title)}</title></g>`;
     }).join("");

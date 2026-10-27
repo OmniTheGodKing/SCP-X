@@ -226,6 +226,11 @@ retaliation (done); (5) doors and sirens (done).
 - **Shot preview:** hit chance, the weapon's damage range, crit chance and the target's armor.
 - **Combat log reasons:** each shot line ends with the situational modifiers behind the chance (for example
   "95%: flanked +10, close range +15").
+- **Moving past squadmates:** the team (operatives, guards and their D-Class) can walk through each other but not stop
+  on an occupied tile, so someone standing in a doorway no longer seals it. Enemies still block.
+- **Doorway sight:** a sight line can only pass through a doorway within about 30° of square to it (DOOR_SLANT in
+  src/core/sight.ts). Someone standing beside a doorway can't see or shoot along the inside of the wall; standing in
+  the doorway or squarely in front of it sees normally. Applies to everyone, enemies and anomalies included.
 
 ## Phase 3G: recruiting Epsilon-11 and operative identity (done; verified in source and in-game)
 
