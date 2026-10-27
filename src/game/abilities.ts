@@ -1,5 +1,5 @@
 // Class abilities used during a mission. Each has a target rule, a cost and an effect.
-import { cheb } from "../core/grid";
+import { DIRS, FULL, HALF, L, STEEL, WALL, cheb, passable, tileAt } from "../core/grid";
 import { hasPerk, spend, usesLeft } from "./perks";
 import { maxSanOf } from "./profiles";
 import { S, alive, canAct, canSee, computeVis, full, hooks, isPanicked, log, loseSanity, seen, team } from "./state";
@@ -11,7 +11,9 @@ export interface AbilityDef {
   perk: AbilityId;
   label: string;
   desc?: string;
-  target: "ally" | "downed" | "panicked" | "enemy" | "self" | "captive" | "witness" | "panel" | "doctor";
+  target: "ally" | "downed" | "panicked" | "enemy" | "self" | "captive" | "witness" | "panel" | "doctor" | "stray" | "carryable";
+  /** For self-targeted actions that only make sense sometimes: when they show up. */
+  when?: (u: Unit) => boolean;
   endsTurn?: boolean;
   /** Uses per mission, if limited. */
   uses?: (u: Unit) => number;
@@ -26,12 +28,19 @@ export const ABILITIES: AbilityDef[] = [
   { perk: "mark_target", label: "Mark target", target: "enemy" },
   { perk: "run_and_gun", label: "Run and gun", target: "self", uses: () => 1 },
   { perk: "secure", label: "Secure prisoner", target: "captive", desc: "Restrain an adjacent wounded Insurgent so they're taken prisoner even if the mission fails." },
+  { perk: "restrain", label: "Restrain", target: "stray", desc: "Grab a loose D-Class next to you and cuff them. They go back to holding after the mission." },
+  { perk: "pickup", label: "Pick up", target: "carryable", desc: "Lift a downed ally or a body next to you and carry them (−1 move). Carried people can leave through an exit with you." },
+  { perk: "drop", label: "Put down", target: "self", when: u => !!u.carrying, desc: "Set down whoever you're carrying, next to you." },
+  { perk: "exfil", label: "Exfiltrate", target: "self", when: u => onExit(u), desc: "Leave the mission through this exit. Anyone you carry, and researchers following you, come too." },
+  { perk: "hunker", label: "Hunker down", target: "self", endsTurn: true, when: u => !u.carrying && hasCover(u), desc: "Get low behind cover: it counts double until your next turn." },
   { perk: "calm", label: "Calm SCP-049", target: "doctor", desc: "Talk SCP-049 down from within 3 tiles (6 sanity). It won't act on its next turn, and you lead it up to 3 tiles now." },
   { perk: "lockdown", label: "Lock the hatch", target: "panel", endsTurn: true, desc: "At the lockdown panel: seal the surface hatch so SCP-173 can't get out that way for a few turns. Takes both actions." },
   { perk: "dose", label: "Dose with amnestics", target: "witness", desc: "Give an adjacent witness amnestics. They forget what they saw and stop running." },
 ];
 
-const UNIVERSAL: AbilityId[] = ["secure", "dose", "lockdown", "calm"];
+const UNIVERSAL: AbilityId[] = ["secure", "dose", "lockdown", "calm", "restrain", "pickup", "drop", "exfil", "hunker"];
+const onExit = (u: Unit) => L.exitMap[u.y * L.W + u.x] === 0;
+const hasCover = (u: Unit) => DIRS.some(([dx, dy]) => { const t = tileAt(u.x + dx, u.y + dy); return t === WALL || t === FULL || t === HALF || t === STEEL; });
 const knows = (u: Unit, p: AbilityId) => UNIVERSAL.includes(p)
   ? u.side === "mtf" && abilityTargets(u, p).length > 0 && (p !== "dose" || S.amnestics > 0)
   : hasPerk(u, p as PerkId);
@@ -44,14 +53,17 @@ const carries = (u: Unit, id: string) => !!u.items?.some(i => i.id === id);
 const within = (a: Unit, b: Unit, r: number) => cheb(a.x, a.y, b.x, b.y) <= r && (r <= 1 || canSee(a, b.x, b.y));
 /** Combat medic: one free medkit per turn. */
 const freeHeal = (u: Unit) => hasPerk(u, "combat_medic") && !(u.used?.["cm" + S.turn]);
-const cost = (u: Unit, p: AbilityId) => p === "run_and_gun" ? 0 : p === "lockdown" ? 2 : p === "medkit" && freeHeal(u) ? 0 : 1;
+const cost = (u: Unit, p: AbilityId) => p === "run_and_gun" || p === "drop" ? 0 : p === "lockdown" ? 2 : p === "medkit" && freeHeal(u) ? 0 : 1;
 
 export function abilityTargets(u: Unit, p: AbilityId): Unit[] {
   const d = def(p);
   switch (d.target) {
     case "captive": return S.units.filter(a => a.side === "raider" && a.alive && a.downed && !a.secured && within(u, a, carries(u, "restraints") ? 2 : 1));
     case "witness": return S.units.filter(a => a.witness && a.alive && !a.saved && !a.dosed && within(u, a, carries(u, "darts") ? 4 : 1));
-    case "self": return [u];
+    case "self": return d.when && !d.when(u) ? [] : [u];
+    case "stray": return S.units.filter(a => a.side === "subject" && a.stray && a.alive && !a.saved && !a.downed && cheb(u.x, u.y, a.x, a.y) <= (hasPerk(u, "shepherd") ? 3 : 1));
+    case "carryable": return u.carrying ? [] : S.units.filter(a => a !== u && !a.saved && !a.carriedBy && a.side !== "anomaly" && a.side !== "zombie" && a.side !== "raider"
+      && (a.downed || !a.alive) && !a.taken && !a.cured && adjacent(u, a));
     case "doctor": {
       const d = S.statue;
       return S.has049 && !S.sealed && d.alive && cheb(u.x, u.y, d.x, d.y) <= 3 && canSee(u, d.x, d.y) ? [d] : [];
@@ -74,6 +86,17 @@ export function abilityCheck(u: Unit | null, p: AbilityId): string | null {
   if (u.ap < cost(u, p)) return "No actions left this turn.";
   if (!abilityTargets(u, p).length) return d.target === "enemy" ? "No enemy in sight." : d.target === "downed" ? "Nobody downed next to them." : d.target === "panicked" ? "Nobody panicking next to them." : d.target === "ally" ? "Nobody next to them needs it." : null;
   return null;
+}
+
+/** Put down whoever this unit is carrying, on a free tile next to them. */
+export function dropCarried(u: Unit) {
+  const t = S.units.find(v => v.id === u.carrying);
+  u.carrying = undefined;
+  if (!t) return;
+  t.carriedBy = undefined;
+  const spot = DIRS.map(([dx, dy]) => [u.x + dx, u.y + dy]).find(([x, y]) => passable(x, y) && !S.units.some(v => v !== t && v.alive && !v.saved && !v.carriedBy && v.x === x && v.y === y));
+  if (spot) [t.x, t.y] = spot;
+  if (u.alive && !u.downed) log(`${full(u)} sets ${t.alive ? full(t) : `${t.name}'s body`} down.`);
 }
 
 /** Start using an ability: self-targeted ones happen at once, the rest wait for a target. */
@@ -144,6 +167,31 @@ export function useAbility(u: Unit, p: AbilityId, t: Unit) {
     case "lockdown":
       S.lockedUntil = S.turn + S.setup.mods.lockdownTurns;
       log(`${full(u)} throws the lockdown: the surface hatch is sealed until turn ${S.lockedUntil + 1}.`, "good");
+      break;
+    case "restrain": {
+      t.restrained = true; t.downed = true; t.stabilized = true; t.side = "dclass";
+      if (hasPerk(u, "shepherd")) { t.downed = false; t.restrained = false; t.joined = true; t.stray = false; t.ap = 0; log(`${full(u)} brings ${t.name} into the work detail.`, "good"); }
+      else log(`${full(u)} cuffs ${t.name}. They'll go back to holding.`, "good");
+      break;
+    }
+    case "pickup":
+      u.carrying = t.id; t.carriedBy = u.id; t.x = u.x; t.y = u.y;
+      log(`${full(u)} lifts ${t.alive ? full(t) : `${t.name}'s body`}.`, "key");
+      break;
+    case "drop": dropCarried(u); break;
+    case "exfil": {
+      u.saved = true; u.staring = false; u.overwatch = false;
+      const out = [full(u)];
+      const carried = S.units.find(v => v.id === u.carrying);
+      if (carried) { carried.saved = true; out.push(carried.alive ? full(carried) : `${carried.name}'s body`); }
+      for (const r of S.units.filter(v => v.researcher && v.followId === u.id && v.alive && !v.saved && cheb(v.x, v.y, u.x, u.y) <= 2)) { r.saved = true; out.push(r.name); }
+      if (S.selected === u) S.selected = null;
+      log(`Out through the exit: ${out.join(", ")}.`, "good");
+      break;
+    }
+    case "hunker":
+      u.hunkerUntil = S.turn;
+      log(`${full(u)} hunkers down behind cover.`, "key");
       break;
     case "run_and_gun":
       u.ap += 1;

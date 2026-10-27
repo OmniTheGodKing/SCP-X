@@ -7,6 +7,7 @@ import { prof } from "./profiles";
 import { S, alive, canSee, full, fx, hooks, isPanicked, team, isTeam, log, loseSanity, rand, reveal, seen, sleep, computeVis } from "./state";
 import type { Gun, Unit } from "./types";
 import { SIDEARM } from "../data/weapons";
+import { dropCarried } from "./abilities";
 import { shotAt106 } from "./scp106";
 
 export function coverAgainst(tx: number, ty: number, sx: number, sy: number) {
@@ -37,7 +38,8 @@ export const usingSidearm = (u: Unit) => u.side === "mtf" && !!u.gun && u.gun.am
 export function shotInfo(sh: Unit, tg: Unit, reaction = false): ShotInfo {
   const v = bestView(sh.x, sh.y, tg.x, tg.y, rangeOf(sh)) || { f: 0, x: sh.x, y: sh.y };
   const dist = Math.hypot(tg.x - v.x, tg.y - v.y);
-  const cover = coverAgainst(tg.x, tg.y, v.x, v.y);
+  const hunkered = (tg.hunkerUntil ?? -1) >= S.turn;
+  const cover = coverAgainst(tg.x, tg.y, v.x, v.y) * (hunkered ? 2 : 1);
   const leaning = v.x !== sh.x || v.y !== sh.y;
   const partial = v.f < 0.5 || leaning;
   const gun = activeGun(sh);
@@ -46,7 +48,7 @@ export function shotInfo(sh: Unit, tg: Unit, reaction = false): ShotInfo {
   if (gun?.attachment === "scope") mods.push(["Telescopic sight", 5]);
   if (gun?.attachment === "sights") mods.push(["Improved sights", 10]);
   if (reaction && gun?.ammoType === "tracer") mods.push(["Tracer rounds", 10]);
-  if (cover === 40) mods.push(["Full cover", -40]);
+  if (cover >= 40) mods.push([hunkered ? (cover === 80 ? "Full cover, hunkered" : "Half cover, hunkered") : "Full cover", -cover]);
   else if (cover === 20) mods.push(["Half cover", -20]);
   else mods.push(["Flanked", 10]);
   if (leaning) mods.push(["Leaning out", -15]);
@@ -139,6 +141,7 @@ export function damage(u: Unit, dmg: number, by?: Unit) {
 
 /** An operative at 0 HP goes down and bleeds out in 3 turns unless stabilized. */
 function goDown(u: Unit) {
+  if (u.carrying) dropCarried(u);
   u.hp = 0; u.downed = true; u.bleed = BLEED_TURNS; u.staring = false; u.overwatch = false; u.ap = 0;
   if (S.selected === u) S.selected = null;
   log(`${full(u)} is down and bleeding out: ${BLEED_TURNS} turns to stabilize them${team().some(m => hasPerk(m, "stabilize")) ? "" : ". Nobody on the squad can; win the mission before they bleed out"}.`, "bad");
@@ -151,6 +154,7 @@ export function kill(u: Unit, by173 = false) {
     m.witnessed = (m.witnessed ?? 0) + 1;
     loseSanity(m, prof(m).witness, "witness");
   }
+  if (u.carrying) dropCarried(u);
   u.alive = false; u.hp = 0; u.staring = false; u.downed = false;
   if (u.side === "mtf") {
     S.stats.mtfLost++;
@@ -171,6 +175,7 @@ export async function moveUnit(u: Unit, path: Pt[]) {
   for (const [x, y] of path) {
     if (!u.alive) return;
     u.x = x; u.y = y;
+    if (u.carrying) { const c = S.units.find(v => v.id === u.carrying); if (c) { c.x = x; c.y = y; } }
     // SCP-106's rot eats at anyone who walks through it
     if (S.corroded.has(y * L.W + x) && u.side !== "anomaly" && u.armorKind !== "hazmat") { log(`${full(u)} steps in the black rot (1 damage).`, "bad"); damage(u, 1); }
     if (isTeam(u)) computeVis();

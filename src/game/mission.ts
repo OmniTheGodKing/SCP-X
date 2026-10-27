@@ -15,6 +15,7 @@ function mk(o: Partial<Unit> & Pick<Unit, "id" | "side" | "name" | "x" | "y" | "
 const shuffle = <T>(a: T[]) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 
+const RESEARCHERS = ["Dr. Halloran", "Dr. Ibsen", "Dr. Achebe", "Dr. Moreau", "Dr. Szilard", "Dr. Whitcombe", "Dr. Okonkwo", "Dr. Lindgren"];
 const CIVILIANS = ["Mr. Delaney", "Mrs. Kowalczyk", "Earl Pruitt", "Dot Hennessey", "Rev. Abernathy", "Lou Marchetti", "Frank Osgood", "June Whitley", "Carl Bjornstad", "Hattie Mae Cole", "Walt Simmons", "Ida Ferraro", "Gus Lindgren", "Peggy Sue Hart"];
 
 let nextSlot = 1;
@@ -83,10 +84,16 @@ export function createMission(setup: MissionSetup) {
       gun: { name: g.name, type: g.type, dmg: g.dmg, mag: g.mag, ammo: g.mag, aim: 0 } }));
   }
   const strayRooms = shuffle(def.strayRooms.filter(r => r !== ciRoom));
-  if (setup.kind === "breach") for (let i = 0; i < setup.mods.strays; i++) {
+  if (setup.kind === "breach") for (let i = 0; i < Math.min(setup.mods.strays, setup.strayPool ?? 4); i++) {
     const [x, y] = claim(floorTiles(strayRooms[i % strayRooms.length]));
     const name = "D-" + (4400 + Math.floor(Math.random() * 600));
-    units.push(mk({ id: "t" + (i + 1), side: "subject", call: name, name, x, y, hp: 5, maxHp: 5, san: PROFILE.dclass.maxSan, blinkMod: setup.mods.blinkBonus }));
+    units.push(mk({ id: "t" + (i + 1), side: "subject", call: name, name, x, y, hp: 5, maxHp: 5, san: PROFILE.dclass.maxSan, blinkMod: setup.mods.blinkBonus, stray: true }));
+  }
+  // researchers caught in the wing hide where they were working
+  const doctors = shuffle([...RESEARCHERS]);
+  for (let i = 0; i < (setup.researchers ?? 0); i++) {
+    const [x, y] = claim(floorTiles(strayRooms[(i + 1) % strayRooms.length]));
+    units.push(mk({ id: "rs" + (i + 1), side: "civilian", call: doctors[i], name: doctors[i], x, y, hp: 4, maxHp: 4, san: 60, researcher: true }));
   }
   const names = shuffle([...CIVILIANS]);
   const people = setup.civilians + setup.witnesses;
@@ -132,7 +139,8 @@ export const BRIEFINGS: Record<MissionKind, (s: MissionSetup) => string> = {
 };
 
 // Downed operatives come home if the mission is won or if they were stabilized; otherwise they die there.
-const survives = (u: Unit, win: boolean) => u.alive && (!u.downed || win || !!u.stabilized);
+// When the team pulls out, only those who made it out through an exit come home.
+const survives = (u: Unit, win: boolean, evacuated: boolean) => u.alive && (win || (evacuated ? u.saved : !u.downed || !!u.stabilized));
 
 export function missionResult(win: boolean, evacuated: boolean): MissionResult {
   let pocketReturned = 0;
@@ -144,7 +152,8 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
       log(`${u.side === "mtf" ? `${u.call} ${u.name}` : u.name} crawls out of a black stain on the floor, alive and barely speaking.`, "key");
     }
   }
-  const detail = S.units.filter(u => u.id.startsWith("d") || u.joined);
+  const detail = S.units.filter(u => (u.id.startsWith("d") || u.joined) && !u.stray);
+  const strays = S.units.filter(u => u.stray), docs = S.units.filter(u => u.researcher);
   return {
     incidentId: S.setup.incidentId,
     win, evacuated,
@@ -154,7 +163,7 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
     restraints: S.units.some(u => u.side === "mtf" && u.items?.some(i => i.id === "restraints")),
     zombiesKilled: S.units.filter(u => u.side === "zombie" && !u.alive).length,
     pocketReturned,
-    squad: [...S.units.filter(u => u.opId).map(u => ({ opId: u.opId!, alive: survives(u, win), hp: Math.max(1, u.hp), san: u.san, kills: u.kills, sealed: !!u.sealed,
+    squad: [...S.units.filter(u => u.opId).map(u => ({ opId: u.opId!, alive: survives(u, win, evacuated), hp: Math.max(1, u.hp), san: u.san, kills: u.kills, sealed: !!u.sealed,
       hasArmor: !!u.hasArmor, armorKind: u.armorKind, armorHp: S.setup.squad.concat(S.setup.guards ?? [], S.setup.lateGuards ?? []).find(m => m.opId === u.opId)?.armorHp ?? 0, items: (u.items || []).map(i => ({ ...i })),
       witnessed: u.witnessed ?? 0, panics: u.panics ?? 0, minHp: u.minHp ?? u.hp, bestStreak: u.bestStreak ?? 0 })),
       // anyone still on the way when it ended comes home untouched, with their gear
@@ -168,6 +177,10 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
     dReturned: detail.filter(u => u.alive).length,
     dRecruited: S.units.filter(u => u.joined && u.alive).length,
     dLost: detail.filter(u => !u.alive).length,
+    researchersRescued: docs.filter(u => u.alive && (u.saved || win)).length,
+    researchersLost: docs.filter(u => !u.alive || (!u.saved && !win)).length,
+    straysLost: strays.filter(u => !u.alive || (!win && !u.restrained && !u.saved)).length,
+    straysEscaped: strays.filter(u => u.alive && u.saved && !u.restrained).length,
     civiliansKilled: S.units.filter(u => u.side === "civilian" && !u.alive).length,
     witnessesEscaped: S.units.filter(u => u.witness && u.saved && !u.dosed).length,
     witnessesDosed: S.units.filter(u => u.witness && u.dosed).length,

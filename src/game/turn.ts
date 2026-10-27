@@ -5,7 +5,7 @@ import { activeGun, damage, fire, kill, moveUnit } from "./combat";
 import { TYPES } from "../data/weapons";
 import { abilityTargets, useAbility } from "./abilities";
 import { hasPerk, rangeOf, spend, usesLeft } from "./perks";
-import { recruitStrays, subjectPhase } from "./dclass";
+import { gatherResearchers, subjectPhase } from "./dclass";
 import { insurgentsStare, raiderPhase } from "./insurgency";
 import { entryTiles, missionResult, spawnMember } from "./mission";
 import { maxSanOf, prof } from "./profiles";
@@ -36,7 +36,7 @@ export function reachFor(u: Unit | null) {
   for (let i = 0; i < res.dist.length; i++) if (res.dist[i] > 0 && tileAt(i % L.W, (i / L.W) | 0) === HALF) res.dist[i] = -res.dist[i] - 100;
   return res;
 }
-export const moveOf = (u: Unit) => Math.max(1, prof(u).move + (u.gun ? TYPES[u.gun.type].move : 0) + (u.moveBonus ?? 0));
+export const moveOf = (u: Unit) => Math.max(1, prof(u).move + (u.gun ? TYPES[u.gun.type].move : 0) + (u.moveBonus ?? 0) - (u.carrying ? 1 : 0));
 export const moveCost = (u: Unit, d: number) => d <= moveOf(u) ? 1 : 2;
 
 /** Why this unit can't fire right now, or null. */
@@ -203,7 +203,7 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
   }
   // while aiming a grenade, a click always picks the target, even on top of someone
   if (S.mode === "ability" && S.ability && sel) {
-    const t = S.units.find(v => v.alive && v.x === x && v.y === y && abilityTargets(sel, S.ability!).includes(v));
+    const t = abilityTargets(sel, S.ability!).find(v => v.x === x && v.y === y);
     if (!t) { flash("Not a valid target for that."); return; }
     if (!confirm()) return;
     useAbility(sel, S.ability, t);
@@ -276,7 +276,7 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
 }
 
 function afterAction() {
-  recruitStrays();
+  gatherResearchers();
   computeVis();
   if (checkEnd()) return;
   if (S.selected && (!S.selected.alive || !isTeam(S.selected) || S.selected.ap === 0)) selectNext();
@@ -532,13 +532,15 @@ export function checkEnd() {
   }
   if (k === "strike" && !alive("raider").length) { finish(true, false); return true; }
   if (S.escaped) { finish(false, false); return true; }
-  if (!alive("mtf").length && !S.reinforce.length) { finish(false, false); return true; }
+  // nobody left on the map: either everyone got out through an exit, or nobody is left at all
+  if (!alive("mtf").length && !S.reinforce.length) { finish(false, S.units.some(u => u.side === "mtf" && u.saved && u.alive)); return true; }
   return false;
 }
 
 export function evacuate() {
   if (!canAct()) return;
-  log(S.has173 ? "Epsilon-11 pulls out. SCP-173 is still loose." : "Epsilon-11 pulls out before the job is done.", "bad");
+  const left = alive("mtf").length;
+  log(`The mission is called off.${left ? ` ${left} still inside ${left > 1 ? "are" : "is"} left behind.` : ""}`, "bad");
   finish(false, true);
 }
 

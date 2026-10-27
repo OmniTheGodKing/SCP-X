@@ -1,5 +1,6 @@
 // D-Class who are loose in the wing run for the exit; operatives can bring them into the work detail.
-import { DIRS, L, canStep, cheb } from "../core/grid";
+import { DIRS, L, bfs, canStep, cheb, pathTo } from "../core/grid";
+import type { Unit } from "./types";
 import { sightFrom } from "../core/sight";
 import { moveUnit } from "./combat";
 import { S, alive, computeVis, hooks, log, occupied, seen, team } from "./state";
@@ -8,7 +9,8 @@ import { S, alive, computeVis, hooks, log, occupied, seen, team } from "./state"
 // the map. Witnesses who get away will talk. Dosed witnesses stay put.
 async function civilianPhase() {
   for (const c of alive("civilian")) {
-    if (c.dosed) continue;
+    if (c.dosed || c.carriedBy) continue;
+    if (c.researcher) { await researcherMove(c); continue; }
     if (!c.spooked) {
       const heard = [...S.mem.entries()].some(([k, m]) => (k.startsWith("shot-") || k.startsWith("bang-")) && m.turn === S.turn && cheb(m.x, m.y, c.x, c.y) <= 8);
       const spotted = team().some(m => m.side === "mtf" && sightFrom(c.x, c.y, m.x, m.y, 5));
@@ -57,20 +59,35 @@ export async function subjectPhase() {
     }
     if (L.exitMap[s.y * L.W + s.x] === 0) {
       s.saved = true; S.stats.escaped++;
-      log(`${s.name} got out through the exit.`, "good");
+      log(s.stray ? `${s.name} got out through the exit and is gone. An escaped D-Class will talk.` : `${s.name} got out through the exit.`, s.stray ? "bad" : "good");
     }
   }
   computeVis();
   hooks.update();
 }
 
-/** Loose D-Class join the work detail when an operative reaches them. */
-export function recruitStrays() {
-  for (const s of alive("subject")) {
-    if (s.fled) continue;
-    const by = alive("mtf").find(m => cheb(m.x, m.y, s.x, s.y) <= (m.perks?.includes("shepherd") ? 3 : 1));
+/** Researchers hiding in the wing start following the first operative or guard who reaches them. */
+export function gatherResearchers() {
+  for (const r of alive("civilian").filter(c => c.researcher && !c.followId)) {
+    const by = alive("mtf").find(m => cheb(m.x, m.y, r.x, r.y) <= 1);
     if (!by) continue;
-    s.side = "dclass"; s.ap = 0; s.hadLos = false; s.joined = true;
-    log(`${by.call} grabs ${s.name}, who joins the work detail.`, "good");
+    r.followId = by.id;
+    log(`${r.name} comes out of hiding and follows ${by.call === "SEC" ? `guard ${by.name}` : by.call}. Get them to an exit.`, "good");
+  }
+}
+/** A researcher keeps close to whoever found them, and gets out the moment they reach an exit. */
+async function researcherMove(r: Unit) {
+  const lead = S.units.find(u => u.id === r.followId);
+  if (!lead) return;
+  if (!lead.alive || lead.downed) { r.followId = undefined; log(`${r.name} is on their own again and goes back into hiding.`, "bad"); return; }
+  if (!lead.saved && cheb(lead.x, lead.y, r.x, r.y) > 1) {
+    const goals = DIRS.map(([dx, dy]) => [lead.x + dx, lead.y + dy] as [number, number]).filter(([x, y]) => !occupied(x, y, r));
+    const res = bfs([[r.x, r.y]], 6, (x, y) => occupied(x, y, r));
+    const best = goals.map(g => ({ g, d: res.dist[g[1] * L.W + g[0]] })).filter(o => o.d > 0).sort((a, b) => a.d - b.d)[0];
+    if (best) await moveUnit(r, pathTo(res, best.g[0], best.g[1]) || []);
+  }
+  if (L.exitMap[r.y * L.W + r.x] === 0 || (lead.saved && cheb(lead.x, lead.y, r.x, r.y) <= 2)) {
+    r.saved = true;
+    log(`${r.name} is out of the wing, safe.`, "good");
   }
 }
