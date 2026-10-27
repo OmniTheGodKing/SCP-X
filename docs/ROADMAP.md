@@ -414,7 +414,7 @@ retaliation (done); (5) doors and sirens (done).
 - Uniform armor line (XCOM's padded to plated to powered), researched once and worn by every operative under any vest:
   padded combat jacket +1 HP; nylon ballistic liner +2 HP (1952); plated undersuit +2 HP and 1 armor (1955, 8 missions
   won); powered combat harness +3 HP and 1 armor (1965, materials test).
-- Nicknames: given at Corporal from a class list (veterans sent by the Council get one too), shown as
+- Nicknames: given at Corporal, picked at random from a list of the usual stupid unit nicknames (nothing to do with class; veterans sent by the Council get one too), shown as
   First "Nick" Last on personnel files and in the field, and editable with the name and callsign.
 
 ## Phase 3J: task forces, field operations and independent Foundation sites (planned)
