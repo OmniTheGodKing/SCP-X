@@ -9,9 +9,9 @@ import type { AmmoId, AttachmentId, WeaponType } from "../data/weapons";
 export type { AmmoId, AttachmentId, WeaponType };
 
 export type ItemId = "armor" | "armor_light" | "armor_heavy" | "hazmat" | "leadsuit"
-  | "eyedrops" | "flashbang" | "smoke" | "tracker" | "frag" | "csgas" | "bazooka" | "law" | "medkit" | "camera" | "restraints" | "darts";
+  | "flare" | "eyedrops" | "flashbang" | "smoke" | "tracker" | "frag" | "csgas" | "bazooka" | "law" | "medkit" | "camera" | "restraints" | "darts";
 /** Items thrown or fired at a tile, and the heavy weapons among them (heavy armor only). */
-export const THROWN: ItemId[] = ["frag", "flashbang", "smoke", "csgas", "bazooka", "law"];
+export const THROWN: ItemId[] = ["frag", "flashbang", "smoke", "csgas", "bazooka", "law", "flare"];
 export const HEAVY: ItemId[] = ["bazooka", "law"];
 
 /** The weapon a unit carries into a mission. */
@@ -23,7 +23,7 @@ export interface Carried { id: ItemId; uses: number; }
 export type Side = "mtf" | "dclass" | "subject" | "civilian" | "raider" | "anomaly" | "zombie";
 /** Anomalies a mission can be about. */
 export type ScpId = "173" | "049" | "106";
-export type MissionKind = "breach" | "manhunt" | "coverup" | "strike";
+export type MissionKind = "breach" | "manhunt" | "coverup" | "strike" | "escort" | "retaliation";
 export type Phase = "player" | "anomaly" | "hand" | "subjects" | "over";
 
 export interface Unit {
@@ -84,6 +84,8 @@ export interface Unit {
   /** Carrying a downed ally or a body, or being carried. */
   carrying?: string;
   carriedBy?: string;
+  /** Escorts: the turn an Insurgent started working the truck open. */
+  stealTurn?: number;
   /** The Insurgency fire team this unit belongs to. */
   pod?: number;
   /** Hunkered down: cover counts double through this turn. */
@@ -150,6 +152,8 @@ export interface MissionSetup {
   scp?: ScpId;
   map: "wingC" | "town" | "farm" | "port";
   amnestics: number;
+  /** Field missions launched between 20:00 and 06:00 are played in the dark. */
+  night?: boolean;
   /** Breaches: researchers caught in the wing, and how many D-Class are in the block to get loose. */
   researchers?: number;
   strayPool?: number;
@@ -254,6 +258,10 @@ export interface MissionState {
   effects: Effect[];
   stats: { mtfLost: number; dLost: number; escaped: number; raidersDown: number };
   smoke: { x: number; y: number; until: number }[];
+  /** Escorts: the Insurgency got the truck open. */
+  stolen?: boolean;
+  /** Flares burning on the ground at night. */
+  flares: { x: number; y: number; until: number }[];
   throwing: Carried | null;
   /** Squad members still on their way, and the turn they arrive. */
   reinforce: { turn: number; members: SquadMember[] }[];

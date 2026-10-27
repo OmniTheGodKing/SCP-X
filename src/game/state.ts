@@ -25,7 +25,9 @@ export const isBlind = (u: Unit) => (u.blindUntil ?? -1) >= S.turn;
 export const unitAt = (x: number, y: number) => S.units.find(u => u.alive && !u.saved && !u.carriedBy && u.x === x && u.y === y);
 export const occupied = (x: number, y: number, except?: Unit) =>
   S.units.some(u => u !== except && u.alive && !u.saved && !u.carriedBy && u.x === x && u.y === y);
-export const canSee = (u: Unit, x: number, y: number) => sightFrom(u.x, u.y, x, y, rangeOf(u));
+/** At night anything inside a flare's light can be seen from as far as in daylight. */
+export const lit = (x: number, y: number) => S.flares.some(f => f.until >= S.turn && Math.max(Math.abs(f.x - x), Math.abs(f.y - y)) <= 2);
+export const canSee = (u: Unit, x: number, y: number) => sightFrom(u.x, u.y, x, y, rangeOf(u)) || (!!S.setup.night && lit(x, y) && sightFrom(u.x, u.y, x, y, R));
 export const seen = (x: number, y: number) => S.vis[y * L.W + x] === 1;
 export const starers = () => team().filter(m => m.staring);
 export const label = (u: Unit) => u.call || u.name;

@@ -236,6 +236,15 @@ export function createRenderer(cv: HTMLCanvasElement) {
     ctx.clearRect(0, 0, L.W * TS, L.H * TS);
     drawTiles();
     drawFog();
+    // night: the map is dark except where flares burn
+    if (S.setup.night) {
+      ctx.fillStyle = "rgba(4,8,20,0.38)"; ctx.fillRect(0, 0, L.W * TS, L.H * TS);
+      for (const f of S.flares.filter(f => f.until >= S.turn)) {
+        const g = ctx.createRadialGradient(f.x * TS + TS / 2, f.y * TS + TS / 2, 4, f.x * TS + TS / 2, f.y * TS + TS / 2, TS * 2.6);
+        g.addColorStop(0, "rgba(255,120,70,0.35)"); g.addColorStop(1, "rgba(255,120,70,0)");
+        ctx.fillStyle = g; ctx.fillRect((f.x - 3) * TS, (f.y - 3) * TS, TS * 7, TS * 7);
+      }
+    }
     drawHatch();
     const sel = S.selected, playing = canAct();
     const st = S.statue;

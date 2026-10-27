@@ -69,7 +69,7 @@ Done alongside part 1
 
 From the XCOM 2 comparison, plus harder breaches. Order: (1) harder breaches, hunker down, carrying and exits
 (done); (2) concealment and enemy pods (done); (3) maps assembled from room plots (done); (4) night missions, escorts and
-retaliation; (5) doors and sirens.
+retaliation (done); (5) doors and sirens.
 
 - Breaches: 1 to 3 researchers are caught in the wing. Walk someone next to one and they follow that person to an exit.
   Dead researchers come off the staff count; each rescue is a small sanity boost.

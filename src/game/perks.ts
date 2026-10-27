@@ -5,7 +5,8 @@ import type { PerkId, Unit } from "./types";
 
 export const hasPerk = (u: Unit | null | undefined, p: PerkId) => !!u?.perks?.includes(p);
 export const hasTrait = (u: Unit, t: NonNullable<Unit["traits"]>[number]) => !!u.traits?.includes(t);
-export const rangeOf = (u: Unit) => R + (hasPerk(u, "keen_eyes") ? 3 : 0) + (u.side === "mtf" && S ? S.setup.mods.sightBonus ?? 0 : 0);
+export const NIGHT_SIGHT = 4;
+export const rangeOf = (u: Unit) => R + (hasPerk(u, "keen_eyes") ? 3 : 0) + (u.side === "mtf" && S ? S.setup.mods.sightBonus ?? 0 : 0) - (S?.setup.night ? NIGHT_SIGHT : 0);
 export const usesLeft = (u: Unit, key: string, max: number) => max - (u.used?.[key] ?? 0);
 export function spend(u: Unit, key: string) { u.used = u.used || {}; u.used[key] = (u.used[key] ?? 0) + 1; }
 
