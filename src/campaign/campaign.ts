@@ -110,6 +110,10 @@ export interface Campaign {
   stats: { won: number; lost: number; missed: number };
   activeIncident?: string;
   over?: string;
+  /** Hour of the current day, for the running clock. */
+  hour?: number;
+  /** Events that paused the clock and haven't been seen yet. */
+  notices?: { text: string; tab: HubTab; kind: string }[];
   /** Set once the debug menu has changed this campaign. */
   debug?: boolean;
 }
@@ -140,7 +144,7 @@ function checkPromotion(c: Campaign, o: Operative, out?: string[]) {
   while (o.rank < RANKS.length - 1 && o.xp >= RANK_XP[o.rank + 1]) o.rank++;
   if (o.rank > before) {
     const msg = `${o.call} ${o.name} promoted to ${RANKS[o.rank]}. ${o.cls ? "Choose a new perk" : "Choose their class"} on the Personnel tab.`;
-    if (out) out.push(msg); else log(c, msg, "good");
+    if (out) out.push(msg); else log(c, msg, "good", "personnel");
   }
 }
 
@@ -177,8 +181,11 @@ export function startRetrain(c: Campaign, o: Operative) {
 const NAMES = ["Okafor", "Lindqvist", "Reyes", "Haddad", "Novak", "Tanaka", "Mbeki", "Sorensen", "Ortiz", "Kowalski", "Achterberg", "Nwosu", "Petrov", "Duarte", "Iqbal", "Varga", "Castellanos", "Whitlock", "Abara", "Morozova"];
 const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
 
-export function log(c: Campaign, text: string, kind = "") {
+export type HubTab = "command" | "world" | "site" | "research" | "personnel";
+/** Log an entry. Passing a tab also pauses the running clock and shows it as a notice. */
+export function log(c: Campaign, text: string, kind = "", pause?: HubTab) {
   c.log.unshift({ day: c.day, text, kind });
+  if (pause) (c.notices ??= []).push({ text, tab: pause, kind });
   if (c.log.length > 100) c.log.pop();
 }
 
@@ -224,7 +231,7 @@ export function advanceDay(c: Campaign) {
   if (pendingBreach(c)) return true;
   const incidentsBefore = c.incidents.length, logBefore = c.log.length;
   c.day++;
-  for (const line of tickConstruction(c)) log(c, line, "good");
+  for (const line of tickConstruction(c)) log(c, line, "good", "site");
   tickResearch(c);
   const heal = healPerDay(c), calm = sanityPerDay(c) * ALERTS[c.alert].sanity, drill = countOperational(c, "training") > 0 && c.day % 7 === 0;
   for (const o of c.roster) if (o.alive) {
@@ -234,12 +241,12 @@ export function advanceDay(c: Campaign) {
     if (o.busy && --o.busy.daysLeft <= 0) {
       if (o.busy.kind === "therapy" && o.busy.trait) {
         o.traits = o.traits.filter(t => t !== o.busy!.trait);
-        log(c, `${o.call} ${o.name} finished therapy. ${TRAITS[o.busy.trait].name} is gone.`, "good");
+        log(c, `${o.call} ${o.name} finished therapy. ${TRAITS[o.busy.trait].name} is gone.`, "good", "personnel");
       } else if (o.busy.kind === "travel") {
         log(c, `${o.call} ${o.name} is back at Site-19.`);
       } else {
         o.cls = undefined; o.perks = [];
-        log(c, `${o.call} ${o.name} finished retraining. Choose their new class on the Personnel tab.`, "good");
+        log(c, `${o.call} ${o.name} finished retraining. Choose their new class on the Personnel tab.`, "good", "personnel");
       }
       o.busy = undefined;
     }
@@ -256,7 +263,7 @@ export function advanceDay(c: Campaign) {
     const room = Math.max(0, dclassCapacity(c) - c.dclass), d = Math.min(DCLASS_MONTHLY, room);
     c.funds += funds - upkeep; c.dclass += d;
     for (const r of REGION_IDS) addExposure(c, r, -3);   // the public slowly forgets
-    log(c, `${monthName(c.day)}: the fronts pass on $${funds}k (less where exposure is high); facility upkeep costs $${upkeep}k. ${d} D-Class transferred in${d < DCLASS_MONTHLY ? " (the barracks are full)" : ""}. Exposure eases by 3 in every region.`, "key");
+    log(c, `${monthName(c.day)}: the fronts pass on $${funds}k (less where exposure is high); facility upkeep costs $${upkeep}k. ${d} D-Class transferred in${d < DCLASS_MONTHLY ? " (the barracks are full)" : ""}. Exposure eases by 3 in every region.`, "key", "command");
   }
   checkOver(c);
   return c.incidents.length > incidentsBefore || c.log.length !== logBefore || !!c.over;

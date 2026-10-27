@@ -89,7 +89,7 @@ export function tickGuards(c: Campaign, heal: number, calm: number) {
       o.traits = [...g.traits];
       o.kills = g.kills;
       c.roster.push(o);
-      log(c, `${g.name} passed selection and joins Epsilon-11 as ${o.call}.`, "good");
+      log(c, `${g.name} passed selection and joins Epsilon-11 as ${o.call}.`, "good", "personnel");
     }
   }
 }

@@ -29,7 +29,7 @@ export function addExposure(c: Campaign, r: RegionId, n: number) {
   st.exposure = Math.max(0, Math.min(100, st.exposure + n));
   if (st.exposure >= 100) {
     st.collapsed = true;
-    log(c, `The ${REGIONS[r].front} front in ${REGIONS[r].name} has collapsed. The public knows too much there, and its funding is gone.`, "bad");
+    log(c, `The ${REGIONS[r].front} front in ${REGIONS[r].name} has collapsed. The public knows too much there, and its funding is gone.`, "bad", "world");
   }
   c.exposure = globalExposure(c);
 }
@@ -71,7 +71,7 @@ export function spawnCoverup(c: Campaign, at?: RegionId) {
     what: `Cover-up: ${pick(STORIES)}, ${town}`,
     expires: c.day + travelDays(c, r) + 4, insurgents: Math.random() < 0.5 ? 0 : rand(1, 2), witnesses: rand(3, 5), civilians: rand(1, 3),
   });
-  log(c, `${inc.title}. Witnesses need amnestics before the story spreads. Respond within ${inc.expires - c.day} days.`, "bad");
+  log(c, `${inc.title}. Witnesses need amnestics before the story spreads. Respond within ${inc.expires - c.day} days.`, "bad", "command");
 }
 
 export function canLocate(c: Campaign, r: RegionId) {
@@ -122,8 +122,8 @@ export function tickWorld(c: Campaign) {
     if (inc.kind === "coverup") {
       c.stats.missed++;
       addExposure(c, inc.region, 12);
-      log(c, `${inc.title.split(":")[0]} went unanswered. The story is out in ${REGIONS[inc.region].name} (+12 exposure there).`, "bad");
-    } else log(c, `The Insurgency cell near ${inc.title.split(", ").pop()} has moved on.`, "key");
+      log(c, `${inc.title.split(":")[0]} went unanswered. The story is out in ${REGIONS[inc.region].name} (+12 exposure there).`, "bad", "command");
+    } else log(c, `The Insurgency cell near ${inc.title.split(", ").pop()} has moved on.`, "key", "command");
   }
 }
 
