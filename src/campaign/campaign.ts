@@ -13,6 +13,9 @@ import { addExposure, collapsedCount, COLLAPSE_LIMIT, newRegions, regionFunding,
 import { RAID, raidArrival, raidLoss, tickRaids, ALERTS, breachGuards, guardMember, guardsReady, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
 import { MEDALS, rollBio, type MedalId } from "../data/bios";
 import { QUALITY, UNITS, rollCandidate, type Candidate, type UnitId } from "../data/units";
+import { rollLook, type Look } from "../data/looks";
+/** An operative's face: their saved look, or a fixed one drawn from their id. */
+export const lookOf = (o: { id: string; sex?: "m" | "f"; look?: Look }) => o.look ?? rollLook(o.id, o.sex);
 import { monthlyStaff, tickStaff, type StaffEvent } from "./staff";
 import { tickInspection } from "./inspection";
 import { buildReport, type Report } from "./reports";
@@ -74,6 +77,8 @@ export interface Operative {
   /** Where they were recruited from, and what that gives them in the field. */
   unit?: UnitId;
   sex?: "m" | "f";
+  /** Portrait parts; operatives without one get a fixed face drawn from their id. */
+  look?: Look;
   fleet?: boolean;
 }
 
@@ -496,7 +501,8 @@ function checkOver(c: Campaign) {
 export const POOL_SIZE = [4, 6];
 export function refreshRecruits(c: Campaign) {
   const used = new Set([...c.roster.map(o => o.name), ...(c.retired ?? []).map(r => r.name)]);
-  c.recruits = Array.from({ length: rand(POOL_SIZE[0], POOL_SIZE[1]) }, (_, i) => rollCandidate(`cand${c.day}-${i}`, yearOf(c.day), used));
+  const liaison = has(c, "liaison_office"), extra = liaison ? 2 : 0;
+  c.recruits = Array.from({ length: rand(POOL_SIZE[0], POOL_SIZE[1]) + extra }, (_, i) => rollCandidate(`cand${c.day}-${i}`, yearOf(c.day), used, liaison, has(c, "joint_exchange")));
 }
 export const candidateCost = (k: Candidate) => QUALITY[k.quality].cost;
 export function canHire(c: Campaign, k: Candidate): string | null {
@@ -509,7 +515,7 @@ export function hireCandidate(c: Campaign, k: Candidate) {
   c.funds -= candidateCost(k);
   c.recruits = (c.recruits ?? []).filter(x => x !== k);
   const o = makeOperative(c, k.name);
-  Object.assign(o, { unit: k.unit, sex: k.sex, aimBase: k.aimBase, bio: { home: k.home, age: k.age, story: k.story } });
+  Object.assign(o, { unit: k.unit, sex: k.sex, aimBase: k.aimBase, bio: { home: k.home, age: k.age, story: k.story }, look: rollLook(k.id, k.sex) });
   const lean = UNITS[k.unit].lean;
   if (lean === "aim") o.aimBase += 6;
   else if (lean === "san") o.sanBonus = (o.sanBonus ?? 0) + 15;

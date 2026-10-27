@@ -285,3 +285,7 @@ ul.traits button { margin-left: 6px; padding: 4px 8px; }
 .file.report { margin-top: 6px; }
 details.archived { margin-top: 8px; }
 details.archived summary { cursor: pointer; font-family: var(--font-mono); font-size: 12px; padding: 4px 0; }
+.portrait { display: inline-block; vertical-align: middle; border: 1px solid var(--line); flex-shrink: 0; }
+.portrait.fallen { filter: grayscale(1) contrast(.9); opacity: .8; }
+.proj .ptop .portrait { margin-right: 8px; }
+.proj .ptop .portrait + b { margin-right: auto; }
