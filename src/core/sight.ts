@@ -1,6 +1,12 @@
 // Line of sight: strict at corners, partial visibility, and leaning past cover.
 import { L, R, d2, opaque, passable } from "./grid";
 
+// Smoke blocks sight like a wall while it lasts. With smoke on the map, sight isn't cached.
+let smoke = new Set<number>();
+export function setSmoke(tiles: [number, number][]) { smoke = new Set(tiles.map(([x, y]) => y * L.W + x)); }
+export const smoky = (x: number, y: number) => smoke.has(y * L.W + x);
+const solid = (x: number, y: number) => opaque(x, y) || (smoke.size > 0 && smoke.has(y * L.W + x));
+
 // Exact grid walk between two points (tile units). A ray that passes exactly through a
 // corner is blocked if either tile beside that corner is solid, so nothing squeezes past.
 function rayClear(x0: number, y0: number, x1: number, y1: number) {
@@ -12,12 +18,12 @@ function rayClear(x0: number, y0: number, x1: number, y1: number) {
   let ty = sy > 0 ? (cy + 1 - y0) / dy : sy < 0 ? (y0 - cy) / -dy : Infinity;
   for (let guard = 0; guard < 80 && !(cx === ex && cy === ey); guard++) {
     if (Math.abs(tx - ty) < 1e-9) {
-      if (opaque(cx + sx, cy) || opaque(cx, cy + sy)) return false;
+      if (solid(cx + sx, cy) || solid(cx, cy + sy)) return false;
       cx += sx; cy += sy; tx += tdx; ty += tdy;
     } else if (tx < ty) { cx += sx; tx += tdx; }
     else { cy += sy; ty += tdy; }
     if (cx === ex && cy === ey) break;
-    if (opaque(cx, cy)) return false;
+    if (solid(cx, cy)) return false;
   }
   return true;
 }
@@ -41,6 +47,14 @@ function ensureCache() {
 export function visFrac(ax: number, ay: number, bx: number, by: number) {
   if (ax === bx && ay === by) return 1;
   ensureCache();
+  if (smoke.size) {
+    let clear = 0;
+    for (const [ox, oy] of SAMPLES) {
+      if (rayClear(ax + .5, ay + .5, bx + ox, by + oy)) clear++;
+      if (rayClear(bx + .5, by + .5, ax + ox, ay + oy)) clear++;
+    }
+    return clear / 10;
+  }
   const N = L.W * L.H, i = (ay * L.W + ax) * N + by * L.W + bx;
   if (visCache[i] < 0) {
     let clear = 0;

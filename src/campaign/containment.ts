@@ -1,5 +1,6 @@
 // Anomalies held at Site-19: daily breach risk, cell cleaning, breaches, and escapes.
 import { FACILITIES, isContainment, nameInText, neighbors, operational, powerShort, type Facility } from "./base";
+import { has } from "./research";
 import { blinkFullOf, log, maxSanOf, type Campaign, type Incident, type Operative } from "./campaign";
 
 export type ScpClass = "Safe" | "Euclid" | "Keter";
@@ -7,8 +8,8 @@ const CLASS_GRADE: Record<ScpClass, number> = { Safe: 0, Euclid: 1, Keter: 2 };
 const BASE_RISK: Record<ScpClass, number> = { Safe: 0.02, Euclid: 0.06, Keter: 0.1 };
 
 export const CLEAN_EVERY = 7;            // days between scheduled cleanings
-const DECAY = 4;                         // maintenance lost per day
-export const BREACH_WINDOW = 2;          // days to answer a breach
+const decay = (c: Campaign) => has(c, "containment_rev") ? 2 : 4;   // maintenance lost per day
+export const breachWindow = (c: Campaign) => has(c, "rapid_response") ? 3 : 2;   // days to answer a breach
 export const RECOVERY_WINDOW = 3;        // days to answer a sighting
 export const MOVE_COST = 20;
 
@@ -47,6 +48,8 @@ export function breachRisk(c: Campaign, s: ScpRecord) {
   const sec = securityNear(c, wing);
   if (sec) { p *= 0.7 ** sec; why.push(`${sec} security station${sec > 1 ? "s" : ""} next door: ×${(0.7 ** sec).toFixed(2)}`); }
   if (wing.disabled) { p *= 3; why.push("Wing damaged: ×3"); }
+  if (has(c, "containment_rev")) { p *= 0.75; why.push("Revised procedures: ×0.75"); }
+  if (has(c, "reinforced_doors")) { p *= 0.8; why.push("Reinforced doors: ×0.8"); }
   if (powerShort(c)) { p *= 2; why.push("Power shortage: ×2"); }
   return { p: Math.min(0.9, p), why };
 }
@@ -54,7 +57,7 @@ export function breachRisk(c: Campaign, s: ScpRecord) {
 // Chance that, on a day a breach goes unanswered, the anomaly gets out of Site-19 entirely.
 export function escapeChance(c: Campaign, s: ScpRecord) {
   const wing = wingOf(c, s);
-  return Math.max(0.05, 0.25 - 0.08 * (wing ? securityNear(c, wing) : 0));
+  return Math.max(0.03, 0.25 - 0.08 * (wing ? securityNear(c, wing) : 0) - (has(c, "early_warning") ? 0.08 : 0));
 }
 
 function startBreach(c: Campaign, s: ScpRecord, cause: string) {
@@ -66,12 +69,12 @@ function startBreach(c: Campaign, s: ScpRecord, cause: string) {
     scpId: s.id,
     title: `Incident ${String(c.nextIncident).padStart(3, "0")}: ${s.name} breach, ${nameInText(wing.type)} on level ${wing.level + 1}`,
     appeared: c.day,
-    expires: c.day + BREACH_WINDOW,
+    expires: c.day + breachWindow(c),
     insurgents: Math.min(4, rand(0, 2) + Math.floor((c.day - 1) / 60)),
   };
   c.nextIncident++;
   c.incidents.push(inc);
-  log(c, `${cause} ${s.name} is out of its cell. Respond within ${BREACH_WINDOW} days before it gets out of the site.`, "bad");
+  log(c, `${cause} ${s.name} is out of its cell. Respond within ${breachWindow(c)} days before it gets out of the site.`, "bad");
 }
 
 function goDark(c: Campaign, s: ScpRecord, why: string) {
@@ -102,7 +105,7 @@ function resurface(c: Campaign, s: ScpRecord) {
 export function tickContainment(c: Campaign) {
   for (const s of c.scps) {
     if (s.status === "contained") {
-      s.maintenance = Math.max(0, s.maintenance - DECAY);
+      s.maintenance = Math.max(0, s.maintenance - decay(c));
       if (Math.random() < breachRisk(c, s).p) startBreach(c, s, "Containment alarm.");
     } else if (s.status === "loose") {
       c.exposure = Math.min(100, c.exposure + 1);
@@ -167,17 +170,19 @@ export function canClean(c: Campaign, s: ScpRecord): string | null {
   return null;
 }
 
-function cellWork(c: Campaign, s: ScpRecord, watchers: Operative[], what: string) {
-  const risk = workRisk(watchers);
+/** D-Class work in the cell while operatives watch. `mult` scales the danger; `breach` is an extra
+ *  chance the work itself lets it loose. Returns false if it ended in a breach. */
+export function cellWork(c: Campaign, s: ScpRecord, watchers: Operative[], what: string, mult = 1, dclass = 1, breach = 0) {
+  const risk = Math.min(0.95, workRisk(watchers) * mult);
   for (const o of watchers) o.san = Math.max(0, o.san - 8);
   const names = watchers.length ? watchers.map(o => o.name).join(" and ") : "site guards";
+  const crew = dclass > 1 ? `one of the ${dclass} D-Class inside` : "the D-Class inside";
   if (Math.random() < risk) {
     c.dclass--;
-    log(c, `During ${what}, ${names} blinked at the same moment. The D-Class inside was killed.`, "bad");
+    log(c, `During ${what}, ${names} blinked at the same moment. SCP-173 killed ${crew}.`, "bad");
     if (Math.random() < 0.3) { startBreach(c, s, "It got past the door."); return false; }
-    return true;
-  }
-  log(c, `${what[0].toUpperCase() + what.slice(1)} done, watched by ${names}.`, "good");
+  } else log(c, `${what[0].toUpperCase() + what.slice(1)}: done, watched by ${names}.`, "good");
+  if (breach && Math.random() < breach) { startBreach(c, s, `Something went wrong during ${what}.`); return false; }
   return true;
 }
 

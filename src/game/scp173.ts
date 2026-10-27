@@ -5,18 +5,23 @@ import { DIRS, L, area, bfs, canStep, cheb, inContainer, passable, pathTo, type 
 import { rawSight, sightFrom } from "../core/sight";
 import { kill } from "./combat";
 import { STRAY_BLINK, blinkChance, prof } from "./profiles";
-import { S, canSee, computeVis, full, fx, hooks, humans, isPanicked, isTeam, log, loseSanity, occupied, reveal, seen, sleep, team } from "./state";
+import { S, canSee, computeVis, full, fx, hooks, humans, isBlind, isPanicked, isTeam, log, loseSanity, occupied, reveal, seen, sleep, team } from "./state";
 import type { Unit } from "./types";
 
 export const LUNGE = 8;
 
 export function rollBlinks() {
   const b = new Set<Unit>();
-  for (const h of humans()) if (Math.random() < (h.side === "subject" ? STRAY_BLINK : blinkChance(h))) b.add(h);
+  for (const h of humans()) {
+    if (Math.random() >= (h.side === "subject" ? STRAY_BLINK : blinkChance(h))) continue;
+    const drops = h.staring ? h.items?.find(i => i.id === "eyedrops" && i.uses > 0) : undefined;
+    if (drops) { drops.uses--; log(`${full(h)} uses eye drops and keeps staring.`, "key"); continue; }
+    b.add(h);
+  }
   return b;
 }
 // Not looking: mid-blink, eyes shut, or a team member who deliberately looked away from it.
-const eyesOpen = (h: Unit, blinked: Set<Unit>) => !blinked.has(h) && !isPanicked(h) && !(isTeam(h) && !h.staring && h.hadLos);
+const eyesOpen = (h: Unit, blinked: Set<Unit>) => !blinked.has(h) && !isPanicked(h) && !isBlind(h) && !(isTeam(h) && !h.staring && h.hadLos);
 const watchedAt = (x: number, y: number, blinked: Set<Unit>) => humans().some(h => eyesOpen(h, blinked) && sightFrom(h.x, h.y, x, y));
 
 // What SCP-173 knows: where it last saw people, and roughly where gunfire came from.

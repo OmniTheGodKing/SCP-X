@@ -7,20 +7,24 @@ import {
 import {
   DCLASS_COST, DCLASS_MONTHLY, RANKS, RANK_XP, RECRUIT_COST, advanceDay, advanceToEvent, aimOf, blinkFullOf, buyDClass,
   canBuyDClass, canHireEngineer, dayOfMonth, deployable, hireEngineer, maxSanOf, monthOf, monthlyFunding, recruit,
-  type Campaign, type Incident, type Operative,
+  type Campaign, type Incident, type Loadout, type Operative,
 } from "../campaign/campaign";
 import {
-  BREACH_WINDOW, CLEAN_EVERY, breachRisk, canClean, canMove, cleanCell, escapeChance, moveScp, occupantOf, wingOf, workRisk,
+  CLEAN_EVERY, breachRisk, breachWindow, canClean, canMove, cleanCell, escapeChance, moveScp, occupantOf, wingOf, workRisk,
   type ScpRecord,
 } from "../campaign/containment";
+import {
+  ITEMS, PROJECTS, TESTS, assign, canHireResearcher, canOrder, canTest, has, hireResearcher, order, projectLock,
+  researcherCapacity, researchersFree, runTest, unlockedItems, type Branch, type ItemId, type TestId,
+} from "../campaign/research";
 import { esc } from "./util";
 
 const MAX_SQUAD = 4, MAX_DCLASS = 4, MAX_WATCHERS = 2;
-type Tab = "command" | "site" | "personnel";
+type Tab = "command" | "site" | "research" | "personnel";
 
 export interface HubActions {
   save: () => void;
-  deploy: (inc: Incident, opIds: string[], dCount: number) => void;
+  deploy: (inc: Incident, loadouts: Loadout[], dCount: number) => void;
   newCampaign: () => void;
 }
 
@@ -32,6 +36,8 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let planning: string | null = null;
   const chosen = new Set<string>();
   const watchers = new Set<string>();
+  const gear = new Map<string, { armor: boolean; items: (ItemId | "")[] }>();
+  let flashMsg = "";
   let dCount = 2;
   let sel: { level: number; slot: number } | null = null;
   let resetArmed = 0;
@@ -58,6 +64,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <span class="pill">Funds $${c.funds}k</span>
       <span class="pill">D-Class ${c.dclass}/${dclassCapacity(c)}</span>
       <span class="pill">Engineers ${engineersFree(c)}/${c.engineers} free</span>
+      <span class="pill">Researchers ${researchersFree(c)}/${c.researchers} free</span>
       <span class="pill ${pw ? "hot" : ""}">Power ${powerUse(c)}/${powerSupply(c)}</span>
       <button class="act" id="resetBtn" type="button">New campaign</button>
     </div>
@@ -65,9 +72,11 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   <nav class="tabs" aria-label="Site-19 sections">
     ${tabBtn("command", `Command${c.incidents.length ? ` · ${c.incidents.length} open` : ""}`)}
     ${tabBtn("site", "Site-19")}
+    ${tabBtn("research", `Research${researchersFree(c) > 0 && c.researchers ? ` · ${researchersFree(c)} idle` : ""}`)}
     ${tabBtn("personnel", "Personnel")}
   </nav>
-  ${tab === "command" ? commandTab() : tab === "site" ? siteTab() : personnelTab()}
+  ${flashMsg ? `<p class="warn-box" role="status">${esc(flashMsg)}</p>` : ""}
+  ${tab === "command" ? commandTab() : tab === "site" ? siteTab() : tab === "research" ? researchTab() : personnelTab()}
   ${c.over ? `<div class="overlay fixed"><div class="sheet">
     <div class="stampmark lose">Command relieved</div>
     <h3>Site-19 has fallen.</h3>
@@ -145,6 +154,8 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <div class="pick">${ops.length ? ops.map(o => `<label class="pickop ${chosen.has(o.id) ? "on" : ""}">
         <input type="checkbox" id="pick-${o.id}" data-pick="${o.id}" ${chosen.has(o.id) ? "checked" : ""} ${!chosen.has(o.id) && chosen.size >= MAX_SQUAD ? "disabled" : ""}>
         <span><b>${esc(o.call)} ${esc(o.name)}</b> · ${RANKS[o.rank]} · SAN ${o.san}/${maxSanOf(o)}</span></label>`).join("") : `<p class="muted">Nobody is fit to deploy. Wait for the wounded to heal or recruit.</p>`}</div>
+      ${chosen.size ? `<div class="loadouts"><div class="specs">Loadout: one armor slot and two item slots each. Unused items come back; gear on anyone killed is lost.</div>
+        ${[...chosen].map(id => loadoutRow(c.roster.find(o => o.id === id)!)).join("")}</div>` : ""}
       <div class="row dpick">
         <span>D-Class work detail</span>
         <button class="act" type="button" id="dMinus" ${dCount <= 0 ? "disabled" : ""}>−</button>
@@ -156,6 +167,106 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         <button class="act primary" type="button" id="launchBtn" ${chosen.size ? "" : "disabled"}>Deploy ${plural(chosen.size, "operative")} and ${dCount} D-Class</button>
         <button class="act" type="button" id="cancelPlan">Cancel</button>
       </div>
+    </div>`;
+  }
+
+  function gearOf(id: string) {
+    let g = gear.get(id);
+    if (!g) { g = { armor: false, items: ["", ""] }; gear.set(id, g); }
+    return g;
+  }
+  /** How many of an item are left in storage once everyone else's loadout is counted. */
+  function spare(item: ItemId, exceptOp: string, exceptSlot = -1) {
+    let used = 0;
+    for (const id of chosen) {
+      const g = gearOf(id);
+      if (item === "armor") { if (g.armor && id !== exceptOp) used++; continue; }
+      g.items.forEach((it, i) => { if (it === item && !(id === exceptOp && i === exceptSlot)) used++; });
+    }
+    return (c.inventory[item] || 0) - used;
+  }
+  function loadoutRow(o: Operative) {
+    const g = gearOf(o.id);
+    const carry = (Object.keys(ITEMS) as ItemId[]).filter(i => !ITEMS[i].armor && ((c.inventory[i] || 0) > 0));
+    const slot = (i: number) => `<select id="gear-${o.id}-${i}" data-gear="${o.id}" data-slot-i="${i}" aria-label="${esc(o.name)} item slot ${i + 1}">
+      <option value="">Empty slot</option>
+      ${carry.map(it => { const left = spare(it, o.id, i); return `<option value="${it}" ${g.items[i] === it ? "selected" : ""} ${left < 1 && g.items[i] !== it ? "disabled" : ""}>${ITEMS[it].name} (${Math.max(0, left)} left)</option>`; }).join("")}
+    </select>`;
+    const armorLeft = spare("armor", o.id);
+    return `<div class="loadrow"><b>${esc(o.call)} ${esc(o.name)}</b>
+      <label class="armorpick"><input type="checkbox" id="armor-${o.id}" data-armor="${o.id}" ${g.armor ? "checked" : ""} ${!g.armor && armorLeft < 1 ? "disabled" : ""}> Body armor${(c.inventory.armor || 0) ? ` (${Math.max(0, armorLeft - (g.armor ? 1 : 0))} spare)` : " (none built)"}</label>
+      ${slot(0)}${slot(1)}</div>`;
+  }
+
+  // ---------- Research ----------
+  function researchTab() {
+    const branches: Branch[] = ["SCP-173", "Personnel", "Equipment", "Site"];
+    const rw = canHireResearcher(c);
+    const s = scp173();
+    return `<div class="hubgrid">
+    <section class="col">
+      <div class="card">
+        <div class="label">Research · ${c.researchers} researchers, ${researchersFree(c)} unassigned · lab space for ${researcherCapacity(c)}</div>
+        <p class="muted">Put researchers on any projects you like; each one adds a day of work per day. A project's cost is paid when work starts.</p>
+        <div class="row"><button class="act" id="hireResBtn" type="button" ${rw ? `disabled title="${esc(rw)}"` : ""}>Hire researcher · $60k</button>${rw ? `<span class="muted">${esc(rw)}</span>` : ""}</div>
+      </div>
+      ${branches.map(b => `<div class="card"><div class="label">${b}</div><div class="projects">${Object.keys(PROJECTS).filter(id => PROJECTS[id].branch === b).map(projectRow).join("")}</div></div>`).join("")}
+    </section>
+    <section class="col">
+      <div class="file">
+        <div class="label">Tests on ${s.name}</div>
+        <h2>Test log</h2>
+        <p>Tests fill in ${s.name}'s file and open new research. A D-Class goes in while operatives watch; riskier tests multiply the chance someone dies, and some can end in a breach.</p>
+        ${(Object.keys(TESTS) as TestId[]).map(t => testRow(t)).join("")}
+        ${watcherPicker()}
+      </div>
+      ${workshopCard()}
+    </section>
+  </div>`;
+  }
+
+  function projectRow(id: string) {
+    const p = PROJECTS[id], r = c.research, n = r.assigned[id] || 0, prog = r.progress[id] || 0;
+    const done = has(c, id), lock = done ? null : projectLock(c, id);
+    const eta = n ? Math.ceil((p.days - prog) / n) : null;
+    const status = done ? `<span class="flag">Done</span>` : lock ? `<span class="flag bad">Locked</span>`
+      : n ? `<span class="flag stare">${plural(n, "researcher")} · ${plural(eta!, "day")} left</span>` : prog ? `<span class="flag">Paused</span>` : "";
+    return `<div class="proj ${done ? "done" : ""} ${lock ? "locked" : ""}">
+      <div class="ptop"><b>${esc(p.name)}</b>${status}</div>
+      <div class="muted">${esc(p.desc)}</div>
+      ${done ? "" : `<div class="pbar"><div class="exp-bar"><span style="width:${Math.min(100, (prog / p.days) * 100)}%"></span></div><span class="specs">${prog}/${p.days} researcher-days${r.paid.includes(id) ? "" : ` · $${p.cost}k to start`}</span></div>`}
+      ${lock ? `<div class="why">${esc(lock)}</div>` : done ? "" : `<div class="row assign">
+        <button class="act" type="button" data-unassign="${id}" ${n ? "" : "disabled"} aria-label="Remove a researcher">−</button>
+        <b>${n}</b>
+        <button class="act" type="button" data-assign="${id}" ${researchersFree(c) < 1 ? "disabled" : ""} aria-label="Add a researcher">+</button>
+      </div>`}
+    </div>`;
+  }
+
+  function testRow(t: TestId) {
+    const d = TESTS[t], why = canTest(c, scp173(), t), done = c.research.tests.includes(t);
+    const opens = Object.values(PROJECTS).filter(p => p.needsTest === t).map(p => p.name).join(", ");
+    const w = watchPool().filter(o => watchers.has(o.id));
+    const death = Math.min(0.95, workRisk(w) * d.risk);
+    return `<div class="test ${done ? "done" : ""}">
+      <div class="ptop"><b>${esc(d.name)}</b>${done ? `<span class="flag">Done</span>` : ""}</div>
+      <p>${esc(d.desc)}</p>
+      <div class="specs">${d.dclass} D-Class · death risk ×${d.risk} (${pctText(death)} with current watchers)${d.breach ? ` · ${pctText(d.breach)} chance of a breach` : ""} · opens ${esc(opens)}</div>
+      ${done ? "" : `<div class="row"><button class="act" type="button" data-test="${t}" ${why ? `disabled title="${esc(why)}"` : ""}>Run the test</button>${why ? `<span>${esc(why)}</span>` : ""}</div>`}
+    </div>`;
+  }
+
+  function workshopCard() {
+    const items = unlockedItems(c);
+    return `<div class="card">
+      <div class="label">Workshop</div>
+      ${items.length ? `<div class="projects">${items.map(i => {
+        const d = ITEMS[i], why = canOrder(c, i), queued = c.orders.filter(o => o.item === i).length;
+        return `<div class="proj"><div class="ptop"><b>${esc(d.name)}</b><span class="flag">${c.inventory[i] || 0} in storage${queued ? ` · ${queued} being built` : ""}</span></div>
+          <div class="muted">${esc(d.desc)}</div>
+          <div class="row"><button class="act" type="button" data-order="${i}" ${why ? `disabled title="${esc(why)}"` : ""}>Build · $${d.cost}k · ${plural(d.days, "day")} · 1 engineer</button>${why ? `<span class="muted">${esc(why)}</span>` : ""}</div></div>`;
+      }).join("")}</div>` : `<p class="muted">Nothing to build yet. Equipment research unlocks items here.</p>`}
+      ${c.orders.length ? `<div class="specs">In production: ${c.orders.map(o => `${ITEMS[o.item].name} (${plural(o.daysLeft, "day")})`).join(", ")}</div>` : ""}
     </div>`;
   }
 
@@ -242,7 +353,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <div class="riskline"><b>Breach risk ${pctText(r.p)} a day</b></div>
       <ul class="why">${r.why.map(w => `<li>${esc(w)}</li>`).join("")}</ul>
       <div class="maint"><span>Maintenance ${s.maintenance}%</span><div class="exp-bar"><span style="width:${s.maintenance}%"></span></div></div>
-      <p>Its cell must be cleaned every ${CLEAN_EVERY} days: a D-Class goes in while others keep their eyes on it. Next cleaning ${due > 0 ? `in ${plural(due, "day")}` : "<b>overdue</b>"}. If a breach starts, you have ${BREACH_WINDOW} days to answer.</p>
+      <p>Its cell must be cleaned every ${CLEAN_EVERY} days: a D-Class goes in while others keep their eyes on it. Next cleaning ${due > 0 ? `in ${plural(due, "day")}` : "<b>overdue</b>"}. If a breach starts, you have ${breachWindow(c)} days to answer.</p>
       ${watcherPicker()}
       <div class="row"><button class="act primary" id="cleanBtn" type="button" ${cw ? `disabled title="${esc(cw)}"` : ""}>Clean the cell · 1 D-Class</button>${cw ? `<span>${esc(cw)}</span>` : ""}</div>
     </div>`;
@@ -272,7 +383,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     <section class="col">
       <div class="card">
         <div class="label">Site staff</div>
-        <p>D-Class in holding: <b>${c.dclass}</b> of ${dclassCapacity(c)} barracks spaces. Engineers: <b>${c.engineers}</b>, ${engineersFree(c)} free.</p>
+        <p>D-Class in holding: <b>${c.dclass}</b> of ${dclassCapacity(c)} barracks spaces. Engineers: <b>${c.engineers}</b>, ${engineersFree(c)} free. Researchers: <b>${c.researchers}</b> (hire them on the Research tab).</p>
         <div class="row">
           <button class="act" id="dBuyBtn" type="button" ${dWhy || c.over ? `disabled title="${esc(dWhy || "")}"` : ""}>Request 2 D-Class · $${DCLASS_COST * 2}k</button>
           <button class="act" id="engBtn" type="button" ${eWhy || c.over ? `disabled title="${esc(eWhy || "")}"` : ""}>Hire engineer · $${ENGINEER_COST}k</button>
@@ -315,8 +426,20 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     const chosenWatchers = () => watchPool().filter(o => watchers.has(o.id));
 
     root.querySelectorAll<HTMLElement>("[data-tab],[data-goto]").forEach(b => b.onclick = () => {
+      flashMsg = "";
       tab = (b.dataset.tab || b.dataset.goto) as Tab;
       try { localStorage.setItem("site19-tab", tab); } catch { /* fine */ }
+      render();
+    });
+    const tryDo = (f: () => string | null | void) => { const why = f(); flashMsg = why || ""; act.save(); render(); };
+    on("hireResBtn", () => change(() => hireResearcher(c)));
+    root.querySelectorAll<HTMLElement>("[data-assign]").forEach(b => b.onclick = () => tryDo(() => assign(c, b.dataset.assign!, 1)));
+    root.querySelectorAll<HTMLElement>("[data-unassign]").forEach(b => b.onclick = () => tryDo(() => assign(c, b.dataset.unassign!, -1)));
+    root.querySelectorAll<HTMLElement>("[data-test]").forEach(b => b.onclick = () => change(() => runTest(c, scp173(), b.dataset.test as TestId, chosenWatchers())));
+    root.querySelectorAll<HTMLElement>("[data-order]").forEach(b => b.onclick = () => change(() => order(c, b.dataset.order as ItemId)));
+    root.querySelectorAll<HTMLInputElement>("[data-armor]").forEach(b => b.onchange = () => { gearOf(b.dataset.armor!).armor = b.checked; render(); });
+    root.querySelectorAll<HTMLSelectElement>("[data-gear]").forEach(b => b.onchange = () => {
+      gearOf(b.dataset.gear!).items[Number(b.dataset.slotI)] = b.value as ItemId | "";
       render();
     });
     on("dayBtn", () => change(() => advanceDay(c)));
@@ -358,7 +481,12 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     on("cancelPlan", () => { planning = null; render(); });
     on("launchBtn", () => {
       const inc = c.incidents.find(i => i.id === planning);
-      if (inc && chosen.size) act.deploy(inc, [...chosen], dCount);
+      if (!inc || !chosen.size) return;
+      const loadouts: Loadout[] = [...chosen].map(id => {
+        const g = gearOf(id);
+        return { opId: id, armor: g.armor, items: g.items.filter((i): i is ItemId => !!i) };
+      });
+      act.deploy(inc, loadouts, dCount);
     });
     on("resetBtn", () => {
       const b = $("resetBtn")!;

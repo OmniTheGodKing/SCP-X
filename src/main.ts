@@ -31,8 +31,8 @@ function showHub() {
   mountHub(root, campaign, {
     save: () => saveCampaign(campaign),
     newCampaign: () => { clearCampaign(); campaign = newCampaign(); saveCampaign(campaign); showHub(); },
-    deploy: (inc, opIds, dCount) => {
-      const setup = buildSetup(campaign, inc, opIds, dCount);
+    deploy: (inc, loadouts, dCount) => {
+      const setup = buildSetup(campaign, inc, loadouts, dCount);
       saveCampaign(campaign);
       createMission(WING_C, setup);
       mountMission(root, showHub, result => {

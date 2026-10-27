@@ -62,8 +62,10 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
     const crit = Math.random() * 100 < info.crit;
     let dmg = sh.side === "mtf" ? rand(3, 4) : rand(2, 3);
     if (crit) dmg += 2;
-    fx({ type: "text", x: x1, y: y1 - 14, text: crit ? `${dmg}!` : `${dmg}`, color: crit ? "#f0c060" : "#ffffff", dur: 900 });
-    if (visibleShot) log(`${reaction ? "Overwatch: " : ""}${full(sh)} hits ${full(tg)} for ${dmg}${crit ? ", critical" : ""} (${info.chance}%).`, sh.side === "mtf" ? "good" : "bad");
+    const soak = Math.min(tg.armor ?? 0, dmg);   // each armor point cuts the hit by 1
+    dmg -= soak;
+    fx({ type: "text", x: x1, y: y1 - 14, text: (crit ? `${dmg}!` : `${dmg}`) + (soak ? ` (−${soak})` : ""), color: crit ? "#f0c060" : "#ffffff", dur: 900 });
+    if (visibleShot) log(`${reaction ? "Overwatch: " : ""}${full(sh)} hits ${full(tg)} for ${dmg}${crit ? ", critical" : ""}${soak ? `; armor absorbed ${soak}` : ""} (${info.chance}%).`, sh.side === "mtf" ? "good" : "bad");
     damage(tg, dmg, sh);
   } else {
     fx({ type: "text", x: x1, y: y1 - 14, text: "miss", color: "#8b939b", dur: 800 });
@@ -74,6 +76,7 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
 }
 
 export function damage(u: Unit, dmg: number, by?: Unit) {
+  if (dmg <= 0) return;
   u.hp -= dmg;
   if (u.hp <= 0) { kill(u); if (by) by.kills++; return; }
   if (isTeam(u)) loseSanity(u, 5);

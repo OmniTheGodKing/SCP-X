@@ -135,7 +135,7 @@ Regions with their own exposure and a Foundation cover-up front.
 |---|---|
 | 1 (done) | Days, funding, exposure, incidents, roster with ranks, D-Class holding, deployment, saves |
 | 2A (done) | Base building, containment cells, breaches inside Site-19, escapes (escaped anomalies go dark and resurface; manhunts wait for the world map) |
-| 2B | Research tree and equipment |
+| 2B (done) | Research labs and researchers assigned freely across projects, three tests on SCP-173, 15 projects, a workshop, and loadouts: an armor slot (XCOM 2 style: HP plus armor points) and two item slots |
 | 2C | Classes, perk choices, traits, psychological services |
 | 2D | World map, manhunts, field recovery, cover-ups |
 | 2E | O5 orders and standing, Insurgency threat and raids, endgame |

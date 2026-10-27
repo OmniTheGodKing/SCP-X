@@ -19,6 +19,7 @@ export const alive = (side: Unit["side"]) => S.units.filter(u => u.side === side
 export const team = () => S.units.filter(u => isTeam(u) && u.alive && !u.saved);
 export const humans = () => S.units.filter(u => u.alive && !u.saved && u.side !== "anomaly");
 export const isPanicked = (u: Unit) => (u.side === "mtf" || u.side === "raider") && u.panicUntil >= S.turn;
+export const isBlind = (u: Unit) => (u.blindUntil ?? -1) >= S.turn;
 export const unitAt = (x: number, y: number) => S.units.find(u => u.alive && !u.saved && u.x === x && u.y === y);
 export const occupied = (x: number, y: number, except?: Unit) =>
   S.units.some(u => u !== except && u.alive && !u.saved && u.x === x && u.y === y);
@@ -52,7 +53,7 @@ export function computeVis() {
   const { W, H } = L;
   S.vis.fill(0);
   for (const m of team()) {
-    if (isPanicked(m)) continue;
+    if (isPanicked(m) || isBlind(m)) continue;
     for (let y = Math.max(0, m.y - R); y <= Math.min(H - 1, m.y + R); y++)
       for (let x = Math.max(0, m.x - R); x <= Math.min(W - 1, m.x + R); x++)
         if (!S.vis[y * W + x] && sightFrom(m.x, m.y, x, y)) S.vis[y * W + x] = 1;
@@ -69,7 +70,7 @@ export function computeVis() {
 function updateStares() {
   const st = S.statue;
   for (const m of team()) {
-    const pan = isPanicked(m);
+    const pan = isPanicked(m) || isBlind(m);
     const eyes = !S.sealed && !pan && canSee(m, st.x, st.y);
     if (m.staring && !eyes) {
       m.staring = false;

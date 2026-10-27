@@ -1,10 +1,11 @@
 // Site-19 between missions: the roster, time passing, funding, public exposure and incidents.
 import type { MissionResult, MissionSetup } from "../game/types";
 import {
-  ENGINEER_COST, MAX_ENGINEERS, dclassCapacity, healPerDay, monthlyUpkeep, sanityPerDay, startingBase, tickConstruction,
+  ENGINEER_COST, engineerCapacity, dclassCapacity, healPerDay, monthlyUpkeep, sanityPerDay, startingBase, tickConstruction,
   type Base,
 } from "./base";
 import { CLEAN_EVERY, resolveScp, startingScps, tickContainment, type ScpRecord } from "./containment";
+import { ARMOR, ITEMS, has, newResearch, tickResearch, type ItemId, type Order, type ResearchState } from "./research";
 
 export const RANKS = ["Operative", "Specialist", "Sergeant", "Lieutenant", "Captain"];
 export const RANK_XP = [0, 3, 7, 12, 18];
@@ -42,13 +43,21 @@ export interface Incident {
 
 export interface SiteLogEntry { day: number; text: string; kind: string; }
 
+export interface Loadout { opId: string; armor: boolean; items: ItemId[]; }
+
 export interface Campaign {
-  version: 2;
+  version: 3;
   day: number;
   funds: number;
   exposure: number;
   dclass: number;
   engineers: number;
+  researchers: number;
+  research: ResearchState;
+  inventory: Partial<Record<ItemId, number>>;
+  orders: Order[];
+  /** Field notes on SCP-173 the Foundation has confirmed, carried into every mission. */
+  knownNotes: string[];
   nextD: number;
   nextOp: number;
   nextIncident: number;
@@ -87,7 +96,8 @@ export function newCampaign(): Campaign {
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
-    version: 2, day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, nextD: 9101, nextOp: 1, nextIncident: 1,
+    version: 3, day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
+    inventory: {}, orders: [], knownNotes: [], nextD: 9101, nextOp: 1, nextIncident: 1,
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
   };
   for (let i = 0; i < 6; i++) c.roster.push(newOperative(c));
@@ -105,6 +115,7 @@ export function advanceDay(c: Campaign) {
   const incidentsBefore = c.incidents.length, logBefore = c.log.length;
   c.day++;
   for (const line of tickConstruction(c)) log(c, line, "good");
+  tickResearch(c);
   const heal = healPerDay(c), calm = sanityPerDay(c);
   for (const o of c.roster) if (o.alive) {
     o.hp = Math.min(o.maxHp, o.hp + heal);
@@ -156,23 +167,40 @@ export function buyDClass(c: Campaign) {
 }
 
 export const canHireEngineer = (c: Campaign) =>
-  c.funds < ENGINEER_COST ? `Needs $${ENGINEER_COST}k.` : c.engineers >= MAX_ENGINEERS ? `Site-19 can house ${MAX_ENGINEERS} engineers.` : null;
+  c.funds < ENGINEER_COST ? `Needs $${ENGINEER_COST}k.` : c.engineers >= engineerCapacity(c) ? `Site-19 can house ${engineerCapacity(c)} engineers. A workshop adds room for 4 more.` : null;
 export function hireEngineer(c: Campaign) {
   if (canHireEngineer(c)) return;
   c.funds -= ENGINEER_COST; c.engineers++;
   log(c, "An engineer joins the site staff.");
 }
 
-export function buildSetup(c: Campaign, inc: Incident, opIds: string[], dCount: number): MissionSetup {
-  const squad = opIds.map(id => c.roster.find(o => o.id === id)!).map(o => ({
-    opId: o.id, name: o.name, call: o.call, hp: o.hp, maxHp: o.maxHp, san: Math.min(o.san, maxSanOf(o)),
-    maxSan: maxSanOf(o), aim: aimOf(o), blinkFull: blinkFullOf(o),
-  }));
+export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCount: number): MissionSetup {
+  const take = (i: ItemId) => { c.inventory[i] = (c.inventory[i] || 0) - 1; };
+  const squad = loadouts.map(l => {
+    const o = c.roster.find(x => x.id === l.opId)!;
+    if (l.armor) take("armor");
+    l.items.forEach(take);
+    const bonus = l.armor ? ARMOR.hp : 0;
+    return {
+      opId: o.id, name: o.name, call: o.call, hp: o.hp + bonus, maxHp: o.maxHp + bonus, san: Math.min(o.san, maxSanOf(o)),
+      maxSan: maxSanOf(o), aim: aimOf(o) + (has(c, "marksmanship") ? 5 : 0), blinkFull: blinkFullOf(o),
+      armor: l.armor ? ARMOR.points : 0, hasArmor: l.armor, items: l.items.map(id => ({ id, uses: ITEMS[id].uses ?? 1 })),
+    };
+  });
   const dclass: string[] = [];
   for (let i = 0; i < dCount; i++) dclass.push("D-" + c.nextD++);
   c.dclass -= dCount;
   c.activeIncident = inc.id;
-  return { incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: inc.insurgents, squad, dclass };
+  return {
+    incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: inc.insurgents, squad, dclass,
+    known: [...c.knownNotes],
+    mods: {
+      blinkBonus: has(c, "blink_cadence") ? 0.02 : 0,
+      recoverBonus: has(c, "trauma_counseling") ? 3 : 0,
+      mtfDrag: has(c, "powered_jack") ? 2 : 1,
+      track173: has(c, "movement_study"),
+    },
+  };
 }
 
 export interface Debrief { lines: string[]; promotions: string[]; }
@@ -193,7 +221,11 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
       lines.push(`${o.call} ${o.name} was killed in action.`);
       continue;
     }
-    o.hp = s.hp; o.san = s.san; o.kills += s.kills;
+    // armor soaks wounds first; gear comes home with whoever survived
+    o.hp = Math.max(1, Math.min(o.maxHp, s.hp - (s.hasArmor ? ARMOR.hp : 0)));
+    o.san = s.san; o.kills += s.kills;
+    if (s.hasArmor) c.inventory.armor = (c.inventory.armor || 0) + 1;
+    for (const it of s.items) if (it.uses > 0) c.inventory[it.id] = (c.inventory[it.id] || 0) + 1;
     o.xp += 1 + (r.win ? 2 : 0) + s.kills + (s.sealed ? 1 : 0);
     const before = o.rank;
     while (o.rank < RANKS.length - 1 && o.xp >= RANK_XP[o.rank + 1]) o.rank++;
@@ -201,6 +233,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   }
 
   c.dclass += r.dReturned;
+  for (const n of r.known) if (!c.knownNotes.includes(n)) c.knownNotes.push(n);
   const recovery = inc?.kind === "recovery";
   if (r.win) {
     const bonus = recovery ? 100 : 50;

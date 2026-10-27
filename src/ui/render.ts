@@ -1,9 +1,9 @@
 // Draws the tactical map, units, sightlines, previews and effects onto the mission canvas.
-import { CONT, EXIT, FULL, HALF, L, STEEL, TS, WALL, inContainer, pathTo, tileAt, type Pt } from "../core/grid";
+import { CONT, EXIT, FULL, HALF, L, STEEL, TS, WALL, area, inContainer, passable, pathTo, tileAt, type Pt } from "../core/grid";
 import { sightFrom } from "../core/sight";
 import { center, shotInfo } from "../game/combat";
 import { S, canAct, canSee, isPanicked, isTeam, seen, team, unitAt } from "../game/state";
-import { dragOptions, moveCost, reachFor } from "../game/turn";
+import { blastArea, dragOptions, moveCost, reachFor, throwOptions } from "../game/turn";
 import type { Unit } from "../game/types";
 
 const C = {
@@ -158,10 +158,21 @@ export function createRenderer(cv: HTMLCanvasElement) {
     const st = S.statue;
     const known = !S.sealed && seen(st.x, st.y);
 
-    // reachable tiles (normal moves or drag destinations)
-    let res: ReturnType<typeof reachFor> = null, drags: Map<number, Pt[]> | null = null;
+    // Movement study: the room SCP-173 is in, even unseen
+    if (S.setup.mods.track173 && !S.sealed && !seen(st.x, st.y)) {
+      const room = area(st.x, st.y);
+      ctx.fillStyle = "rgba(215,91,71,0.13)";
+      for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) if (passable(x, y) && area(x, y) === room) ctx.fillRect(x * TS, y * TS, TS, TS);
+    }
+
+    // reachable tiles (normal moves, drag destinations, or grenade targets)
+    let res: ReturnType<typeof reachFor> = null, drags: Map<number, Pt[]> | null = null, throws: Set<number> | null = null;
     if (playing && sel && sel.ap > 0) {
-      if (S.mode === "drag") {
+      if (S.mode === "throw") {
+        throws = throwOptions(sel);
+        ctx.fillStyle = "rgba(242,230,201,0.12)";
+        for (const i of throws) ctx.fillRect((i % L.W) * TS + 1, ((i / L.W) | 0) * TS + 1, TS - 2, TS - 2);
+      } else if (S.mode === "drag") {
         drags = dragOptions(sel);
         ctx.fillStyle = "rgba(224,132,63,0.3)";
         for (const i of drags.keys()) ctx.fillRect((i % L.W) * TS + 1, ((i / L.W) | 0) * TS + 1, TS - 2, TS - 2);
@@ -196,6 +207,26 @@ export function createRenderer(cv: HTMLCanvasElement) {
       drawUnit(u);
     }
 
+    // smoke
+    for (const s of S.smoke) {
+      const cx = s.x * TS + TS / 2, cy = s.y * TS + TS / 2;
+      ctx.fillStyle = "rgba(170,178,186,0.55)";
+      for (const [ox, oy, r] of [[-6, -4, 11], [6, -2, 10], [0, 6, 12]]) { ctx.beginPath(); ctx.arc(cx + ox, cy + oy, r, 0, Math.PI * 2); ctx.fill(); }
+    }
+
+    // motion trackers: anything within 6 tiles of a carrier shows as a blip, walls or not
+    const carriers = team().filter(u => u.side === "mtf" && u.items?.some(i => i.id === "tracker"));
+    if (carriers.length) {
+      const pulse = 0.5 + 0.5 * Math.sin(now / 250);
+      for (const u of S.units) {
+        if (!u.alive || u.saved || isTeam(u) || seen(u.x, u.y) || (u === st && S.sealed)) continue;
+        if (!carriers.some(cr => Math.max(Math.abs(cr.x - u.x), Math.abs(cr.y - u.y)) <= 6)) continue;
+        const [cx, cy] = center(u);
+        ctx.strokeStyle = u === st ? C.alert : C.manila; ctx.lineWidth = 2; ctx.globalAlpha = 0.5 + pulse * 0.5;
+        ctx.beginPath(); ctx.arc(cx, cy, 6 + pulse * 4, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
+      }
+    }
+
     if (sel && sel.alive) {
       const [cx, cy] = center(sel);
       ctx.strokeStyle = C.manila; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]); ctx.lineDashOffset = -now / 60;
@@ -206,7 +237,14 @@ export function createRenderer(cv: HTMLCanvasElement) {
     const hv = S.hover;
     if (playing && sel && hv) {
       const tu = unitAt(hv.x, hv.y);
-      if (drags) {
+      if (throws) {
+        if (throws.has(hv.y * L.W + hv.x)) {
+          ctx.strokeStyle = S.throwing?.id === "smoke" ? "#aab2ba" : "#fff8e0"; ctx.lineWidth = 2;
+          for (const [x, y] of blastArea(hv.x, hv.y)) ctx.strokeRect(x * TS + 2, y * TS + 2, TS - 4, TS - 4);
+          const caught = team().filter(u => blastArea(hv.x, hv.y).some(([a, b]) => a === u.x && b === u.y));
+          if (S.throwing?.id === "flashbang" && caught.length) tag(`BLINDS ${caught.map(u => u.call || u.name).join(", ")}`, hv.x * TS + TS / 2, hv.y * TS - 20, C.alert);
+        }
+      } else if (drags) {
         const path = drags.get(hv.y * L.W + hv.x);
         if (path) {
           drawPath(center(sel), path, C.subject);
@@ -258,8 +296,11 @@ export function createRenderer(cv: HTMLCanvasElement) {
       } else if (e.type === "text") {
         ctx.globalAlpha = 1 - k; ctx.fillStyle = e.color; ctx.font = "600 13px IBM Plex Mono, monospace"; ctx.textAlign = "center";
         ctx.fillText(e.text, e.x, e.y - k * 14); ctx.globalAlpha = 1;
-      } else {
+      } else if (e.type === "ghost") {
         drawStatue(e.x, e.y, 0.5 * (1 - k));
+      } else {
+        ctx.globalAlpha = 1 - k; ctx.fillStyle = "#fff8e0";
+        ctx.beginPath(); ctx.arc(e.x, e.y, TS * (0.6 + k * 1.2), 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
       }
     }
   };

@@ -2,14 +2,21 @@
 // blocked site data), so every access is guarded and the game still runs without it.
 import type { Campaign } from "./campaign";
 
+import { newResearch } from "./research";
+
 const KEY = "site19-campaign-v2";
 
+/** Loads the saved campaign, bringing older saves up to date. Pass-one saves (v1) can't be carried over. */
 export function loadCampaign(): Campaign | null {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
-    const c = JSON.parse(raw) as Campaign;
-    return c && c.version === 2 ? c : null;
+    const c = JSON.parse(raw) as { version: number } | null;
+    if (!c) return null;
+    if (c.version === 2) {
+      Object.assign(c, { version: 3, researchers: 0, research: newResearch(), inventory: {}, orders: [], knownNotes: [] });
+    }
+    return c.version === 3 ? (c as unknown as Campaign) : null;
   } catch {
     return null;
   }

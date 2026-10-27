@@ -26,6 +26,6 @@ export const prof = (u: Unit): Profile =>
 export const maxSanOf = (u: Unit) => u.maxSan ?? prof(u).maxSan;
 export const blinkChance = (u: Unit) => {
   const p = prof(u), full = u.blinkFull ?? p.blinkFull;
-  return full + (p.blinkZero - full) * (1 - u.san / maxSanOf(u));
+  return Math.max(0.01, full + (p.blinkZero - full) * (1 - u.san / maxSanOf(u)) - (u.staring ? u.blinkMod ?? 0 : 0));
 };
 export const pct = (p: number) => p < 0.001 ? "<0.1%" : p < 0.01 ? (p * 100).toFixed(1) + "%" : Math.round(p * 100) + "%";

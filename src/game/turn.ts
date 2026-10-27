@@ -1,6 +1,6 @@
 // Player actions and the turn cycle: your move, SCP-173, the Insurgency, then loose D-Class.
-import { L, TS, cheb, inContainer, nearContainer, pathTo, bfs, canStep, DIRS, type Pt } from "../core/grid";
-import { sightFrom } from "../core/sight";
+import { L, TS, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, DIRS, type Pt } from "../core/grid";
+import { setSmoke, sightFrom } from "../core/sight";
 import { fire, moveUnit } from "./combat";
 import { recruitStrays, subjectPhase } from "./dclass";
 import { insurgentsStare, raiderPhase } from "./insurgency";
@@ -26,6 +26,7 @@ export function reachFor(u: Unit | null) {
   return bfs([[u.x, u.y]], u.ap * move, (x, y) => occupied(x, y, u));
 }
 export const moveCost = (u: Unit, d: number) => d <= prof(u).move ? 1 : 2;
+const dragOf = (u: Unit) => u.side === "mtf" ? S.setup.mods.mtfDrag : prof(u).drag;
 
 // Drag: the dragger steps up to their drag distance and SCP-173 slides into the tile they
 // just left. Every position it passes through must be in sight of someone else who is staring.
@@ -40,7 +41,7 @@ export function dragOptions(u: Unit) {
     const ax = u.x + dx, ay = u.y + dy;
     if (!canStep(u.x, u.y, dx, dy) || !free(ax, ay, false)) continue;
     if (!out.has(ay * L.W + ax)) out.set(ay * L.W + ax, [[ax, ay]]);
-    if (prof(u).drag < 2 || !watched(ax, ay)) continue;
+    if (dragOf(u) < 2 || !watched(ax, ay)) continue;
     for (const [ex, ey] of DIRS) {
       const bx = ax + ex, by = ay + ey;
       if ((bx === u.x && by === u.y) || !canStep(ax, ay, ex, ey) || !free(bx, by, true)) continue;
@@ -88,7 +89,11 @@ export function sealCheck(u: Unit | null) {
 }
 
 export function startPlayerTurn(first: boolean) {
-  S.phase = "player"; S.called = false; S.mode = null;
+  S.phase = "player"; S.called = false; S.mode = null; S.throwing = null;
+  const smokeBefore = S.smoke.length;
+  S.smoke = S.smoke.filter(s => s.until >= S.turn);
+  setSmoke(S.smoke.map(s => [s.x, s.y]));
+  if (smokeBefore && !S.smoke.length) log("The smoke clears.");
   for (const m of team()) {
     m.overwatch = false;
     m.ap = isPanicked(m) ? 0 : m.staring ? 1 : 2;
@@ -116,14 +121,21 @@ export function selectNext() {
 export async function onTap(x: number, y: number, touch: boolean, flash: (t: string) => void) {
   if (!canAct()) return;
   const u = unitAt(x, y);
-  if (u && isTeam(u)) { select(u); return; }
   const sel = S.selected;
-  if (!sel || sel.ap < 1) return;
   const confirm = () => {
     if (!touch) return true;
     if (S.pending && S.pending.x === x && S.pending.y === y) return true;
     S.pending = { x, y }; S.hover = { x, y }; hooks.update(); return false;
   };
+  // while aiming a grenade, a click always picks the target, even on top of someone
+  if (S.mode === "throw" && S.throwing && sel) {
+    if (!throwOptions(sel).has(y * L.W + x)) { flash("Out of range or out of sight."); return; }
+    if (!confirm()) return;
+    doThrow(sel, S.throwing, x, y);
+    return;
+  }
+  if (u && isTeam(u)) { select(u); return; }
+  if (!sel || sel.ap < 1) return;
   if (S.mode === "drag") {
     const path = dragOptions(sel).get(y * L.W + x);
     if (!path) { S.mode = null; hooks.update(); return; }
@@ -251,11 +263,61 @@ export function doSeal(flash: (t: string) => void) {
   afterAction();
 }
 
+// ---------- grenades ----------
+export const THROW_RANGE = 6;
+/** Tiles the unit can throw to: within range and in sight. */
+export function throwOptions(u: Unit) {
+  const out = new Set<number>();
+  for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++)
+    if ((x - u.x) ** 2 + (y - u.y) ** 2 <= THROW_RANGE ** 2 && passable(x, y) && sightFrom(u.x, u.y, x, y)) out.add(y * L.W + x);
+  return out;
+}
+export const blastArea = (x: number, y: number): Pt[] => DIRS.concat([[0, 0]]).map(([dx, dy]) => [x + dx, y + dy] as Pt).filter(([a, b]) => passable(a, b));
+
+export function throwCheck(u: Unit | null, idx: number) {
+  if (!u || u.side !== "mtf") return "Select an operative.";
+  const it = u.items?.[idx];
+  if (!it || (it.id !== "flashbang" && it.id !== "smoke")) return "Nothing to throw in that slot.";
+  if (it.uses < 1) return "Used up.";
+  if (u.ap < 1) return "No actions left this turn.";
+  return null;
+}
+export function toggleThrow(idx: number, flash: (t: string) => void) {
+  const u = S.selected;
+  if (!canAct() || !u) return;
+  if (S.mode === "throw" && S.throwing === u.items?.[idx]) { S.mode = null; S.throwing = null; hooks.update(); return; }
+  const why = throwCheck(u, idx);
+  if (why) { flash(why); return; }
+  S.mode = "throw"; S.throwing = u.items![idx]; S.pending = null;
+  hooks.update();
+}
+
+function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y: number) {
+  item.uses--; u.ap = 0;
+  S.mode = null; S.throwing = null; S.pending = null;
+  const area = blastArea(x, y);
+  const inArea = (v: Unit) => area.some(([a, b]) => a === v.x && b === v.y);
+  if (item.id === "flashbang") {
+    fx({ type: "flash", x: x * TS + TS / 2, y: y * TS + TS / 2, dur: 700 });
+    const hit = humans().filter(inArea);
+    for (const v of hit) { v.blindUntil = S.turn; if (isTeam(v)) v.staring = false; }
+    const ours = hit.filter(isTeam), theirs = hit.filter(v => v.side === "raider");
+    log(`${full(u)} throws a flashbang.${theirs.length ? ` ${theirs.length} Insurgent${theirs.length > 1 ? "s" : ""} blinded.` : ""}${ours.length ? ` ${ours.map(label).join(", ")} ${ours.length > 1 ? "are" : "is"} blinded too.` : ""}`, ours.length ? "bad" : "good");
+    if (ours.some(v => v.hadLos)) log("Anyone blinded can't hold SCP-173 until next turn.", "bad");
+    S.mem.set("bang-" + u.id, { x, y, turn: S.turn });   // SCP-173 hears it
+  } else {
+    for (const [a, b] of area) S.smoke.push({ x: a, y: b, until: S.turn + 1 });
+    setSmoke(S.smoke.map(s => [s.x, s.y]));
+    log(`${full(u)} throws smoke. Nothing can see through it until it clears.`, "key");
+  }
+  afterAction();
+}
+
 // Quiet turns restore sanity: not staring, and no sanity lost this turn.
 function recoverSanity() {
   for (const m of team()) {
     if (m.staring || m.lostSanTurn === S.turn) continue;
-    m.san = Math.min(maxSanOf(m), m.san + prof(m).recover);
+    m.san = Math.min(maxSanOf(m), m.san + prof(m).recover + (m.side === "mtf" ? S.setup.mods.recoverBonus : 0));
   }
 }
 
