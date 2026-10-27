@@ -84,6 +84,8 @@ export interface Unit {
   /** Carrying a downed ally or a body, or being carried. */
   carrying?: string;
   carriedBy?: string;
+  /** The Insurgency fire team this unit belongs to. */
+  pod?: number;
   /** Hunkered down: cover counts double through this turn. */
   hunkerUntil?: number;
   /** Pulled into SCP-106's pocket dimension; whether they come back is decided when the mission ends. */
@@ -241,6 +243,9 @@ export interface MissionState {
   explored: Uint8Array;
   lastSeen: { x: number; y: number; turn: number } | null;
   raidersActive: boolean;
+  /** XCOM-style concealment for the team, and which Insurgency pods have been alerted. */
+  concealed: boolean;
+  activePods: number[];
   mem: Map<string, Mem>;
   checked: Set<string>;
   known: Set<string>;

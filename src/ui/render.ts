@@ -8,6 +8,7 @@ import { abilityTargets } from "../game/abilities";
 import type { Unit } from "../game/types";
 import { MAPS } from "../data/maps";
 import { escaping } from "../game/scp173";
+import { DETECT } from "../game/insurgency";
 import { freshBodies, isCalm, isStaggered, leadOptions } from "../game/scp049";
 import { isFeeding } from "../game/scp106";
 
@@ -175,12 +176,13 @@ export function createRenderer(cv: HTMLCanvasElement) {
       ctx.strokeStyle = "#0f1317"; ctx.lineWidth = 2; ctx.stroke();
       ctx.fillStyle = "#0f1317"; ctx.font = "600 11px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText(pan ? "––" : String(u.slot ?? ""), cx, cy + 1);
+      if (S.concealed) { ctx.strokeStyle = C.ok; ctx.lineWidth = 1.5; ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.arc(cx, cy, 14, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); }
       if (u.overwatch) {
         ctx.strokeStyle = C.manila; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(cx, cy, 14, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke();
       }
     } else if (u.side === "raider") {
-      ctx.fillStyle = u.downed ? "#5d5266" : C.raider;
+      ctx.fillStyle = u.downed ? "#5d5266" : S.activePods.includes(u.pod ?? 0) ? C.raider : "#8a74a0";
       ctx.beginPath(); ctx.moveTo(cx, cy - 12); ctx.lineTo(cx + 11, cy); ctx.lineTo(cx, cy + 12); ctx.lineTo(cx - 11, cy); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = "#0f1317"; ctx.lineWidth = 2; ctx.stroke();
     } else if (u.side === "civilian") {
@@ -246,6 +248,14 @@ export function createRenderer(cv: HTMLCanvasElement) {
       for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) if (passable(x, y) && area(x, y) === room) ctx.fillRect(x * TS, y * TS, TS, TS);
     }
 
+    // concealment: where unalerted Insurgents would notice the team
+    if (S.concealed) {
+      ctx.fillStyle = "rgba(215,91,71,0.16)";
+      for (const r of S.units.filter(u => u.side === "raider" && u.alive && !u.downed && !S.activePods.includes(u.pod ?? 0) && seen(u.x, u.y))) {
+        for (let y = r.y - DETECT; y <= r.y + DETECT; y++) for (let x = r.x - DETECT; x <= r.x + DETECT; x++)
+          if (x >= 0 && y >= 0 && x < L.W && y < L.H && passable(x, y) && sightFrom(r.x, r.y, x, y, DETECT)) ctx.fillRect(x * TS + 1, y * TS + 1, TS - 2, TS - 2);
+      }
+    }
     // floor rotted by SCP-106
     if (S.has106) {
       ctx.fillStyle = "rgba(28,22,14,0.55)";

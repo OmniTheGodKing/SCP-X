@@ -6,14 +6,14 @@ import { TYPES } from "../data/weapons";
 import { abilityTargets, useAbility } from "./abilities";
 import { hasPerk, rangeOf, spend, usesLeft } from "./perks";
 import { gatherResearchers, subjectPhase } from "./dclass";
-import { insurgentsStare, raiderPhase } from "./insurgency";
+import { insurgentsStare, raiderPhase, wakePods } from "./insurgency";
 import { entryTiles, missionResult, spawnMember } from "./mission";
 import { maxSanOf, prof } from "./profiles";
 import { release, rollBlinks } from "./scp173";
 import { leadOptions, leadTo, plaguePhase, zombiePhase } from "./scp049";
 import { oldManPhase } from "./scp106";
 import {
-  S, alive, canAct, canSee, computeVis, full, fx, hooks, humans, isPanicked, isTeam, label, log, loseSanity,
+  S, alive, breakConcealment, canAct, canSee, computeVis, full, fx, hooks, humans, isPanicked, isTeam, label, log, loseSanity,
   occupied, reveal, seen, sleep, starers, team, unitAt,
 } from "./state";
 import { THROWN, type Unit } from "./types";
@@ -214,6 +214,7 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
     if (!throwOptions(sel).has(y * L.W + x)) { flash("Out of range or out of sight."); return; }
     if (!confirm()) return;
     doThrow(sel, S.throwing, x, y);
+    S.busy = true; await wakePods(); S.busy = false; afterAction();
     return;
   }
   if (u && isTeam(u) && !u.downed) { select(u); return; }
@@ -249,14 +250,16 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
     // a bayonet settles an adjacent fight without a roll or a round
     if (sel.gun?.attachment === "bayonet" && cheb(sel.x, sel.y, u.x, u.y) <= 1) {
       S.busy = false; sel.ap = 0;
+      breakConcealment("a bayonet attack");
       log(`${full(sel)} drives the bayonet home (3 damage).`, "good");
       fx({ type: "text", x: u.x * TS + TS / 2, y: u.y * TS - 2, text: "3", color: "#ffffff", dur: 800 });
-      damage(u, 3, sel); afterAction(); return;
+      damage(u, 3, sel); await wakePods(); afterAction(); return;
     }
     if (activeGun(sel)?.type === "smg") sel.ap -= 1;
     else if (hasPerk(sel, "double_tap") && sel.ap >= 2 && sel.gun?.type !== "marksman" && usesLeft(sel, "double_tap", 1) > 0) { spend(sel, "double_tap"); sel.ap = 1; log(`${full(sel)}: double tap.`, "key"); }
     else sel.ap = 0;
     await fire(sel, u, false);
+    await wakePods();
     S.busy = false; afterAction(); return;
   }
   if (u) return;
@@ -272,6 +275,7 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
   const path = pathTo(res, x, y) || [];
   setVault(false);
   await moveUnit(sel, path);
+  await wakePods();
   S.busy = false; afterAction();
 }
 
@@ -436,6 +440,7 @@ export function useItem(idx: number, flash: (t: string) => void) {
 
 function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y: number) {
   item.uses--; u.ap = 0;
+  breakConcealment(item.id === "smoke" ? "a smoke canister hissing" : "an explosion");
   S.mode = null; S.throwing = null; S.pending = null;
   const area = blastArea(x, y);
   const inArea = (v: Unit) => area.some(([a, b]) => a === v.x && b === v.y);

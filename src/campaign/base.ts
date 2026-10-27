@@ -192,6 +192,8 @@ export function tickConstruction(c: Campaign): string[] {
     const back = Math.round(FACILITIES[f.type].cost * DEMOLISH.refund);
     c.funds += back;
     done.push(`The ${nameInText(f.type)} on level ${f.level + 1} has been torn down (+$${back}k in salvage).`);
+    const moved = c.guards.filter(g => g.alive && g.stationId === f.id);
+    if (moved.length) { for (const g of moved) g.stationId = undefined; done.push(`${moved.length} guard${moved.length > 1 ? "s are" : " is"} without a post. Post them at another Security station.`); }
     // anyone it housed has to go somewhere
     if (c.dclass > dclassCapacity(c)) { done.push(`${c.dclass - dclassCapacity(c)} D-Class were transferred out for lack of beds.`); c.dclass = dclassCapacity(c); }
   }

@@ -41,6 +41,7 @@ const TEMPLATE = `
     <div class="turnbox">
       <span class="pill" id="turnPill">Turn 1</span>
       <span class="pill" id="phasePill">Your move</span>
+      <span class="pill" id="concealPill" hidden title="Insurgents haven't noticed the team. They only spot you within 4 tiles. Firing or throwing anything gives you away.">Concealed</span>
       <button class="act" id="evacBtn" type="button" title="Ends the mission. Anyone who hasn't left through an exit is left behind.">Abort mission</button>
     </div>
   </header>
@@ -145,6 +146,11 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("objRule").after(extra);
   }
   {
+    if (S.concealed) {
+      const c = document.createElement("div");
+      c.innerHTML = `<b>Concealment.</b> The team starts unseen. Insurgents who haven't been alerted only notice you within 4 tiles (red tiles show where they're looking). Firing, throwing anything or a bayonet attack gives you away. Insurgents move in fire teams: when one is alerted, the whole team dashes for cover at once, so set overwatch first for an ambush. Witnesses only run once you're seen.`;
+      $("objRule").after(c);
+    }
     const exits = document.createElement("div");
     exits.innerHTML = `<b>Exits, carrying and cover.</b> Stand on an exit tile to <b>Exfiltrate</b>; anyone you carry comes with you. <b>Pick up</b> a downed ally or a body next to you (−1 move). <b>Hunker down</b> next to cover to double it until your next turn. <b>Abort mission</b> ends it at once, and anyone who hasn't left through an exit is left behind.`;
     $("objRule").after(exits);
@@ -229,6 +235,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     const ph = { player: "Your move", anomaly: "SCP-173", hand: "Chaos Insurgency", subjects: "D-Class fleeing", over: "Incident closed" }[S.phase];
     $("phasePill").textContent = ph;
     $("phasePill").className = "pill" + (S.phase === "anomaly" ? " hot" : "");
+    $("concealPill").hidden = !S.concealed;
 
     const sc = $("statusCard"), line = $("statusLine");
     if (S.has106) {

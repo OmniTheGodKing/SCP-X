@@ -39,6 +39,14 @@ export function log(text: string, kind = "") {
   hooks.log();
 }
 
+/** Concealment ends for the whole team (XCOM style): something loud, or someone was spotted. */
+export function breakConcealment(why: string) {
+  if (!S.concealed) return;
+  S.concealed = false;
+  log(`Concealment broken: ${why}.`, "bad");
+  hooks.update();
+}
+
 export function reveal(id: string) {
   if (S.known.has(id) || !S.has173) return;
   S.known.add(id); S.fresh.add(id);

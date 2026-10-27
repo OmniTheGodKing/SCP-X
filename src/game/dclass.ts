@@ -11,6 +11,12 @@ async function civilianPhase() {
   for (const c of alive("civilian")) {
     if (c.dosed || c.carriedBy) continue;
     if (c.researcher) { await researcherMove(c); continue; }
+    if (!c.spooked && S.concealed) {
+      // nobody has noticed the team yet: civilians go about their business
+      const [dx, dy] = DIRS[Math.floor(Math.random() * DIRS.length)];
+      if (Math.random() < 0.5 && canStep(c.x, c.y, dx, dy) && !occupied(c.x + dx, c.y + dy, c)) await moveUnit(c, [[c.x + dx, c.y + dy]]);
+      continue;
+    }
     if (!c.spooked) {
       const heard = [...S.mem.entries()].some(([k, m]) => (k.startsWith("shot-") || k.startsWith("bang-")) && m.turn === S.turn && cheb(m.x, m.y, c.x, c.y) <= 8);
       const spotted = team().some(m => m.side === "mtf" && sightFrom(c.x, c.y, m.x, m.y, 5));

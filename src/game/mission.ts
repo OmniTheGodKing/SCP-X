@@ -78,9 +78,10 @@ export function createMission(setup: MissionSetup) {
   const arsenal = insurgentGuns(setup.year);
   for (let i = 0; i < setup.insurgents; i++) {
     // on a strike the cell is spread through the building; elsewhere a team arrives together
-    const [x, y] = claim(floorTiles(setup.kind === "strike" ? ciRooms[i % ciRooms.length] : ciRoom));
+    const room = setup.kind === "strike" ? Math.floor(i / 2) % ciRooms.length : 0;   // fire teams of two
+    const [x, y] = claim(floorTiles(setup.kind === "strike" ? ciRooms[room] : ciRoom));
     const g = pick(arsenal);
-    units.push(mk({ id: "r" + (i + 1), side: "raider", name: "Insurgent", x, y, hp: 4, maxHp: 4, aim: 60, san: PROFILE.raider.maxSan, armor: setup.insurgentArmor,
+    units.push(mk({ id: "r" + (i + 1), side: "raider", name: "Insurgent", x, y, pod: room, hp: 4, maxHp: 4, aim: 60, san: PROFILE.raider.maxSan, armor: setup.insurgentArmor,
       gun: { name: g.name, type: g.type, dmg: g.dmg, mag: g.mag, ammo: g.mag, aim: 0 } }));
   }
   const strayRooms = shuffle(def.strayRooms.filter(r => r !== ciRoom));
@@ -114,7 +115,8 @@ export function createMission(setup: MissionSetup) {
     setup, has173, has049, calmUntil: 0, has106, sunkUntil: 0, submerged: false, feedTurn: -1, corroded: new Set(), amnestics: setup.amnestics, turn: 1, phase: "player", busy: false, over: false, called: false, mode: null,
     units, statue, sealed: false, selected: null, hover: null, pending: null,
     vis: new Uint8Array(W * H), explored: new Uint8Array(W * H),
-    lastSeen: null, raidersActive: setup.kind === "strike", mem: new Map(), checked: new Set(),
+    lastSeen: null, raidersActive: false, mem: new Map(), checked: new Set(),
+    concealed: setup.kind === "strike" || setup.kind === "coverup", activePods: [],
     known: new Set([...STARTING_NOTES, ...setup.known]), fresh: new Set(), log: [], effects: [],
     stats: { mtfLost: 0, dLost: 0, escaped: 0, raidersDown: 0 }, smoke: [], throwing: null, ability: null,
     reinforce: setup.kind === "breach" ? [

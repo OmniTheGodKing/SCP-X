@@ -7,7 +7,7 @@ import {
 import {
   DCLASS_COST, DCLASS_MONTHLY, RANKS, RANK_XP, RECRUIT_COST, advanceDay, aimOf, blinkFullOf, buyDClass,
   canBuyDClass, canHireEngineer, dayOfMonth, deployable, hireEngineer, maxSanOf, monthOf, monthlyFunding, recruit,
-  INTEL_PER_PRISONER, INTERROGATION_DAYS, PRISONER_BOUNTY, holdingCapacity, canRetrain, canTherapy, canWeaken, dateText, fitAttachment, gunFor, loadAmmo, setWeapon, weaken, weaponOf, weaponOptions, chooseClass, choosePerk, perkChoices, promotionDue, startRetrain, startTherapy,
+  INTEL_PER_PRISONER, INTERROGATION_DAYS, interrogationDays, PRISONER_BOUNTY, holdingCapacity, canRetrain, canTherapy, canWeaken, dateText, fitAttachment, gunFor, loadAmmo, setWeapon, weaken, weaponOf, weaponOptions, chooseClass, choosePerk, perkChoices, promotionDue, startRetrain, startTherapy,
   pendingBreach, type Campaign, type Incident, type Loadout, type Operative,
 } from "../campaign/campaign";
 import { CLASSES, PERKS, TRAITS, type ClassId, type PerkId, type TraitId } from "../data/classes";
@@ -28,7 +28,7 @@ import {
 } from "../campaign/world";
 import {
   ALERTS, GUARD, PROMOTE, canHireGuard, canPromote, guardCapacity, guardOdds, guardsAlive, guardsReady, hireGuard, letGuardsHandle, mtfArrival,
-  promoteGuard, breachGuards, TRAINING, canTrain, squadSize, train, type Alert, type Guard,
+  promoteGuard, breachGuards, postedAt, postGuard, unposted, TRAINING, canTrain, squadSize, train, type Alert, type Guard,
 } from "../campaign/security";
 import { HEAVY } from "../game/types";
 import { esc } from "./util";
@@ -94,7 +94,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <span class="pill">Funds $${c.funds}k</span>
       <span class="pill">D-Class ${c.dclass}/${dclassCapacity(c)}</span>
       <span class="pill">Intel ${c.intel}</span>
-      <span class="pill">Guards ${guardsAlive(c).length}/${guardCapacity(c)}</span>
+      <span class="pill" title="Guards alive / posts at working Security stations">Guards ${guardsAlive(c).length}/${guardCapacity(c)}${unposted(c).length ? ` · ${unposted(c).length} unposted` : ""}</span>
       <span class="pill">Amnestics ${c.amnestics}/${amnesticsCapacity(c)}</span>
       <span class="pill ${c.exposure >= 60 || collapsedCount(c) ? "hot" : ""}">Exposure ${c.exposure}${collapsedCount(c) ? ` · ${collapsedCount(c)} lost` : ""}</span>
       <span class="pill">Engineers ${engineersFree(c)}/${c.engineers} free</span>
@@ -329,14 +329,13 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       ...((c.materials.prisoners ?? 0) > 0 ? ["Insurgency" as Branch] : []), "Personnel", "Weapons", "Equipment", "Site"];
     const offer = c.research.offer, insp = c.research.inspired;
     const bt = Object.keys(PROJECTS).filter(id => PROJECTS[id].breakthrough && !has(c, id) && offered(c, id));
-    const rw = canHireResearcher(c);
     const s = scp173();
     return `<div class="hubgrid">
     <section class="col">
       <div class="card">
         <div class="label">Research · ${c.researchers} researchers, ${researchersFree(c)} unassigned · lab space for ${researcherCapacity(c)}</div>
         <p class="muted">Put researchers on any projects you like; each one adds a day of work per day. A project's cost is paid when work starts.</p>
-        <div class="row"><button class="act" id="hireResBtn" type="button" ${rw ? `disabled title="${esc(rw)}"` : ""}>Hire researcher · $60k</button>${rw ? `<span class="muted">${esc(rw)}</span>` : ""}</div>
+        <p class="muted">Hire researchers at a research lab, and build equipment at the workshop, on the Site-19 tab.</p>
       </div>
       ${bt.length ? `<div class="card plan"><div class="label">Breakthrough${offer && !c.research.paid.includes(offer.id) ? ` · on offer until ${dateText(offer.until)}` : ""}</div><div class="projects">${bt.map(projectRow).join("")}</div></div>` : ""}
       ${insp && !has(c, insp.id) ? `<p class="muted">Inspiration: <b>${esc(PROJECTS[insp.id].name)}</b> takes half the time${c.research.paid.includes(insp.id) ? "" : ` if started by ${dateText(insp.until)}`}.</p>` : ""}
@@ -350,7 +349,6 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         ${(Object.keys(TESTS) as TestId[]).map(t => testRow(t)).join("")}
         ${watcherPicker()}
       </div>
-      ${workshopCard()}
     </section>
   </div>`;
   }
@@ -484,6 +482,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       ${f.demolishDays ? `<p class="warn">Being torn down: ${plural(f.demolishDays, "day")} left.</p>` : f.type === "command" ? "" : (() => { const dw = canDemolish(c, f);
         return `<div class="row"><button class="act" id="demolishBtn" type="button" ${dw ? `disabled title="${esc(dw)}"` : ""}>Tear down · ${plural(demolishDays(f), "day")} · 1 engineer · +$${Math.round(d.cost * DEMOLISH.refund)}k salvage</button>${dw ? `<span class="muted">${esc(dw)}</span>` : demolishLeavesShort(c, f) ? `<span class="warn">This would leave Site-19 short of power.</span>` : ""}</div>`; })()}
       ${f.disabled && f.repairDays === 0 ? `<div class="row"><button class="act primary" id="repairBtn" type="button" ${rw ? `disabled title="${esc(rw)}"` : ""}>Repair · $${REPAIR.cost}k · ${REPAIR.days} days · ${REPAIR.engineers} engineers</button>${rw ? `<span class="muted">${esc(rw)}</span>` : ""}</div>` : ""}
+      ${facilityPanel(f)}
       ${occ ? `<p>Holds <b>${occ.name}</b>.</p>` : ""}
       ${isContainment(f.type) && !occ && operational(f) && s.status === "contained" ? `
         <p class="muted">Moving ${s.name} here takes D-Class to shift it, with guards watching if you post them, and $20k. The same risk as a cleaning applies.</p>
@@ -520,26 +519,59 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     </div>`;
   }
 
-  function securityCard() {
-    const gw = canHireGuard(c), alive = guardsAlive(c), dead = c.guards.filter(g => !g.alive).length;
-    const row = (g: Guard) => {
-      const pw = canPromote(c, g);
-      return `<li><b>${esc(g.name)}</b> · HP ${g.hp}/${g.maxHp} · SAN ${g.san}/${GUARD.maxSan} · aim ${g.aim} · ${plural(g.breaches, "breach")} survived${g.traits.length ? ` · ${g.traits.map(t => TRAITS[t].name).join(", ")}` : ""}
-        ${g.training !== undefined ? `<span class="flag">MTF training · ${plural(g.training, "day")}</span>`
-          : g.breaches >= PROMOTE.breaches ? `<button class="act" type="button" data-promote="${g.id}" ${pw ? `disabled title="${esc(pw)}"` : ""}>Put forward for Epsilon-11 · $${PROMOTE.cost}k · ${PROMOTE.days} days</button>` : ""}</li>`;
-    };
-    return `<div class="card">
-      <div class="label">Site Security · ${alive.length} of ${guardCapacity(c)} posts filled</div>
-      <p class="muted">Guards are first on the scene of every breach and the only ones you control until Epsilon-11 arrives. Weaker than operatives: aim around 55, ${GUARD.maxSan} sanity, ${GUARD.hp} HP, no armor, and they blink more. Each Security station houses ${GUARD.perStation}. After ${PROMOTE.breaches} breaches a guard can train into Epsilon-11.</p>
-      ${alive.length ? `<ul class="memorial">${alive.map(row).join("")}</ul>` : `<p class="warn">No guards. A breach would have nobody to answer it.</p>`}
-      ${dead ? `<p class="muted">${plural(dead, "guard")} killed on duty.</p>` : ""}
-      <div class="row"><button class="act" id="hireGuardBtn" type="button" ${gw || c.over ? `disabled title="${esc(gw || "")}"` : ""}>Hire guard · $${GUARD.cost}k · $5k a month</button>${gw ? `<span class="muted">${esc(gw)}</span>` : ""}</div>
-    </div>`;
+  // ---------- facility panels: everything you do with a facility happens in its own panel ----------
+  function guardRow(g: Guard) {
+    const pw = canPromote(c, g);
+    return `<li><b>${esc(g.name)}</b> · HP ${g.hp}/${g.maxHp} · SAN ${g.san}/${GUARD.maxSan} · aim ${g.aim} · ${plural(g.breaches, "breach")} survived${g.traits.length ? ` · ${g.traits.map(t => TRAITS[t].name).join(", ")}` : ""}
+      ${g.training !== undefined ? `<span class="flag">MTF training · ${plural(g.training, "day")}</span>`
+        : g.breaches >= PROMOTE.breaches ? `<button class="act" type="button" data-promote="${g.id}" ${pw ? `disabled title="${esc(pw)}"` : ""}>Put forward for Epsilon-11 · $${PROMOTE.cost}k · ${PROMOTE.days} days</button>` : ""}</li>`;
+  }
+  function facilityPanel(f: Facility) {
+    if (!operational(f)) return "";
+    const box = (label: string, body: string) => `<div class="facpanel"><div class="label">${label}</div>${body}</div>`;
+    switch (f.type) {
+      case "security": {
+        const here = postedAt(c, f.id), gw = canHireGuard(c, f.id), loose = unposted(c), room = here.length < GUARD.perStation;
+        return box(`Site Security post · ${here.length} of ${GUARD.perStation} guards`, `
+          <p class="muted">Guards here are first on the scene of a breach in any wing next to this station. Others arrive a turn later. Weaker than operatives: aim around 55, ${GUARD.maxSan} sanity, ${GUARD.hp} HP, and they blink more. After ${PROMOTE.breaches} breaches a guard can train into Epsilon-11.</p>
+          ${here.length ? `<ul class="memorial">${here.map(guardRow).join("")}</ul>` : `<p class="warn">Nobody is posted here.</p>`}
+          <div class="row"><button class="act" type="button" data-hireguard="${f.id}" ${gw || c.over ? `disabled title="${esc(gw || "")}"` : ""}>Hire guard for this post · $${GUARD.cost}k · $5k a month</button>${gw ? `<span class="muted">${esc(gw)}</span>` : ""}</div>
+          ${loose.length ? `<p>Without a post: ${loose.map(g => `<b>${esc(g.name)}</b> ${room ? `<button class="act" type="button" data-post="${g.id}" data-station="${f.id}">Post here</button>` : ""}`).join(" ")}</p>` : ""}`);
+      }
+      case "training": return box(`Training range · squad size ${squadSize(c)}`, `
+        <p class="muted">One-off courses, like XCOM's Guerrilla Tactics School. Operatives here also gain 1 XP a week, and can retrain into a new class.</p>
+        <div class="projects">${Object.entries(TRAINING).map(([id, t]) => { const w = canTrain(c, id), got = c.purchases.includes(id);
+          return `<div class="proj ${got ? "done" : ""}"><div class="ptop"><b>${esc(t.name)}</b>${got ? `<span class="flag">Done</span>` : ""}</div><div class="muted">${esc(t.desc)}</div>
+          ${got ? "" : `<div class="row"><button class="act" type="button" data-train="${id}" ${w ? `disabled title="${esc(w)}"` : ""}>Buy · $${t.cost}k</button>${w ? `<span class="muted">${esc(w)}</span>` : ""}</div>`}</div>`; }).join("")}</div>
+        <div class="label" style="margin-top:10px">Retraining · $50k · 5 days</div>
+        ${c.roster.filter(o => o.alive && o.cls).map(o => { const rw = canRetrain(c, o); return `<div class="row"><span>${esc(o.call)} ${esc(o.name)} · ${CLASSES[o.cls!].name}</span><button class="act" type="button" data-retrain="${o.id}" ${rw ? `disabled title="${esc(rw)}"` : ""}>Retrain</button>${rw && rw !== "Already away from duty." ? "" : rw ? `<span class="muted">${esc(rw)}</span>` : ""}</div>`; }).join("") || `<p class="muted">Nobody has a class yet.</p>`}`);
+      case "psych": {
+        const need = c.roster.filter(o => o.alive && o.traits.some(t => TRAITS[t].bad));
+        return box("Psychological services · therapy $30k, 7 days", `
+          <p class="muted">Operatives recover 20 sanity a day instead of 10. One at a time can be treated for a bad trait.</p>
+          ${need.length ? need.map(o => { const tw = canTherapy(c, o); return `<div class="row"><span>${esc(o.call)} ${esc(o.name)}${o.busy?.kind === "therapy" ? " · in therapy" : ""}</span>${o.traits.filter(t => TRAITS[t].bad).map(t => `<button class="act" type="button" data-therapy="${t}" data-op="${o.id}" ${tw ? `disabled title="${esc(tw)}"` : ""}>Treat ${esc(TRAITS[t].name.toLowerCase())}</button>`).join("")}</div>`; }).join("") : `<p class="muted">Nobody needs treatment.</p>`}`);
+      }
+      case "holding": return box(`Holding cells · ${c.prisoners.length} of ${holdingCapacity(c)} occupied · Intel ${c.intel}`, `
+        <p class="muted">Each prisoner yields 1 Intel every ${interrogationDays(c)} days, ${INTEL_PER_PRISONER} in all. With no room, prisoners go to another site for $${PRISONER_BOUNTY}k.</p>
+        ${c.prisoners.length ? `<ul class="memorial">${c.prisoners.map(p => `<li><b>${esc(p.name)}</b> · held ${plural(p.days, "day")} · ${p.intel}/${INTEL_PER_PRISONER} Intel given</li>`).join("")}</ul>` : `<p class="muted">No prisoners.</p>`}`);
+      case "barracks": { const dWhy = canBuyDClass(c); return box(`D-Class · ${c.dclass} of ${dclassCapacity(c)} beds across all barracks`, `
+        <p class="muted">${DCLASS_MONTHLY} D-Class are transferred in each month while there's room.</p>
+        <div class="row"><button class="act" id="dBuyBtn" type="button" ${dWhy || c.over ? `disabled title="${esc(dWhy || "")}"` : ""}>Request 2 D-Class · $${DCLASS_COST * 2}k</button>${dWhy ? `<span class="muted">${esc(dWhy)}</span>` : ""}</div>`); }
+      case "workshop": { const eWhy = canHireEngineer(c); return box(`Workshop · engineers ${engineersFree(c)} of ${c.engineers} free`, `
+        <div class="row"><button class="act" id="engBtn" type="button" ${eWhy || c.over ? `disabled title="${esc(eWhy || "")}"` : ""}>Hire engineer · $${ENGINEER_COST}k</button>${eWhy ? `<span class="muted">${esc(eWhy)}</span>` : ""}</div>
+        ${workshopCard()}`); }
+      case "lab": { const rw = canHireResearcher(c); return box(`Research lab · ${c.researchers} researchers, ${researchersFree(c)} unassigned, room for ${researcherCapacity(c)}`, `
+        <div class="row"><button class="act" id="hireResBtn" type="button" ${rw ? `disabled title="${esc(rw)}"` : ""}>Hire researcher · $60k</button>${rw ? `<span class="muted">${esc(rw)}</span>` : ""}</div>
+        <p class="muted">Working on: ${Object.entries(c.research.assigned).filter(([, n]) => n).map(([id, n]) => `${esc(PROJECTS[id].name)} (${n})`).join(", ") || "nothing"}.</p>
+        <button class="act" type="button" data-goto="research">Open the Research tab</button>`); }
+      case "amnestics": return box(`Amnestics · ${c.amnestics} of ${amnesticsCapacity(c)} doses`, `<p class="muted">Each lab brews ${has(c, "classb_amnestics") ? 2 : 1} dose every 5 days. Doses go on cover-ups and cover stories.</p>`);
+      case "medical": { const hurt = c.roster.filter(o => o.alive && o.hp < o.maxHp); return box(`Medical bay · ${healPerDay(c)} HP a day`, hurt.length ? `<ul class="memorial">${hurt.map(o => `<li>${esc(o.call)} ${esc(o.name)} · HP ${o.hp}/${o.maxHp}</li>`).join("")}</ul>` : `<p class="muted">Nobody is wounded.</p>`); }
+      default: return "";
+    }
   }
 
   // ---------- Personnel ----------
   function personnelTab() {
-    const dWhy = canBuyDClass(c), eWhy = canHireEngineer(c);
     return `<div class="hubgrid">
     <section class="col">
       <div class="card">
@@ -551,30 +583,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     </section>
     <section class="col">
       ${opDetail()}
-      ${securityCard()}
-      <div class="card">
-        <div class="label">Training range · squad size ${squadSize(c)}</div>
-        <p class="muted">One-off courses paid at the training range, like XCOM's Guerrilla Tactics School.</p>
-        <div class="projects">${Object.entries(TRAINING).map(([id, t]) => { const w = canTrain(c, id), got = c.purchases.includes(id);
-          return `<div class="proj ${got ? "done" : ""}"><div class="ptop"><b>${esc(t.name)}</b>${got ? `<span class="flag">Done</span>` : ""}</div><div class="muted">${esc(t.desc)}</div>
-          ${got ? "" : `<div class="row"><button class="act" type="button" data-train="${id}" ${w ? `disabled title="${esc(w)}"` : ""}>Buy · $${t.cost}k</button>${w ? `<span class="muted">${esc(w)}</span>` : ""}</div>`}</div>`; }).join("")}</div>
-      </div>
-      <div class="card">
-        <div class="label">Site staff</div>
-        <p>D-Class in holding: <b>${c.dclass}</b> of ${dclassCapacity(c)} barracks spaces. Engineers: <b>${c.engineers}</b>, ${engineersFree(c)} free. Researchers: <b>${c.researchers}</b> (hire them on the Research tab).</p>
-        <div class="row">
-          <button class="act" id="dBuyBtn" type="button" ${dWhy || c.over ? `disabled title="${esc(dWhy || "")}"` : ""}>Request 2 D-Class · $${DCLASS_COST * 2}k</button>
-          <button class="act" id="engBtn" type="button" ${eWhy || c.over ? `disabled title="${esc(eWhy || "")}"` : ""}>Hire engineer · $${ENGINEER_COST}k</button>
-        </div>
-        ${dWhy || eWhy ? `<p class="muted">${esc([dWhy, eWhy].filter(Boolean).join(" "))}</p>` : ""}
-      </div>
-      <div class="card">
-        <div class="label">Prisoners · Intel ${c.intel}</div>
-        ${holdingCapacity(c) ? `<p>Holding cells: ${c.prisoners.length} of ${holdingCapacity(c)} occupied. Each prisoner yields 1 Intel every ${INTERROGATION_DAYS} days, ${INTEL_PER_PRISONER} in all.</p>
-          ${c.prisoners.length ? `<ul class="memorial">${c.prisoners.map(p => `<li><b>${esc(p.name)}</b> · held ${plural(p.days, "day")} · ${p.intel}/${INTEL_PER_PRISONER} Intel given</li>`).join("")}</ul>` : ""}`
-          : `<p class="muted">No holding cells. Build them on the Site-19 tab to interrogate captured Insurgents; until then prisoners are handed to another site for $${PRISONER_BOUNTY}k.</p>`}
-        <p class="muted">Spend Intel when planning a response to intercept Insurgents before the mission.</p>
-      </div>
+      <p class="muted">Guards, training, therapy, D-Class, engineers and prisoners are managed from their facilities on the Site-19 tab.</p>
       ${c.roster.some(o => !o.alive) ? `<div class="card">
         <div class="label">Memorial</div>
         <ul class="memorial">${c.roster.filter(o => !o.alive).map(o => `<li><b>${esc(o.call)} ${esc(o.name)}</b>, ${RANKS[o.rank]} · ${plural(o.missions, "mission")} · killed on day ${o.diedDay}, ${esc(o.diedAt || "")}</li>`).join("")}</ul>
@@ -609,7 +618,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         </ol>` : ""}
       <div class="label" style="margin-top:10px">Traits</div>
       ${o.traits.length ? `<ul class="traits">${o.traits.map(t => `<li class="${TRAITS[t].bad ? "bad" : "good"}"><b>${TRAITS[t].name}</b>: ${esc(TRAITS[t].desc)} <span class="muted">${esc(TRAITS[t].how)}</span>
-        ${TRAITS[t].bad && !o.busy ? `<button class="act" type="button" data-therapy="${t}" ${tw ? `disabled title="${esc(tw)}"` : ""}>Therapy · $30k · 7 days</button>` : ""}</li>`).join("")}</ul>
+        ${TRAITS[t].bad && !o.busy ? `<span class="muted">Treatable at Psychological services.</span>` : ""}</li>`).join("")}</ul>
         ${bad.length && tw ? `<p class="muted">${esc(tw)}</p>` : ""}` : `<p class="muted">None yet. Traits come from what happens to them on missions.</p>`}
       <div class="label" style="margin-top:10px">Weapon</div>
       <div class="row">
@@ -631,7 +640,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         </select>
       </div>
       <div class="specs">Sidearm: ${SIDEARM.name}, ${SIDEARM.dmg.join("–")} damage, fired automatically when the main weapon is empty.</div>
-      ${o.cls && !o.busy ? `<div class="row"><button class="act" type="button" id="retrainBtn" ${rw ? `disabled title="${esc(rw)}"` : ""}>Retrain · $50k · 5 days</button><span class="muted">${esc(rw || "Clears their class and perks; they choose again, keeping their rank.")}</span></div>` : ""}
+      ${o.cls && !o.busy ? `<p class="muted">Retraining (a new class, keeping their rank) is arranged at the training range.</p>` : ""}
     </div>`;
   }
 
@@ -702,8 +711,11 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     const opNow = () => c.roster.find(x => x.id === opSel)!;
     root.querySelectorAll<HTMLElement>("[data-class]").forEach(b => b.onclick = () => change(() => chooseClass(c, opNow(), b.dataset.class as ClassId)));
     root.querySelectorAll<HTMLElement>("[data-perk]").forEach(b => b.onclick = () => change(() => choosePerk(c, opNow(), b.dataset.perk as PerkId)));
-    root.querySelectorAll<HTMLElement>("[data-therapy]").forEach(b => b.onclick = () => change(() => startTherapy(c, opNow(), b.dataset.therapy as TraitId)));
-    on("retrainBtn", () => change(() => startRetrain(c, opNow())));
+    const opById = (id?: string) => c.roster.find(x => x.id === id);
+    root.querySelectorAll<HTMLElement>("[data-therapy]").forEach(b => b.onclick = () => { const o = opById(b.dataset.op); if (o) change(() => startTherapy(c, o, b.dataset.therapy as TraitId)); });
+    root.querySelectorAll<HTMLElement>("[data-retrain]").forEach(b => b.onclick = () => { const o = opById(b.dataset.retrain); if (o) change(() => startRetrain(c, o)); });
+    root.querySelectorAll<HTMLElement>("[data-hireguard]").forEach(b => b.onclick = () => change(() => hireGuard(c, b.dataset.hireguard!)));
+    root.querySelectorAll<HTMLElement>("[data-post]").forEach(b => b.onclick = () => { const g = c.guards.find(x => x.id === b.dataset.post); if (g) change(() => postGuard(c, g, b.dataset.station!)); });
     root.querySelectorAll<HTMLElement>("[data-setweapon]").forEach(b => b.onclick = () => change(() => setWeapon(c, opNow(), b.dataset.setweapon as WeaponType)));
     root.querySelectorAll<HTMLSelectElement>("[data-ammo]").forEach(b => b.onchange = () => change(() => loadAmmo(c, opNow(), b.value as AmmoId | "")));
     root.querySelectorAll<HTMLElement>("[data-ammoorder]").forEach(b => b.onclick = () => change(() => orderAmmo(c, b.dataset.ammoorder as AmmoId)));
@@ -719,7 +731,6 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     root.querySelectorAll<HTMLElement>("[data-clean]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.clean); if (s) change(() => cleanCell(c, s)); });
     root.querySelectorAll<HTMLElement>("[data-alert]").forEach(b => b.onclick = () => change(() => { c.alert = b.dataset.alert as Alert; }));
     root.querySelectorAll<HTMLElement>("[data-guards]").forEach(b => b.onclick = () => { const inc = c.incidents.find(i => i.id === b.dataset.guards); if (inc) change(() => letGuardsHandle(c, inc)); });
-    on("hireGuardBtn", () => change(() => hireGuard(c)));
     root.querySelectorAll<HTMLElement>("[data-train]").forEach(b => b.onclick = () => change(() => train(c, b.dataset.train!)));
     root.querySelectorAll<HTMLElement>("[data-promote]").forEach(b => b.onclick = () => { const g = c.guards.find(x => x.id === b.dataset.promote); if (g) change(() => promoteGuard(c, g)); });
     on("upgradeBtn", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) change(() => upgradeFacility(c, f)); });

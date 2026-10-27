@@ -77,7 +77,7 @@ export interface SiteLogEntry { day: number; text: string; kind: string; }
 export interface Loadout { opId: string; armor: ItemId | ""; items: ItemId[]; }
 
 export interface Campaign {
-  version: 12;
+  version: 13;
   /** Guards issued flak vests through the workshop. */
   guardVests?: boolean;
   /** Material brought back from missions, for studies (like XCOM autopsies). */
@@ -220,13 +220,14 @@ export function newCampaign(): Campaign {
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
-    version: 12, materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
+    version: 13, materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
     day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
     inventory: {}, orders: [], knownNotes: [], nextD: 9101, nextOp: 1, nextIncident: 1,
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
   };
   for (let i = 0; i < 6; i++) c.roster.push(makeOperative(c));
-  for (let i = 0; i < 2; i++) c.guards.push(newGuard(c));
+  const station = c.base.facilities.find(f => f.type === "security");
+  for (let i = 0; i < 2; i++) { const g = newGuard(c); g.stationId = station?.id; c.guards.push(g); }
   log(c, "Site-19 Command is online. SCP-173 is held in the Euclid wing on level 2. Keep its cell clean, keep it watched, and keep Epsilon-11 ready for when it gets out.", "key");
   return c;
 }

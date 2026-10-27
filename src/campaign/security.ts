@@ -22,6 +22,8 @@ export interface Guard {
   breaches: number;
   kills: number;
   traits: TraitId[];
+  /** The Security station they're posted to; unposted guards still answer breaches, a turn late. */
+  stationId?: string;
   /** Away training for Epsilon-11. */
   training?: number;
   diedDay?: number;
@@ -43,6 +45,12 @@ const NAMES = ["Brennan", "Kowalczyk", "Delgado", "Fairweather", "Haskins", "Lun
 const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
 
 export const guardCapacity = (c: Campaign) => countOperational(c, "security") * GUARD.perStation;
+export const stations = (c: Campaign) => c.base.facilities.filter(f => f.type === "security" && operational(f));
+export const postedAt = (c: Campaign, stationId: string) => guardsAlive(c).filter(g => g.stationId === stationId);
+export const unposted = (c: Campaign) => guardsAlive(c).filter(g => !g.stationId || !stations(c).some(f => f.id === g.stationId));
+/** A working station with a free post, preferring the given one. */
+export const freePost = (c: Campaign, prefer?: string) =>
+  stations(c).filter(f => postedAt(c, f.id).length < GUARD.perStation).sort((a, b) => (a.id === prefer ? -1 : b.id === prefer ? 1 : 0))[0] ?? null;
 export const guardsAlive = (c: Campaign) => c.guards.filter(g => g.alive);
 /** Guards who can respond to a breach: alive, not away training, and not badly hurt. */
 export const guardsReady = (c: Campaign) => guardsAlive(c).filter(g => g.training === undefined && g.hp >= 3);
@@ -53,17 +61,25 @@ export function newGuard(c: Campaign): Guard {
   return { id: "gd" + c.nextGuard++, name, hp: GUARD.hp, maxHp: GUARD.hp, san: GUARD.maxSan, aim: rand(52, 60), alive: true, breaches: 0, kills: 0, traits: [] };
 }
 
-export function canHireGuard(c: Campaign) {
+export function canHireGuard(c: Campaign, stationId: string) {
+  const f = stations(c).find(x => x.id === stationId);
+  if (!f) return "This station isn't working.";
+  if (postedAt(c, stationId).length >= GUARD.perStation) return `Every post here is filled (${GUARD.perStation}).`;
   if (c.funds < GUARD.cost) return `Needs $${GUARD.cost}k.`;
-  if (guardsAlive(c).length >= guardCapacity(c)) return `Security stations house ${GUARD.perStation} guards each. Build another to hire more.`;
   return null;
 }
-export function hireGuard(c: Campaign) {
-  if (canHireGuard(c)) return;
+export function hireGuard(c: Campaign, stationId: string) {
+  if (canHireGuard(c, stationId)) return;
   c.funds -= GUARD.cost;
   const g = newGuard(c);
+  g.stationId = stationId;
   c.guards.push(g);
   log(c, `Guard ${g.name} joins Site Security.`);
+}
+/** Post an unposted guard (or move one) to a station with room. */
+export function postGuard(c: Campaign, g: Guard, stationId: string) {
+  if (!stations(c).some(f => f.id === stationId) || postedAt(c, stationId).length >= GUARD.perStation) return;
+  g.stationId = stationId;
 }
 
 export function canPromote(c: Campaign, g: Guard) {
@@ -118,9 +134,13 @@ function stationsNear(c: Campaign, inc: Incident) {
 }
 /** Who responds to a breach: guards posted beside the wing start on the map, the rest come in on turn 2. */
 export function breachGuards(c: Campaign, inc: Incident) {
-  const ready = guardsReady(c).sort((a, b) => b.san - a.san).slice(0, GUARD.maxInMission).map(g => guardMember(c, g));
-  const posted = Math.max(2, stationsNear(c, inc) * GUARD.perStation);
-  return { first: ready.slice(0, posted), late: ready.slice(posted) };
+  const s = c.scps.find(x => x.id === inc.scpId), wing = s && wingOf(c, s);
+  const near = new Set(wing ? neighbors(c, wing).filter(n => n.type === "security" && operational(n)).map(n => n.id) : []);
+  const ready = guardsReady(c).sort((a, b) => (near.has(b.stationId ?? "") ? 1 : 0) - (near.has(a.stationId ?? "") ? 1 : 0) || b.san - a.san).slice(0, GUARD.maxInMission);
+  // guards posted beside the wing are there from the start; at least two on patrol always are
+  const onScene = Math.max(2, ready.filter(g => near.has(g.stationId ?? "")).length);
+  const team = ready.map(g => guardMember(c, g));
+  return { first: team.slice(0, onScene), late: team.slice(onScene) };
 }
 
 /** Chance Site Security recontains a breach on their own. Plenty of guards make it close to certain. */
