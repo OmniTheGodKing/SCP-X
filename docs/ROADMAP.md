@@ -565,10 +565,51 @@ retaliation (done); (5) doors and sirens (done).
 - Play a stable long-term campaign from Site-19 through the interactive Geoscape, deploy to readable 2D tactical missions, recover/contain/research SCPs, manage persistent operatives, respond to independent facilities, engage with O5 choices and a global Insurgency, and observe consistent world/facility consequences.
 - Confirm implemented/partial/missing status against source **and** in-game behavior before declaring an item done. Campaign victory/final mission and 3D presentation are deliberately deferred.
 
-## Phase 4: to be defined
+## Phase 4: content, story and presentation in 2D (planned)
 
-The original Phase 4 (moving to 3D) is now Phase 5: it's too early in the project for 3D. A new Phase 4 will be written
-here once its scope is agreed.
+The original Phase 4 (moving to 3D) is now Phase 5: it's too early in the project for 3D. Phase 4 deepens the 2D game
+first. The Phase 3 implementation rules still apply (explicit specification, status is not proof, expand rather than
+recreate, shared consequences).
+
+### 4A: campaign story and endgame
+- **A campaign arc:** the Chaos Insurgency's agenda, the O5 Council and the anomalies build toward a defined climax
+  instead of running forever. Story beats unlock at milestones (years passed, anomalies held, the agenda's steps,
+  commanders defeated), each with a briefing and a real choice.
+- **Victory:** a final operation (several linked missions, Avenger-assault style) that becomes available once Site-19
+  meets clear conditions, shown on the Command tab as a checklist so the player can see how close they are.
+- **Defeat:** the existing losses (fronts collapsed, standing gone) plus the agenda completing too many times; each ends
+  with an epilogue built from the campaign history.
+- **Epilogue and record:** a closing report drawn from the History tab: operatives who served, who fell, anomalies held
+  and lost, the Council's verdict.
+
+### 4B: more anomalies
+- **5 to 8 new SCPs**, each with its own tactical behaviour, containment routine and procedure, research line and
+  capture method, in the way SCP-173, 049, 106 and 610 differ (candidates: SCP-096, SCP-939, SCP-008, SCP-012,
+  SCP-035, and SCP-682 as a long-term Keter threat that can't be killed, only held). Every one credited to its author
+  under CC BY-SA 3.0, checked against the SCP Wiki page.
+- **Sightings, transfers and breaches** reuse the existing systems; new Safe-class objects can join the transfer pool.
+- **Anomaly interactions:** some anomalies affect others or the site (for example a breach in one wing raising the
+  risk next door in specific ways).
+
+### 4C: art and sound
+- **2D art:** proper sprites for operatives, guards, D-Class, Insurgents and each anomaly, replacing the placeholder
+  shapes, with clear silhouettes and the existing markers (roles, rings, status) kept readable on top.
+- **Animation:** movement, firing, hits, going down, anomalies' signature moves (SCP-173's blink jump, SCP-106 sinking).
+- **Portraits:** a better portrait style built on the existing look data (operatives, staff, commanders).
+- **Sound and music:** effects for shots, hits, doors, blinks, alarms and the World Map clock; a small score for the
+  World Map and missions; volume controls and mute. Only assets the project is allowed to use, credited.
+
+### 4D: maps and mission variety
+- **More maps:** new field and facility maps (rail yard, church, research lab, ship, Site-19 levels for base defence).
+- **Generated layouts:** maps assembled from room pieces so missions don't repeat, keeping cover, exits and objective
+  placement fair.
+- **Multiple floors in 2D:** stairs and lifts between floors on one map, with a floor switcher, before true elevation in
+  Phase 5.
+- **New mission types:** fighting GOC strike teams and GRU-P units tactically; Site-19 base defence across levels;
+  escorting a transfer through a hostile town; investigating a site gone quiet.
+
+## Phase 4 order
+4A first (it gives the campaign its shape), then 4B, 4D and 4C, unless the user decides otherwise.
 
 ## Phase 5: 3D, XCOM style
 
