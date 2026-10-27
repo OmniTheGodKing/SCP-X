@@ -121,7 +121,8 @@ retaliation (done); (5) doors and sirens (done).
 - (Done) Era news: 31 real headlines from 1951 to 1970 in the monthly report. The Korean armistice (East Asia funding
   +10% for a year), Sputnik (research 10% cheaper for a year), the Cuban crisis (exposure rises 50% faster in the
   Eastern US and Latin America for 3 months) and the Gulf of Tonkin (weapons research 20% faster from then on).
-- Incident reports in the Foundation's style after each mission, kept in a browsable archive.
+- (Done) Incident reports in the Foundation's style after every mission, built from what happened, kept in an Archive
+  on the Command tab (newest open, older ones folded).
 - Personnel files: hometowns, a line of backstory, service history, medals and commendations with small bonuses.
 - Retirement: Majors and Colonels can retire as trainers (recruits arrive as Specialists, at most 2 trainers); lower
   ranks get an honourable discharge.
