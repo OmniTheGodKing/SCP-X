@@ -162,7 +162,7 @@ button.act kbd { opacity: .6; font-family: inherit; }
 
 /* Site-19 cross-section */
 .basegrid { display: grid; gap: 6px; }
-.level { display: grid; grid-template-columns: 64px repeat(4, minmax(0, 1fr)); gap: 6px; align-items: stretch; }
+.level { display: grid; grid-template-columns: 64px repeat(6, minmax(0, 1fr)); gap: 6px; align-items: stretch; }
 .lvl { font-family: var(--font-mono); font-size: 11px; color: var(--muted); display: grid; align-content: center; text-transform: uppercase; letter-spacing: .08em; }
 .lvl span { font-size: 9.5px; opacity: .7; }
 .slot { min-height: 74px; display: grid; align-content: space-between; gap: 6px; text-align: left; padding: 8px; background: var(--panel-2); border: 1px solid var(--line); color: var(--ink); cursor: pointer; font: inherit; min-width: 0; }
@@ -176,7 +176,7 @@ button.act kbd { opacity: .6; font-family: inherit; }
 .slot.alarm .sstat, .slot.damaged .sstat { color: var(--alert); }
 .sname { font-weight: 600; font-size: 13px; line-height: 1.2; overflow-wrap: anywhere; }
 .sstat { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
-@media (max-width: 560px) { .level { grid-template-columns: repeat(4, minmax(0, 1fr)); } .lvl { grid-column: 1 / -1; } .slot { min-height: 64px; } .sname { font-size: 12px; } }
+@media (max-width: 560px) { .level { grid-template-columns: repeat(3, minmax(0, 1fr)); } .lvl { grid-column: 1 / -1; } .slot { min-height: 64px; } .sname { font-size: 12px; } }
 h3.fac { font-family: var(--font-display); font-weight: 400; font-size: 20px; margin: 2px 0 4px; color: var(--manila); }
 .buildlist { display: grid; gap: 6px; }
 .buildopt { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; padding: 8px 10px; background: var(--panel-2); }

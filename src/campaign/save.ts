@@ -106,7 +106,13 @@ export function parseCampaign(raw: string): Campaign | null {
       Object.assign(c, { version: 18, council: newCouncil(old.day) });
       issueDirectives(old, false);
     }
-    return c.version === 18 ? (c as unknown as Campaign) : null;
+    if (c.version === 18) {
+      // generators are refitted one by one now: a site that had researched efficient generators keeps 15 power on each
+      const old = c as unknown as Campaign;
+      if (old.research.done.includes("efficient_gen")) for (const f of old.base.facilities) if (f.type === "generator") f.genTier = Math.max(f.genTier ?? 0, 1);
+      Object.assign(c, { version: 19 });
+    }
+    return c.version === 19 ? (c as unknown as Campaign) : null;
   } catch {
     return null;
   }

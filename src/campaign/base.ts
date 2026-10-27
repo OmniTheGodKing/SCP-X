@@ -21,7 +21,7 @@ export interface FacilityDef {
 
 export const FACILITIES: Record<FacilityType, FacilityDef> = {
   command:     { name: "Command", cost: 0, days: 0, engineers: 0, power: 0, upkeep: 0, buildable: false, desc: "Site-19's operations center. Runs on its own backup supply." },
-  generator:   { name: "Generator", cost: 100, days: 6, engineers: 2, power: -10, upkeep: 5, buildable: true, desc: "Supplies 10 power." },
+  generator:   { name: "Generator", cost: 100, days: 6, engineers: 2, power: -10, upkeep: 5, buildable: true, desc: "Supplies 10 power, more once refitted with researched designs." },
   barracks:    { name: "D-Class barracks", cost: 80, days: 5, engineers: 2, power: 1, upkeep: 5, buildable: true, desc: "Holds 10 D-Class." },
   security:    { name: "Security station", cost: 150, days: 7, engineers: 3, power: 2, upkeep: 15, buildable: true, desc: "Houses 4 Site Security guards. Each station cuts the breach risk of every containment wing on its level by 30%, and its guards are on the scene the moment a wing on that level breaches." },
   medical:     { name: "Medical bay", cost: 180, days: 10, engineers: 3, power: 3, upkeep: 15, buildable: true, desc: "Operatives heal 2 HP a day instead of 1." },
@@ -42,7 +42,7 @@ export const nameInText = (t: FacilityType) => {
   const n = FACILITIES[t].name;
   return /^(Safe|Euclid|Keter|D-Class)/.test(n) ? n : n[0].toLowerCase() + n.slice(1);
 };
-export const SLOTS = 4, MAX_LEVELS = 6;
+export const SLOTS = 6, MAX_LEVELS = 6;
 export const EXCAVATE = { cost: 200, days: 10, engineers: 4 };
 export const REPAIR = { cost: 30, days: 3, engineers: 2 };
 export const ENGINEER_COST = 50;
@@ -58,7 +58,9 @@ export interface Facility {
   demolishDays?: number;  // > 0 while being torn down
   upgraded?: boolean;     // expanded (barracks)
   recreation?: boolean;   // barracks: a recreation room (morale +1 a day)
-  upgradeDays?: number;   // > 0 while being expanded
+  upgradeDays?: number;   // > 0 while being expanded (barracks) or refitted (generators)
+  /** Generators: how far it has been refitted (see GEN_TIERS). */
+  genTier?: number;
 }
 
 export interface Base {
@@ -81,15 +83,40 @@ export const countOperational = (c: Campaign, type: FacilityType) =>
 export const neighbors = (c: Campaign, f: Facility) => c.base.facilities.filter(o =>
   o !== f && ((o.level === f.level && Math.abs(o.slot - f.slot) === 1) || (o.slot === f.slot && Math.abs(o.level - f.level) === 1)));
 
-export const generatorOutput = (c: Campaign) => has(c, "efficient_gen") ? 15 : 10;
+/** Generator refits: each is researched once, then bought for each generator in its own panel. */
+export const GEN_TIERS = [
+  { name: "Diesel generator", power: 10, upkeep: 0, cost: 0, days: 0, engineers: 0, research: "" },
+  { name: "Turbocharged diesel", power: 15, upkeep: 0, cost: 60, days: 4, engineers: 2, research: "efficient_gen" },
+  { name: "Gas turbine", power: 22, upkeep: 5, cost: 120, days: 6, engineers: 3, research: "gas_turbine" },
+  { name: "Compact reactor", power: 35, upkeep: 15, cost: 250, days: 10, engineers: 4, research: "compact_reactor" },
+];
+export const genTierOf = (f: Facility) => GEN_TIERS[f.genTier ?? 0];
+export const generatorOutput = (f: Facility) => genTierOf(f).power;
 export const powerSupply = (c: Campaign) =>
-  c.base.facilities.filter(f => f.type === "generator" && operational(f)).length * generatorOutput(c);
+  c.base.facilities.filter(f => f.type === "generator" && operational(f) && !f.upgradeDays).reduce((a, f) => a + generatorOutput(f), 0);
+export function canRefitGen(c: Campaign, f: Facility): string | null {
+  const next = GEN_TIERS[(f.genTier ?? 0) + 1];
+  if (f.type !== "generator") return "Only generators can be refitted.";
+  if (!next) return "Already the best Site-19 can build.";
+  if (f.upgradeDays) return "Already being refitted.";
+  if (!operational(f)) return "It has to be working first.";
+  if (!has(c, next.research)) return "Needs research first.";
+  if (c.funds < next.cost) return `Needs $${next.cost}k.`;
+  if (engineersFree(c) < next.engineers) return `Needs ${next.engineers} free engineers.`;
+  return null;
+}
+/** Refitting takes the generator offline until it's done. */
+export function refitGenerator(c: Campaign, f: Facility) {
+  if (canRefitGen(c, f)) return;
+  const next = GEN_TIERS[(f.genTier ?? 0) + 1];
+  c.funds -= next.cost; f.upgradeDays = next.days;
+}
 export const powerUse = (c: Campaign) =>
   c.base.facilities.filter(f => FACILITIES[f.type].power > 0 && f.daysLeft === 0).reduce((a, f) => a + FACILITIES[f.type].power, 0);
 export const powerShort = (c: Campaign) => powerUse(c) > powerSupply(c);
 
 export const engineersBusy = (c: Campaign) =>
-  c.base.facilities.reduce((a, f) => a + (f.daysLeft > 0 ? FACILITIES[f.type].engineers : 0) + (f.repairDays > 0 ? REPAIR.engineers : 0) + (f.demolishDays ? 1 : 0) + (f.upgradeDays ? UPGRADE.engineers : 0), 0)
+  c.base.facilities.reduce((a, f) => a + (f.daysLeft > 0 ? FACILITIES[f.type].engineers : 0) + (f.repairDays > 0 ? REPAIR.engineers : 0) + (f.demolishDays ? 1 : 0) + (f.upgradeDays ? (f.type === "generator" ? GEN_TIERS[(f.genTier ?? 0) + 1]?.engineers ?? 0 : UPGRADE.engineers) : 0), 0)
   + (c.base.excavation > 0 ? EXCAVATE.engineers : 0) + c.orders.length;
 export const engineersFree = (c: Campaign) => c.engineers - engineersBusy(c);
 
@@ -126,7 +153,7 @@ export function upgradeFacility(c: Campaign, f: Facility) {
 export const SALARY = { operative: 10, guard: 5 };
 export const salaries = (c: Campaign) => c.roster.filter(o => o.alive).length * SALARY.operative + c.guards.filter(g => g.alive).length * SALARY.guard;
 /** Facility upkeep, the alert level's cost, and staff salaries, per month. */
-export const monthlyUpkeep = (c: Campaign) => c.base.facilities.reduce((a, f) => a + (f.type === "security" && has(c, "bt_security") ? 0 : FACILITIES[f.type].upkeep), 0) + ALERTS[c.alert].upkeep + salaries(c);
+export const monthlyUpkeep = (c: Campaign) => c.base.facilities.reduce((a, f) => a + (f.type === "security" && has(c, "bt_security") ? 0 : FACILITIES[f.type].upkeep) + (f.type === "generator" ? genTierOf(f).upkeep : 0), 0) + ALERTS[c.alert].upkeep + salaries(c);
 export const healPerDay = (c: Campaign) => (countOperational(c, "medical") && !powerShort(c) ? 2 : 1) + (has(c, "necrotic_study") ? 1 : 0) + (has(c, "bt_triage") ? 1 : 0);
 export const sanityPerDay = (c: Campaign) => countOperational(c, "psych") && !powerShort(c) ? 20 : 10;
 
@@ -163,7 +190,7 @@ export function canDemolish(c: Campaign, f: Facility): string | null {
   return null;
 }
 /** What tearing this down would cost in power, for a warning. */
-export const demolishLeavesShort = (c: Campaign, f: Facility) => f.type === "generator" && powerUse(c) > powerSupply(c) - generatorOutput(c);
+export const demolishLeavesShort = (c: Campaign, f: Facility) => f.type === "generator" && powerUse(c) > powerSupply(c) - generatorOutput(f);
 export function demolish(c: Campaign, f: Facility) {
   if (canDemolish(c, f)) return;
   f.demolishDays = demolishDays(f);
@@ -202,7 +229,10 @@ export function tickConstruction(c: Campaign): string[] {
     if (f.daysLeft > 0 && --f.daysLeft === 0) done.push(`${FACILITIES[f.type].name} on level ${f.level + 1} is complete.`);
     if (f.repairDays > 0 && --f.repairDays === 0) { f.disabled = false; done.push(`${FACILITIES[f.type].name} on level ${f.level + 1} is repaired.`); }
   }
-  for (const f of c.base.facilities) if (f.upgradeDays && --f.upgradeDays === 0) { f.upgraded = true; done.push(`The ${nameInText(f.type)} on level ${f.level + 1} has been expanded.`); }
+  for (const f of c.base.facilities) if (f.upgradeDays && --f.upgradeDays === 0) {
+    if (f.type === "generator") { f.genTier = (f.genTier ?? 0) + 1; done.push(`The generator on level ${f.level + 1} is refitted as a ${genTierOf(f).name.toLowerCase()}: ${genTierOf(f).power} power.`); }
+    else { f.upgraded = true; done.push(`The ${nameInText(f.type)} on level ${f.level + 1} has been expanded.`); }
+  }
   for (const f of [...c.base.facilities]) if (f.demolishDays && --f.demolishDays === 0) {
     c.base.facilities = c.base.facilities.filter(x => x !== f);
     const back = Math.round(FACILITIES[f.type].cost * DEMOLISH.refund);
