@@ -29,7 +29,7 @@ import type { MissionResult, Unit } from "../game/types";
 import { esc } from "./util";
 import { createRenderer } from "./render";
 import { ESCAPE_AT, escaping } from "../game/scp173";
-import { ESCORT_TURNS } from "../game/turn";
+import { ESCORT_TURNS, MAX_SEALED } from "../game/turn";
 import { freshBodies, isCalm, isStaggered } from "../game/scp049";
 import { bait, isFeeding } from "../game/scp106";
 import { MAPS } from "../data/maps";
@@ -44,6 +44,7 @@ const TEMPLATE = `
     <div class="turnbox">
       <span class="pill" id="turnPill">Turn 1</span>
       <span class="pill" id="phasePill">Your move</span>
+      <span class="pill hot" id="sirenPill" hidden title="The breach siren: nobody recovers sanity on quiet turns, but SCP-173 can't hear where shots come from. Silence it at the panel.">Siren</span>
       <span class="pill" id="nightPill" hidden title="Night: everyone sees 4 tiles less, except inside a flare's light.">Night</span>
       <span class="pill" id="concealPill" hidden title="Insurgents haven't noticed the team. They only spot you within 4 tiles. Firing or throwing anything gives you away.">Concealed</span>
       <button class="act" id="evacBtn" type="button" title="Ends the mission. Anyone who hasn't left through an exit is left behind.">Abort mission</button>
@@ -160,7 +161,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("objRule").after(exits);
   }
   if (kind === "breach" && has173) {
-    $("objRule").innerHTML = `<b>Objective.</b> Get SCP-173 into the transport container at the dock in the southwest staging room, with nobody else inside, then seal it. Site Security starts on the scene; Epsilon-11 arrives later. If SCP-173 roams unseen for ${ESCAPE_AT} turns without a kill it heads for the surface hatch in the east lab, and if it gets there it's out of Site-19. Anyone at the panel at the east end of the corridor can spend both actions to lock the hatch for ${S.setup.mods.lockdownTurns} turns.`;
+    $("objRule").innerHTML = `<b>Objective.</b> Get SCP-173 into the transport container at the dock in the southwest staging room, with nobody else inside, then seal it. The panel at the east end of the corridor also seals blast doors (up to ${MAX_SEALED}) and silences the breach siren, which stops quiet turns restoring sanity but hides your gunfire from SCP-173. Site Security starts on the scene; Epsilon-11 arrives later. If SCP-173 roams unseen for ${ESCAPE_AT} turns without a kill it heads for the surface hatch in the east lab, and if it gets there it's out of Site-19. Anyone at the panel at the east end of the corridor can spend both actions to lock the hatch for ${S.setup.mods.lockdownTurns} turns.`;
   }
   const cv = $("cv") as HTMLCanvasElement;
   const draw = createRenderer(cv);
@@ -241,6 +242,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("phasePill").className = "pill" + (S.phase === "anomaly" ? " hot" : "");
     $("concealPill").hidden = !S.concealed;
     $("nightPill").hidden = !S.setup.night;
+    $("sirenPill").hidden = !S.siren;
 
     const sc = $("statusCard"), line = $("statusLine");
     if (S.has106) {
@@ -342,7 +344,8 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     else if (!can) h = S.over ? "" : "Enemy activity…";
     else if (sel) {
       const hv = S.hover && unitAt(S.hover.x, S.hover.y);
-      if (S.mode === "lead") h = `<b>SCP-049 is listening.</b>\nClick a green tile to lead it there (up to 3 tiles), or press Escape to leave it where it stands.`;
+      if (S.mode === "doors") h = `<b>Blast doors.</b>\nClick a doorway to seal it (up to ${MAX_SEALED}) or to open a sealed one. Escape to cancel.`;
+      else if (S.mode === "lead") h = `<b>SCP-049 is listening.</b>\nClick a green tile to lead it there (up to 3 tiles), or press Escape to leave it where it stands.`;
       else if (S.mode === "ability" && S.ability) h = `<b>${esc(full(sel))}: ${abilityName(S.ability)}.</b>\n${esc(abilityDesc(S.ability))} Click a highlighted target.`;
       else if (S.mode === "throw" && S.throwing) h = `<b>${esc(full(sel))}: choose where to throw the ${ITEM_NAMES[S.throwing.id].toLowerCase()}.</b>\nLit tiles are in range and in sight. It covers the target tile and every tile around it. Throwing ends their turn.`;
       else if (S.mode === "drag") h = `<b>${esc(sel.name)}: choose where to drag SCP-173.</b>\nOrange tiles keep it in someone else's sight the whole way. Dragging ends their turn.`;

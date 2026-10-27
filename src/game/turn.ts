@@ -1,5 +1,5 @@
 // Player actions and the turn cycle: your move, SCP-173, the Insurgency, then loose D-Class.
-import { FLOOR, HALF, L, TS, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, setSlow, setVault, tileAt, DIRS, type Pt } from "../core/grid";
+import { FLOOR, HALF, L, STEEL, TS, area, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, setSlow, setVault, tileAt, DIRS, type Pt } from "../core/grid";
 import { setSmoke, sightFrom } from "../core/sight";
 import { activeGun, damage, fire, kill, moveUnit } from "./combat";
 import { TYPES } from "../data/weapons";
@@ -194,6 +194,7 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
     if (S.pending && S.pending.x === x && S.pending.y === y) return true;
     S.pending = { x, y }; S.hover = { x, y }; hooks.update(); return false;
   };
+  if (S.mode === "doors") { toggleDoor(x, y, flash); return; }
   if (S.mode === "lead") {
     if (!leadOptions().has(y * L.W + x)) { flash("SCP-049 can be led up to 3 tiles along open floor."); return; }
     if (!confirm()) return;
@@ -479,7 +480,26 @@ function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y
 }
 
 // Quiet turns restore sanity: not staring, and no sanity lost this turn.
+/** Seal or open a doorway from the panel. Sealed doors are steel: nothing passes or sees through but SCP-106. */
+export const MAX_SEALED = 2;
+export function toggleDoor(x: number, y: number, flash: (t: string) => void) {
+  const u = S.selected, i = y * L.W + x;
+  if (!u || !L.doors.has(i)) { flash("Click a doorway."); return; }
+  if (S.lockedDoors.includes(i)) {
+    S.lockedDoors = S.lockedDoors.filter(d => d !== i); L.grid[y][x] = FLOOR;
+    log(`${full(u)} opens the blast door in the ${area(x, y)}.`, "key");
+  } else {
+    if (S.lockedDoors.length >= MAX_SEALED) { flash(`Only ${MAX_SEALED} doors can be sealed at once. Open one first.`); return; }
+    if (S.units.some(v => v.alive && !v.saved && v.x === x && v.y === y)) { flash("Someone is standing in the doorway."); return; }
+    S.lockedDoors.push(i); L.grid[y][x] = STEEL;
+    log(`${full(u)} seals the blast door in the ${area(x, y)}.`, "key");
+  }
+  u.ap -= 1; S.mode = null;
+  afterAction();
+}
+
 function recoverSanity() {
+  if (S.siren) return;   // nobody settles down with the alarm going
   for (const m of team()) {
     if (m.staring || m.lostSanTurn === S.turn) continue;
     m.san = Math.min(maxSanOf(m), m.san + prof(m).recover + (m.side === "mtf" ? S.setup.mods.recoverBonus : 0));

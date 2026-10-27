@@ -49,7 +49,8 @@ function perceive(blinked: Set<Unit>) {
 // Where to head with no one to kill in view: the freshest lead, else a room it hasn't searched.
 function goal173(): Pt[] {
   const st = S.statue;
-  const leads = [...S.mem.values()].filter(m => m.x !== st.x || m.y !== st.y);
+  // the breach siren drowns out gunfire, so shots tell it nothing while it wails
+  const leads = [...S.mem.entries()].filter(([k, m]) => (m.x !== st.x || m.y !== st.y) && !(S.siren && (k.startsWith("shot-") || k.startsWith("bang-")))).map(([, m]) => m);
   if (leads.length) {
     const newest = Math.max(...leads.map(m => m.turn));
     return leads.filter(m => m.turn === newest).map(m => [m.x, m.y] as Pt);

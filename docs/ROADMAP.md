@@ -65,11 +65,11 @@ Done alongside part 1
 - Depth bonus: containment wings are 10% less likely to breach per level below the top, and 5 points less likely to
   escape when the guards handle a breach alone, but Epsilon-11 takes a turn longer per level to arrive.
 
-## Phase 3C: tactical depth
+## Phase 3C (done): tactical depth
 
 From the XCOM 2 comparison, plus harder breaches. Order: (1) harder breaches, hunker down, carrying and exits
 (done); (2) concealment and enemy pods (done); (3) maps assembled from room plots (done); (4) night missions, escorts and
-retaliation (done); (5) doors and sirens.
+retaliation (done); (5) doors and sirens (done).
 
 - Breaches: 1 to 3 researchers are caught in the wing. Walk someone next to one and they follow that person to an exit.
   Dead researchers come off the staff count; each rescue is a small sanity boost.
@@ -79,7 +79,8 @@ retaliation (done); (5) doors and sirens.
 - Escort missions as the second half of distant field captures: the convoy home, with an ambush chance.
 - Night missions (set by the hour on the clock): shorter sight range, flares as an item.
 - Retaliation: the Insurgency attacks a town where you just captured something, to draw your squad out.
-- Lockable doors from panels during breaches (SCP-106 ignores them); alarm lights and sirens that attract sound hunters.
+- Blast doors sealed from the Wing C panel (up to 2; SCP-106 ignores them); the breach siren, which blocks quiet-turn
+  sanity recovery but hides gunfire from SCP-173 (and will draw sound hunters like SCP-939 later).
 
 - Concealment: strikes and cover-ups start hidden; firing or being seen breaks it. Witnesses only run once it's broken.
 - Enemy pods: Insurgents in fire teams that activate together when spotted, then scramble to cover.

@@ -34,11 +34,13 @@ export const ABILITIES: AbilityDef[] = [
   { perk: "exfil", label: "Exfiltrate", target: "self", when: u => onExit(u), desc: "Leave the mission through this exit. Anyone you carry, and researchers following you, come too." },
   { perk: "hunker", label: "Hunker down", target: "self", endsTurn: true, when: u => !u.carrying && hasCover(u), desc: "Get low behind cover: it counts double until your next turn." },
   { perk: "calm", label: "Calm SCP-049", target: "doctor", desc: "Talk SCP-049 down from within 3 tiles (6 sanity). It won't act on its next turn, and you lead it up to 3 tiles now." },
+  { perk: "doors", label: "Blast doors", target: "panel", desc: "At the panel: seal a doorway with a blast door, or open one (up to 2 sealed). Sealed doors block everyone but SCP-106." },
+  { perk: "siren", label: "Silence the siren", target: "panel", desc: "At the panel: switch the breach siren off or on. While it wails nobody recovers sanity, but SCP-173 can't hear where your shots come from." },
   { perk: "lockdown", label: "Lock the hatch", target: "panel", endsTurn: true, desc: "At the lockdown panel: seal the surface hatch so SCP-173 can't get out that way for a few turns. Takes both actions." },
   { perk: "dose", label: "Dose with amnestics", target: "witness", desc: "Give an adjacent witness amnestics. They forget what they saw and stop running." },
 ];
 
-const UNIVERSAL: AbilityId[] = ["secure", "dose", "lockdown", "calm", "restrain", "pickup", "drop", "exfil", "hunker"];
+const UNIVERSAL: AbilityId[] = ["secure", "dose", "lockdown", "doors", "siren", "calm", "restrain", "pickup", "drop", "exfil", "hunker"];
 const onExit = (u: Unit) => L.exitMap[u.y * L.W + u.x] === 0;
 const hasCover = (u: Unit) => DIRS.some(([dx, dy]) => { const t = tileAt(u.x + dx, u.y + dy); return t === WALL || t === FULL || t === HALF || t === STEEL; });
 const knows = (u: Unit, p: AbilityId) => UNIVERSAL.includes(p)
@@ -70,7 +72,9 @@ export function abilityTargets(u: Unit, p: AbilityId): Unit[] {
     }
     case "panel": {
       const pn = L.def.panel;
-      return pn && S.has173 && !S.sealed && !u.staring && S.lockedUntil < S.turn && cheb(u.x, u.y, pn[0], pn[1]) <= 1 ? [u] : [];
+      const at = !!pn && !u.staring && cheb(u.x, u.y, pn[0], pn[1]) <= 1;
+      if (p === "doors" || p === "siren") return at && S.setup.kind === "breach" ? [u] : [];
+      return at && S.has173 && !S.sealed && S.lockedUntil < S.turn ? [u] : [];
     }
     case "ally": return team().filter(a => adjacent(u, a) && (p === "medkit" ? a.hp < a.maxHp && a.side === "mtf" : a.san < maxSanOf(a)));
     case "downed": return S.units.filter(a => a.alive && a.downed && !a.stabilized && adjacent(u, a));
@@ -106,6 +110,7 @@ export function startAbility(p: AbilityId, flash: (t: string) => void) {
   if (S.mode === "ability" && S.ability === p) { S.mode = null; S.ability = null; hooks.update(); return; }
   const why = abilityCheck(u, p);
   if (why) { flash(why); return; }
+  if (p === "doors") { if (u.ap < 1) { flash("No actions left this turn."); return; } S.mode = "doors"; hooks.update(); return; }
   if (def(p).target === "self" || def(p).target === "panel") { useAbility(u, p, u); return; }
   if (def(p).target === "doctor") { useAbility(u, p, S.statue); return; }
   S.mode = "ability"; S.ability = p; S.pending = null;
@@ -164,6 +169,10 @@ export function useAbility(u: Unit, p: AbilityId, t: Unit) {
       S.mode = "lead"; S.selected = u;
       hooks.update();
       return;
+    case "siren":
+      S.siren = !S.siren;
+      log(S.siren ? `${full(u)} switches the breach siren back on.` : `${full(u)} silences the breach siren. In the quiet, everyone can think again, and anything listening can hear the shots.`, "key");
+      break;
     case "lockdown":
       S.lockedUntil = S.turn + S.setup.mods.lockdownTurns;
       log(`${full(u)} throws the lockdown: the surface hatch is sealed until turn ${S.lockedUntil + 1}.`, "good");

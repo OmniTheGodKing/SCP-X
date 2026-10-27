@@ -279,6 +279,11 @@ export function createRenderer(cv: HTMLCanvasElement) {
       ctx.strokeStyle = "#7d6f5a"; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.moveTo(cx - 7, cy - 7); ctx.lineTo(cx + 7, cy + 7); ctx.moveTo(cx + 7, cy - 7); ctx.lineTo(cx - 7, cy + 7); ctx.stroke();
     }
+    // choosing a doorway to seal or open
+    if (playing && S.mode === "doors") {
+      for (const i of L.doors) { const x = i % L.W, y = (i / L.W) | 0; ctx.strokeStyle = S.lockedDoors.includes(i) ? C.ok : C.manila; ctx.lineWidth = 2; ctx.strokeRect(x * TS + 3, y * TS + 3, TS - 6, TS - 6); }
+    }
+    for (const i of S.lockedDoors) { const x = i % L.W, y = (i / L.W) | 0; tag("SEALED", x * TS + TS / 2, y * TS + TS / 2, C.manila); }
     // leading a calmed SCP-049
     if (playing && S.mode === "lead") {
       ctx.fillStyle = "rgba(134,193,147,0.25)";
