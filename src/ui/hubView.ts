@@ -5,7 +5,7 @@ import {
   powerShort, powerSupply, powerUse, repair, sanityPerDay, type Facility, type FacilityType,
 } from "../campaign/base";
 import {
-  DCLASS_COST, DCLASS_MONTHLY, RANKS, RANK_XP, RECRUIT_COST, advanceDay, advanceToEvent, aimOf, blinkFullOf, buyDClass,
+  DCLASS_COST, DCLASS_MONTHLY, RANKS, RANK_XP, RECRUIT_COST, advanceDay, aimOf, blinkFullOf, buyDClass,
   canBuyDClass, canHireEngineer, dayOfMonth, deployable, hireEngineer, maxSanOf, monthOf, monthlyFunding, recruit,
   INTEL_PER_PRISONER, INTERROGATION_DAYS, PRISONER_BOUNTY, holdingCapacity, canRetrain, canTherapy, canWeaken, dateText, fitAttachment, gunFor, setWeapon, weaken, weaponOf, weaponOptions, chooseClass, choosePerk, perkChoices, promotionDue, startRetrain, startTherapy,
   pendingBreach, type Campaign, type Incident, type Loadout, type Operative,
@@ -64,6 +64,13 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let resetArmed = 0;
   let regionSel: RegionId = HOME;
 
+  // the running clock: starts paused every time the hub opens
+  let speed = 0, lastSpeed = 1;
+  const SPEEDS = [1, 2, 4], DAY_MS = 4000;
+  const hourText = () => `${String(Math.floor(c.hour ?? 0)).padStart(2, "0")}:00`;
+  const clockBlocked = () => !!c.over || !!pendingBreach(c) || !!c.notices?.length;
+  const setSpeed = (n: number) => { if (n > 0 && clockBlocked()) return; speed = n; if (n) lastSpeed = n; render(); };
+
   const ready = () => c.roster.filter(deployable);
   const watchPool = () => guardsReady(c);
   const scp173 = () => c.scps[0];
@@ -80,7 +87,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   <header class="top">
     <div>
       <div class="eyebrow">SCP Foundation · Site-19 Command · Mobile Task Force Epsilon-11</div>
-      <h1>Site-19 <small>${dateText(c.day)}</small></h1>
+      <h1>Site-19 <small>${dateText(c.day)} · <span id="clockHour">${hourText()}</span></small></h1>
     </div>
     <div class="turnbox">
       <span class="pill">Funds $${c.funds}k</span>
@@ -105,6 +112,11 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   </nav>
   ${flashMsg ? `<p class="warn-box" role="status">${esc(flashMsg)}</p>` : ""}
   ${tab === "command" ? commandTab() : tab === "world" ? worldTab() : tab === "site" ? siteTab() : tab === "research" ? researchTab() : personnelTab()}
+  ${!c.over && c.notices?.length ? `<div class="overlay fixed"><div class="sheet notice" role="dialog" aria-label="Time paused">
+    <div class="label">${dateText(c.day)} · time paused</div>
+    <ul class="debrief">${c.notices.slice(0, 8).map(n => `<li class="${n.kind}">${esc(n.text)}</li>`).join("")}${c.notices.length > 8 ? `<li>…and ${c.notices.length - 8} more in the site log.</li>` : ""}</ul>
+    <div class="row"><button class="act primary" type="button" id="noticeGo">Go to it</button><button class="act" type="button" id="noticeOk">Continue</button></div>
+  </div></div>` : ""}
   ${c.over ? `<div class="overlay fixed"><div class="sheet">
     <div class="stampmark lose">Command relieved</div>
     <h3>Site-19 has fallen.</h3>
@@ -129,7 +141,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       ${scpSummary(scp173())}
       <div class="card">
         <div class="label">Active incidents</div>
-        ${c.incidents.length ? c.incidents.map(incidentCard).join("") : `<p class="muted">No open incidents. Advance time to see what happens next.</p>`}
+        ${c.incidents.length ? c.incidents.map(incidentCard).join("") : `<p class="muted">No open incidents. Let time run to see what happens next.</p>`}
       </div>
       ${inc ? planPanel(inc) : ""}
       <div class="card">
@@ -141,13 +153,13 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     </section>
     <section class="col">
       <div class="card">
-        <div class="label">Time</div>
-        <div class="row">
-          <button class="act" id="dayBtn" type="button" ${c.over || pendingBreach(c) ? "disabled" : ""}>Next day</button>
-          <button class="act primary" id="waitBtn" type="button" ${c.over || pendingBreach(c) ? "disabled" : ""}>Advance until something happens</button>
+        <div class="label">Time · ${speed ? `running at ${speed}×` : "paused"}</div>
+        <div class="row speeds">
+          <button class="act ${speed ? "" : "on"}" type="button" data-speed="0" aria-pressed="${!speed}">Pause <kbd>Space</kbd></button>
+          ${SPEEDS.map((n, i) => `<button class="act ${speed === n ? "on" : ""}" type="button" data-speed="${n}" aria-pressed="${speed === n}" ${clockBlocked() ? "disabled" : ""}>${n}× <kbd>${i + 1}</kbd></button>`).join("")}
         </div>
         ${pendingBreach(c) ? `<p class="warn">A breach is under way. Deal with it before time moves on.</p>` : ""}
-        <p class="muted">"Advance" skips quiet stretches and stops when something needs you or a new month starts. Next month: $${monthlyFunding(c)}k from the fronts, $${monthlyUpkeep(c)}k upkeep, up to ${DCLASS_MONTHLY} D-Class. Operatives heal ${healPerDay(c)} HP and recover ${sanityPerDay(c)} sanity a day.</p>
+        <p class="muted">At 1× a day passes every ${DAY_MS / 1000} seconds. The clock pauses itself when something needs you. Next month: $${monthlyFunding(c)}k from the fronts, $${monthlyUpkeep(c)}k upkeep, up to ${DCLASS_MONTHLY} D-Class. Operatives heal ${healPerDay(c)} HP and recover ${sanityPerDay(c)} sanity a day.</p>
       </div>
       <div class="card">
         <div class="label">Alert level · Epsilon-11 reaches a breach on turn ${mtfArrival(c)}</div>
@@ -636,8 +648,9 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     });
     on("coverBtn", () => change(() => coverStory(c, regionSel)));
     on("locateBtn", () => change(() => locateCell(c, regionSel)));
-    on("dayBtn", () => change(() => advanceDay(c)));
-    on("waitBtn", () => change(() => advanceToEvent(c)));
+    root.querySelectorAll<HTMLElement>("[data-speed]").forEach(b => b.onclick = () => setSpeed(Number(b.dataset.speed)));
+    on("noticeGo", () => { tab = c.notices![0].tab; c.notices = []; act.save(); render(); window.scrollTo(0, 0); });
+    on("noticeOk", () => { c.notices = []; act.save(); setSpeed(lastSpeed); });
     on("recruitBtn", () => change(() => recruit(c)));
     root.querySelectorAll<HTMLElement>("[data-op]").forEach(b => b.onclick = () => { opSel = opSel === b.dataset.op ? null : b.dataset.op!; render(); });
     const opNow = () => c.roster.find(x => x.id === opSel)!;
@@ -679,6 +692,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     });
     root.querySelectorAll<HTMLElement>("[data-plan]").forEach(b => b.onclick = () => {
       planning = planning === b.dataset.plan ? null : b.dataset.plan!;
+      if (planning) speed = 0;   // nothing expires while a plan is being made
       if (planning && !chosen.size) for (const o of ready().slice(0, MAX_SQUAD)) chosen.add(o.id);
       render();
     });
@@ -711,6 +725,38 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     });
     on("overBtn", act.newCampaign);
   }
+
+  // the clock loop runs until the hub is replaced by a mission or a fresh hub
+  let last = performance.now();
+  const stillHere = () => root.contains(document.getElementById("clockHour")) && root.dataset.hub === mountId;
+  const mountId = String(Math.random());
+  root.dataset.hub = mountId;
+  const tick = (now: number) => {
+    if (!stillHere()) { document.removeEventListener("keydown", onKey); return; }
+    const dt = Math.min(250, now - last); last = now;
+    if (speed && clockBlocked()) { speed = 0; render(); }
+    if (speed) {
+      c.hour = (c.hour ?? 0) + dt * speed * 24 / DAY_MS;
+      let newDay = false;
+      while ((c.hour ?? 0) >= 24) {
+        c.hour! -= 24;
+        advanceDay(c);
+        newDay = true;
+        if (clockBlocked()) { speed = 0; c.hour = 0; break; }
+      }
+      if (newDay) { act.save(); render(); }
+      else { const el = document.getElementById("clockHour"); if (el) el.textContent = hourText(); }
+    }
+    requestAnimationFrame(tick);
+  };
+  const onKey = (e: KeyboardEvent) => {
+    const t = e.target as HTMLElement;
+    if (!stillHere() || (t.closest && t.closest("input,textarea,select"))) return;
+    if (e.key === " ") { e.preventDefault(); setSpeed(speed ? 0 : lastSpeed); }
+    else if (["1", "2", "3"].includes(e.key)) setSpeed(SPEEDS[Number(e.key) - 1]);
+  };
+  document.addEventListener("keydown", onKey);
+  requestAnimationFrame(tick);
 
   render();
   window.scrollTo(0, 0);

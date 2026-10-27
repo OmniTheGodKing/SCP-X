@@ -274,3 +274,8 @@ ul.traits button { margin-left: 6px; padding: 4px 8px; }
 .dbg-field select, .dbg-field input { background: var(--panel); color: var(--ink); border: 1px solid var(--line); padding: 3px; font: inherit; }
 .dbg-note { margin: 0; color: var(--alert); }
 .debug-toggle { position: fixed; left: 12px; bottom: 12px; z-index: 49; }
+
+/* ---------- clock ---------- */
+.speeds .act kbd { margin-left: 4px; }
+.notice ul.debrief li.bad { color: #8a2a1c; }
+.notice ul.debrief li.good { color: #2f5a35; }

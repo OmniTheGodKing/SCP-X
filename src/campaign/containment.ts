@@ -76,7 +76,7 @@ export function startBreach(c: Campaign, s: ScpRecord, cause: string) {
   };
   c.nextIncident++;
   c.incidents.push(inc);
-  log(c, `${cause} ${s.name} is out of its cell. Site Security is responding now: send Epsilon-11 in after them, or leave it to the guards.`, "bad");
+  log(c, `${cause} ${s.name} is out of its cell. Site Security is responding now: send Epsilon-11 in after them, or leave it to the guards.`, "bad", "command");
 }
 
 export function goDark(c: Campaign, s: ScpRecord, why: string, from = "Site-19") {
@@ -103,7 +103,7 @@ export function resurface(c: Campaign, s: ScpRecord, at?: RegionId) {
   c.incidents.push(inc);
   s.resurfaceDay = undefined;
   addExposure(c, region, 5);
-  log(c, `${s.name} has turned up near ${where}, and the locals have seen it (+5 exposure in ${REGIONS[region].name}). Recover it within ${inc.expires - c.day} days.`, "bad");
+  log(c, `${s.name} has turned up near ${where}, and the locals have seen it (+5 exposure in ${REGIONS[region].name}). Recover it within ${inc.expires - c.day} days.`, "bad", "command");
 }
 
 /** One day of containment: wear, breaches, unanswered breaches spreading or escaping, sightings. */
@@ -125,6 +125,7 @@ export function tickContainment(c: Campaign) {
     // breaches are answered on the spot, so only sightings can run out of time
     if (inc.kind === "recovery" && c.day > inc.expires) {
       drop(); addExposure(c, inc.region, 15); c.stats.missed++;
+      log(c, `${inc.title.split(":")[0]} went unanswered.`, "bad", "command");
       goDark(c, s, `The sighting went unanswered (+15 exposure in ${REGIONS[inc.region].name}).`, REGIONS[inc.region].name);
     }
   }

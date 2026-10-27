@@ -122,6 +122,10 @@ Built in pass 2E:
 - Guards who survive 3 breaches can train into Epsilon-11 ($80k, 10 days).
 - Cleaning is D-Class only: three go in, two watch. Tests and moves can add guards at the door as watchers.
 
+### Running clock
+
+Time on the hub runs on its own, like the XCOM 2 Avenger scan. Pause, 1×, 2× and 4× (Space, 1, 2, 3); at 1× a day takes 4 seconds. Daily systems still tick once per day at midnight. The clock pauses with a notice for new incidents, breaches, unanswered incidents, finished research, construction or workshop orders, promotions, finished therapy or training, collapsed fronts and the monthly report. Opening a deployment plan pauses it, and it starts paused whenever the hub opens.
+
 ### Debug menu
 
 Press the backtick key, or open the page with `?debug` for a Debug button. On the hub it adds resources, skips time or jumps the calendar, spawns any incident in any region, finishes research and construction, and edits operatives, guards, alert level, regional exposure and SCP-173's status. In a mission it reveals the map, wins or loses, refills the squad, makes them invincible, brings reinforcements in, kills units, and freezes, teleports or provokes SCP-173. A campaign it touches is marked as a debug save. `node tests/combat.e2e.cjs` (after `npm run build`) checks shooting and frag grenades in a breach.

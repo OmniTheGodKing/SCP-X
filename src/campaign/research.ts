@@ -158,7 +158,7 @@ export function tickResearch(c: Campaign) {
       const p = PROJECTS[id], u = p.unlocks;
       const next = u ? ` ${ITEMS[u].name} can now be built in the workshop.` : p.model || (p.armorTier ?? 0) > 1 ? " Refit the squad in the workshop." : p.attachment ? ` ${ATTACHMENTS[p.attachment].name} can now be built in the workshop.` : "";
       if (p.armorTier === 1) c.armorTier = Math.max(c.armorTier, 1);
-      log(c, `Research complete: ${p.name}.${next}`, "good");
+      log(c, `Research complete: ${p.name}.${next}`, "good", "research");
     }
   }
   const working = countOperational(c, "workshop") > 0;
@@ -168,17 +168,17 @@ export function tickResearch(c: Campaign) {
       c.orders = c.orders.filter(x => x !== o);
       if (o.item) {
         c.inventory[o.item] = (c.inventory[o.item] || 0) + 1;
-        log(c, `Workshop: ${ITEMS[o.item].name} ready.`, "good");
+        log(c, `Workshop: ${ITEMS[o.item].name} ready.`, "good", "research");
       } else if (o.attachment) {
         c.attachments[o.attachment] = (c.attachments[o.attachment] || 0) + 1;
-        log(c, `Workshop: ${ATTACHMENTS[o.attachment].name} ready. Fit it on the Personnel tab.`, "good");
+        log(c, `Workshop: ${ATTACHMENTS[o.attachment].name} ready. Fit it on the Personnel tab.`, "good", "research");
       } else if (o.refit?.startsWith("armor:")) {
         c.armorTier = Number(o.refit.slice(6));
-        log(c, `Workshop: every vest refitted as ${ARMOR_TIERS[c.armorTier].name}.`, "good");
+        log(c, `Workshop: every vest refitted as ${ARMOR_TIERS[c.armorTier].name}.`, "good", "research");
       } else if (o.refit) {
         const m = model(o.refit);
         c.models[m.type] = m.id;
-        log(c, `Workshop: Epsilon-11 is now issued the ${m.name}.`, "good");
+        log(c, `Workshop: Epsilon-11 is now issued the ${m.name}.`, "good", "research");
       }
     }
   }
