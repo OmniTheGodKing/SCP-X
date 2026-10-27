@@ -1,6 +1,7 @@
 // The O5 Council: Site-19's standing with it, its monthly orders, what it can be asked for, and the transfers of
 // anomalies it arranges between sites. Standing is separate from exposure: exposure is what the public knows,
 // standing is what the Council thinks of Site-19's command.
+import { chronicle } from "./history";
 import { REGIONS, REGION_IDS, HOME, type RegionId } from "../data/regions";
 import { UNITS, rollCandidate } from "../data/units";
 import { dateText, gainIntel, log, monthName, operativeFrom, yearOf, type Campaign, type Incident } from "./campaign";
@@ -58,8 +59,10 @@ export function addStanding(c: Campaign, n: number, why: string) {
   k.standing = Math.max(0, Math.min(100, k.standing + n));
   k.history.unshift({ day: c.day, n: k.standing - before, why });
   if (k.history.length > 30) k.history.pop();
-  if (tierOf(before).name !== tierOf(k.standing).name)
+  if (tierOf(before).name !== tierOf(k.standing).name) {
+    chronicle(c, "council", `O5 Council standing became ${tierOf(k.standing).name.toLowerCase()} (${k.standing}) after: ${why}.`);
     log(c, `O5 Council standing is now ${tierOf(k.standing).name.toLowerCase()} (${k.standing}). ${tierOf(k.standing).desc}`, n > 0 ? "good" : "bad", "command");
+  }
 }
 
 /** The Council's own monthly grant to Site-19, on top of what the fronts pass on. */
@@ -156,7 +159,7 @@ export function directiveText(c: Campaign, d: Directive) {
     case "research": return `Finish ${PROJECTS[d.project!].name}`;
     case "contact": return "Establish a new front";
     case "no_missed": return "Let no incident go unanswered";
-    case "clean": return "Keep every cell cleaned on schedule";
+    case "clean": return "Keep every containment routine on schedule";
   }
 }
 /** How the order stands now: met (it can be closed early), broken, or still open. */
@@ -182,6 +185,7 @@ export function directiveProgress(c: Campaign, d: Directive) {
 
 function settle(c: Campaign, d: Directive, ok: boolean) {
   d.state = ok ? "done" : "failed";
+  chronicle(c, "council", `O5 order ${ok ? "met" : "failed"}: ${directiveText(c, d)}.`);
   if (ok) {
     const got = grantReward(c, d.reward);
     addStanding(c, d.standing, `order met: ${directiveText(c, d).toLowerCase()}`);
@@ -240,6 +244,7 @@ export function makeRequest(c: Campaign, id: RequestId) {
   if (canRequest(c, id)) return;
   const q = REQUESTS[id], k = c.council;
   k.requests[id] = c.day;
+  chronicle(c, "council", `Site-19 asked the O5 Council for: ${q.name.toLowerCase()}.`);
   if (q.cost) addStanding(c, -q.cost, `request granted: ${q.name.toLowerCase()}`);
   switch (id) {
     case "funding": c.funds += 100; log(c, "The O5 Council approves an emergency appropriation: $100k.", "good"); break;
@@ -283,6 +288,7 @@ export function answerOffer(c: Campaign, id: string, yes: boolean) {
   const k = c.council, o = k.offers.find(x => x.id === id);
   if (!o || (yes && canAcceptOffer(c, o))) return;
   k.offers = k.offers.filter(x => x !== o);
+  chronicle(c, "council", `${yes ? "Accepted" : "Refused"}: ${o.text}`);
   if (!yes) {
     if (o.kind === "order") addStanding(c, -6, `refused the transfer of ${scpName(o.get!)}`);
     log(c, o.kind === "order" ? `Site-19 refuses to take ${scpName(o.get!)}. The Council won't forget it.` : `Site-19 declines ${o.from}'s offer.`, o.kind === "order" ? "bad" : "");
@@ -336,6 +342,7 @@ function arrive(c: Campaign, t: Transit) {
     c.scps = c.scps.filter(s => s.id !== t.scp);
     c.funds += t.funds;
     addStanding(c, t.standing, `${d.name} handed to ${t.site}`);
+    chronicle(c, "anomaly", `${d.name} was transferred to ${t.site} for good.`);
     log(c, `${d.name} is now held at ${t.site}${t.funds ? ` (+$${t.funds}k)` : ""}. Site-19 no longer studies it.`, "key", "site");
     return;
   }
@@ -360,6 +367,7 @@ export function receive(c: Campaign, t: Transit) {
   c.scps.push({ id: t.scp, name: d.name, title: d.title, cls: d.cls, status: "contained", wingId: wing.id, maintenance: 100, lastCleaned: c.day });
   if (t.scp === "500") c.pills = (c.pills ?? 0) + 5;
   c.funds += t.funds;
+  chronicle(c, "anomaly", `${d.name}, "${d.title}", arrived from ${t.site} and was contained at Site-19.`);
   addStanding(c, t.standing, `took ${d.name} from ${t.site}`);
   log(c, `${d.name}, "${d.title}", arrives from ${t.site}${t.funds ? ` (+$${t.funds}k)` : ""}. ${d.use ?? "New research is open."}`, "good", "site");
 }
@@ -367,6 +375,7 @@ export function receive(c: Campaign, t: Transit) {
 export function transferFought(c: Campaign, t: Transit, win: boolean): string {
   if (win) { receive(c, t); return `${scpName(t.scp)} reached Site-19.`; }
   addStanding(c, -8, `lost ${scpName(t.scp)} in transit`);
+  chronicle(c, "anomaly", `${scpName(t.scp)} was taken by the Insurgency from a transfer convoy.`);
   addExposure(c, HOME, 8);
   if (t.scp === "106") c.sightings["106"] = c.day + rand(60, 120);
   return `The Insurgency took ${scpName(t.scp)} off the truck. The Council holds Site-19 responsible.`;
@@ -392,6 +401,7 @@ export function crisis(c: Campaign) {
     made.push(inc);
   }
   if (made.length < 2) { for (const i of made) { i.group = undefined; } return; }
+  chronicle(c, "insurgency", `Several incidents at once: ${made.map(i => i.title.split(": ")[1]).join("; ")}. Only one could be answered.`);
   log(c, `Several reports at once: ${made.map(i => `${i.title.split(": ")[1]} (${rewardText(i.reward!)})`).join("; ")}. Epsilon-11 can only answer one of them. The rest will go unanswered.`, "bad", "command");
 }
 /** Epsilon-11 deployed to one incident in a group: the others are lost. */
@@ -418,6 +428,7 @@ export function tickCouncil(c: Campaign) {
   if (k.standing < AUDIT_BELOW && !k.audit) {
     k.audit = true;
     c.inspectionDay = Math.min(c.inspectionDay ?? Infinity, c.day + 14);
+    chronicle(c, "council", `Standing fell to ${k.standing}: the O5 Council ordered an audit.`);
     log(c, `The O5 Council orders an audit of Site-19: an inspector arrives ${dateText(c.inspectionDay)}. Failing it costs twice as much; passing restores some standing.`, "bad", "command");
   }
   // transfers

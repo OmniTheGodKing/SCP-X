@@ -2,7 +2,7 @@
 // Incidents are placed at the town they happened in (or at Site-19 for anything inside the site); independent
 // Foundation facilities are shown too, but Site-19 is the only one the player runs.
 import { REGIONS, SITE19, type RegionId } from "../data/regions";
-import { has } from "./research";
+import { anomalyProgress, has } from "./research";
 import { rewardText } from "./council";
 import { addExposure, flightOut, isContacted, locateCell, travelDays } from "./world";
 import { scpName } from "./containment";
@@ -54,28 +54,42 @@ export function incidentState(c: Campaign, inc: Incident): "active" | "urgent" |
   return "open";
 }
 
+/** The field report behind an incident: usually right, sometimes off by one or two, now and then badly wrong.
+ *  Kept on the incident so it reads the same every time; a cell that grows later makes it out of date. */
+export function reportOf(inc: Incident) {
+  if (!inc.report) {
+    const x = Math.random(), off = x < 0.7 ? 0 : x < 0.9 ? (Math.random() < 0.5 ? -1 : 1) : (Math.random() < 0.5 ? -1 : 1) * (2 + Math.floor(Math.random() * 2));
+    inc.report = { ins: Math.max(0, inc.insurgents + off), day: inc.appeared };
+  }
+  return inc.report;
+}
+
 /** What the player knows about an incident, what they don't, and what's at stake, for the briefing panel. */
 export function briefing(c: Campaign, inc: Incident) {
   const place = incidentPlace(inc), t = flightOut(c, inc);
   const left = inc.expires - c.day, immediate = inc.kind === "breach" || inc.kind === "riot" || inc.kind === "raid" || inc.kind === "escort";
   const ins = Math.max(0, inc.insurgents - (inc.weakened ?? 0));
-  const known: string[] = [], unknown: string[] = [];
-  // opposition: exact with codebooks, otherwise only a rough report
+  const known: string[] = [], estimated: string[] = [], unknown: string[] = [];
+  // opposition: confirmed with codebooks or an investigation, otherwise a field report that can be out of date or wrong
+  const rep = reportOf(inc), est = Math.max(0, rep.ins - (inc.weakened ?? 0));
   if (inc.kind === "outbreak") known.push("No Insurgents expected; SCP-610 instances and spreading flesh.");
   else if (inc.kind === "riot") known.push("Rioting D-Class, unarmed.");
-  else if (has(c, "codebooks") || inc.recon || inc.kind === "raid") known.push(ins ? `${ins} Insurgents${inc.kind === "raid" ? " at the wire" : ""}.` : "No Insurgents on site.");
-  else if (ins) unknown.push(`Insurgent numbers: reports say ${ins >= 4 ? "heavy" : ins >= 2 ? "some" : "light"} activity. Investigating (or Insurgency codebooks research) gives the exact count.`);
-  else known.push("No Insurgency activity reported.");
+  else if (has(c, "codebooks") || inc.recon || inc.kind === "raid" || inc.kind === "breach" || inc.kind === "escort") {
+    known.push(ins ? `${ins} Insurgents${inc.kind === "raid" ? " at the wire" : ""}.` : "No Insurgents on site.");
+    if (inc.recon && rep.ins !== inc.insurgents) known.push(`The first report said ${rep.ins}: it was ${rep.ins < inc.insurgents && inc.grown ? "out of date" : "wrong"}.`);
+  } else if (est || ins) estimated.push(`${est <= 1 ? "1 or 2" : `${est - 1} to ${est + 1}`} Insurgents, from a field report of ${dateText(rep.day)}. Reports can be out of date or plain wrong; investigating (or Insurgency codebooks research) confirms the number.`);
+  else estimated.push(`No Insurgency activity reported (as of ${dateText(rep.day)}).`);
   // the anomaly
   if (inc.scpId && !inc.first) known.push(`Anomaly: ${scpName(inc.scpId)}.`);
   else if (inc.first && inc.recon) known.push(`Anomaly: ${scpName(inc.scpId)}, identified by investigation.`);
   else if (inc.first) unknown.push("Anomaly: unidentified. Witnesses describe something new; investigating would identify it.");
   if (inc.witnesses) known.push(`${inc.witnesses} witness${inc.witnesses === 1 ? "" : "es"} to dose.`);
-  if (inc.civilians) known.push(`${inc.civilians} civilian${inc.civilians === 1 ? "" : "s"} in the area.`);
+  if (inc.civilians) (inc.recon ? known : estimated).push(`${inc.recon ? "" : "About "}${inc.civilians} civilian${inc.civilians === 1 ? "" : "s"} in the area.`);
+  if (inc.kind !== "breach" && inc.kind !== "riot" && inc.kind !== "raid" && inc.kind !== "escort") known.push(`Weather and light: ${missionWeather(c, inc) === "clear" ? "clear" : WEATHER[missionWeather(c, inc)].name.toLowerCase()}${nightAt(c, inc) ? ", dark" : ""} right now.`);
   const bonus = MISSION_BONUS[inc.kind] ?? 0;
   const rewards = [bonus ? `$${bonus}k from the O5 Council` : "", inc.kind === "coverup" ? "−10 exposure here" : inc.kind === "riot" || inc.kind === "raid" ? "" : "−5 exposure here",
     inc.kind === "strike" || inc.kind === "retaliation" || inc.kind === "raid" ? "captured Insurgent weapons and prisoners for research" : "",
-    inc.first ? "a new anomaly for Site-19 to hold and study" : "", inc.kind === "outbreak" ? "SCP-610 burned back a stage" : "",
+    inc.first ? (inc.recon ? `${scpName(inc.scpId)} for Site-19 to hold and study (opens ${anomalyProgress(c, inc.scpId).projects.map(p => p.name).join(", ") || "new research"})` : "a new anomaly for Site-19 to hold and study") : "", inc.kind === "outbreak" ? "SCP-610 burned back a stage" : "",
     inc.reward ? `${rewardText(inc.reward)} from the Council for answering this one` : "", inc.transfer ? `${scpName(inc.transfer.scp)} delivered to Site-19` : ""].filter(Boolean);
   const ignore = inc.kind === "breach" ? "Site Security faces it alone; it may escape or wreck neighbouring facilities."
     : inc.kind === "riot" ? "Leave it to the guards: a few D-Class die."
@@ -92,7 +106,7 @@ export function briefing(c: Campaign, inc: Incident) {
     place, travel: t, arrives: c.day + t,
     deadline: immediate ? "Now" : inc.kind === "outbreak" ? "Ongoing: worsens every 2 weeks" : inc.dispatch ? `Handled ${dateText(inc.dispatch.done)}` : left <= 0 ? "Last day" : `${dateText(inc.expires)} (${left} day${left === 1 ? "" : "s"})`,
     short: immediate ? "now" : inc.kind === "outbreak" ? "ongoing" : inc.dispatch ? "en route" : left <= 0 ? "last day" : `${left}d`,
-    reachable: inc.kind === "escort" || c.day + t <= inc.expires, known, unknown, rewards, ignore, worse: worsening(inc),
+    reachable: inc.kind === "escort" || c.day + t <= inc.expires, known, estimated, unknown, rewards, ignore, worse: worsening(inc),
     arrival: arrivalTurn ? `Epsilon-11 reaches the scene on turn ${arrivalTurn}.` : t ? `The team lands ${dateText(c.day + t)} after ${t} day${t > 1 ? "s" : ""} in the air.` : "The team goes by road and is there the same day.",
   };
 }

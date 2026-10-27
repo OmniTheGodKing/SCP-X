@@ -1,5 +1,6 @@
 // Site Security: the guards who are actually at Site-19 when a cell fails, the alert level that
 // decides how quickly Epsilon-11 can get there, and breaches left to the guards alone.
+import { chronicle } from "./history";
 import { TRAITS, type TraitId } from "../data/classes";
 import { familyOf, withGivenName } from "../data/names";
 import { model } from "../data/weapons";
@@ -189,6 +190,7 @@ export function startRaid(c: Campaign) {
   c.incidents.push({ id: "inc" + c.nextIncident, kind: "raid", scpId: "", region: HOME, map: "gate", appeared: c.day, expires: c.day, insurgents: raidSize(c),
     title: `Incident ${String(c.nextIncident).padStart(3, "0")}: Insurgency raid on Site-19` });
   c.nextIncident++;
+  chronicle(c, "insurgency", `The Chaos Insurgency raided Site-19's surface compound with about ${raidSize(c)} fighters.`);
   log(c, `Gunfire at the wire: the Chaos Insurgency is attacking Site-19's surface compound, about ${raidSize(c)} of them. Site Security is holding; Epsilon-11 can come up the lift.`, "bad", "command");
 }
 /** What the Insurgency gets when it reaches the lift: its people out of holding, or the payroll and a wrecked building. */
@@ -201,7 +203,7 @@ export function raidLoss(c: Campaign): string[] {
     if (took) out.push(`They emptied the payroll safe ($${took}k).`);
   }
   const hit = c.base.facilities.filter(f => f.level === 0 && f.type !== "command" && f.type !== "generator" && !f.disabled && f.daysLeft === 0);
-  if (hit.length) { const f = hit[rand(0, hit.length - 1)]; wreckFacility(c, f, "Demolition charges went off on the way out."); out.push(`The ${nameInText(f.type)} on level 1 was wrecked.`); }
+  if (hit.length) { const f = hit[rand(0, hit.length - 1)]; wreckFacility(c, f, "Demolition charges went off on the way out.", true); out.push(`The ${nameInText(f.type)} on level 1 was wrecked.`); }
   addExposure(c, HOME, 5); out.push("Locals heard the shooting (+5 exposure in the Eastern US).");
   return out;
 }
@@ -252,7 +254,7 @@ export function letGuardsHandle(c: Campaign, inc: Incident) {
   const wing = wingOf(c, s);
   const hit = wing ? neighbors(c, wing).filter(n => n.type !== "command" && !n.disabled && n.daysLeft === 0) : [];
   if (hit.length) {
-    wreckFacility(c, hit[rand(0, hit.length - 1)], `${s.name} tore through the wall next door.`);
+    wreckFacility(c, hit[rand(0, hit.length - 1)], `${s.name} tore through the wall next door.`, true);
   }
   const dead = lost.length ? ` ${lost.join(" and ")} ${lost.length > 1 ? "were" : "was"} killed.` : "";
   if (Math.random() < Math.max(0.1, 0.4 - DEPTH.escape * wingLevel(c, inc.scpId))) {

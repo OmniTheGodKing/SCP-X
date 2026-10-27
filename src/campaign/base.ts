@@ -45,6 +45,26 @@ export const nameInText = (t: FacilityType) => {
 export const SLOTS = 6, MAX_LEVELS = 6;
 export const EXCAVATE = { cost: 200, days: 10, engineers: 4 };
 export const REPAIR = { cost: 30, days: 3, engineers: 2 };
+/** A wrecked facility (blown up, torn through by an anomaly) takes much longer to rebuild than a damaged one. */
+export const REBUILD = { cost: 90, days: 9, engineers: 4 };
+export const repairOf = (f: Facility) => f.wrecked ? REBUILD : REPAIR;
+/** What stops working while a facility is out of action, in words. */
+export function damageEffect(c: Campaign, f: Facility): string {
+  switch (f.type) {
+    case "generator": return `${generatorOutput(f)} power lost${powerShort(c) ? ": Site-19 is short of power, and every wing's breach risk is up" : ""}.`;
+    case "security": return "No guards respond from this post, and containment wings on its level lose its protection.";
+    case "lab": return "Its 4 desks of lab space are gone; researchers over the limit stop work.";
+    case "workshop": return "Its 4 engineer berths are gone, and nothing it would build can be ordered.";
+    case "barracks": return `${f.upgraded ? 15 : 10} D-Class beds lost.`;
+    case "medical": return "Wounded heal at the slower rate.";
+    case "psych": return "No therapy, and sanity recovers at the slower rate.";
+    case "holding": return "No prisoners can be held or interrogated here.";
+    case "amnestics": return "Its amnestics production stops.";
+    case "training": return "No drills, no retraining, and trainers can't teach.";
+    case "cont_safe": case "cont_euclid": case "cont_keter": return "Whatever it holds breaches three times as often; nothing new can be moved in.";
+    default: return "Out of action.";
+  }
+}
 export const ENGINEER_COST = 50;
 
 export interface Facility {
@@ -54,6 +74,8 @@ export interface Facility {
   slot: number;
   daysLeft: number;    // > 0 while under construction
   disabled: boolean;   // damaged by a breach
+  /** Wrecked rather than damaged: needs a full rebuild. */
+  wrecked?: boolean;
   repairDays: number;  // > 0 while being repaired
   demolishDays?: number;  // > 0 while being torn down
   upgraded?: boolean;     // expanded (barracks)
@@ -116,7 +138,7 @@ export const powerUse = (c: Campaign) =>
 export const powerShort = (c: Campaign) => powerUse(c) > powerSupply(c);
 
 export const engineersBusy = (c: Campaign) =>
-  c.base.facilities.reduce((a, f) => a + (f.daysLeft > 0 ? FACILITIES[f.type].engineers : 0) + (f.repairDays > 0 ? REPAIR.engineers : 0) + (f.demolishDays ? 1 : 0) + (f.upgradeDays ? (f.type === "generator" ? GEN_TIERS[(f.genTier ?? 0) + 1]?.engineers ?? 0 : UPGRADE.engineers) : 0), 0)
+  c.base.facilities.reduce((a, f) => a + (f.daysLeft > 0 ? FACILITIES[f.type].engineers : 0) + (f.repairDays > 0 ? repairOf(f).engineers : 0) + (f.demolishDays ? 1 : 0) + (f.upgradeDays ? (f.type === "generator" ? GEN_TIERS[(f.genTier ?? 0) + 1]?.engineers ?? 0 : UPGRADE.engineers) : 0), 0)
   + (c.base.excavation > 0 ? EXCAVATE.engineers : 0) + c.orders.length;
 export const engineersFree = (c: Campaign) => c.engineers - engineersBusy(c);
 
@@ -199,14 +221,16 @@ export function demolish(c: Campaign, f: Facility) {
 export function canRepair(c: Campaign, f: Facility): string | null {
   if (!f.disabled) return "Not damaged.";
   if (f.repairDays > 0) return "Already being repaired.";
-  if (c.funds < REPAIR.cost) return `Needs $${REPAIR.cost}k.`;
-  if (engineersFree(c) < REPAIR.engineers) return `Needs ${REPAIR.engineers} free engineers.`;
+  const r = repairOf(f);
+  if (c.funds < r.cost) return `Needs $${r.cost}k.`;
+  if (engineersFree(c) < r.engineers) return `Needs ${r.engineers} free engineers.`;
   return null;
 }
 export function repair(c: Campaign, f: Facility) {
   if (canRepair(c, f)) return;
-  c.funds -= REPAIR.cost;
-  f.repairDays = REPAIR.days;
+  const r = repairOf(f);
+  c.funds -= r.cost;
+  f.repairDays = r.days;
 }
 
 export function canExcavate(c: Campaign): string | null {
@@ -227,7 +251,7 @@ export function tickConstruction(c: Campaign): string[] {
   const done: string[] = [];
   for (const f of c.base.facilities) {
     if (f.daysLeft > 0 && --f.daysLeft === 0) done.push(`${FACILITIES[f.type].name} on level ${f.level + 1} is complete.`);
-    if (f.repairDays > 0 && --f.repairDays === 0) { f.disabled = false; done.push(`${FACILITIES[f.type].name} on level ${f.level + 1} is repaired.`); }
+    if (f.repairDays > 0 && --f.repairDays === 0) { done.push(`${FACILITIES[f.type].name} on level ${f.level + 1} is ${f.wrecked ? "rebuilt" : "repaired"}.`); f.disabled = false; f.wrecked = undefined; }
   }
   for (const f of c.base.facilities) if (f.upgradeDays && --f.upgradeDays === 0) {
     if (f.type === "generator") { f.genTier = (f.genTier ?? 0) + 1; done.push(`The generator on level ${f.level + 1} is refitted as a ${genTierOf(f).name.toLowerCase()}: ${genTierOf(f).power} power.`); }

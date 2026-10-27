@@ -1,4 +1,5 @@
 import "./styles.css";
+import { briefing } from "./campaign/geo";
 import { advanceDay, applyResult, buildSetup, log, newCampaign, refreshRecruits, resolveInterrupted, type Campaign, type Debrief } from "./campaign/campaign";
 import { clearCampaign, loadCampaign, saveCampaign } from "./campaign/save";
 import { REGIONS } from "./data/regions";
@@ -62,6 +63,8 @@ function showHub() {
       if (travelBlock(campaign, inc)) return;
       const setup = buildSetup(campaign, inc, loadouts, dCount);
       forfeitGroup(campaign, inc);
+      { const b = briefing(campaign, inc); const first = (t: string) => t.split(/(?<=\.) /)[0];
+        inc.briefed = [...b.known.map(first), ...b.estimated.map(t => `Estimated: ${first(t)}`), ...b.unknown.map(t => `Unknown: ${first(t)}`)].join(" "); }
       // the flight out: days pass at Site-19 while the squad is in the air
       // a storm over the destination holds the flight back a day
       const storm = inc.kind !== "escort" && stormDelay(campaign, inc.region), t = flightOut(campaign, inc);

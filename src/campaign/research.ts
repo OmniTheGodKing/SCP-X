@@ -266,6 +266,18 @@ export function projectVisible(c: Campaign, id: string) {
   if (p.afterMilestone && !(c.milestones ?? []).includes(p.afterMilestone) && !(p.afterMilestone === "fire" && (c.materials.outbreaks ?? 0) > 0)) return false;
   return true;
 }
+/** An anomaly's path through Site-19: recovered, contained, studied, put to use. */
+export function anomalyProgress(c: Campaign, id: string) {
+  const s = c.scps.find(x => x.id === id);
+  const projects = Object.keys(PROJECTS).filter(p => !PROJECTS[p].breakthrough && (PROJECTS[p].branch === `SCP-${id}` || PROJECTS[p].needsScp === id));
+  const done = projects.filter(p => has(c, p));
+  return {
+    recovered: !!s, contained: s?.status === "contained" || s?.status === "breach",
+    projects: projects.map(p => ({ id: p, name: PROJECTS[p].name, done: has(c, p), visible: projectVisible(c, p), desc: PROJECTS[p].desc })),
+    studied: done.length, total: projects.length,
+  };
+}
+
 /** Record that something happened; research it opens appears on the next day's tick. */
 export function reachMilestone(c: Campaign, m: Milestone) { if (!(c.milestones ??= []).includes(m)) c.milestones.push(m); }
 /** New projects that have just become visible get a notice, as in XCOM. The first call only takes stock. */

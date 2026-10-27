@@ -407,7 +407,7 @@ retaliation (done); (5) doors and sirens (done).
 - **Difficulty and Ironman:** difficulty presets and optional Ironman after full-loop balance work; clarify their impact. Test economy, recruitment, injury/casualty rates, anomaly capture, travel, deadlines, global threat growth, Council pressure and long-campaign stability.
 - **Acceptance:** the player can manage a recognizable roster and run a long 2D campaign with varied missions, understandable risks, persistent consequences, reliable saves and no requirement to complete a final story mission.
 
-## Phase 3L: anomaly procedures, research, facility consequences and history (planned)
+## Phase 3L: anomaly procedures, research, facility consequences and history (done; verified in source and in-game)
 
 - **SCP-specific containment:** every implemented anomaly should have documented requirements, field-capture methods, necessary personnel/equipment, failure triggers, facility containment rules and emergency responses. Avoid a generic “capture” solution that works identically for SCP-173, SCP-049, SCP-106, SCP-610 and future anomalies. Surface these requirements in mission preparation and Site-19.
 - **Research from recovery:** recovered anomalies enable experiments, discoveries, specialized equipment, improved containment protocols and tactical/strategic benefits. Show the progression from field recovery → containment → research/test → unlock/use. Extend existing anomaly studies and research rather than duplicating them.
@@ -415,6 +415,39 @@ retaliation (done); (5) doors and sirens (done).
 - **Reliable vs uncertain intelligence:** label briefing information as confirmed, estimated or unknown. Reconnaissance can improve it; some reports may be outdated, incomplete or deliberately false. Distinguish in-world uncertainty from broken UI; avoid unfair invisible certainty.
 - **Campaign history:** chronological searchable log of deployments, containment breaches, anomalies recovered/transferred/lost, casualties, promotions/retirements, major Council decisions, global Insurgency actions and regional events. Link to existing mission incident reports, personnel service records, sites and outcomes rather than recreating their data.
 - **Acceptance:** anomalies have distinctive procedures; their capture changes research and containment options; damage has lasting operational costs; players can trace important campaign events and understand what information they knew when decisions were made.
+
+### As built (with the base changes asked for alongside it)
+
+- **Base:** 6 facility slots per level (was 4). Generators are refitted one at a time from their own panel, each tier
+  researched first: turbocharged diesel 15 power ($60k, 4 days), gas turbine 22 power (from 1953, $120k, +$5k upkeep),
+  compact reactor 35 power (from 1957, after the Army's SM-1, $250k, +$15k upkeep). A generator is offline while it is
+  refitted. Saves that had researched efficient generators keep 15 power on every generator.
+- **Procedures** (src/data/procedures.ts): each anomaly has its cell requirements, capture method, what to bring, what
+  makes containment fail and the emergency orders, shown under its cell on the Site-19 tab and in the deploy panel for
+  breaches, recoveries and outbreaks (only once an unknown anomaly has been identified). Routines now differ:
+  SCP-173 is cleaned by 3 D-Class every 7 days; SCP-049 is interviewed by a free researcher every 10 days (3% chance it
+  "cures" them; overdue, its cell wears twice as fast); SCP-106's cell is relined by 2 engineers for $15k every 14 days,
+  and a power cut triples its breach risk instead of doubling it. Objects need no routine. The inspection check and the
+  Council order now cover every routine.
+- **Progression:** each anomaly's file shows Recovered → Contained → Studied (n of m) → Fully understood, what its
+  finished studies do, and what is still to learn. A first-contact briefing names the research capture would open once
+  the anomaly is identified.
+- **Facility damage** has two levels: damaged (repair $30k, 3 days, 2 engineers) and wrecked (rebuild $90k, 9 days,
+  4 engineers). Raids and anomalies tearing through walls wreck; faults and storms damage; a facility hit again before
+  it is fixed is wrecked, and any repair under way is lost. Each facility states what stops working while it is down. A
+  damage report on the Site-19 tab lists everything out of action with its effect, cost, time and crew, and how many
+  engineers are already busy.
+- **Intelligence:** briefings sort what is known into Confirmed, Estimated and Unknown. Insurgent numbers come from a
+  field report that is right 70% of the time, off by one 20% and badly wrong 10%; it is dated, and cells that grow make
+  it stale. Investigating or Insurgency codebooks confirm it (and say if the first report was wrong). The deploy panel
+  and incident cards no longer show the true count unless it is confirmed.
+- **History tab:** a chronological, searchable record of deployments (with what the briefing said and what was found),
+  breaches, anomalies recovered, transferred or lost, casualties, promotions and medals, recruits and retirements,
+  Council orders, requests, offers, inspections and audits, Insurgency raids and attacks, and fronts made or lost.
+  Entries link to the incident report (the archive now lives on this tab) and to living operatives' personnel files.
+  Older saves start it from their incident reports.
+- Also fixed: a new anomaly now takes the lowest-grade free wing that can hold it, so a Euclid no longer fills the
+  Keter wing.
 
 ## Phase 3 completion gate (not a campaign ending)
 

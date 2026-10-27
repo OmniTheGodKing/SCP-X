@@ -1,5 +1,6 @@
 // The world outside Site-19: regional exposure and Foundation fronts, travel, cover-ups,
 // Insurgency cells and amnestics.
+import { chronicle } from "./history";
 import { countOperational } from "./base";
 import { dateOf, log, yearOf, type Campaign, type Incident } from "./campaign";
 import { newsActive } from "./news";
@@ -62,6 +63,7 @@ function tickContact(c: Campaign) {
     if (st.collapsed) continue;
     st.contact = undefined;
     c.council.tally.contacts++;
+    chronicle(c, "region", `Contact made in ${REGIONS[r].name}: ${REGIONS[r].front} became the Foundation's front there.`);
     addStanding(c, 3, `front established in ${REGIONS[r].name}`);
     log(c, `Contact made: ${REGIONS[r].front} is now the Foundation's front in ${REGIONS[r].name}. It passes on funding every month, and field operations, cover stories and cell hunts can be run there.`, "good", "world");
   }
@@ -79,6 +81,7 @@ export function addExposure(c: Campaign, r: RegionId, n: number) {
   st.exposure = Math.max(0, Math.min(100, st.exposure + n));
   if (st.exposure >= 100) {
     st.collapsed = true; st.contactDue = undefined;
+    chronicle(c, "region", `The ${REGIONS[r].front} front in ${REGIONS[r].name} collapsed: the public knows too much there.`);
     if (isContacted(c, r)) addStanding(c, -15, `the front in ${REGIONS[r].name} collapsed`);
     log(c, `The ${REGIONS[r].front} front in ${REGIONS[r].name} has collapsed. The public knows too much there, and its funding is gone.`, "bad", "world");
   }
@@ -215,6 +218,7 @@ export function tickWorld(c: Campaign) {
     c.retaliations = c.retaliations!.filter(x => x !== due);
     if (c.regions[due.region].collapsed) continue;
     const inc = newRetaliation(c, due.region);
+    chronicle(c, "insurgency", `The Insurgency attacked ${inc.title.split(" on ").pop()} to punish it for helping the Foundation.`);
     log(c, `${inc.title}. The Insurgency is punishing the town for helping the Foundation. Respond within ${inc.expires - c.day} days.`, "bad", "command");
   }
   for (const inc of [...c.incidents]) {
