@@ -10,7 +10,7 @@ import { STARTING_NOTES } from "./notes";
 import { PROFILE } from "./profiles";
 import { S, computeVis, log, setMission } from "./state";
 import { WEATHER } from "../data/weather";
-import { RAID_TURNS, type MissionKind, type MissionResult, type MissionSetup, type MissionState, type SquadMember, type Unit } from "./types";
+import { RAID_TURNS, type OptionalId, type MissionKind, type MissionResult, type MissionSetup, type MissionState, type SquadMember, type Unit } from "./types";
 
 function mk(o: Partial<Unit> & Pick<Unit, "id" | "side" | "name" | "x" | "y" | "hp" | "maxHp" | "san">): Unit {
   return { aim: 0, alive: true, saved: false, ap: 0, overwatch: false, panicUntil: -1, staring: false, hadLos: false, seen173: false, fled: false, kills: 0, ...o };
@@ -114,6 +114,13 @@ export function createMission(setup: MissionSetup) {
     const [x, y] = claim(floorTiles(strayRooms[(i + 2) % strayRooms.length]));
     units.push(mk({ id: "rec" + (i + 1), side: "civilian", name: "Classified records", x, y, hp: 1, maxHp: 1, san: 0, record: true }));
   }
+  // a cell keeps its ledger and its radio: optional objectives on a strike
+  if (setup.kind === "strike" && ciRooms.length) {
+    const [lx, ly] = claim(floorTiles(ciRooms[ciRooms.length - 1]));
+    units.push(mk({ id: "ledger", side: "civilian", name: "The cell's ledger", x: lx, y: ly, hp: 1, maxHp: 1, san: 0, record: true }));
+    const [rx, ry] = claim(floorTiles(ciRooms[0]));
+    units.push(mk({ id: "radio", side: "civilian", name: "Insurgent radio set", x: rx, y: ry, hp: 1, maxHp: 1, san: 0, record: true, radio: true }));
+  }
   if (setup.hazard === "instances") for (let i = 0; i < 4; i++) {
     const [x, y] = claim(floorTiles(pick(def.scpRooms)));
     units.push(mk({ id: "zi" + (i + 1), side: "zombie", name: "Escaped instance", x, y, hp: 5, maxHp: 5, san: 0 }));
@@ -150,7 +157,7 @@ export function createMission(setup: MissionSetup) {
       ...(setup.nu7?.length ? [{ turn: Math.max(3, (setup.mtfTurn ?? 3) + 1), members: setup.nu7 }] : []),
     ] : [],
     escapeDrive: 0, lockedUntil: 0, escaped: false, photos: [],
-    siren: setup.kind === "breach", lockedDoors: [], fires: new Map(), flesh: new Set(), core: null,
+    optional: optionalFor(setup), siren: setup.kind === "breach", lockedDoors: [], fires: new Map(), flesh: new Set(), core: null,
   };
   setMission(state);
   // perimeter alarms: Site Security is already in position and watching when the raid starts
@@ -190,6 +197,32 @@ function seedOutbreak(setup: MissionSetup, rooms: [number, number, number, numbe
   for (let k = 0; k < sev + 1 && on.length; k++) {
     const i = on.splice(Math.floor(Math.random() * on.length), 1)[0];
     S.units.push(mk({ id: "f" + k, side: "zombie", name: "SCP-610 instance", x: i % L.W, y: (i / L.W) | 0, hp: 6, maxHp: 6, san: 0, flesh: true }));
+  }
+}
+
+/** Optional objectives: not needed to win, each with its own reward. */
+export function optionalFor(setup: MissionSetup): { id: OptionalId; text: string }[] {
+  switch (setup.kind) {
+    case "strike": return [{ id: "ledger", text: "Seize the cell's ledger (F)" }, { id: "radio", text: `Cut their radio (X) before turn ${(setup.reinforce ?? 8) - 1}, or they call for help` }];
+    case "retaliation": return [{ id: "civilians", text: "Keep at least half the townspeople alive" }];
+    case "manhunt": return [{ id: "nocas", text: "Let no civilian die" }];
+    case "coverup": return [{ id: "allwitnesses", text: "Dose every witness, not just half" }];
+    case "escort": case "raid": return [{ id: "nolosses", text: "Lose nobody" }];
+    case "breach": return setup.researchers ? [{ id: "staff", text: "Bring every researcher out alive" }] : [];
+    default: return [];
+  }
+}
+/** Whether an optional objective is met right now (or, at the end, was). */
+export function optionalMet(id: OptionalId, end = false): boolean {
+  const u = S.units;
+  switch (id) {
+    case "ledger": return u.some(x => x.id === "ledger" && x.saved);
+    case "radio": return !!S.radioCut;
+    case "civilians": { const all = u.filter(x => x.side === "civilian" && !x.record); return u.filter(x => x.side === "civilian" && !x.record && x.alive).length * 2 >= all.length; }
+    case "nocas": return !u.some(x => x.side === "civilian" && !x.record && !x.alive);
+    case "allwitnesses": return end ? u.filter(x => x.witness).every(x => x.dosed) : !u.some(x => x.witness && (x.saved && !x.dosed || !x.alive));
+    case "nolosses": return !u.some(x => (x.side === "mtf") && !x.alive);
+    case "staff": return u.filter(x => x.researcher).every(x => x.alive && (x.saved || !end));
   }
 }
 
@@ -267,6 +300,7 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
     commander: (() => { const c = S.units.find(u => u.role === "commander"); return !c ? "absent" : c.escaped ? "escaped" : !c.alive ? "killed" : c.downed && (c.secured || win) ? "captured" : "escaped"; })(),
     charms: win ? S.units.filter(u => u.hadCharm && (!u.alive || u.downed)).length : 0,
     gru: !!S.setup.gru,
+    optional: S.optional.map(o => ({ ...o, met: optionalMet(o.id, true) && (win || o.id === "ledger" || o.id === "radio") })),
     survivorsSaved: S.units.filter(u => u.researcher && u.alive && u.saved).length, survivorsTotal: (S.setup.researchers ?? 0) + (S.setup.survivors ?? 0),
     recordsRecovered: S.units.filter(u => u.record && u.saved).length, recordsTotal: S.setup.records ?? 0,
     powerRestored: !!S.powerOn, hazardDealt: hazardDealt(), scans: { ...(S.scans ?? {}) },
