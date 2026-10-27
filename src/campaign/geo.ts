@@ -3,10 +3,11 @@
 // Foundation facilities are shown too, but Site-19 is the only one the player runs.
 import { REGIONS, SITE19, type RegionId } from "../data/regions";
 import { has } from "./research";
-import { travelDays } from "./world";
+import { addExposure, locateCell, travelDays } from "./world";
 import { scpName } from "./containment";
 import { mtfArrival, raidArrival } from "./security";
-import { MISSION_BONUS, dateText, type Campaign, type Incident } from "./campaign";
+import { MISSION_BONUS, dateText, gainIntel, log, yearOf, type Campaign, type Incident } from "./campaign";
+import { rollCandidate } from "../data/units";
 
 /** Where each town is (fictional towns placed in their real regions). */
 export const TOWN_POS: Record<string, [number, number]> = {
@@ -59,12 +60,13 @@ export function briefing(c: Campaign, inc: Incident) {
   // opposition: exact with codebooks, otherwise only a rough report
   if (inc.kind === "outbreak") known.push("No Insurgents expected; SCP-610 instances and spreading flesh.");
   else if (inc.kind === "riot") known.push("Rioting D-Class, unarmed.");
-  else if (has(c, "codebooks") || inc.kind === "raid") known.push(`${ins} Insurgents${inc.kind === "raid" ? " at the wire" : ""}.`);
-  else if (ins) unknown.push(`Insurgent numbers: reports say ${ins >= 4 ? "heavy" : ins >= 2 ? "some" : "light"} activity (Insurgency codebooks research gives exact counts).`);
+  else if (has(c, "codebooks") || inc.recon || inc.kind === "raid") known.push(ins ? `${ins} Insurgents${inc.kind === "raid" ? " at the wire" : ""}.` : "No Insurgents on site.");
+  else if (ins) unknown.push(`Insurgent numbers: reports say ${ins >= 4 ? "heavy" : ins >= 2 ? "some" : "light"} activity. Investigating (or Insurgency codebooks research) gives the exact count.`);
   else known.push("No Insurgency activity reported.");
   // the anomaly
   if (inc.scpId && !inc.first) known.push(`Anomaly: ${scpName(inc.scpId)}.`);
-  else if (inc.first) unknown.push("Anomaly: unidentified. Witnesses describe something new.");
+  else if (inc.first && inc.recon) known.push(`Anomaly: ${scpName(inc.scpId)}, identified by investigation.`);
+  else if (inc.first) unknown.push("Anomaly: unidentified. Witnesses describe something new; investigating would identify it.");
   if (inc.witnesses) known.push(`${inc.witnesses} witnesses to dose.`);
   if (inc.civilians) known.push(`${inc.civilians} civilians in the area.`);
   const bonus = MISSION_BONUS[inc.kind] ?? 0;
@@ -84,7 +86,90 @@ export function briefing(c: Campaign, inc: Incident) {
   const arrivalTurn = inc.kind === "breach" ? mtfArrival(c, inc) : inc.kind === "raid" ? raidArrival(c) : 0;
   return {
     place, travel: t, arrives: c.day + t, deadline: immediate ? "Now" : left <= 0 ? "Last day" : `${dateText(inc.expires)} (${left} day${left === 1 ? "" : "s"})`,
-    reachable: inc.kind === "escort" || c.day + t <= inc.expires, known, unknown, rewards, ignore,
+    reachable: inc.kind === "escort" || c.day + t <= inc.expires, known, unknown, rewards, ignore, worse: worsening(inc),
     arrival: arrivalTurn ? `Epsilon-11 reaches the scene on turn ${arrivalTurn}.` : t ? `The team lands ${dateText(c.day + t)} after ${t} day${t > 1 ? "s" : ""} in the air.` : "The team goes by road and is there the same day.",
   };
+}
+
+// ---- investigating incidents, and incidents that worsen while they wait ----
+export const INVESTIGATE = { intel: 1, cost: 15, days: 1 };
+const immediate = (inc: Incident) => inc.kind === "breach" || inc.kind === "riot" || inc.kind === "raid" || inc.kind === "escort";
+export function canInvestigate(c: Campaign, inc: Incident): string | null {
+  if (immediate(inc) || inc.kind === "outbreak") return "There's no time to investigate this.";
+  if (inc.recon) return "Already investigated.";
+  if (inc.reconDue) return `A field agent's report is due ${dateText(inc.reconDue)}.`;
+  return null;
+}
+/** Investigate now with Intel, or send a field agent who reports back the next day. */
+export function investigate(c: Campaign, inc: Incident, withIntel: boolean) {
+  if (canInvestigate(c, inc)) return;
+  if (withIntel) { if (c.intel < INVESTIGATE.intel) return; c.intel -= INVESTIGATE.intel; revealed(c, inc, false); return; }
+  if (c.funds < INVESTIGATE.cost) return;
+  c.funds -= INVESTIGATE.cost; inc.reconDue = c.day + INVESTIGATE.days;
+  log(c, `A field agent is on the way to ${incidentPlace(inc).name}. Report due ${dateText(inc.reconDue)}.`);
+}
+function revealed(c: Campaign, inc: Incident, agent: boolean) {
+  inc.recon = true; inc.reconDue = undefined;
+  const who = inc.first && inc.scpId ? ` It is ${scpName(inc.scpId)}.` : "";
+  const ins = Math.max(0, inc.insurgents - (inc.weakened ?? 0));
+  log(c, `${agent ? "Field agent's report" : "Intel report"} on ${inc.title.split(": ")[1] ?? inc.title}:${who} ${ins ? `${ins} Insurgents on site.` : "No Insurgents seen."}`, "key", agent ? "world" : undefined);
+}
+/** What changes each day an incident waits, for the briefing. */
+export function worsening(inc: Incident): string | null {
+  if (inc.kind === "strike") return "The cell takes in another Insurgent every 3 days it's left alone (up to 3 more).";
+  if (inc.kind === "retaliation") return "Every 2 days a civilian is killed (+2 exposure here).";
+  if (inc.kind === "coverup") return "Every 3 days another witness hears the story (up to 2 more).";
+  return null;
+}
+
+// ---- field operations: scanning a region for leads, and surveillance of Insurgency activity ----
+export type FieldOpKind = "scan" | "surveil";
+export interface FieldOp { kind: FieldOpKind; region: RegionId; done: number; }
+export const FIELD_OPS: Record<FieldOpKind, { name: string; cost: number; days: number; desc: string }> = {
+  scan: { name: "Scan for leads", cost: 20, days: 4, desc: "Front staff work their contacts. Turns up Intel, money, a strong recruit, or sometimes an Insurgency cell." },
+  surveil: { name: "Surveillance", cost: 30, days: 6, desc: "Watch the Insurgency's movements here. Usually finds a cell to strike; otherwise yields Intel." },
+};
+export function canFieldOp(c: Campaign, r: RegionId, k: FieldOpKind): string | null {
+  if (c.regions[r].collapsed) return "The front here has collapsed.";
+  if ((c.ops ?? []).some(o => o.region === r)) return "An operation is already running here.";
+  if (k === "surveil" && c.incidents.some(i => i.kind === "strike" && i.region === r)) return "A cell here is already located.";
+  if (c.funds < FIELD_OPS[k].cost) return `Needs $${FIELD_OPS[k].cost}k.`;
+  return null;
+}
+export function startFieldOp(c: Campaign, r: RegionId, k: FieldOpKind) {
+  if (canFieldOp(c, r, k)) return;
+  c.funds -= FIELD_OPS[k].cost;
+  (c.ops ??= []).push({ kind: k, region: r, done: c.day + FIELD_OPS[k].days });
+  log(c, `${FIELD_OPS[k].name} begins in ${REGIONS[r].name}. Results ${dateText(c.day + FIELD_OPS[k].days)}.`);
+}
+function finishOp(c: Campaign, op: FieldOp) {
+  const where = REGIONS[op.region].name, roll = Math.random();
+  if (op.kind === "surveil") {
+    if (roll < 0.7 && !c.incidents.some(i => i.kind === "strike" && i.region === op.region)) { locateCell(c, op.region, true); return; }
+    gainIntel(c, 2); log(c, `Surveillance in ${where} found no cell, but picked up their radio traffic (+2 Intel).`, "key", "world"); return;
+  }
+  if (roll < 0.35) { gainIntel(c, 1 + Math.floor(Math.random() * 2)); log(c, `The scan in ${where} turned up a source inside the Insurgency (+Intel).`, "key", "world"); }
+  else if (roll < 0.65) { const k = 20 + Math.floor(Math.random() * 3) * 10; c.funds += k; log(c, `The scan in ${where} found a cache of misappropriated funds (+$${k}k).`, "good", "world"); }
+  else if (roll < 0.85) {
+    const used = new Set<string>(), cand = rollCandidate(`lead${c.day}`, yearOf(c.day), used, false, true);
+    cand.quality = Math.max(1, cand.quality); (c.recruits ??= []).push(cand);
+    log(c, `The scan in ${where} found ${cand.name}, a ${cand.quality === 2 ? "very" : ""} promising recruit, now in this month's pool at Command.`, "good", "world");
+  } else if (!c.incidents.some(i => i.kind === "strike" && i.region === op.region)) locateCell(c, op.region, true);
+  else { gainIntel(c, 1); log(c, `The scan in ${where} came back thin (+1 Intel).`, "key", "world"); }
+}
+
+/** Every day: field reports arrive, operations finish, and waiting incidents get worse. */
+export function tickGeo(c: Campaign) {
+  for (const inc of c.incidents) {
+    if (inc.reconDue && c.day >= inc.reconDue) revealed(c, inc, true);
+    if (inc.id === c.activeIncident) continue;
+    const waited = c.day - inc.appeared;
+    if (inc.kind === "strike" && waited > 0 && waited % 3 === 0 && (inc.grown ?? 0) < 3) { inc.insurgents++; inc.grown = (inc.grown ?? 0) + 1; }
+    if (inc.kind === "retaliation" && waited > 0 && waited % 2 === 0 && (inc.civilians ?? 0) > 2) {
+      inc.civilians = (inc.civilians ?? 0) - 1; addExposure(c, inc.region, 2);
+      log(c, `${inc.title.split(": ")[1] ?? inc.title}: another civilian is dead (+2 exposure).`, "bad");
+    }
+    if (inc.kind === "coverup" && waited > 0 && waited % 3 === 0 && (inc.grown ?? 0) < 2) { inc.witnesses = (inc.witnesses ?? 0) + 1; inc.grown = (inc.grown ?? 0) + 1; }
+  }
+  for (const op of (c.ops ?? []).filter(o => c.day >= o.done)) { c.ops = c.ops!.filter(o => o !== op); finishOp(c, op); }
 }

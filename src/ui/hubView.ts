@@ -2,7 +2,7 @@
 import { STAFF_EVENTS, answerStaff } from "../campaign/staff";
 import { parseCampaign } from "../campaign/save";
 import type { Report } from "../campaign/reports";
-import { FACILITIES_WORLD, briefing, groupOf, incidentPlace, incidentState, type MarkerGroup } from "../campaign/geo";
+import { FACILITIES_WORLD, FIELD_OPS, INVESTIGATE, briefing, canFieldOp, canInvestigate, groupOf, incidentPlace, incidentState, investigate, startFieldOp, type FieldOpKind, type MarkerGroup } from "../campaign/geo";
 import { MEDALS } from "../data/bios";
 import { LEANS, QUALITY, UNITS, nationalityOf } from "../data/units";
 import { FACIAL, HAIR_BY_SEX, HAIR_COLORS, HAIR_STYLES, HEADGEAR, LOOK_PARTS, SEX_NAMES, SKIN, fitLook, rollLook } from "../data/looks";
@@ -366,7 +366,10 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         ${(() => { const here = c.incidents.filter(i => i.region === r); return here.length ? `<p>Active here: ${here.map(i => `<button class="linkbtn" type="button" data-mapinc="${i.id}">${esc(i.title.split(": ")[1] ?? i.title)}</button>`).join(" · ")}</p>` : `<p class="muted">Nothing active here.</p>`; })()}
         ${st.collapsed ? `<p class="warn">The public knows too much here. This region sends nothing and can't be recovered.</p>` : `
         <div class="row"><button class="act" type="button" id="coverBtn" ${cw ? `disabled title="${esc(cw)}"` : ""}>Cover story · $${COVER_STORY.cost}k · ${plural(coverDoses(c), "amnestic dose")}</button><span class="muted">${esc(cw || `${d.front} plants a story: −${COVER_STORY.cut} exposure here. Once every ${COVER_STORY.cooldown} days.`)}</span></div>
-        <div class="row"><button class="act" type="button" id="locateBtn" ${lw ? `disabled title="${esc(lw)}"` : ""}>Locate an Insurgency cell · ${locateIntel(c)} Intel</button><span class="muted">${esc(lw || "Creates a strike mission here. Breaking the cell pays $80k and lowers exposure.")}</span></div>`}
+        <div class="row"><button class="act" type="button" id="locateBtn" ${lw ? `disabled title="${esc(lw)}"` : ""}>Locate an Insurgency cell · ${locateIntel(c)} Intel</button><span class="muted">${esc(lw || "Creates a strike mission here. Breaking the cell pays $80k and lowers exposure.")}</span></div>
+        <div class="label" style="margin-top:10px">Field operations</div>
+        ${(() => { const op = (c.ops ?? []).find(o => o.region === r); return op ? `<p>${esc(FIELD_OPS[op.kind].name)} under way: results ${dateText(op.done)}.</p>`
+          : (Object.keys(FIELD_OPS) as FieldOpKind[]).map(k => { const fw = canFieldOp(c, r, k); return `<div class="row"><button class="act" type="button" data-fieldop="${k}" ${fw ? `disabled title="${esc(fw)}"` : ""}>${FIELD_OPS[k].name} · $${FIELD_OPS[k].cost}k · ${plural(FIELD_OPS[k].days, "day")}</button><span class="muted">${esc(fw || FIELD_OPS[k].desc)}</span></div>`; }).join(""); })()}`}
       </div>`;
     const briefCard = (i: Incident) => { const b = briefing(c, i), block = travelBlock(c, i), stt = incidentState(c, i);
       return `<div class="file brief">
@@ -378,6 +381,9 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         ${b.unknown.length ? `<p><b>Unknown.</b> ${b.unknown.map(esc).join(" ")}</p>` : ""}
         ${b.rewards.length ? `<p><b>If it goes well:</b> ${esc(b.rewards.join("; "))}.</p>` : ""}
         <p><b>If it's ignored:</b> ${esc(b.ignore)}</p>
+        ${b.worse ? `<p class="warn"><b>While it waits:</b> ${esc(b.worse)}</p>` : ""}
+        ${(() => { const iw = canInvestigate(c, i); return iw && (i.recon || iw.startsWith("There's")) ? "" : iw ? `<p class="muted">${esc(iw)}</p>`
+          : `<div class="row"><button class="act" type="button" data-investigate="${i.id}" data-how="intel" ${c.intel < INVESTIGATE.intel ? `disabled title="Needs ${INVESTIGATE.intel} Intel."` : ""}>Investigate · ${INVESTIGATE.intel} Intel, now</button><button class="act" type="button" data-investigate="${i.id}" data-how="agent" ${c.funds < INVESTIGATE.cost ? `disabled title="Needs $${INVESTIGATE.cost}k."` : ""}>Send a field agent · $${INVESTIGATE.cost}k, ${plural(INVESTIGATE.days, "day")}</button></div>`; })()}
         ${block ? `<p class="warn">${esc(block)}</p>` : ""}
         <div class="row">${planning === i.id ? "" : `<button class="act primary" type="button" data-plan="${i.id}" ${c.over || block ? "disabled" : ""}>${i.kind === "breach" ? "Take command" : "Prepare a response"}</button>`}
           ${i.kind === "breach" ? `<button class="act" type="button" data-guards="${i.id}" ${c.over ? "disabled" : ""}>Let the guards handle it · ${pctText(guardOdds(c, i))} chance</button>` : ""}
@@ -400,6 +406,9 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
           ${SPEEDS.map((n, i) => `<button class="act ${speed === n ? "on" : ""}" type="button" data-speed="${n}" aria-pressed="${speed === n}" ${clockBlocked() ? "disabled" : ""}>${n}× <kbd>${i + 1}</kbd></button>`).join("")}
         </div>
         ${pendingBreach(c) ? `<p class="warn">${pendingBreach(c)!.kind === "escort" ? "A convoy is under attack" : "Something at Site-19 needs an answer"}. Deal with it before time moves on.</p>` : ""}
+        ${(() => { const away = c.roster.filter(o => o.alive && o.busy?.kind === "travel");
+          return away.length ? `<p>In the air: ${away.map(o => `<b>${esc(o.name)}</b>`).join(", ")}, flying home${away[0].busy!.from ? ` from ${esc(REGIONS[away[0].busy!.from].name)}` : ""}, back ${dateText(c.day + Math.max(...away.map(o => o.busy!.daysLeft)))}.</p>` : ""; })()}
+        ${(c.ops ?? []).length ? `<p class="muted">Field operations: ${c.ops!.map(op => `${esc(FIELD_OPS[op.kind].name)} in ${esc(REGIONS[op.region].name)} (results ${dateText(op.done)})`).join("; ")}.</p>` : ""}
         <p class="muted">At 1× a day passes every ${DAY_MS / 1000} seconds. The clock pauses itself when something needs you. Next month: $${monthlyFunding(c)}k from the fronts, $${monthlyUpkeep(c)}k upkeep and salaries, up to ${DCLASS_MONTHLY} D-Class. Operatives heal ${healPerDay(c)} HP and recover ${sanityPerDay(c)} sanity a day.</p>
       </div>
     <div class="card worldcard">
@@ -414,6 +423,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
           <g class="site19"><rect x="${sx - 2.2}" y="${sy - 2.2}" width="4.4" height="4.4" transform="rotate(45 ${sx} ${sy})"></rect>
             <text x="${sx - 4}" y="${sy + 7}" text-anchor="end">Site-19</text><title>Site-19 · exact location classified</title></g>
           ${facs}
+          ${(c.ops ?? []).map(op => { const d = REGIONS[op.region], [ox, oy] = project(d.lon, d.lat); return `<g class="fieldop"><circle cx="${ox + 9}" cy="${oy - 7}" r="2"/><circle cx="${ox + 9}" cy="${oy - 7}" r="3.6" class="wave"/><title>${esc(FIELD_OPS[op.kind].name)} in ${esc(d.name)}, results ${esc(dateText(op.done))}</title></g>`; }).join("")}
           ${markers}
         </svg>
         <div class="row mapfilters">${(["anomaly", "insurgency", "coverup", "site", "facility"] as const).map(g => `<button class="act ${mapShow.has(g) ? "on" : ""}" type="button" data-mapfilter="${g}" aria-pressed="${mapShow.has(g)}"><span class="dot ${g}"></span>${{ anomaly: "Anomalies", insurgency: "Insurgency", coverup: "Cover-ups", site: "At Site-19", facility: "Facilities" }[g]}</button>`).join("")}</div>
@@ -961,6 +971,8 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     });
     root.querySelectorAll<HTMLElement>("[data-mapfac]").forEach(b => { const pick = () => { mapSel = "fac:" + b.dataset.mapfac; planning = null; render(); };
       b.onclick = pick; b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } }; });
+    root.querySelectorAll<HTMLElement>("[data-investigate]").forEach(b => b.onclick = () => { const i = c.incidents.find(x => x.id === b.dataset.investigate); if (i) change(() => investigate(c, i, b.dataset.how === "intel")); });
+    root.querySelectorAll<HTMLElement>("[data-fieldop]").forEach(b => b.onclick = () => change(() => startFieldOp(c, regionSel, b.dataset.fieldop as FieldOpKind)));
     root.querySelectorAll<HTMLElement>("[data-mapclear]").forEach(b => b.onclick = () => { mapSel = null; planning = null; render(); });
     root.querySelectorAll<HTMLElement>("[data-mapfilter]").forEach(b => b.onclick = () => { const g = b.dataset.mapfilter!; if (mapShow.has(g)) mapShow.delete(g); else mapShow.add(g); render(); });
     root.querySelectorAll<HTMLElement>("[data-plan]").forEach(b => b.onclick = () => {
