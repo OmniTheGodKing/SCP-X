@@ -17,9 +17,11 @@ import { buildReport, type Report } from "./reports";
 import { newsFor } from "./news";
 import { CLASS_WEAPONS, WEAPON_TIERS, model, startingModels, type AmmoId, type AttachmentId, type WeaponType } from "../data/weapons";
 
-export const RANKS = ["Operative", "Specialist", "Sergeant", "Lieutenant", "Captain", "Major", "Colonel"];
+// The US Army's enlisted ladder as it stood in 1951 (Staff Sergeant was dropped in 1948 and came back in 1958).
+export const RANKS = ["Private", "Private First Class", "Corporal", "Sergeant", "Sergeant First Class", "Master Sergeant", "Sergeant Major"];
+export const RANK_SHORT = ["Pvt", "PFC", "Cpl", "Sgt", "SFC", "MSgt", "SGM"];
 export const RANK_XP = [0, 3, 7, 12, 18, 25, 34];
-/** Ranks that come with a new perk (Specialist to Captain); Major and Colonel give a fixed bonus instead. */
+/** Ranks that come with a new perk (Private First Class to Sergeant First Class); the top two give a fixed bonus instead. */
 export const PERK_RANKS = 4;
 export const RANK_BONUS: Record<number, string> = { 5: "+1 HP and +5 aim", 6: "−2% blink chance and +10 max sanity" };
 export const RECRUIT_COST = 120;
@@ -253,7 +255,7 @@ export function log(c: Campaign, text: string, kind = "", pause?: HubTab) {
 }
 
 /** A new rank-0 operative; guards promoted into Epsilon-11 keep their own name. */
-// ---- retirement: Majors and Colonels can stay on as trainers; anyone else leaves with an honourable discharge ----
+// ---- retirement: Master Sergeants and Sergeants Major can stay on as trainers; anyone else leaves with an honourable discharge ----
 export const TRAINER = { minRank: 5, max: 2 };
 const trainerCount = (c: Campaign) => (c.retired ?? []).filter(r => r.trainer).length;
 /** Trainers only teach while there's a working training range. */
@@ -269,7 +271,7 @@ export function retire(c: Campaign, o: Operative) {
   const trainer = !trainerWhy(c, o);
   c.roster = c.roster.filter(x => x !== o);
   (c.retired ??= []).push({ name: o.name, call: o.call, rank: o.rank, missions: o.missions, day: c.day, trainer });
-  log(c, trainer ? `${RANKS[o.rank]} ${o.name} retires from the field to train recruits at the range. New operatives arrive as Specialists.`
+  log(c, trainer ? `${RANKS[o.rank]} ${o.name} retires from the field to train recruits at the range. New operatives arrive as Privates First Class.`
     : `${o.call} ${o.name} leaves Epsilon-11 with an honourable discharge after ${plural(o.missions, "mission")}.`, "key");
 }
 
@@ -512,7 +514,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     const bonus = st.hp;
     return {
       opId: o.id, name: o.name, call: o.call, hp: o.hp + bonus, maxHp: o.maxHp + bonus, san: Math.min(o.san, maxSanOf(o)),
-      maxSan: maxSanOf(o), aim: aimOf(o) + (has(c, "marksmanship") ? 5 : 0), blinkFull: blinkFullOf(o), medals: [...(o.medals ?? [])],
+      rankShort: RANK_SHORT[o.rank], maxSan: maxSanOf(o), aim: aimOf(o) + (has(c, "marksmanship") ? 5 : 0), blinkFull: blinkFullOf(o), medals: [...(o.medals ?? [])],
       armor: st.points, hasArmor: !!kind, armorKind: kind || undefined, armorHp: st.hp, moveBonus: st.move, items: items.map(id => ({ id, uses: ITEMS[id].uses ?? 1 })),
       cls: o.cls, perks: [...o.perks], traits: [...o.traits], gun: gunFor(c, o),
     };

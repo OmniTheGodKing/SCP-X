@@ -128,6 +128,7 @@ export interface Unit {
   bestStreak?: number;
   medals?: string[];
   returned?: boolean;
+  rankShort?: string;
 }
 
 export interface LogEntry { t: number; text: string; kind: string; }
@@ -148,6 +149,8 @@ export interface SquadMember {
   gun: Gun;
   guard?: boolean;
   medals?: string[];
+  /** Short rank shown on the squad cards (Pvt, PFC, Sgt...). */
+  rankShort?: string;
 }
 
 /** Effects of finished research that apply during missions. */

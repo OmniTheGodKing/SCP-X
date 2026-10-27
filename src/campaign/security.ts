@@ -7,7 +7,7 @@ import { countOperational, neighbors, operational, nameInText, stationsOnLevel }
 import { addExposure } from "./world";
 import { HOME } from "../data/regions";
 import { has } from "./research";
-import { log, makeOperative, type Campaign, type Incident } from "./campaign";
+import { RANKS, RANK_XP, log, makeOperative, type Campaign, type Incident } from "./campaign";
 import { DEPTH, goDark, wingLevel, wingOf, wreckFacility } from "./containment";
 
 export interface Guard {
@@ -103,10 +103,13 @@ export function tickGuards(c: Campaign, heal: number, calm: number) {
     if (g.training !== undefined && --g.training <= 0) {
       c.guards = c.guards.filter(x => x !== g);
       const o = makeOperative(c, g.name);
+      // guards come in as Privates; the selection cadre brings them in a step higher (recruiting trainers don't apply)
+      const pfc = c.purchases.includes("selection_cadre");
+      o.rank = pfc ? 1 : 0; o.xp = pfc ? RANK_XP[1] : 0;
       o.traits = [...g.traits];
       o.kills = g.kills;
       c.roster.push(o);
-      log(c, `${g.name} passed selection and joins Epsilon-11 as ${o.call}.`, "good", "personnel");
+      log(c, `${g.name} passed selection and joins Epsilon-11 as ${RANKS[o.rank]} ${o.call}.`, "good", "personnel");
     }
   }
 }
@@ -215,8 +218,9 @@ export function rollTrait(c: Campaign, g: Guard, t: TraitId, hit: boolean) {
 
 // ---------- training range purchases (like XCOM 2's Guerrilla Tactics School) ----------
 export const TRAINING: Record<string, { name: string; cost: number; desc: string; needs?: string; captain?: boolean }> = {
-  officer_school: { name: "Officer school", cost: 150, desc: "Squad leaders trained to run a fifth operative. Squad size 5." },
-  command_staff:  { name: "Command staff", cost: 300, needs: "officer_school", captain: true, desc: "A field command structure under a Captain. Squad size 6." },
+  officer_school: { name: "NCO academy", cost: 150, desc: "Squad leaders trained to run a fifth operative. Squad size 5." },
+  command_staff:  { name: "Command staff", cost: 300, needs: "officer_school", captain: true, desc: "A field command structure under a Sergeant First Class. Squad size 6." },
+  selection_cadre: { name: "Selection cadre", cost: 80, desc: "A permanent cadre runs Epsilon-11 selection for Site Security. Guards who pass join as Privates First Class instead of Privates." },
   guard_training: { name: "Guard training program", cost: 100, desc: "Site Security trains on the range every week. Guards get +10 aim and +10 sanity." },
 };
 export const squadSize = (c: Campaign) => 4 + (c.purchases.includes("officer_school") ? 1 : 0) + (c.purchases.includes("command_staff") ? 1 : 0);
@@ -225,7 +229,7 @@ export function canTrain(c: Campaign, id: string) {
   if (c.purchases.includes(id)) return "Already done.";
   if (!countOperational(c, "training")) return "Needs a working training range.";
   if (t.needs && !c.purchases.includes(t.needs)) return `Needs ${TRAINING[t.needs].name}.`;
-  if (t.captain && !c.roster.some(o => o.alive && o.rank >= 4)) return "Needs a Captain or higher on the roster.";
+  if (t.captain && !c.roster.some(o => o.alive && o.rank >= 4)) return "Needs a Sergeant First Class or higher on the roster.";
   if (c.funds < t.cost) return `Needs $${t.cost}k.`;
   return null;
 }
