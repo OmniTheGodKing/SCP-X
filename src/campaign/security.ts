@@ -3,7 +3,7 @@
 import { TRAITS, type TraitId } from "../data/classes";
 import { model } from "../data/weapons";
 import type { SquadMember } from "../game/types";
-import { countOperational, neighbors, operational, nameInText } from "./base";
+import { countOperational, neighbors, operational, nameInText, stationsOnLevel } from "./base";
 import { addExposure } from "./world";
 import { HOME } from "../data/regions";
 import { has } from "./research";
@@ -127,15 +127,15 @@ export function guardMember(c: Campaign, g: Guard): SquadMember {
   };
 }
 
-/** Security stations next to the breached wing: their guards are already there when it starts. */
+/** Security stations on the breached wing's level: their guards are already there when it starts. */
 function stationsNear(c: Campaign, inc: Incident) {
   const s = c.scps.find(x => x.id === inc.scpId), wing = s && wingOf(c, s);
-  return wing ? neighbors(c, wing).filter(n => n.type === "security" && operational(n)).length : 0;
+  return wing ? stationsOnLevel(c, wing).length : 0;
 }
 /** Who responds to a breach: guards posted beside the wing start on the map, the rest come in on turn 2. */
 export function breachGuards(c: Campaign, inc: Incident) {
   const s = c.scps.find(x => x.id === inc.scpId), wing = s && wingOf(c, s);
-  const near = new Set(wing ? neighbors(c, wing).filter(n => n.type === "security" && operational(n)).map(n => n.id) : []);
+  const near = new Set(wing ? stationsOnLevel(c, wing).map(n => n.id) : []);
   const ready = guardsReady(c).sort((a, b) => (near.has(b.stationId ?? "") ? 1 : 0) - (near.has(a.stationId ?? "") ? 1 : 0) || b.san - a.san).slice(0, GUARD.maxInMission);
   // guards posted beside the wing are there from the start; at least two on patrol always are
   const onScene = Math.max(2, ready.filter(g => near.has(g.stationId ?? "")).length);
@@ -216,7 +216,7 @@ export function canTrain(c: Campaign, id: string) {
   if (c.purchases.includes(id)) return "Already done.";
   if (!countOperational(c, "training")) return "Needs a working training range.";
   if (t.needs && !c.purchases.includes(t.needs)) return `Needs ${TRAINING[t.needs].name}.`;
-  if (t.captain && !c.roster.some(o => o.alive && o.rank >= 4)) return "Needs a Captain on the roster.";
+  if (t.captain && !c.roster.some(o => o.alive && o.rank >= 4)) return "Needs a Captain or higher on the roster.";
   if (c.funds < t.cost) return `Needs $${t.cost}k.`;
   return null;
 }

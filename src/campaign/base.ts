@@ -23,7 +23,7 @@ export const FACILITIES: Record<FacilityType, FacilityDef> = {
   command:     { name: "Command", cost: 0, days: 0, engineers: 0, power: 0, upkeep: 0, buildable: false, desc: "Site-19's operations center. Runs on its own backup supply." },
   generator:   { name: "Generator", cost: 100, days: 6, engineers: 2, power: -10, upkeep: 5, buildable: true, desc: "Supplies 10 power." },
   barracks:    { name: "D-Class barracks", cost: 80, days: 5, engineers: 2, power: 1, upkeep: 5, buildable: true, desc: "Holds 10 D-Class." },
-  security:    { name: "Security station", cost: 150, days: 7, engineers: 3, power: 2, upkeep: 15, buildable: true, desc: "Houses 4 Site Security guards. Each station next to a containment wing cuts that wing's breach risk by 30%, and its guards are already in the wing when a breach starts." },
+  security:    { name: "Security station", cost: 150, days: 7, engineers: 3, power: 2, upkeep: 15, buildable: true, desc: "Houses 4 Site Security guards. Each station cuts the breach risk of every containment wing on its level by 30%, and its guards are on the scene the moment a wing on that level breaches." },
   medical:     { name: "Medical bay", cost: 180, days: 10, engineers: 3, power: 3, upkeep: 15, buildable: true, desc: "Operatives heal 2 HP a day instead of 1." },
   lab:         { name: "Research lab", cost: 200, days: 10, engineers: 3, power: 3, upkeep: 20, buildable: true, desc: "Room for 4 researchers. Needed for research and for tests on SCP-173." },
   workshop:    { name: "Workshop", cost: 180, days: 9, engineers: 3, power: 3, upkeep: 15, buildable: true, desc: "Builds equipment, and houses 4 more engineers." },
@@ -32,7 +32,7 @@ export const FACILITIES: Record<FacilityType, FacilityDef> = {
   amnestics:   { name: "Amnestics lab", cost: 140, days: 8, engineers: 2, power: 2, upkeep: 15, buildable: true, desc: "Brews Class-A amnestics: 1 dose every 5 days per lab, and room to store 10 per lab. Doses are used on cover-ups and cover stories." },
   training:    { name: "Training range", cost: 150, days: 8, engineers: 2, power: 2, upkeep: 10, buildable: true, desc: "Operatives at Site-19 gain 1 XP a week, and can retrain into a new class." },
   cont_safe:   { name: "Safe-grade containment wing", cost: 120, days: 8, engineers: 3, power: 2, upkeep: 10, buildable: true, grade: 0, desc: "Basic cells. Anything above Safe breaches three times as often here." },
-  cont_euclid: { name: "Euclid-grade containment wing", cost: 250, days: 12, engineers: 4, power: 4, upkeep: 20, buildable: true, grade: 1, desc: "Reinforced cells suited to Euclid-class anomalies like SCP-173." },
+  cont_euclid: { name: "Euclid-grade containment wing", cost: 250, days: 12, engineers: 4, power: 4, upkeep: 20, buildable: true, grade: 1, desc: "Reinforced cells for Euclid-class anomalies: things that are dangerous and not fully understood, but can be reliably held." },
   cont_keter:  { name: "Keter-grade containment wing", cost: 450, days: 18, engineers: 5, power: 6, upkeep: 35, buildable: true, grade: 2, desc: "The strongest cells Site-19 can build. Anomalies held a grade below the wing's breach half as often." },
 };
 
@@ -70,6 +70,8 @@ export interface Base {
 export const isContainment = (t: FacilityType) => FACILITIES[t].grade !== undefined;
 export const facilityAt = (c: Campaign, level: number, slot: number) =>
   c.base.facilities.find(f => f.level === level && f.slot === slot) || null;
+/** Security stations on the same level as a facility: each one guards the whole level. */
+export const stationsOnLevel = (c: Campaign, f: Facility) => c.base.facilities.filter(n => n.type === "security" && n.level === f.level && operational(n));
 export const operational = (f: Facility) => f.daysLeft === 0 && !f.disabled && !f.demolishDays;
 export const countOperational = (c: Campaign, type: FacilityType) =>
   c.base.facilities.filter(f => f.type === type && operational(f)).length;

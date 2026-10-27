@@ -1,5 +1,5 @@
 // Anomalies held at Site-19: daily breach risk, cell cleaning, breaches, and escapes.
-import { FACILITIES, isContainment, nameInText, neighbors, operational, powerShort, type Facility } from "./base";
+import { FACILITIES, isContainment, nameInText, neighbors, operational, powerShort, stationsOnLevel, type Facility } from "./base";
 import { has } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, travelDays } from "./world";
@@ -40,7 +40,7 @@ const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1
 
 export const wingOf = (c: Campaign, s: ScpRecord) => c.base.facilities.find(f => f.id === s.wingId) || null;
 export const occupantOf = (c: Campaign, f: Facility) => c.scps.find(s => s.wingId === f.id) || null;
-const securityNear = (c: Campaign, f: Facility) => neighbors(c, f).filter(n => n.type === "security" && operational(n)).length;
+const securityNear = (c: Campaign, f: Facility) => stationsOnLevel(c, f).length;
 
 /** Chance per day that this anomaly breaches, with the reasons, for display. */
 export function breachRisk(c: Campaign, s: ScpRecord) {
@@ -56,7 +56,7 @@ export function breachRisk(c: Campaign, s: ScpRecord) {
   if (m > 1.01) why.push(`Maintenance ${s.maintenance}%: ×${m.toFixed(1)}`);
   p *= m;
   const sec = securityNear(c, wing);
-  if (sec) { p *= 0.7 ** sec; why.push(`${sec} security station${sec > 1 ? "s" : ""} next door: ×${(0.7 ** sec).toFixed(2)}`); }
+  if (sec) { p *= 0.7 ** sec; why.push(`${sec} security station${sec > 1 ? "s" : ""} on this level: ×${(0.7 ** sec).toFixed(2)}`); }
   if (wing.disabled) { p *= 3; why.push("Wing damaged: ×3"); }
   if (has(c, "containment_rev")) { p *= 0.75; why.push("Revised procedures: ×0.75"); }
   if (has(c, "reinforced_doors")) { p *= 0.8; why.push("Reinforced doors: ×0.8"); }
