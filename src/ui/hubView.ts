@@ -14,7 +14,7 @@ import {
 import { CLASSES, PERKS, TRAITS, type ClassId, type PerkId, type TraitId } from "../data/classes";
 import { AMMO, ATTACHMENTS, SIDEARM, TYPES, model, type AmmoId, type AttachmentId, type WeaponType } from "../data/weapons";
 import {
-  CLEAN_CREW, CLEAN_EVERY, CLEAN_RISK, breachRisk, canClean, canMove, cleanCell, moveScp, occupantOf, wingOf, workRisk,
+  CLEAN_CREW, CLEAN_EVERY, CLEAN_RISK, EVAC, breachRisk, canClean, canEvacuate, canMove, cleanCell, evacuate, freeWings, moveScp, occupantOf, transferOut, unpowered, wingOf, workRisk,
   type ScpRecord,
 } from "../campaign/containment";
 import {
@@ -193,6 +193,8 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     const wing = wingOf(c, s);
     if (s.status === "loose") return `<div class="card status danger"><div class="label">${s.name} · ${s.title} · ${s.cls}</div>
       <div class="status-line"><b>Escaped.</b> Whereabouts unknown. Exposure rises every day it stays loose; it will surface somewhere eventually.</div></div>`;
+    if (s.status === "away") return `<div class="card status"><div class="label">${s.name} · ${s.title} · ${s.cls}</div>
+      <div class="status-line"><b>Held at Site-17</b> for safekeeping. It comes back ${dateText(s.returnDay ?? c.day)}.</div></div>`;
     if (s.status === "breach") return `<div class="card status danger"><div class="label">${s.name} · ${s.title} · ${s.cls}</div>
       <div class="status-line"><b>Breach in progress.</b> Site Security is on it now. Send Epsilon-11 in after them, or leave it to the guards.</div></div>`;
     const r = breachRisk(c, s), due = s.lastCleaned + CLEAN_EVERY - c.day;
@@ -448,13 +450,13 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     <section class="col">
       <div class="card">
         <div class="label">Site-19 cross-section</div>
-        ${powerShort(c) ? `<p class="warn-box">Power shortage: medical bay and psychological services are offline and every containment wing is twice as likely to breach. Build or repair a generator.</p>` : ""}
+        ${powerShort(c) ? `<p class="warn-box">Power shortage: medical bay and psychological services are offline${unpowered(c) ? ", every containment wing is twice as likely to breach, and each cell has a 10% chance a day of failing outright" : ". Backup generators keep the containment wings running"}. Repair or build a generator, or evacuate anomalies from their wings.</p>` : ""}
         <div class="basegrid">${rows.join("")}</div>
         <div class="row">
           ${c.base.excavation > 0 ? `<span class="muted">Excavating level ${c.base.levels + 1}: ${plural(c.base.excavation, "day")} left.</span>`
             : c.base.levels < MAX_LEVELS ? `<button class="act" id="digBtn" type="button" ${exWhy ? `disabled title="${esc(exWhy)}"` : ""}>Excavate level ${c.base.levels + 1} · $${EXCAVATE.cost}k · ${EXCAVATE.days} days · ${EXCAVATE.engineers} engineers</button>${exWhy ? `<span class="muted">${esc(exWhy)}</span>` : ""}` : ""}
         </div>
-        <p class="muted">Facilities share walls with the ones beside, above and below them. Security stations protect neighbouring containment wings; breaches wreck neighbours.</p>
+        <p class="muted">Facilities share walls with the ones beside, above and below them. Security stations protect every containment wing on their level; breaches wreck neighbours, and a wrecked containment wing can crack open too.</p>
       </div>
     </section>
     <section class="col">
@@ -468,8 +470,8 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     const f = facilityAt(c, level, slot), on = sel && sel.level === level && sel.slot === slot;
     if (!f) return `<button type="button" class="slot empty ${on ? "sel" : ""}" data-slot="${level},${slot}"><span class="sname">Empty</span><span class="sstat">Build here</span></button>`;
     const d = FACILITIES[f.type], occ = occupantOf(c, f);
-    const stat = f.demolishDays ? `Tearing down · ${plural(f.demolishDays, "day")}` : f.daysLeft > 0 ? `Building · ${plural(f.daysLeft, "day")}` : f.repairDays > 0 ? `Repairing · ${plural(f.repairDays, "day")}` : f.disabled ? "Damaged" : occ ? `${occ.name}${occ.status === "breach" ? " · BREACH" : occ.status === "loose" ? " · escaped" : ""}` : isContainment(f.type) ? "Empty cells" : "Operational";
-    const cls = [f.daysLeft > 0 ? "building" : "", f.disabled ? "damaged" : "", isContainment(f.type) ? "cont" : "", occ && occ.status !== "contained" ? "alarm" : ""].join(" ");
+    const stat = f.demolishDays ? `Tearing down · ${plural(f.demolishDays, "day")}` : f.daysLeft > 0 ? `Building · ${plural(f.daysLeft, "day")}` : f.repairDays > 0 ? `Repairing · ${plural(f.repairDays, "day")}` : f.disabled ? "Damaged" : occ ? `${occ.name}${occ.status === "breach" ? " · BREACH" : occ.status === "loose" ? " · escaped" : occ.status === "away" ? " · at Site-17" : ""}` : isContainment(f.type) ? "Empty cells" : "Operational";
+    const cls = [f.daysLeft > 0 ? "building" : "", f.disabled ? "damaged" : "", isContainment(f.type) ? "cont" : "", occ && (occ.status === "breach" || occ.status === "loose") ? "alarm" : ""].join(" ");
     return `<button type="button" class="slot ${cls} ${on ? "sel" : ""}" data-slot="${level},${slot}"><span class="sname">${esc(d.name)}</span><span class="sstat">${esc(stat)}</span></button>`;
   }
 
@@ -527,6 +529,20 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <label class="armorpick"><input type="checkbox" id="cleanOrder" ${c.cleaningOrder ? "checked" : ""}> Standing order: D-Class clean it on schedule</label>
       <p>${c.cleaningOrder ? `Next scheduled cleaning ${due > 0 ? `in ${plural(due, "day")}` : "today"}.` : `Next cleaning ${due > 0 ? `due in ${plural(due, "day")}` : "<b>overdue</b>"}. Order it below.`}</p>
       <div class="row"><button class="act primary" data-clean="${s.id}" type="button" ${cw ? `disabled title="${esc(cw)}"` : ""}>Clean the cell now · ${CLEAN_CREW} D-Class</button>${cw ? `<span>${esc(cw)}</span>` : ""}</div>
+      ${evacBlock(s)}
+    </div>`;
+  }
+
+  /** Only while its wing is damaged or without power: rush it somewhere safer. */
+  function evacBlock(s: ScpRecord) {
+    if (canEvacuate(c, s)) return "";
+    const wing = wingOf(c, s)!, free = freeWings(c, s.cls).filter(f => f !== wing), poor = c.funds < EVAC.cost;
+    return `<div class="facpanel"><div class="label">Emergency evacuation</div>
+      <p class="warn">The ${wing.disabled ? "wing is damaged" : "wing has no power"}${unpowered(c) ? ": every day the site stays short of power, its cell has a 10% chance of failing outright" : ""}.</p>
+      ${free.length ? `<p class="muted">Rushing it into a free wing costs $${EVAC.cost}k and is twice as dangerous as a normal move.</p>${watcherPicker()}
+        <div class="row">${free.map(f => `<button class="act" type="button" data-evac="${s.id}" data-to="${f.id}" ${poor ? `disabled title="Needs $${EVAC.cost}k."` : ""}>Evacuate to the ${esc(nameInText(f.type))} on level ${f.level + 1}</button>`).join("")}</div>`
+        : `<p class="muted">No free ${s.cls}-grade wing. Site-17 can hold it for ${EVAC.transferDays} days.</p>
+        <div class="row"><button class="act" type="button" data-transfer="${s.id}" ${c.funds < EVAC.transferCost ? `disabled title="Needs $${EVAC.transferCost}k."` : ""}>Send it to Site-17 · $${EVAC.transferCost}k</button></div>`}
     </div>`;
   }
 
@@ -758,6 +774,8 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     on("dBuyBtn", () => change(() => buyDClass(c)));
     on("engBtn", () => change(() => hireEngineer(c)));
     on("digBtn", () => change(() => excavate(c)));
+    root.querySelectorAll<HTMLElement>("[data-evac]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.evac), f = c.base.facilities.find(x => x.id === b.dataset.to); if (s && f) change(() => evacuate(c, s, f, chosenWatchers())); });
+    root.querySelectorAll<HTMLElement>("[data-transfer]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.transfer); if (s) change(() => transferOut(c, s)); });
     root.querySelectorAll<HTMLElement>("[data-clean]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.clean); if (s) change(() => cleanCell(c, s)); });
     root.querySelectorAll<HTMLElement>("[data-alert]").forEach(b => b.onclick = () => change(() => { c.alert = b.dataset.alert as Alert; }));
     root.querySelectorAll<HTMLElement>("[data-staff]").forEach(b => b.onclick = () => change(() => answerStaff(c, Number(b.dataset.staff) as 0 | 1)));

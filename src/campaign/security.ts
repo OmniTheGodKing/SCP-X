@@ -8,7 +8,7 @@ import { addExposure } from "./world";
 import { HOME } from "../data/regions";
 import { has } from "./research";
 import { log, makeOperative, type Campaign, type Incident } from "./campaign";
-import { DEPTH, goDark, wingLevel, wingOf } from "./containment";
+import { DEPTH, goDark, wingLevel, wingOf, wreckFacility } from "./containment";
 
 export interface Guard {
   id: string;
@@ -194,9 +194,7 @@ export function letGuardsHandle(c: Campaign, inc: Incident) {
   const wing = wingOf(c, s);
   const hit = wing ? neighbors(c, wing).filter(n => n.type !== "command" && !n.disabled && n.daysLeft === 0) : [];
   if (hit.length) {
-    const n = hit[rand(0, hit.length - 1)];
-    n.disabled = true;
-    log(c, `${s.name} tore through the ${nameInText(n.type)} on level ${n.level + 1}. It's out of action until repaired.`, "bad");
+    wreckFacility(c, hit[rand(0, hit.length - 1)], `${s.name} tore through the wall next door.`);
   }
   const dead = lost.length ? ` ${lost.join(" and ")} ${lost.length > 1 ? "were" : "was"} killed.` : "";
   if (Math.random() < Math.max(0.1, 0.4 - DEPTH.escape * wingLevel(c, inc.scpId))) {

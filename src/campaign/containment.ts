@@ -3,7 +3,7 @@ import { FACILITIES, isContainment, nameInText, neighbors, operational, powerSho
 import { has } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, travelDays } from "./world";
-import { dclassDied, log, type Campaign, type Incident } from "./campaign";
+import { dateOf, dclassDied, log, type Campaign, type Incident } from "./campaign";
 import type { ScpId } from "../game/types";
 import { GUARD, type Guard } from "./security";
 
@@ -29,7 +29,9 @@ export interface ScpRecord {
   name: string;
   title: string;
   cls: ScpClass;
-  status: "contained" | "breach" | "loose";
+  status: "contained" | "breach" | "loose" | "away";
+  /** While held at another site for safekeeping: the day it comes back. */
+  returnDay?: number;
   wingId: string;
   maintenance: number;     // 0–100
   lastCleaned: number;
@@ -61,7 +63,7 @@ export function breachRisk(c: Campaign, s: ScpRecord) {
   if (has(c, "containment_rev")) { p *= 0.75; why.push("Revised procedures: ×0.75"); }
   if (has(c, "reinforced_doors")) { p *= 0.8; why.push("Reinforced doors: ×0.8"); }
   if (s.id === "106" && has(c, "em_containment")) { p *= 0.7; why.push("Electromagnetic containment: ×0.7"); }
-  if (powerShort(c)) { p *= 2; why.push("Power shortage: ×2"); }
+  if (powerShort(c) && !has(c, "backup_gen")) { p *= 2; why.push("Power shortage: ×2"); }
   // the deeper a wing sits, the harder it is to get anywhere from it
   if (wing.level > 0) { p *= 1 - DEPTH.risk * wing.level; why.push(`Level ${wing.level + 1}, deep underground: ×${(1 - DEPTH.risk * wing.level).toFixed(1)}`); }
   return { p: Math.min(0.9, p), why };
@@ -113,8 +115,71 @@ export function resurface(c: Campaign, s: ScpRecord, at?: RegionId) {
   log(c, `${s.name} has turned up near ${where}, and the locals have seen it (+5 exposure in ${REGIONS[region].name}). Recover it within ${inc.expires - c.day} days.`, "bad", "command");
 }
 
+// ---- power failures, cascading breaches and evacuations ----
+export const POWER = { genFail: 0.01, genFailNear: 0.03, storm: 0.02, cascade: 0.1, wreckBreach: 0.2 };
+export const EVAC = { cost: 10, mult: 2, transferCost: 50, transferDays: 30 };
+/** A wing loses power when the site is short and it has no backup supply. */
+export const unpowered = (c: Campaign) => powerShort(c) && !has(c, "backup_gen");
+
+/** Something knocks a facility out. A containment wing that's hit may crack open (20%). */
+export function wreckFacility(c: Campaign, f: Facility, text: string) {
+  f.disabled = true;
+  log(c, `${text} The ${nameInText(f.type)} on level ${f.level + 1} is out of action until repaired.`, "bad", "site");
+  const occ = occupantOf(c, f);
+  if (occ?.status === "contained" && Math.random() < POWER.wreckBreach) startBreach(c, occ, "The damage cracked its cell open.");
+}
+
+/** Every day: generators can fail (1% a month, 3% next to a damaged facility, plus winter storms at 2%), and
+ *  while the site is short of power each anomaly in an unpowered wing has a 10% chance a day of breaking out. */
+function tickPower(c: Campaign) {
+  const gens = c.base.facilities.filter(f => f.type === "generator" && operational(f));
+  for (const g of gens) {
+    const near = neighbors(c, g).some(n => n.disabled);
+    if (Math.random() < (near ? POWER.genFailNear : POWER.genFail) / 30) { wreckFacility(c, g, near ? "Damage next door spread into a generator and it shorted out." : "A generator fault: a turbine bearing seized."); return; }
+  }
+  const month = dateOf(c.day).getUTCMonth();
+  if ((month === 11 || month <= 1) && gens.length && Math.random() < POWER.storm / 30) {
+    wreckFacility(c, gens[rand(0, gens.length - 1)], "A winter storm brought the lines down and burned out a generator.");
+    return;
+  }
+  if (!unpowered(c)) return;
+  for (const s of c.scps) if (s.status === "contained" && Math.random() < POWER.cascade) startBreach(c, s, "The cell's locks failed when the power went.");
+}
+
+/** Wings an anomaly can be rushed into in an emergency: its own is damaged or has no power. */
+export function canEvacuate(c: Campaign, s: ScpRecord): string | null {
+  const wing = wingOf(c, s);
+  if (s.status !== "contained" || !wing) return `${s.name} isn't in its cell.`;
+  if (!wing.disabled && !unpowered(c)) return "Its wing is intact and powered.";
+  if (c.dclass < 1) return "Needs a D-Class.";
+  return null;
+}
+/** Rush it into a free wing: $10k, and twice the danger of a normal move. */
+export function evacuate(c: Campaign, s: ScpRecord, to: Facility, watchers: Guard[]) {
+  if (canEvacuate(c, s) || !freeWings(c, s.cls).includes(to) || c.funds < EVAC.cost) return;
+  c.funds -= EVAC.cost;
+  if (cellWork(c, s, watchers, `the emergency evacuation of ${s.name}`, EVAC.mult) && s.status === "contained") {
+    s.wingId = to.id;
+    log(c, `${s.name} was rushed into the ${nameInText(to.type)} on level ${to.level + 1}.`, "key");
+  }
+}
+/** Nowhere free: another site holds it for 30 days, for $50k. */
+export function transferOut(c: Campaign, s: ScpRecord) {
+  if (canEvacuate(c, s) || c.funds < EVAC.transferCost) return;
+  c.funds -= EVAC.transferCost;
+  s.status = "away"; s.returnDay = c.day + EVAC.transferDays;
+  log(c, `${s.name} is on its way to Site-17 for safekeeping. It comes back in ${EVAC.transferDays} days.`, "key");
+}
+function comeBack(c: Campaign, s: ScpRecord) {
+  const own = wingOf(c, s), to = own && operational(own) && !c.scps.some(o => o !== s && o.wingId === own.id && o.status !== "loose") ? own : freeWings(c, s.cls)[0];
+  if (!to) { s.returnDay = c.day + 10; log(c, `Site-17 was due to send ${s.name} back, but there's no working wing for it. They'll hold it 10 more days.`, "bad", "site"); return; }
+  s.status = "contained"; s.wingId = to.id; s.maintenance = 100; s.lastCleaned = c.day; s.returnDay = undefined;
+  log(c, `${s.name} is back from Site-17, held in the ${nameInText(to.type)} on level ${to.level + 1}.`, "good");
+}
+
 /** One day of containment: wear, breaches, unanswered breaches spreading or escaping, sightings. */
 export function tickContainment(c: Campaign) {
+  tickPower(c);
   for (const [id, day] of Object.entries(c.sightings) as [ScpId, number][])
     if (c.day >= day) { delete c.sightings[id]; firstSighting(c, id); }
   for (const s of c.scps) {
@@ -122,6 +187,8 @@ export function tickContainment(c: Campaign) {
       s.maintenance = Math.max(0, s.maintenance - decay(c));
       if (c.cleaningOrder && c.day - s.lastCleaned >= CLEAN_EVERY && c.dclass >= CLEAN_CREW) clean(c, s, "A routine cleaning");
       if (Math.random() < breachRisk(c, s).p) startBreach(c, s, "Containment alarm.");
+    } else if (s.status === "away") {
+      if (c.day >= (s.returnDay ?? 0)) comeBack(c, s);
     } else if (s.status === "loose") {
       if ((c.day - (s.resurfaceDay ?? 0)) % 4 === 0) addExposure(c, HOME, 1);
       if (s.resurfaceDay !== undefined && c.day >= s.resurfaceDay) resurface(c, s);
