@@ -6,7 +6,7 @@ import { S, canAct, canSee, isPanicked, isTeam, seen, team, unitAt } from "../ga
 import { blastArea, dragOptions, moveCost, reachFor, throwOptions } from "../game/turn";
 import { abilityTargets } from "../game/abilities";
 import type { Unit } from "../game/types";
-import { MAPS } from "../data/maps";
+import { mapLayer, noise } from "./tiles";
 import { escaping } from "../game/scp173";
 import { detectRange } from "../game/insurgency";
 import { freshBodies, isCalm, isStaggered, leadOptions } from "../game/scp049";
@@ -20,73 +20,13 @@ const C = {
   manila: "#d8bf86", alert: "#d75b47", ok: "#86c193",
 };
 
-// Floor surfaces by area, so a lab, a street and a field read differently at a glance. Kept dark and low-contrast so
-// units, cover and overlays stay on top.
-type Surface = "asphalt" | "grass" | "dirt" | "concrete" | "wood" | "labtile" | "steel";
-const SURFACE_BASE: Record<Surface, string> = { asphalt: "#24282c", grass: "#222d22", dirt: "#2b271f", concrete: "#283038", wood: "#2b2520", labtile: "#28313a", steel: "#232a31" };
-function surfaceFor(name: string): Surface {
-  if (/field/.test(name)) return "grass";
-  if (/barn/.test(name)) return "dirt";
-  if (/street|road|lot|motor pool|courtyard/i.test(name)) return "asphalt";
-  if (/lab/.test(name)) return "labtile";
-  if (/cell(?! corridor)|containment/.test(name)) return "steel";
-  if (/diner|store|church|farmhouse|houses|office|records|barracks|canteen|mess|guard room/.test(name)) return "wood";
-  return "concrete";
-}
-/** A fixed pseudo-random number per tile, so textures don't shimmer between frames. */
-const noise = (x: number, y: number, k: number) => { let h = (x * 374761393 + y * 668265263 + k * 2147483647) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
-let surfaceCache: { grid: unknown; s: Surface[] } | null = null;
-
 export function createRenderer(cv: HTMLCanvasElement) {
   const ctx = cv.getContext("2d")!;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   cv.width = L.W * TS * dpr; cv.height = L.H * TS * dpr;
 
   function drawTiles() {
-    for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) {
-      const t = L.grid[y][x], px = x * TS, py = y * TS;
-      if (t === WALL) {
-        ctx.fillStyle = C.wall; ctx.fillRect(px, py, TS, TS);
-        if (tileAt(x, y + 1) !== WALL) { ctx.fillStyle = C.wallTop; ctx.fillRect(px, py + TS - 5, TS, 5); }
-        continue;
-      }
-      if (t === STEEL) {
-        ctx.fillStyle = C.steelDark; ctx.fillRect(px, py, TS, TS);
-        ctx.fillStyle = C.steel; for (let k = 3; k < TS; k += 6) ctx.fillRect(px + 6, py + k, TS - 12, 2);
-        continue;
-      }
-      if (t === CONT) {
-        ctx.fillStyle = C.steelDark; ctx.fillRect(px, py, TS, TS);
-        ctx.strokeStyle = C.steel; ctx.lineWidth = 1;
-        ctx.beginPath(); for (let k = 4; k < TS; k += 7) { ctx.moveTo(px + k, py); ctx.lineTo(px + k, py + TS); } ctx.stroke();
-        continue;
-      }
-      drawFloor(x, y, px, py);
-      if (t === HALF) {
-        ctx.fillStyle = C.desk; ctx.fillRect(px + 4, py + 7, TS - 8, TS - 12);
-        ctx.fillStyle = C.deskTop; ctx.fillRect(px + 4, py + 7, TS - 8, 4);
-      } else if (t === FULL) {
-        ctx.fillStyle = C.pillar; ctx.fillRect(px + 3, py + 3, TS - 6, TS - 6);
-        ctx.strokeStyle = C.pillarHatch; ctx.lineWidth = 2; ctx.beginPath();
-        for (let k = -TS; k < TS; k += 7) { ctx.moveTo(px + 3 + Math.max(0, k), py + 3 + Math.max(0, -k)); ctx.lineTo(px + 3 + Math.min(TS - 6, k + TS - 6), py + 3 + Math.min(TS - 6, TS - 6 - k)); }
-        ctx.stroke();
-      } else if (t === DRUM) {
-        ctx.fillStyle = "#7a3b1e"; ctx.beginPath(); ctx.ellipse(px + TS / 2, py + TS / 2, 9, 11, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = "#d9a441"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(px + 8, py + 13); ctx.lineTo(px + TS - 8, py + 13); ctx.moveTo(px + 8, py + 20); ctx.lineTo(px + TS - 8, py + 20); ctx.stroke();
-      } else if (t === EXIT) {
-        ctx.fillStyle = C.exit; ctx.fillRect(px + 2, py + 2, TS - 4, TS - 4);
-        ctx.fillStyle = "#cfe8d6"; ctx.font = "9px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillText("EXIT", px + TS / 2, py + TS / 2);
-      }
-      if (L.doors.has(y * L.W + x)) {
-        ctx.strokeStyle = C.door; ctx.lineWidth = 2;
-        const vertical = tileAt(x - 1, y) === WALL && tileAt(x + 1, y) === WALL;
-        ctx.beginPath();
-        if (vertical) { ctx.moveTo(px + 1, py + 2); ctx.lineTo(px + 1, py + TS - 2); ctx.moveTo(px + TS - 1, py + 2); ctx.lineTo(px + TS - 1, py + TS - 2); }
-        else { ctx.moveTo(px + 2, py + 1); ctx.lineTo(px + TS - 2, py + 1); ctx.moveTo(px + 2, py + TS - 1); ctx.lineTo(px + TS - 2, py + TS - 1); }
-        ctx.stroke();
-      }
-    }
+    ctx.drawImage(mapLayer(dpr), 0, 0, L.W * TS, L.H * TS);
     // container door frame along its open (north) side
     if (!L.contTiles.length) return;
     const [x0, y0] = L.contTiles[0], x1 = Math.max(...L.contTiles.map(t => t[0]));
@@ -95,42 +35,6 @@ export function createRenderer(cv: HTMLCanvasElement) {
     ctx.beginPath(); ctx.moveTo(x0 * TS, y0 * TS + 1); ctx.lineTo((x1 + 1) * TS, y0 * TS + 1); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = "#e7ecf0"; ctx.font = "9px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText(S.setup.kind === "raid" ? "LIFT" : "CONTAINER", (x0 + x1 + 1) / 2 * TS, (y0 + 2) * TS - 5);
-  }
-
-  function surfaces() {
-    if (surfaceCache?.grid !== L.grid) {
-      const s: Surface[] = [];
-      for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) s.push(surfaceFor(area(x, y)));
-      surfaceCache = { grid: L.grid, s };
-    }
-    return surfaceCache.s;
-  }
-  function drawFloor(x: number, y: number, px: number, py: number) {
-    const sf = surfaces()[y * L.W + x];
-    ctx.fillStyle = SURFACE_BASE[sf]; ctx.fillRect(px, py, TS, TS);
-    ctx.save(); ctx.beginPath(); ctx.rect(px, py, TS, TS); ctx.clip();
-    if (sf === "asphalt" || sf === "dirt") {
-      ctx.fillStyle = sf === "asphalt" ? "rgba(255,255,255,0.05)" : "rgba(160,130,90,0.12)";
-      for (let k = 0; k < 7; k++) ctx.fillRect(px + noise(x, y, k) * TS, py + noise(x, y, k + 9) * TS, 1.5, 1.5);
-    } else if (sf === "grass") {
-      ctx.strokeStyle = "rgba(120,160,100,0.16)"; ctx.lineWidth = 1; ctx.beginPath();
-      for (let k = 0; k < 6; k++) { const gx = px + noise(x, y, k) * TS, gy = py + noise(x, y, k + 5) * TS; ctx.moveTo(gx, gy); ctx.lineTo(gx + 1.5, gy - 4); }
-      ctx.stroke();
-    } else if (sf === "wood") {
-      ctx.strokeStyle = "rgba(0,0,0,0.28)"; ctx.lineWidth = 1; ctx.beginPath();
-      for (let k = 8; k < TS; k += 8) { ctx.moveTo(px, py + k); ctx.lineTo(px + TS, py + k); }
-      const off = (y % 2) * 16 + 8; ctx.moveTo(px + off, py); ctx.lineTo(px + off, py + TS);
-      ctx.stroke();
-    } else if (sf === "labtile") {
-      ctx.strokeStyle = "rgba(200,220,235,0.07)"; ctx.lineWidth = 1; ctx.beginPath();
-      ctx.moveTo(px + TS / 2, py); ctx.lineTo(px + TS / 2, py + TS); ctx.moveTo(px, py + TS / 2); ctx.lineTo(px + TS, py + TS / 2); ctx.stroke();
-    } else if (sf === "steel") {
-      ctx.fillStyle = "rgba(170,185,200,0.09)";
-      for (let k = 4; k < TS; k += 8) for (let j = 4; j < TS; j += 8) ctx.fillRect(px + j + ((k / 8) % 2) * 4 - 2, py + k - 1, 3, 1.5);
-    } else if ((x + y) % 2) { ctx.fillStyle = "rgba(255,255,255,0.018)"; ctx.fillRect(px, py, TS, TS); }   // concrete slabs
-    ctx.restore();
-    // a faint grid so tiles can be counted at a glance
-    ctx.strokeStyle = "rgba(255,255,255,0.045)"; ctx.lineWidth = 1; ctx.strokeRect(px + 0.5, py + 0.5, TS - 1, TS - 1);
   }
 
   function drawFog() {

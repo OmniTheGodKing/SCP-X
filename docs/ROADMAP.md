@@ -592,12 +592,32 @@ first. The Phase 3 implementation rules still apply (explicit specification, sta
 recreate, shared consequences).
 
 ### 4A: art and sound
-- **2D art:** proper sprites for operatives, guards, D-Class, Insurgents and each anomaly, replacing the placeholder
-  shapes, with clear silhouettes and the existing markers (roles, rings, status) kept readable on top.
-- **Animation:** movement, firing, hits, going down, anomalies' signature moves (SCP-173's blink jump, SCP-106 sinking).
+Decided: all art is drawn in code (canvas and SVG, like the portraits), and all sound is synthesized in the browser,
+so there are no asset files or licences to track. Both layers get art; nothing in the strategic layer is left as a
+bare text box where a picture would help.
+
+- **Tactical maps:** designed tile art for every map instead of flat fills: walls with depth and material (concrete,
+  brick, timber, steel bulkheads), floors per room (lab tile, office boards, asphalt, grass, mud, steel decking),
+  doors that read as doors, and cover drawn as what it is (desks, crates, sandbags, vehicles, filing cabinets, pews,
+  hay bales) so half and full cover are recognisable by shape. Props and decals per map (lights, stains, signage,
+  vents, wiring). Containment cells, the transport container, hatches and lifts get their own art.
+- **Tactical sprites and animation:** top-down sprites for operatives (by class and armor), guards, D-Class,
+  researchers, civilians, Insurgents (by role), the Insurgency commander, Nu-7, and each anomaly, facing where they
+  last moved or shot. Movement slides tile to tile; firing has muzzle flash and tracers; hits flinch; the downed and
+  dead fall. Signature moves: SCP-173's blink jump, SCP-106 sinking into and rising from the floor, SCP-049's touch,
+  SCP-610's spreading flesh. Existing markers (slot numbers, role letters, rings, health bars, tags) stay readable on top.
+- **Strategic layer art:** the World Map (drawn coastlines and terrain, region shading, illustrated markers for each
+  incident type, the plane, Site-19 and partner sites, weather); the Site-19 cross-section (rock strata, each facility
+  drawn as its room with its function visible, power and damage states); illustrations or icons for research projects,
+  workshop items, weapons and armor, anomalies' file photos, Council and Insurgency cards, and the History tab.
 - **Portraits:** a better portrait style built on the existing look data (operatives, staff, commanders).
-- **Sound and music:** effects for shots, hits, doors, blinks, alarms and the World Map clock; a small score for the
-  World Map and missions; volume controls and mute. Only assets the project is allowed to use, credited.
+- **Sound:** synthesized effects for shots by weapon type, hits, misses, grenades, doors, the blink tick, SCP-173's
+  scrape, SCP-106's corrosion, alarms and sirens; interface sounds (clicks, tab changes, notices); transitions (deploy,
+  take-off and landing, mission start, victory and defeat, returning to Site-19, the month ticking over); a small
+  ambient score for the World Map, Site-19 and missions. Volume per channel and mute, remembered per viewer.
+
+Built in this order: (1) tactical map art, (2) tactical sprites and animation, (3) sound engine with tactical and
+transition sounds, (4) World Map art, (5) Site-19 and the other strategic tabs, (6) portraits and the score.
 
 ### 4B: more anomalies
 - **5 to 8 new SCPs**, each with its own tactical behaviour, containment routine and procedure, research line and
