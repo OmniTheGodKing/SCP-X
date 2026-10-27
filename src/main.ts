@@ -19,6 +19,7 @@ import { reachFor } from "./game/turn";
 import { mountMission } from "./ui/missionView";
 import { esc } from "./ui/util";
 import { mountDebug } from "./ui/debug";
+import { transition } from "./ui/audio";
 
 const root = document.getElementById("app")!;
 let campaign: Campaign = loadCampaign() ?? newCampaign({ difficulty: "agent", ironman: false, tutorial: true });   // a first visit starts with the tutorial on
@@ -60,7 +61,7 @@ function launch(setup: MissionSetup, inc: Incident) {
   saveCampaign(campaign);
   createMission(setup);
   screen = "mission";
-  mountMission(root, () => { openTab("world", "reg:" + inc.region); showHub(); }, result => {
+  mountMission(root, () => { transition.returnHome(); openTab("world", "reg:" + inc.region); showHub(); }, result => {
     const d = applyResult(campaign, result);
     saveCampaign(campaign);
     return debriefHtml(result, d, setup.kind, scpName(setup.scp ?? "173"));
@@ -93,6 +94,7 @@ function showHub() {
       const depart = campaign.day + (campaign.hour ?? 0) / 24, tf = setup.squad.some(m => m.goggles) ? "Eta-10" : "Epsilon-11";
       campaign.outbound = { incId: inc.id, region: inc.region, depart, arrive: depart + t, setup, tf };
       for (const m of setup.squad) { const o = campaign.roster.find(x => x.id === m.opId); if (o) o.busy = { kind: "travel", daysLeft: t, out: true }; }
+      transition.takeoff();
       log(campaign, `${tf} takes off for ${REGIONS[inc.region].name} on the ${transportName(campaign)}: ${t} day${t > 1 ? "s" : ""}${storm ? " (a storm there adds a day)" : ""}. Let time run on the World Map to get them there.`, "key");
       saveCampaign(campaign);
       openTab("world", "inc:" + inc.id);
@@ -108,6 +110,7 @@ function showHub() {
       log(campaign, `${o.tf} has landed in ${REGIONS[inc.region].name}.`, "key");
       o.setup.weather = missionWeather(campaign, inc);   // the sky they land under
       o.setup.night = inc.kind === "emergency" ? true : nightAt(campaign, inc);
+      transition.landing();
       launch(o.setup, inc);
     },
   });

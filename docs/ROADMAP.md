@@ -619,6 +619,34 @@ bare text box where a picture would help.
 Built in this order: (1) tactical map art, (2) tactical sprites and animation, (3) sound engine with tactical and
 transition sounds, (4) World Map art, (5) Site-19 and the other strategic tabs, (6) portraits and the score.
 
+#### As built so far
+- **(1) Tactical map art (done, src/ui/tiles.ts):** each map is painted once into an offscreen layer and repainted only
+  when the grid changes. Materials per map: Site-19 concrete with a painted wall band and hazard-striped blast doors,
+  brick on Main Street, timber on the farm, corrugated metal at the port, concrete with chain-link and wire around
+  the surface compound, hedges round the fields. Walls show a south face and cast shadows. Floors by room (lab tile,
+  boards, slabs, diamond plate, asphalt with a centre line, grass, straw). Cover is drawn as what it is, chosen by room:
+  desks, lab benches, restraint tables, cots, washers, pews, shelves, sofas, lockers, hay bales, sandbags, park
+  benches, carts and crates for half cover; pillars, trees, crate stacks, instrument cabinets, bookcases and iceboxes
+  for full cover, and parked trucks where two stand together. Fuel drums, exits with chevrons, the container or truck
+  bed, the surface lift, room names stencilled on the floor, ceiling light pools, decals (SCP-173's cell floor, papers,
+  oil, drains), debris where cover was blown apart, and puddles or snow on open ground in bad weather.
+- **(2) Sprites and animation (done, src/ui/sprites.ts):** top-down figures for every unit, by side, armor (heavy,
+  hazmat, lead, containment suit), weapon type, class (medic armband, containment pack), Eta-10 goggles, Nu-7 gas
+  masks, guards' caps, Insurgent roles (commander's beret, sniper's hood, sapper's satchel), researchers' coats,
+  civilians, D-Class, SCP-049-2, SCP-610 instances, rioters, the radio set and the records crate. The side shapes
+  (circle, rounded square, diamond, square) are kept as rings with the slot or role badge. Units face where they last
+  moved or fired, slide from tile to tile, flash when they fire, flinch red when hit, and fall where they die
+  (downed figures lie with a bleed counter). SCP-049 is drawn from above with its mask pointing ahead, SCP-106 sinks
+  into and rises from its puddle, SCP-173 throws up grit where it lands.
+- **(3) Sound (done, src/ui/audio.ts):** all synthesized with Web Audio, starting on the first click. Shots by weapon
+  type (machine guns and SMGs fire bursts), hits, ricochets, explosions, sealing doors, the blink tick, SCP-173's stone
+  scrape, SCP-106's corrosion, the radio click each turn and a low pulse when the enemy moves. Interface clicks, tab
+  changes, a refusal buzz on disabled buttons, a typewriter-and-bell for notices and a longer one for a new month,
+  the alarm when Site-19 has a breach or raid. Transitions: take-off, landing, mission start, victory, defeat and the
+  ride back down to Site-19. A generative ambient score per scene (World Map, Site-19, missions, tense for breaches
+  and raids). A Sound button in both headers sets master, effects, interface and music volume and mute, remembered
+  per viewer.
+
 ### 4B: more anomalies
 - **5 to 8 new SCPs**, each with its own tactical behaviour, containment routine and procedure, research line and
   capture method, in the way SCP-173, 049, 106 and 610 differ (candidates: SCP-096, SCP-939, SCP-008, SCP-012,

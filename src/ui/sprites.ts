@@ -43,17 +43,20 @@ export function placeOf(u: Unit, now: number): { x: number; y: number; ang: numb
 const defaultFacing = (u: Unit) => u.side === "raider" ? Math.PI : u.side === "mtf" ? 0 : Math.PI / 2;
 
 /** Read new tracer and damage effects: the shooter turns to face the target and flashes; whoever was hit flinches. */
-export function noteEffects(effects: readonly { type: string; t0: number; x0?: number; y0?: number; x1?: number; y1?: number; x?: number; y?: number; text?: string }[], units: Unit[]) {
+type Fx = { type: string; t0: number; x0?: number; y0?: number; x1?: number; y1?: number; x?: number; y?: number; text?: string };
+export function noteEffects(effects: readonly Fx[], units: Unit[], onNew?: (e: Fx, by?: Unit) => void) {
   for (const e of effects) {
     if (seenEffects.has(e)) continue;
     seenEffects.add(e);
     if (e.type === "line") {
       const s = nearest(units, e.x0!, e.y0!, TS * 0.8);
       if (s) { const a = anims.get(s.id); if (a) { a.ang = Math.atan2(e.y1! - e.y0!, e.x1! - e.x0!); a.fired = e.t0; } }
+      onNew?.(e, s ?? undefined); continue;
     } else if (e.type === "text" && e.text && /^\d/.test(e.text)) {
       const v = nearest(units, e.x!, e.y! + 14, TS * 0.8);
       if (v) { const a = anims.get(v.id); if (a) a.hit = e.t0; }
     }
+    onNew?.(e);
   }
 }
 function nearest(units: Unit[], x: number, y: number, max: number) {

@@ -90,9 +90,9 @@ canvas { display: block; width: 100%; max-width: 100%; height: auto; border: 1px
 .flag.bad { border-color: var(--alert); color: var(--alert); }
 .actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .actions .wide { grid-column: 1 / -1; }
-button.act, label.act { font-family: var(--font-mono); font-size: 12px; letter-spacing: .04em; padding: 9px 10px; background: var(--panel-2); color: var(--ink); border: 1px solid var(--line); cursor: pointer; }
-button.act:hover:not(:disabled), label.act:hover { border-color: var(--manila); }
-button.act:focus-visible { outline: 2px solid var(--manila); outline-offset: 1px; }
+button.act, label.act, summary.act { font-family: var(--font-mono); font-size: 12px; letter-spacing: .04em; padding: 9px 10px; background: var(--panel-2); color: var(--ink); border: 1px solid var(--line); cursor: pointer; }
+button.act:hover:not(:disabled), label.act:hover, summary.act:hover { border-color: var(--manila); }
+button.act:focus-visible, summary.act:focus-visible { outline: 2px solid var(--manila); outline-offset: 1px; }
 button.act:disabled { opacity: .4; cursor: not-allowed; }
 button.act.primary { background: var(--manila); color: var(--bg); border-color: var(--manila); font-weight: 500; }
 button.act.on { border-color: var(--manila); color: var(--manila); }
@@ -437,3 +437,12 @@ main.wrap:has(#actionBar) { padding-bottom: 150px; }
   main.wrap:has(#actionBar) .board canvas { width: auto; max-width: 100%; max-height: calc(100vh - 250px); margin: 0 auto; }
   main.wrap:has(#actionBar) .side { position: sticky; top: 8px; max-height: calc(100vh - 150px); overflow-y: auto; align-self: start; }
 }
+/* the sound popover in either screen's header */
+details.sound { position: relative; display: inline-block; }
+details.sound > summary { list-style: none; cursor: pointer; }
+details.sound > summary::-webkit-details-marker { display: none; }
+.sndpanel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: 240px; display: grid; gap: 8px; padding: 12px;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+.sndrow { display: grid; grid-template-columns: 80px 1fr; align-items: center; gap: 8px; font-size: 13px; }
+.sndrow:first-child { grid-template-columns: auto 1fr; }
+.sndrow input[type=range] { width: 100%; accent-color: var(--manila); }
