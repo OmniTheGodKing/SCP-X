@@ -8,7 +8,11 @@ export type AbilityId = PerkId | "secure" | "dose" | "lockdown" | "calm";
 import type { AmmoId, AttachmentId, WeaponType } from "../data/weapons";
 export type { AmmoId, AttachmentId, WeaponType };
 
-export type ItemId = "armor" | "eyedrops" | "flashbang" | "smoke" | "tracker" | "frag";
+export type ItemId = "armor" | "armor_light" | "armor_heavy" | "hazmat" | "leadsuit"
+  | "eyedrops" | "flashbang" | "smoke" | "tracker" | "frag" | "csgas" | "bazooka" | "law" | "medkit" | "camera" | "restraints" | "darts";
+/** Items thrown or fired at a tile, and the heavy weapons among them (heavy armor only). */
+export const THROWN: ItemId[] = ["frag", "flashbang", "smoke", "csgas", "bazooka", "law"];
+export const HEAVY: ItemId[] = ["bazooka", "law"];
 
 /** The weapon a unit carries into a mission. */
 export interface Gun { name: string; type: WeaponType; dmg: [number, number]; mag: number; ammo: number; aim: number; attachment?: AttachmentId;
@@ -57,6 +61,11 @@ export interface Unit {
   /** Armor points: each one cuts the damage of every hit by 1. */
   armor?: number;
   hasArmor?: boolean;
+  /** Which armor they wear, and the movement it adds or costs. */
+  armorKind?: ItemId;
+  moveBonus?: number;
+  /** SCP-106 has a grip on them (lead-lined suits hold for a turn). */
+  seizedTurn?: number;
   items?: Carried[];
   /** Blinded by a flashbang through the enemy phases of this turn. */
   blindUntil?: number;
@@ -110,6 +119,7 @@ export interface SquadMember {
   opId: string; name: string; call: string;
   hp: number; maxHp: number; san: number; maxSan: number; aim: number; blinkFull: number;
   armor: number; hasArmor: boolean; items: Carried[];
+  armorKind?: ItemId; armorHp?: number; moveBonus?: number;
   cls?: ClassId; perks: PerkId[]; traits: TraitId[];
   gun: Gun;
   guard?: boolean;
@@ -151,6 +161,7 @@ export interface MissionResult {
   turns: number;
   squad: {
     opId: string; alive: boolean; hp: number; san: number; kills: number; sealed: boolean; hasArmor: boolean; items: Carried[];
+    armorKind?: ItemId; armorHp?: number;
     witnessed: number; panics: number; minHp: number; bestStreak: number;
     /** Reinforcements who never reached the map before it ended. */
     absent?: boolean;
@@ -160,6 +171,9 @@ export interface MissionResult {
   /** Material for studies: SCP-049-2 killed, and people who came back from SCP-106. */
   zombiesKilled: number;
   pocketReturned: number;
+  /** Anomalies photographed with the field camera, and whether a restraint kit came along. */
+  photos: ScpId[];
+  restraints: boolean;
   aftercare: boolean;
   prisoners: number;
   civiliansKilled: number;
@@ -223,6 +237,8 @@ export interface MissionState {
   escapeDrive: number;
   lockedUntil: number;
   escaped: boolean;
+  /** Anomalies photographed this mission. */
+  photos: ScpId[];
   /** Debug menu switches. */
   debug?: { freeze173?: boolean; place173?: boolean; kill?: boolean };
   result?: MissionResult;

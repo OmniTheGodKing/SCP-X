@@ -1,6 +1,6 @@
 // Site-19 Command: incidents and time, the base and its containment, and Epsilon-11's roster.
 import {
-  DEMOLISH, canDemolish, demolish, demolishDays, demolishLeavesShort, ENGINEER_COST, EXCAVATE, FACILITIES, nameInText, GRADE_NAMES, MAX_LEVELS, REPAIR, SLOTS, build, canBuild, canExcavate, canRepair,
+  UPGRADE, canUpgrade, upgradeFacility, DEMOLISH, canDemolish, demolish, demolishDays, demolishLeavesShort, ENGINEER_COST, EXCAVATE, FACILITIES, nameInText, GRADE_NAMES, MAX_LEVELS, REPAIR, SLOTS, build, canBuild, canExcavate, canRepair,
   dclassCapacity, engineersFree, excavate, facilityAt, healPerDay, isContainment, monthlyUpkeep, neighbors, operational,
   powerShort, powerSupply, powerUse, repair, sanityPerDay, type Facility, type FacilityType,
 } from "../campaign/base";
@@ -17,7 +17,7 @@ import {
   type ScpRecord,
 } from "../campaign/containment";
 import {
-  ARMOR_TIERS, ATTACHMENT_COST, REFIT, canOrderAmmo, orderAmmo, unlockedAmmo, canOrderAttachment, canRefit, orderAttachment, orderRefit, pendingRefits, unlockedAttachments,
+  ARMOR_KINDS, ARMOR_TIERS, armorStats, ATTACHMENT_COST, REFIT, canOrderAmmo, orderAmmo, unlockedAmmo, canOrderAttachment, canRefit, orderAttachment, orderRefit, pendingRefits, unlockedAttachments,
   ITEMS, PROJECTS, TESTS, assign, canHireResearcher, canOrder, canTest, has, hireResearcher, order, projectLock,
   researcherCapacity, researchersFree, runTest, offered, projectDays, unlockedItems, type Branch, type ItemId, type TestId,
 } from "../campaign/research";
@@ -30,6 +30,7 @@ import {
   ALERTS, GUARD, PROMOTE, canHireGuard, canPromote, guardCapacity, guardOdds, guardsAlive, guardsReady, hireGuard, letGuardsHandle, mtfArrival,
   promoteGuard, breachGuards, TRAINING, canTrain, squadSize, train, type Alert, type Guard,
 } from "../campaign/security";
+import { HEAVY } from "../game/types";
 import { esc } from "./util";
 
 const MAX_DCLASS = 4, MAX_WATCHERS = 2;
@@ -56,7 +57,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let planning: string | null = null;
   const chosen = new Set<string>();
   const watchers = new Set<string>();
-  const gear = new Map<string, { armor: boolean; items: (ItemId | "")[] }>();
+  const gear = new Map<string, { armor: ItemId | ""; items: (ItemId | "")[] }>();
   let flashMsg = "";
   let opSel: string | null = null;
   let dCount = 2;
@@ -228,7 +229,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
 
   function gearOf(id: string) {
     let g = gear.get(id);
-    if (!g) { g = { armor: false, items: ["", "", ""] }; gear.set(id, g); }
+    if (!g) { g = { armor: "", items: ["", "", ""] }; gear.set(id, g); }
     return g;
   }
   /** How many of an item are left in storage once everyone else's loadout is counted. */
@@ -236,23 +237,27 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     let used = 0;
     for (const id of chosen) {
       const g = gearOf(id);
-      if (item === "armor") { if (g.armor && id !== exceptOp) used++; continue; }
+      if (ITEMS[item].armor) { if (g.armor === item && id !== exceptOp) used++; continue; }
       g.items.forEach((it, i) => { if (it === item && !(id === exceptOp && i === exceptSlot)) used++; });
     }
     return (c.inventory[item] || 0) - used;
   }
   function loadoutRow(o: Operative) {
     const g = gearOf(o.id);
-    const carry = (Object.keys(ITEMS) as ItemId[]).filter(i => !ITEMS[i].armor && ((c.inventory[i] || 0) > 0));
+    // heavy weapons only show for someone in heavy armor
+    const carry = (Object.keys(ITEMS) as ItemId[]).filter(i => !ITEMS[i].armor && ((c.inventory[i] || 0) > 0) && (g.armor === "armor_heavy" || !HEAVY.includes(i)));
     const slot = (i: number) => `<select id="gear-${o.id}-${i}" data-gear="${o.id}" data-slot-i="${i}" aria-label="${esc(o.name)} item slot ${i + 1}">
       <option value="">Empty slot</option>
       ${carry.map(it => { const left = spare(it, o.id, i); return `<option value="${it}" ${g.items[i] === it ? "selected" : ""} ${left < 1 && g.items[i] !== it ? "disabled" : ""}>${ITEMS[it].name} (${Math.max(0, left)} left)</option>`; }).join("")}
     </select>`;
-    const armorLeft = spare("armor", o.id);
+    const kinds = ARMOR_KINDS.filter(k => (c.inventory[k] || 0) > 0 || g.armor === k);
     return `<div class="loadrow"><b>${esc(o.call)} ${esc(o.name)}</b>
       <span class="specs">${esc(gunFor(c, o).name)}${o.attachment ? ` + ${ATTACHMENTS[o.attachment].name}` : ""}${o.ammoType ? ` · ${AMMO[o.ammoType].name}` : ""}</span>
       ${weaponOptions(o).length > 1 ? `<select id="wpn-${o.id}" data-weapon="${o.id}" aria-label="${esc(o.name)} weapon">${weaponOptions(o).map(t => `<option value="${t}" ${weaponOf(o) === t ? "selected" : ""}>${TYPES[t].name}: ${model(c.models[t]).name}</option>`).join("")}</select>` : ""}
-      <label class="armorpick"><input type="checkbox" id="armor-${o.id}" data-armor="${o.id}" ${g.armor ? "checked" : ""} ${!g.armor && (armorLeft < 1 || !c.armorTier) ? "disabled" : ""}> ${c.armorTier ? ARMOR_TIERS[c.armorTier].name : "Flak vest (research it first)"}${(c.inventory.armor || 0) ? ` (${Math.max(0, armorLeft - (g.armor ? 1 : 0))} spare)` : c.armorTier ? " (none built)" : ""}</label>
+      <select id="armor-${o.id}" data-armor="${o.id}" aria-label="${esc(o.name)} armor">
+        <option value="">${kinds.length ? "No armor" : c.armorTier ? "No armor (none built)" : "No armor (research a vest first)"}</option>
+        ${kinds.map(k => { const left = spare(k, o.id), st = armorStats(k, c.armorTier); return `<option value="${k}" ${g.armor === k ? "selected" : ""} ${left < 1 && g.armor !== k ? "disabled" : ""}>${k === "armor" ? ARMOR_TIERS[Math.max(1, c.armorTier)].name : ITEMS[k].name}: +${st.hp} HP, ${st.points} armor${st.move ? `, ${st.move > 0 ? "+" : ""}${st.move} move` : ""} (${Math.max(0, left - (g.armor === k ? 1 : 0))} spare)</option>`; }).join("")}
+      </select>
       ${slot(0)}${slot(1)}${o.perks.includes("field_kit") ? slot(2) : ""}</div>`;
   }
 
@@ -474,6 +479,8 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <div class="specs">${d.power < 0 ? `Supplies ${-d.power} power` : `Uses ${d.power} power`} · $${d.upkeep}k/month upkeep${d.grade !== undefined ? ` · ${GRADE_NAMES[d.grade]} grade` : ""}</div>
       <div class="specs">Next to: ${esc(nb)}</div>
       <p>${f.demolishDays ? "Shut down while it's taken apart." : f.daysLeft > 0 ? `Under construction: ${plural(f.daysLeft, "day")} left.` : f.repairDays > 0 ? `Engineers are repairing it: ${plural(f.repairDays, "day")} left.` : f.disabled ? `<span class="warn">Damaged in a breach and out of action.</span>` : "Operational."}</p>
+      ${f.type === "barracks" && !f.upgraded ? (() => { const uw = canUpgrade(c, f);
+        return f.upgradeDays ? `<p class="muted">Being expanded: ${plural(f.upgradeDays, "day")} left.</p>` : `<div class="row"><button class="act" id="upgradeBtn" type="button" ${uw ? `disabled title="${esc(uw)}"` : ""}>Expand to 15 beds · $${UPGRADE.cost}k · ${plural(UPGRADE.days, "day")} · ${UPGRADE.engineers} engineers</button>${uw ? `<span class="muted">${esc(uw)}</span>` : ""}</div>`; })() : f.upgraded ? `<p class="muted">Expanded: holds 15 D-Class.</p>` : ""}
       ${f.demolishDays ? `<p class="warn">Being torn down: ${plural(f.demolishDays, "day")} left.</p>` : f.type === "command" ? "" : (() => { const dw = canDemolish(c, f);
         return `<div class="row"><button class="act" id="demolishBtn" type="button" ${dw ? `disabled title="${esc(dw)}"` : ""}>Tear down · ${plural(demolishDays(f), "day")} · 1 engineer · +$${Math.round(d.cost * DEMOLISH.refund)}k salvage</button>${dw ? `<span class="muted">${esc(dw)}</span>` : demolishLeavesShort(c, f) ? `<span class="warn">This would leave Site-19 short of power.</span>` : ""}</div>`; })()}
       ${f.disabled && f.repairDays === 0 ? `<div class="row"><button class="act primary" id="repairBtn" type="button" ${rw ? `disabled title="${esc(rw)}"` : ""}>Repair · $${REPAIR.cost}k · ${REPAIR.days} days · ${REPAIR.engineers} engineers</button>${rw ? `<span class="muted">${esc(rw)}</span>` : ""}</div>` : ""}
@@ -671,7 +678,11 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     root.querySelectorAll<HTMLElement>("[data-unassign]").forEach(b => b.onclick = () => tryDo(() => assign(c, b.dataset.unassign!, -1)));
     root.querySelectorAll<HTMLElement>("[data-test]").forEach(b => b.onclick = () => change(() => runTest(c, scp173(), b.dataset.test as TestId, chosenWatchers())));
     root.querySelectorAll<HTMLElement>("[data-order]").forEach(b => b.onclick = () => change(() => order(c, b.dataset.order as ItemId)));
-    root.querySelectorAll<HTMLInputElement>("[data-armor]").forEach(b => b.onchange = () => { gearOf(b.dataset.armor!).armor = b.checked; render(); });
+    root.querySelectorAll<HTMLSelectElement>("[data-armor]").forEach(b => b.onchange = () => {
+      const g = gearOf(b.dataset.armor!); g.armor = b.value as ItemId | "";
+      if (g.armor !== "armor_heavy") g.items = g.items.map(i => (i && HEAVY.includes(i) ? "" : i));
+      render();
+    });
     root.querySelectorAll<HTMLSelectElement>("[data-gear]").forEach(b => b.onchange = () => {
       gearOf(b.dataset.gear!).items[Number(b.dataset.slotI)] = b.value as ItemId | "";
       render();
@@ -711,6 +722,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     on("hireGuardBtn", () => change(() => hireGuard(c)));
     root.querySelectorAll<HTMLElement>("[data-train]").forEach(b => b.onclick = () => change(() => train(c, b.dataset.train!)));
     root.querySelectorAll<HTMLElement>("[data-promote]").forEach(b => b.onclick = () => { const g = c.guards.find(x => x.id === b.dataset.promote); if (g) change(() => promoteGuard(c, g)); });
+    on("upgradeBtn", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) change(() => upgradeFacility(c, f)); });
     on("demolishBtn", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) change(() => demolish(c, f)); });
     on("repairBtn", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) change(() => repair(c, f)); });
     on("moveBtn", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) change(() => moveScp(c, scp173(), f, chosenWatchers())); });

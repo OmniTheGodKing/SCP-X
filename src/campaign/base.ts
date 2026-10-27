@@ -56,6 +56,8 @@ export interface Facility {
   disabled: boolean;   // damaged by a breach
   repairDays: number;  // > 0 while being repaired
   demolishDays?: number;  // > 0 while being torn down
+  upgraded?: boolean;     // expanded (barracks)
+  upgradeDays?: number;   // > 0 while being expanded
 }
 
 export interface Base {
@@ -84,12 +86,27 @@ export const powerUse = (c: Campaign) =>
 export const powerShort = (c: Campaign) => powerUse(c) > powerSupply(c);
 
 export const engineersBusy = (c: Campaign) =>
-  c.base.facilities.reduce((a, f) => a + (f.daysLeft > 0 ? FACILITIES[f.type].engineers : 0) + (f.repairDays > 0 ? REPAIR.engineers : 0) + (f.demolishDays ? 1 : 0), 0)
+  c.base.facilities.reduce((a, f) => a + (f.daysLeft > 0 ? FACILITIES[f.type].engineers : 0) + (f.repairDays > 0 ? REPAIR.engineers : 0) + (f.demolishDays ? 1 : 0) + (f.upgradeDays ? UPGRADE.engineers : 0), 0)
   + (c.base.excavation > 0 ? EXCAVATE.engineers : 0) + c.orders.length;
 export const engineersFree = (c: Campaign) => c.engineers - engineersBusy(c);
 
 export const engineerCapacity = (c: Campaign) => 8 + countOperational(c, "workshop") * 4;
-export const dclassCapacity = (c: Campaign) => countOperational(c, "barracks") * 10;
+export const dclassCapacity = (c: Campaign) => c.base.facilities.filter(f => f.type === "barracks" && operational(f)).reduce((a, f) => a + (f.upgraded ? 15 : 10), 0);
+/** Facility upgrades built by engineers (like XCOM's room upgrades). */
+export const UPGRADE = { cost: 60, days: 4, engineers: 2 };
+export function canUpgrade(c: Campaign, f: Facility): string | null {
+  if (f.type !== "barracks") return "Nothing to upgrade.";
+  if (f.upgraded) return "Already expanded.";
+  if (f.upgradeDays) return "Already being expanded.";
+  if (!operational(f)) return "It has to be working first.";
+  if (c.funds < UPGRADE.cost) return `Needs $${UPGRADE.cost}k.`;
+  if (engineersFree(c) < UPGRADE.engineers) return `Needs ${UPGRADE.engineers} free engineers.`;
+  return null;
+}
+export function upgradeFacility(c: Campaign, f: Facility) {
+  if (canUpgrade(c, f)) return;
+  c.funds -= UPGRADE.cost; f.upgradeDays = UPGRADE.days;
+}
 export const SALARY = { operative: 10, guard: 5 };
 export const salaries = (c: Campaign) => c.roster.filter(o => o.alive).length * SALARY.operative + c.guards.filter(g => g.alive).length * SALARY.guard;
 /** Facility upkeep, the alert level's cost, and staff salaries, per month. */
@@ -169,6 +186,7 @@ export function tickConstruction(c: Campaign): string[] {
     if (f.daysLeft > 0 && --f.daysLeft === 0) done.push(`${FACILITIES[f.type].name} on level ${f.level + 1} is complete.`);
     if (f.repairDays > 0 && --f.repairDays === 0) { f.disabled = false; done.push(`${FACILITIES[f.type].name} on level ${f.level + 1} is repaired.`); }
   }
+  for (const f of c.base.facilities) if (f.upgradeDays && --f.upgradeDays === 0) { f.upgraded = true; done.push(`The ${nameInText(f.type)} on level ${f.level + 1} has been expanded.`); }
   for (const f of [...c.base.facilities]) if (f.demolishDays && --f.demolishDays === 0) {
     c.base.facilities = c.base.facilities.filter(x => x !== f);
     const back = Math.round(FACILITIES[f.type].cost * DEMOLISH.refund);

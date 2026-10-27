@@ -7,9 +7,9 @@ import { blinkChance, maxSanOf, pct } from "../game/profiles";
 import { S, canAct, canSee, full, hooks, isBlind, isPanicked, isTeam, label, seen, starers, team, unitAt } from "../game/state";
 import {
   callBlink, callCheck, doOverwatch, doSeal, dragCheck, endTurn, evacuate, onTap, sealCheck, select, selectNext,
-  doReload, fireCheck, reloadCheck, stareCheck, startPlayerTurn, throwCheck, toggleDrag, toggleStare, toggleThrow,
+  doReload, fireCheck, reloadCheck, useCheck, useItem, stareCheck, startPlayerTurn, throwCheck, toggleDrag, toggleStare, toggleThrow,
 } from "../game/turn";
-import type { AbilityId, ItemId } from "../game/types";
+import { HEAVY, THROWN, type AbilityId, type ItemId } from "../game/types";
 import { abilitiesOf, abilityCheck, abilityDesc, abilityName, startAbility } from "../game/abilities";
 import { usesLeft } from "../game/perks";
 import { CLASSES, PERKS } from "../data/classes";
@@ -20,7 +20,9 @@ const OBJECTIVES = {
   coverup: "Reach every witness (marked W) and give them amnestics with Dose: 1 action, from the next tile. A witness who spots the team runs for the map edge; any who escape undosed add exposure. Dose at least half of them for the mission to count as a success. Other civilians can be ignored.",
   strike: "Neutralise every Insurgent in the warehouse. Use Secure on a wounded one to take them prisoner.",
 } as const;
-const ITEM_NAMES: Record<ItemId, string> = { armor: "Flak vest", eyedrops: "Eye drops", flashbang: "Stun grenade", smoke: "M18 smoke", tracker: "Seismic sensor", frag: "M26 frag" };
+const ITEM_NAMES: Record<ItemId, string> = { armor: "Flak vest", armor_light: "Recon smock", armor_heavy: "Heavy plate", hazmat: "Hazmat suit", leadsuit: "Lead-lined suit",
+  eyedrops: "Eye drops", flashbang: "Stun grenade", smoke: "M18 smoke", tracker: "Seismic sensor", frag: "M26 frag", csgas: "CS gas", bazooka: "M20 bazooka", law: "M72 LAW",
+  medkit: "Medkit", camera: "Field camera", restraints: "Restraint kit", darts: "Amnestic darts" };
 import type { MissionResult, Unit } from "../game/types";
 import { esc } from "./util";
 import { createRenderer } from "./render";
@@ -296,10 +298,15 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
       return `<button class="act ${on ? "on" : ""}" type="button" data-ability="${a.perk}" ${why ? `disabled title="${esc(why)}"` : ""}>${on ? "Cancel" : a.label + left}</button>`;
     }).join("");
     bar.innerHTML = abil + its.map((it, i) => {
-      const throwable = it.id === "flashbang" || it.id === "smoke";
+      if (it.id === "medkit" || it.id === "camera") {
+        const why = off || useCheck(sel, i);
+        return it.uses > 0 ? `<button class="act" type="button" data-use="${i}" ${why ? `disabled title="${esc(why)}"` : ""}>${it.id === "medkit" ? "Use medkit" : "Photograph"} <kbd>${i + 1}</kbd></button>` : "";
+      }
+      const throwable = THROWN.includes(it.id);
       if (!throwable) return `<span class="flag">${ITEM_NAMES[it.id]}${it.id === "eyedrops" ? ` ×${it.uses} · used automatically` : " · always on"}</span>`;
+      if (it.uses < 1) return "";
       const why = off || (S.mode === "throw" && S.throwing === it ? null : throwCheck(sel, i));
-      return `<button class="act ${S.mode === "throw" && S.throwing === it ? "on" : ""}" type="button" data-item="${i}" ${why ? `disabled title="${esc(why)}"` : ""}>${S.mode === "throw" && S.throwing === it ? "Cancel throw" : `Throw ${ITEM_NAMES[it.id].toLowerCase()} ×${it.uses}`} <kbd>${i + 1}</kbd></button>`;
+      return `<button class="act ${S.mode === "throw" && S.throwing === it ? "on" : ""}" type="button" data-item="${i}" ${why ? `disabled title="${esc(why)}"` : ""}>${S.mode === "throw" && S.throwing === it ? "Cancel throw" : `${HEAVY.includes(it.id) ? "Fire" : "Throw"} ${HEAVY.includes(it.id) ? ITEM_NAMES[it.id] : ITEM_NAMES[it.id].toLowerCase()} ×${it.uses}`} <kbd>${i + 1}</kbd></button>`;
     }).join("");
 
     let h = "";
@@ -357,6 +364,8 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   $("itemBar").addEventListener("click", e => {
     const b = (e.target as HTMLElement).closest<HTMLElement>("[data-item]");
     if (b) toggleThrow(Number(b.dataset.item), flash);
+    const ub = (e.target as HTMLElement).closest<HTMLElement>("[data-use]");
+    if (ub) useItem(Number(ub.dataset.use), flash);
     const a = (e.target as HTMLElement).closest<HTMLElement>("[data-ability]");
     if (a) startAbility(a.dataset.ability as AbilityId, flash);
   });
@@ -377,7 +386,10 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     const k = e.key.toLowerCase();
     if (k === "tab") { e.preventDefault(); selectNext(); }
     else if (k === "escape") { if (S.mode) { S.mode = null; S.throwing = null; S.ability = null; update(); } }
-    else if (k === "1" || k === "2") toggleThrow(Number(k) - 1, flash);
+    else if (k === "1" || k === "2" || k === "3") {
+      const it = S.selected?.items?.[Number(k) - 1];
+      if (it && (it.id === "medkit" || it.id === "camera")) useItem(Number(k) - 1, flash); else toggleThrow(Number(k) - 1, flash);
+    }
     else if (k === "e") endTurn();
     else if (k === "o") doOverwatch();
     else if (k === "r") doReload(flash);

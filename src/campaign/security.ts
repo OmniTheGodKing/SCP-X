@@ -105,8 +105,8 @@ export function guardMember(c: Campaign, g: Guard): SquadMember {
   if (g.traits.includes("steady")) blink = Math.max(0.02, blink - 0.02);
   if (g.traits.includes("nightmares")) san = Math.max(1, san - 15);
   return {
-    opId: g.id, name: g.name, call: "SEC", guard: true, hp: g.hp, maxHp: g.maxHp, san: drilled ? san + 10 : san, maxSan: GUARD.maxSan + (drilled ? 10 : 0), aim, blinkFull: blink,
-    armor: 0, hasArmor: false, items: [], perks: [], traits: [...g.traits],
+    opId: g.id, name: g.name, call: "SEC", guard: true, hp: g.hp + (c.guardVests ? 1 : 0), maxHp: g.maxHp + (c.guardVests ? 1 : 0), armorHp: c.guardVests ? 1 : 0, san: drilled ? san + 10 : san, maxSan: GUARD.maxSan + (drilled ? 10 : 0), aim, blinkFull: blink,
+    armor: c.guardVests ? 1 : 0, hasArmor: false, items: [], perks: [], traits: [...g.traits],
     gun: { name: m.name, type: "carbine", dmg: [...m.dmg] as [number, number], mag: m.mag, ammo: m.mag, aim: m.aim },
   };
 }

@@ -102,6 +102,19 @@ export const PROJECTS: Record<string, ProjectDef> = {
   att_suppressor:     { name: "Suppressors", branch: "Weapons", days: 25, cost: 50, attachment: "suppressor", desc: "Weapon attachment: shots make no noise." },
   att_bayonet:        { name: "Bayonets", branch: "Weapons", days: 15, cost: 20, attachment: "bayonet", desc: "Weapon attachment: a sure 3-damage thrust against an adjacent enemy, using no ammo." },
   att_sights:         { name: "Improved sights", branch: "Weapons", days: 30, cost: 70, needs: ["att_scope"], attachment: "sights", desc: "Weapon attachment: +10 aim." },
+  // ---- armor and kit ----
+  light_armor:        { name: "Recon smocks", branch: "Equipment", days: 20, cost: 40, needs: ["body_armor"], unlocks: "armor_light", desc: "Light armor: less protection, +1 move." },
+  heavy_armor:        { name: "Heavy plate", branch: "Equipment", days: 30, cost: 70, needs: ["body_armor"], unlocks: "armor_heavy", desc: "Heavy armor: +2 HP and +1 armor point over the vest, −1 move, and it carries heavy weapons." },
+  hazmat_suit:        { name: "Hazmat suits", branch: "Equipment", days: 25, cost: 50, unlocks: "hazmat", desc: "Sealed suits. SCP-106's rot does nothing to the wearer." },
+  lead_suit:          { name: "Lead-lined suits", branch: "SCP-106", days: 40, cost: 120, needsScp: "106", needs: ["hazmat_suit"], unlocks: "leadsuit", desc: "SCP-106 needs to hold the wearer for two turns to drag them under." },
+  m20:                { name: "M20 super bazooka", branch: "Weapons", days: 30, cost: 80, needs: ["heavy_armor"], unlocks: "bazooka", desc: "Heavy weapon for heavy armor: 5 damage in a blast, out to 10 tiles." },
+  m72:                { name: "M72 LAW", branch: "Weapons", days: 30, cost: 100, from: 1961, needs: ["m20"], unlocks: "law", desc: "A light one-shot rocket: 4 damage in a blast, out to 8 tiles. Cheaper to build." },
+  medkits:            { name: "Field medkits", branch: "Equipment", days: 15, cost: 30, unlocks: "medkit", desc: "A medkit anyone can use once: heal themselves or an adjacent ally." },
+  cs_gas:             { name: "CS gas grenades", branch: "Equipment", days: 20, cost: 40, unlocks: "csgas", desc: "Tear gas: −30 aim for Insurgents and civilians caught in it." },
+  field_camera:       { name: "Field cameras", branch: "Equipment", days: 20, cost: 40, unlocks: "camera", desc: "Photograph an anomaly mid-mission; the film speeds up research on it." },
+  restraint_kit:      { name: "Restraint kit", branch: "Equipment", days: 20, cost: 40, needsMaterial: ["prisoners", 1], unlocks: "restraints", desc: "Secure from 2 tiles, and each prisoner yields 1 more Intel." },
+  amnestic_darts:     { name: "Amnestic darts", branch: "Equipment", days: 30, cost: 70, unlocks: "darts", desc: "A dart pistol loaded with amnestics: Dose witnesses from up to 4 tiles." },
+  guard_vests:        { name: "Guard flak vests", branch: "Equipment", days: 25, cost: 60, needs: ["body_armor"], desc: "Site Security gets vests too: +1 HP and 1 armor point for every guard. Refit in the workshop." },
   // ---- breakthroughs: offered now and then, for 30 days ----
   bt_barrels:         { name: "Breakthrough: lapped barrels", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Service rifles do +1 damage." },
   bt_drills:          { name: "Breakthrough: drill instructors", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "The training range runs drills twice a week." },
@@ -124,8 +137,31 @@ export const TESTS: Record<TestId, TestDef> = {
 };
 
 export interface ItemDef { name: string; cost: number; days: number; uses: number | null; armor?: boolean; desc: string; }
+/** What each armor gives at the researched vest tier: light, medium and heavy versions, and the special suits. */
+export function armorStats(kind: ItemId, tier: number) {
+  const t = ARMOR_TIERS[Math.max(1, tier)];
+  switch (kind) {
+    case "armor_light": return { hp: Math.max(1, t.hp - 1), points: Math.max(0, t.points - 1), move: 1 };
+    case "armor_heavy": return { hp: t.hp + 2, points: t.points + 1, move: -1 };
+    case "hazmat": return { hp: 1, points: 0, move: 0 };
+    case "leadsuit": return { hp: t.hp, points: t.points, move: -1 };
+    default: return { hp: t.hp, points: t.points, move: 0 };
+  }
+}
+export const ARMOR_KINDS: ItemId[] = ["armor_light", "armor", "armor_heavy", "hazmat", "leadsuit"];
 export const ITEMS: Record<ItemId, ItemDef> = {
-  armor:     { name: "Flak vest", cost: 60, days: 4, uses: null, armor: true, desc: "Worn in the armor slot. Its protection depends on the vest model researched." },
+  armor:     { name: "Flak vest", cost: 60, days: 4, uses: null, armor: true, desc: "Medium armor. Its protection depends on the vest model researched." },
+  armor_light: { name: "Recon smock", cost: 50, days: 3, uses: null, armor: true, desc: "Light armor: 1 HP less and 1 armor point less than the vest, but +1 move." },
+  armor_heavy: { name: "Heavy plate", cost: 90, days: 5, uses: null, armor: true, desc: "Heavy armor: +2 HP and +1 armor point over the vest, −1 move. The only armor that can carry a heavy weapon." },
+  hazmat:    { name: "Hazmat suit", cost: 60, days: 4, uses: null, armor: true, desc: "+1 HP. SCP-106's rot does nothing to the wearer." },
+  leadsuit:  { name: "Lead-lined suit", cost: 120, days: 6, uses: null, armor: true, desc: "Vest protection, −1 move. SCP-106 needs to hold the wearer for two turns to take them." },
+  csgas:     { name: "CS gas grenade", cost: 15, days: 1, uses: 1, desc: "Insurgents and civilians within 1 tile of where it lands get −30 aim until the end of next turn." },
+  bazooka:   { name: "M20 bazooka", cost: 40, days: 2, uses: 1, desc: "Heavy weapon (heavy armor only): 5 damage within 1 tile of where it hits, out to 10 tiles; destroys half cover." },
+  law:       { name: "M72 LAW", cost: 30, days: 2, uses: 1, desc: "Heavy weapon (heavy armor only): 4 damage within 1 tile of where it hits, out to 8 tiles; destroys half cover." },
+  medkit:    { name: "Medkit", cost: 15, days: 1, uses: 1, desc: "1 action: heals the carrier or an adjacent ally." },
+  camera:    { name: "Field camera", cost: 30, days: 2, uses: 1, desc: "1 action: photograph an anomaly in sight. The film counts toward research on it." },
+  restraints: { name: "Restraint kit", cost: 25, days: 2, uses: null, desc: "Secure from 2 tiles away, and every prisoner taken yields 1 more Intel." },
+  darts:     { name: "Amnestic dart pistol", cost: 30, days: 2, uses: null, desc: "Dose witnesses from up to 4 tiles away, in sight." },
   eyedrops:  { name: "Eye drops", cost: 10, days: 1, uses: 1, desc: "Ignores one blink while staring." },
   frag:      { name: "M26 frag grenade", cost: 15, days: 1, uses: 1, desc: "3 damage within 1 tile of where it lands; destroys half cover." },
   flashbang: { name: "Stun grenade", cost: 15, days: 1, uses: 1, desc: "Blinds everyone within 1 tile of where it lands until the next turn." },
@@ -246,6 +282,9 @@ export function tickResearch(c: Campaign) {
       } else if (o.ammo) {
         c.ammo[o.ammo] = (c.ammo[o.ammo] || 0) + 1;
         log(c, `Workshop: a load of ${AMMO[o.ammo].name.toLowerCase()} is ready. Load it on the Personnel tab.`, "good", "research");
+      } else if (o.refit === "guardvests") {
+        c.guardVests = true;
+        log(c, "Workshop: every guard now has a flak vest.", "good", "research");
       } else if (o.refit?.startsWith("tier:")) {
         c.weaponTier = Number(o.refit.slice(5));
         log(c, `Workshop: every weapon refitted to ${WEAPON_TIERS[c.weaponTier].name} pattern.`, "good", "research");
@@ -266,6 +305,7 @@ export function pendingRefits(c: Campaign): { key: string; name: string }[] {
   const out: { key: string; name: string }[] = [];
   for (const [id, p] of Object.entries(PROJECTS)) {
     if (!has(c, id) || c.orders.some(o => o.refit === (p.model ?? (p.weaponTier ? `tier:${p.weaponTier}` : `armor:${p.armorTier}`)))) continue;
+    if (id === "guard_vests" && !c.guardVests && !c.orders.some(o => o.refit === "guardvests")) out.push({ key: "guardvests", name: "Guard flak vests" });
     if (p.weaponTier && (c.weaponTier ?? 1) < p.weaponTier) out.push({ key: `tier:${p.weaponTier}`, name: `${WEAPON_TIERS[p.weaponTier].name} pattern weapons` });
     if (p.model && c.models[model(p.model).type] !== p.model && model(c.models[model(p.model).type]).year < model(p.model).year) out.push({ key: p.model, name: model(p.model).name });
     if ((p.armorTier ?? 0) > 1 && c.armorTier < p.armorTier!) out.push({ key: `armor:${p.armorTier}`, name: ARMOR_TIERS[p.armorTier!].name });

@@ -1,12 +1,12 @@
 // Site-19 between missions: the roster, time passing, funding, public exposure and incidents.
-import type { MissionResult, MissionSetup, ScpId } from "../game/types";
+import { HEAVY, type MissionResult, type MissionSetup, type ScpId } from "../game/types";
 import { CLASSES, PERKS, TRAITS, type ClassId, type PerkId, type TraitId } from "../data/classes";
 import {
   ENGINEER_COST, countOperational, engineerCapacity, dclassCapacity, healPerDay, monthlyUpkeep, sanityPerDay, startingBase, tickConstruction,
   type Base,
 } from "./base";
 import { CLEAN_EVERY, firstSightings, resolveScp, scpName, startingScps, tickContainment, type ScpRecord } from "./containment";
-import { ITEMS, armorOf, has, monthlyResearch, newResearch, tickResearch, type MaterialId, type ItemId, type Order, type ResearchState } from "./research";
+import { ITEMS, PROJECTS, armorStats, has, projectLock, monthlyResearch, newResearch, tickResearch, type MaterialId, type ItemId, type Order, type ResearchState } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, collapsedCount, COLLAPSE_LIMIT, newRegions, regionFunding, tickWorld, travelDays, type RegionState } from "./world";
 import { ALERTS, breachGuards, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
@@ -73,10 +73,13 @@ export interface Prisoner { name: string; days: number; intel: number; }
 
 export interface SiteLogEntry { day: number; text: string; kind: string; }
 
-export interface Loadout { opId: string; armor: boolean; items: ItemId[]; }
+/** Which armor (an armor item id, or "" for none) and items an operative takes. */
+export interface Loadout { opId: string; armor: ItemId | ""; items: ItemId[]; }
 
 export interface Campaign {
-  version: 11;
+  version: 12;
+  /** Guards issued flak vests through the workshop. */
+  guardVests?: boolean;
   /** Material brought back from missions, for studies (like XCOM autopsies). */
   materials: Partial<Record<MaterialId, number>>;
   /** One-off training range purchases (like XCOM's Guerrilla Tactics School). */
@@ -216,7 +219,7 @@ export function newCampaign(): Campaign {
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
-    version: 11, materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
+    version: 12, materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
     day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
     inventory: {}, orders: [], knownNotes: [], nextD: 9101, nextOp: 1, nextIncident: 1,
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
@@ -385,17 +388,19 @@ export function hireEngineer(c: Campaign) {
 
 export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCount: number): MissionSetup {
   const take = (i: ItemId) => { c.inventory[i] = (c.inventory[i] || 0) - 1; };
-  const vest = armorOf(c);
   const squad = loadouts.map(l => {
     const o = c.roster.find(x => x.id === l.opId)!;
-    const armored = l.armor && c.armorTier > 0;
-    if (armored) take("armor");
-    l.items.forEach(take);
-    const bonus = armored ? vest.hp : 0;
+    const kind = l.armor && (c.inventory[l.armor] ?? 0) > 0 ? l.armor : "";
+    if (kind) take(kind);
+    const st = kind ? armorStats(kind, c.armorTier) : { hp: 0, points: 0, move: 0 };
+    // heavy weapons only go with heavy armor
+    const items = l.items.filter(i => kind === "armor_heavy" || !HEAVY.includes(i));
+    items.forEach(take);
+    const bonus = st.hp;
     return {
       opId: o.id, name: o.name, call: o.call, hp: o.hp + bonus, maxHp: o.maxHp + bonus, san: Math.min(o.san, maxSanOf(o)),
       maxSan: maxSanOf(o), aim: aimOf(o) + (has(c, "marksmanship") ? 5 : 0), blinkFull: blinkFullOf(o),
-      armor: armored ? vest.points : 0, hasArmor: armored, items: l.items.map(id => ({ id, uses: ITEMS[id].uses ?? 1 })),
+      armor: st.points, hasArmor: !!kind, armorKind: kind || undefined, armorHp: st.hp, moveBonus: st.move, items: items.map(id => ({ id, uses: ITEMS[id].uses ?? 1 })),
       cls: o.cls, perks: [...o.perks], traits: [...o.traits], gun: gunFor(c, o),
     };
   }).map(m => {
@@ -451,7 +456,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   for (const s of r.squad) {
     // reinforcements who never arrived just bring their gear back
     if (s.absent) {
-      if (s.hasArmor) c.inventory.armor = (c.inventory.armor || 0) + 1;
+      if (s.armorKind) c.inventory[s.armorKind] = (c.inventory[s.armorKind] || 0) + 1;
       for (const it of s.items) if (it.uses > 0) c.inventory[it.id] = (c.inventory[it.id] || 0) + 1;
       continue;
     }
@@ -473,9 +478,9 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
       continue;
     }
     // armor soaks wounds first; gear comes home with whoever survived
-    o.hp = Math.max(1, Math.min(o.maxHp, s.hp - (s.hasArmor ? armorOf(c).hp : 0)));
+    o.hp = Math.max(1, Math.min(o.maxHp, s.hp - (s.armorHp ?? 0)));
     o.san = s.san; o.kills += s.kills;
-    if (s.hasArmor) c.inventory.armor = (c.inventory.armor || 0) + 1;
+    if (s.armorKind) c.inventory[s.armorKind] = (c.inventory[s.armorKind] || 0) + 1;
     for (const it of s.items) if (it.uses > 0) c.inventory[it.id] = (c.inventory[it.id] || 0) + 1;
     o.xp += 1 + (r.win ? 2 : 0) + s.kills + (s.sealed ? 1 : 0);
     checkPromotion(c, o, promotions);
@@ -498,8 +503,15 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   if (r.win) { addMaterial(c, "ciWeapons", r.insurgentsDown); addMaterial(c, "tissue", r.zombiesKilled); }
   addMaterial(c, "survivors", r.pocketReturned);
   addMaterial(c, "prisoners", r.prisoners);
+  // film from the field camera: a head start on research into what was photographed
+  for (const id of r.photos) {
+    const branch = `SCP-${id}`, p = Object.keys(PROJECTS).find(k => PROJECTS[k].branch === branch && !has(c, k) && !projectLock(c, k));
+    if (p) { c.research.progress[p] = (c.research.progress[p] || 0) + 10; lines.push(`Photographs of ${scpName(id)} put 10 researcher-days into ${PROJECTS[p].name}.`); }
+    else lines.push(`Photographs of ${scpName(id)} are filed for later.`);
+  }
   for (let i = 0; i < r.prisoners; i++) {
     const name = `Insurgent prisoner ${c.nextIncident * 10 + i}`;
+    if (r.restraints) { gainIntel(c, 1); lines.push("The restraint kit kept a prisoner talking on the way back (+1 Intel)."); }
     if (c.prisoners.length < holdingCapacity(c)) { c.prisoners.push({ name, days: 0, intel: 0 }); lines.push(`An Insurgent was taken alive and is held for interrogation.`); }
     else { c.funds += PRISONER_BOUNTY; lines.push(`An Insurgent was taken alive. With no room in holding cells, they were handed to another site (+$${PRISONER_BOUNTY}k).`); }
   }
