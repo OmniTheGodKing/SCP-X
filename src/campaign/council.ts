@@ -5,7 +5,7 @@ import { planActive } from "./chaos";
 import { chronicle } from "./history";
 import { REGIONS, REGION_IDS, HOME, type RegionId } from "../data/regions";
 import { UNITS, rollCandidate } from "../data/units";
-import { dateText, gainIntel, log, monthName, operativeFrom, yearOf, type Campaign, type Incident } from "./campaign";
+import { dateText, gainIntel, giveNick, log, monthName, operativeFrom, yearOf, type Campaign, type Incident } from "./campaign";
 import { engineerCapacity, dclassCapacity } from "./base";
 import { PROJECTS, has, projectVisible, researcherCapacity, type ItemId } from "./research";
 import { SCP_DEFS, freeWings, scpName, type ScpClass } from "./containment";
@@ -127,6 +127,7 @@ function veteranJoins(c: Campaign, how: string) {
   const k = rollCandidate(`vet${c.day}-${c.council.nextId++}`, yearOf(c.day), used, has(c, "liaison_office"), true);
   const o = operativeFrom(c, { ...k, quality: Math.max(1, k.quality) });
   o.rank = Math.max(o.rank, 2); o.xp = Math.max(o.xp, 7);
+  giveNick(c, o);
   c.roster.push(o);
   return `${o.call} ${o.name} (${UNITS[k.unit].name}), ${how}`;
 }

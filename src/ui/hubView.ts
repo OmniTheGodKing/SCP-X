@@ -22,7 +22,7 @@ import {
 } from "../campaign/base";
 import {
   DCLASS_COST, DCLASS_MONTHLY, RANKS, RANK_XP, TRAINER, retire, trainerWhy, RANK_BONUS, RECRUIT_COST, advanceDay, aimOf, blinkFullOf, buyDClass,
-  canBuyDClass, canHireEngineer, dayOfMonth, deployable, hireEngineer, maxSanOf, monthOf, monthlyFunding, frontsFunding, canHire, candidateCost, hireCandidate, lookOf, trainersActive,
+  NICK_RANK, fieldName, canBuyDClass, canHireEngineer, dayOfMonth, deployable, hireEngineer, maxSanOf, monthOf, monthlyFunding, frontsFunding, canHire, candidateCost, hireCandidate, lookOf, trainersActive,
   INTEL_PER_PRISONER, INTERROGATION_DAYS, interrogationDays, PRISONER_BOUNTY, holdingCapacity, canRetrain, canTherapy, canWeaken, dateText, fitAttachment, gunFor, loadAmmo, setWeapon, weaken, weaponOf, weaponOptions, chooseClass, choosePerk, perkChoices, promotionDue, startRetrain, startTherapy,
   pendingBreach, type Campaign, type Incident, type Loadout, type Operative,
 } from "../campaign/campaign";
@@ -34,7 +34,7 @@ import {
 } from "../campaign/containment";
 import {
   ARMOR_KINDS, ARMOR_TIERS, armorStats, ATTACHMENT_COST, REFIT, canOrderAmmo, orderAmmo, unlockedAmmo, canOrderAttachment, canRefit, orderAttachment, orderRefit, pendingRefits, unlockedAttachments,
-  ITEMS, PROJECTS, TESTS, anomalyProgress, assign, projectVisible, canHireResearcher, canOrder, canTest, has, hireResearcher, order, projectLock,
+  ITEMS, PROJECTS, TESTS, uniformOf, anomalyProgress, assign, projectVisible, canHireResearcher, canOrder, canTest, has, hireResearcher, order, projectLock,
   researcherCapacity, projectCost, researchersFree, startTest, testKey, offered, projectDays, unlockedItems, type Branch, type ItemId, type TestId,
 } from "../campaign/research";
 import { HOME, LAND, REGIONS, REGION_IDS, SITE19, project, type RegionId } from "../data/regions";
@@ -87,6 +87,8 @@ let geoView = { ...WORLD_VIEW };
 export function openTab(t: Tab, sel?: string) { tab = t; pendingMapSel = sel ?? null; try { localStorage.setItem("site19-tab", t); } catch { /* fine */ } }
 let tab: Tab = (() => { try { return (localStorage.getItem("site19-tab") as Tab) || "command"; } catch { return "command"; } })();
 
+/** The night side of the world as SVG polygon points for the current hour. */
+const nightPointsOf = (c: Campaign) => nightPolygon(c).map(([lo, la]) => project(lo, la).map(n => n.toFixed(1)).join(",")).join(" ");
 export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let planning: string | null = null;
   const chosen = new Set<string>();
@@ -189,6 +191,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     bind();
   }
 
+  const nightPoints = () => nightPointsOf(c);
   const tabBtn = (t: Tab, label: string) => `<button type="button" class="tab ${tab === t ? "on" : ""}" data-tab="${t}" aria-pressed="${tab === t}">${label}</button>`;
 
   // ---------- Command ----------
@@ -392,7 +395,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       <p class="muted">Pick up to ${squadSize(c)} operatives. Only fully healed operatives can deploy; sanity carries over, so watch it.${inc.kind === "breach" ? " You can also send nobody and play it with the guards alone." : ""}</p>
       <div class="pick">${ops.length ? ops.map(o => `<label class="pickop ${chosen.has(o.id) ? "on" : ""}">
         <input type="checkbox" id="pick-${o.id}" data-pick="${o.id}" ${chosen.has(o.id) ? "checked" : ""} ${!chosen.has(o.id) && chosen.size >= squadSize(c) ? "disabled" : ""}>
-        <span><b>${esc(o.call)} ${esc(o.name)}</b> · ${RANKS[o.rank]} · SAN ${o.san}/${maxSanOf(o)}</span></label>`).join("") : `<p class="muted">Nobody is fit to deploy. Wait for the wounded to heal or recruit.</p>`}</div>
+        <span><b>${esc(o.call)} ${esc(fieldName(o))}</b> · ${RANKS[o.rank]} · SAN ${o.san}/${maxSanOf(o)}</span></label>`).join("") : `<p class="muted">Nobody is fit to deploy. Wait for the wounded to heal or recruit.</p>`}</div>
       ${chosen.size ? `<div class="loadouts"><div class="specs">Loadout: weapon, one armor slot and two item slots each. Unused items come back; gear on anyone killed is lost.</div>
         ${[...chosen].map(id => loadoutRow(c.roster.find(o => o.id === id)!)).join("")}</div>` : ""}`}
       ${noD ? "" : `<div class="row dpick">
@@ -433,8 +436,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       ${carry.map(it => { const left = spare(it, o.id, i); return `<option value="${it}" ${g.items[i] === it ? "selected" : ""} ${left < 1 && g.items[i] !== it ? "disabled" : ""}>${ITEMS[it].name} (${Math.max(0, left)} left)</option>`; }).join("")}
     </select>`;
     const kinds = ARMOR_KINDS.filter(k => (c.inventory[k] || 0) > 0 || g.armor === k);
-    return `<div class="loadrow"><b>${esc(o.call)} ${esc(o.name)}</b>
-      <span class="specs">${esc(gunFor(c, o).name)}${o.attachment ? ` + ${ATTACHMENTS[o.attachment].name}` : ""}${o.ammoType ? ` · ${AMMO[o.ammoType].name}` : ""}</span>
+    return `<div class="loadrow"><b>${esc(o.call)} ${esc(fieldName(o))}</b>
+      <span class="specs">${esc(gunFor(c, o).name)}${o.attachment ? ` + ${ATTACHMENTS[o.attachment].name}` : ""}${o.ammoType ? ` · ${AMMO[o.ammoType].name}` : ""}${uniformOf(c).id ? ` · ${esc(uniformOf(c).name)} (+${uniformOf(c).hp} HP${uniformOf(c).points ? `, +${uniformOf(c).points} armor` : ""})` : ""}</span>
       ${weaponOptions(o).length > 1 ? `<select id="wpn-${o.id}" data-weapon="${o.id}" aria-label="${esc(o.name)} weapon">${weaponOptions(o).map(t => `<option value="${t}" ${weaponOf(o) === t ? "selected" : ""}>${TYPES[t].name}: ${model(c.models[t]).name}</option>`).join("")}</select>` : ""}
       <select id="armor-${o.id}" data-armor="${o.id}" aria-label="${esc(o.name)} armor">
         <option value="">${kinds.length ? "No armor" : c.armorTier ? "No armor (none built)" : "No armor (research a vest first)"}</option>
@@ -508,7 +511,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       const [ax, ay] = project(REGIONS[r].lon, REGIONS[r].lat), f = 1 - o.busy!.daysLeft / total, px = ax + (sx - ax) * f, py = ay + (sy - ay) * f;
       const ang = Math.atan2(sy - ay, sx - ax) * 180 / Math.PI;
       return `<g class="flight"><line x1="${ax}" y1="${ay}" x2="${sx}" y2="${sy}" style="stroke-width:${0.4 * k};stroke-dasharray:${1 * k} ${1.5 * k}"/><path d="M${px + 3 * k} ${py}L${px - 2 * k} ${py - 2 * k}L${px - 1 * k} ${py}L${px - 2 * k} ${py + 2 * k}Z" transform="rotate(${ang} ${px} ${py})"/><title>Epsilon-11 flying home from ${esc(REGIONS[r].name)}: back ${esc(dateText(c.day + o.busy!.daysLeft))}</title></g>`; }).join("");
-    const night = nightPolygon(c).map(([lo, la]) => project(lo, la).map(n => n.toFixed(1)).join(",")).join(" ");
+    const night = nightPoints();
     const [s19x, s19y] = [sx, sy];
     // ---- the side panel: one thing at a time ----
     const back = `<button class="act" type="button" data-mapclear>← All incidents</button>`;
@@ -1016,7 +1019,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       </div>` : ""}
       ${c.roster.some(o => !o.alive) ? `<div class="card">
         <div class="label">Memorial</div>
-        <ul class="memorial">${c.roster.filter(o => !o.alive).map(o => `<li>${portraitSvg(lookOf(o), o.unit, 36, true)} <b>${esc(o.name)}</b> (${esc(o.call)}), ${RANKS[o.rank]}${o.unit ? `, formerly ${esc(UNITS[o.unit].name)}` : ""}${o.bio ? `, of ${esc(o.bio.home)}` : ""} · ${plural(o.missions, "mission")}, ${plural(o.kills, "kill")}${o.wounds ? `, wounded ${o.wounds}×` : ""}${o.seals ? `, ${o.seals} sealed` : ""}${o.medals?.length ? ` · ${o.medals.map(m => MEDALS[m].name).join(", ")}` : ""} · killed ${o.diedDay ? dateText(o.diedDay) : ""}${o.diedAt ? `, ${esc(o.diedAt)}` : ""}</li>`).join("")}</ul>
+        <ul class="memorial">${c.roster.filter(o => !o.alive).map(o => `<li>${portraitSvg(lookOf(o), o.unit, 36, true)} <b>${esc(fieldName(o))}</b> (${esc(o.call)}), ${RANKS[o.rank]}${o.unit ? `, formerly ${esc(UNITS[o.unit].name)}` : ""}${o.bio ? `, of ${esc(o.bio.home)}` : ""} · ${plural(o.missions, "mission")}, ${plural(o.kills, "kill")}${o.wounds ? `, wounded ${o.wounds}×` : ""}${o.seals ? `, ${o.seals} sealed` : ""}${o.medals?.length ? ` · ${o.medals.map(m => MEDALS[m].name).join(", ")}` : ""} · killed ${o.diedDay ? dateText(o.diedDay) : ""}${o.diedAt ? `, ${esc(o.diedAt)}` : ""}</li>`).join("")}</ul>
       </div>` : ""}
     </section>
   </div>`;
@@ -1029,7 +1032,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     const bad = o.traits.filter(t => TRAITS[t].bad);
     return `<div class="card plan">
       <div class="label">${esc(o.call)} · ${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}</div>
-      <div class="row" style="align-items:center">${portraitSvg(lookOf(o), o.unit, 88)}<h3 class="fac">${esc(o.name)}</h3></div>
+      <div class="row" style="align-items:center">${portraitSvg(lookOf(o), o.unit, 88)}<h3 class="fac">${esc(fieldName(o))}</h3></div>
       ${o.busy ? `<p class="warn">${o.busy.kind === "therapy" ? "In therapy" : o.busy.kind === "travel" ? "Flying home" : "Retraining"}: ${plural(o.busy.daysLeft, "day")} left. Can't deploy until then.</p>` : ""}
       ${o.unit ? `<div class="specs">Recruited from the ${esc(UNITS[o.unit].name)} (${esc(UNITS[o.unit].country)}) · ${LEANS[UNITS[o.unit].lean]}${o.bio ? ` · nationality ${esc(nationalityOf(o.bio.home))}` : ""}</div>` : ""}
       <div class="specs">Sex: ${SEX_NAMES[o.sex ?? "m"]}</div>
@@ -1046,6 +1049,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       </details>
       <details class="archived"><summary>Rename</summary><div class="row">
         <label class="specs" for="renameName">Full name</label><input id="renameName" maxlength="40" value="${esc(o.name)}">
+        <label class="specs" for="renameNick">Nickname</label><input id="renameNick" maxlength="16" value="${esc(o.nick ?? "")}" placeholder="${o.rank >= NICK_RANK ? "none" : "given at Corporal"}">
         <label class="specs" for="renameCall">Callsign</label><input id="renameCall" maxlength="12" value="${esc(o.call)}">
         <button class="act" type="button" id="renameBtn">Save</button></div></details>
       ${promotionDue(o) && !o.cls ? `<p><b>Choose a class.</b> It decides the abilities they learn from here on.</p>
@@ -1101,7 +1105,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     const ms = maxSanOf(o);
     return `<button type="button" class="oprow ${opSel === o.id ? "sel" : ""}" data-op="${o.id}">
       <span class="tag">${portraitSvg(lookOf(o), o.unit, 40)}<br>${esc(o.call)}</span>
-      <span class="nm">${esc(o.name)} <span class="muted">${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}</span></span>
+      <span class="nm">${esc(fieldName(o))} <span class="muted">${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}</span></span>
       ${status}
       <span class="bars">
         <span>HP ${o.hp}/${o.maxHp}<span class="meter" style="--c: var(--mtf)"><span style="width:${(o.hp / o.maxHp) * 100}%"></span></span></span>
@@ -1224,7 +1228,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     });
     on("renameBtn", () => {
       const o = c.roster.find(x => x.id === opSel), n = root.querySelector<HTMLInputElement>("#renameName")!.value.trim(), k = root.querySelector<HTMLInputElement>("#renameCall")!.value.trim();
-      if (o && n && k) change(() => { o.name = n.slice(0, 40); o.call = k.slice(0, 12); });
+      const nk = root.querySelector<HTMLInputElement>("#renameNick")!.value.trim().replace(/"/g, "");
+      if (o && n && k) change(() => { o.name = n.slice(0, 40); o.call = k.slice(0, 12); o.nick = nk ? nk.slice(0, 16) : undefined; });
     });
     root.querySelectorAll<HTMLElement>("[data-staff]").forEach(b => b.onclick = () => change(() => answerStaff(c, Number(b.dataset.staff) as 0 | 1)));
     root.querySelectorAll<HTMLElement>("[data-guards]").forEach(b => b.onclick = () => { const inc = c.incidents.find(i => i.id === b.dataset.guards); if (inc) change(() => inc.kind === "riot" ? letGuardsHandleRiot(c, inc) : inc.kind === "raid" ? letGuardsHandleRaid(c, inc) : letGuardsHandle(c, inc)); });
@@ -1357,7 +1362,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
   }
 
   // the clock loop runs until the hub is replaced by a mission or a fresh hub
-  let last = performance.now();
+  let last = performance.now(), lastNight = 0;
   const stillHere = () => root.contains(document.getElementById("clockHour")) && root.dataset.hub === mountId;
   const mountId = String(Math.random());
   root.dataset.hub = mountId;
@@ -1375,7 +1380,13 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         if (clockBlocked()) { speed = 0; c.hour = 0; break; }
       }
       if (newDay) { act.save(); if (busyField()) redrawLater = true; else render(); }
-      else { const el = document.getElementById("clockHour"); if (el) el.textContent = hourText(); }
+      else {
+        const el = document.getElementById("clockHour"); if (el) el.textContent = hourText();
+        // the night side sweeps across the map with the clock, not just when the day turns over
+        const night = root.querySelector<SVGPolygonElement>("polygon.night");
+        if (night && now - lastNight > 80) { lastNight = now; night.setAttribute("points", nightPoints()); }
+        const gd = root.querySelector<HTMLElement>(".geodate"); if (gd) gd.textContent = `${dateText(c.day)} · ${String(Math.floor(c.hour ?? 0)).padStart(2, "0")}:00`;
+      }
     }
     requestAnimationFrame(tick);
   };

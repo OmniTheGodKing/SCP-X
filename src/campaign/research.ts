@@ -64,6 +64,10 @@ export const PROJECTS: Record<string, ProjectDef> = {
   joint_exchange:     { name: "Joint training exchange", branch: "Personnel", days: 40, cost: 100, afterWon: 6, needs: ["liaison_office"], desc: "Epsilon-11 trains alongside allied units. Veteran and Elite candidates turn up far more often." },
   trauma_counseling:  { name: "Trauma counseling", branch: "Personnel", days: 30, cost: 60, desc: "Operatives recover 3 more sanity on quiet turns during missions." },
   marksmanship:       { name: "Advanced marksmanship", branch: "Personnel", days: 30, cost: 60, afterWon: 2, desc: "+5 aim for every operative." },
+  padded_jacket:      { name: "Padded combat jacket", branch: "Equipment", days: 20, cost: 40, desc: "A quilted jacket over the field uniform. Every operative gets +1 HP, armor slot or not." },
+  nylon_liner:        { name: "Nylon ballistic liner", branch: "Equipment", days: 40, cost: 110, from: 1952, needs: ["padded_jacket"], desc: "Layers of ballistic nylon sewn into every uniform, as the Korean War vests used. Every operative gets +2 HP in all." },
+  plated_undersuit:   { name: "Plated undersuit", branch: "Equipment", days: 60, cost: 200, from: 1955, needs: ["nylon_liner"], afterWon: 8, desc: "Overlapping plates worn under the uniform. Every operative gets +2 HP and 1 armor point, on top of any vest." },
+  powered_harness:    { name: "Powered combat harness", branch: "Equipment", days: 90, cost: 320, from: 1965, needs: ["plated_undersuit"], needsTest: "material", desc: "A Foundation exoskeleton harness that carries the plate's weight. Every operative gets +3 HP and 1 armor point, on top of any vest." },
   body_armor:         { name: "M1951 flak vest", branch: "Equipment", days: 25, cost: 50, unlocks: "armor", armorTier: 1, desc: "Issue the Korean War flak vest: +2 HP and 1 armor point, which cuts the damage of every hit by 1." },
   m69_vest:           { name: "M69 fragmentation vest", branch: "Equipment", days: 60, cost: 180, from: 1967, needs: ["body_armor"], armorTier: 2, desc: "A lighter, stronger vest: +3 HP and 1 armor point. Every vest is refitted in the workshop." },
   ceramic_plate:      { name: "Foundation ceramic plate", branch: "Equipment", days: 90, cost: 300, needs: ["body_armor"], needsTest: "material", armorTier: 3, desc: "Ceramic armor developed from Site-19's materials work: +4 HP and 2 armor points. Every vest is refitted in the workshop." },
@@ -144,15 +148,17 @@ export const PROJECTS: Record<string, ProjectDef> = {
   guard_vests:        { name: "Guard flak vests", branch: "Equipment", days: 25, cost: 60, needs: ["body_armor"], desc: "Site Security gets vests too: +1 HP and 1 armor point for every guard. Refit in the workshop." },
   // ---- breakthroughs: offered now and then, for 30 days ----
   bt_barrels:         { name: "Breakthrough: lapped barrels", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Service rifles do +1 damage." },
-  bt_drills:          { name: "Breakthrough: drill instructors", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "The training range runs drills twice a week." },
+  bt_drills:          { name: "Breakthrough: drill instructors", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "The training range runs drills twice a week: drill XP comes twice as fast (still never past Private First Class)." },
   bt_security:        { name: "Breakthrough: security contracts", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Security stations cost nothing to run." },
   bt_guard_aim:       { name: "Breakthrough: range qualification", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Guards get +5 aim." },
   bt_triage:          { name: "Breakthrough: triage protocol", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Everyone heals 1 more HP a day." },
   bt_cold_storage:    { name: "Breakthrough: cold storage", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Each amnestics lab stores 5 more doses." },
   bt_jigs:            { name: "Breakthrough: production jigs", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Workshop items cost half as much." },
   efficient_gen:      { name: "Turbocharged diesels", branch: "Site", days: 30, cost: 70, desc: "Generators can be refitted with turbochargers (from each generator's panel): 15 power instead of 10." },
-  gas_turbine:        { name: "Gas turbine generators", branch: "Site", days: 40, cost: 120, from: 1953, needs: ["efficient_gen"], desc: "Turbocharged generators can be refitted as gas turbines: 22 power, $5k more upkeep a month." },
-  compact_reactor:    { name: "Compact reactor", branch: "Site", days: 70, cost: 250, from: 1957, needs: ["gas_turbine"], desc: "A small pressurised-water reactor, after the Army's SM-1. Gas turbines can be refitted as reactors: 35 power, $15k more upkeep a month." },
+  twin_diesel:        { name: "Twin diesel sets", branch: "Site", days: 25, cost: 70, needs: ["efficient_gen"], desc: "A second engine on the same bed. Turbocharged generators can be refitted as twin sets: 20 power, $2k more upkeep a month." },
+  gas_turbine:        { name: "Gas turbine generators", branch: "Site", days: 40, cost: 120, from: 1952, needs: ["twin_diesel"], desc: "Twin diesel sets can be refitted as gas turbines: 28 power, $5k more upkeep a month." },
+  compact_reactor:    { name: "Compact reactor", branch: "Site", days: 70, cost: 250, from: 1957, needs: ["gas_turbine"], desc: "A small pressurised-water reactor, after the Army's SM-1. Gas turbines can be refitted as reactors: 40 power, $12k more upkeep a month." },
+  reactor_uprate:     { name: "Reactor uprate", branch: "Site", days: 60, cost: 220, from: 1962, needs: ["compact_reactor"], desc: "Better fuel and a bigger core, as the Army's later plants had. Reactors can be uprated: 55 power, $15k upkeep a month over a diesel." },
   backup_gen:         { name: "Backup generators", branch: "Site", days: 25, cost: 60, afterMilestone: "power_failure", desc: "Containment wings get their own backup supply: a power shortage no longer doubles breach risk or lets cells fail." },
 };
 
@@ -212,6 +218,16 @@ export const ARMOR_TIERS = [
   { name: "Foundation ceramic plate", hp: 4, points: 2 },
 ];
 export const armorOf = (c: Campaign) => ARMOR_TIERS[c.armorTier] || ARMOR_TIERS[1];
+/** The uniform every operative wears under whatever armor they're issued (XCOM's armor line): each researched tier
+ *  applies to the whole squad at once, on top of the vest. */
+export const UNIFORMS = [
+  { id: "", name: "Army field uniform", hp: 0, points: 0 },
+  { id: "padded_jacket", name: "Padded combat jacket", hp: 1, points: 0 },
+  { id: "nylon_liner", name: "Nylon ballistic liner", hp: 2, points: 0 },
+  { id: "plated_undersuit", name: "Plated undersuit", hp: 2, points: 1 },
+  { id: "powered_harness", name: "Powered combat harness", hp: 3, points: 1 },
+];
+export const uniformOf = (c: Campaign) => [...UNIFORMS].reverse().find(u => !u.id || has(c, u.id))!;
 
 export interface ResearchState {
   done: string[];

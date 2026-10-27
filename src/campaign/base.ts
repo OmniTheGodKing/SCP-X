@@ -30,7 +30,7 @@ export const FACILITIES: Record<FacilityType, FacilityDef> = {
   psych:       { name: "Psychological services", cost: 160, days: 10, engineers: 3, power: 2, upkeep: 15, buildable: true, desc: "Operatives recover 20 sanity a day instead of 10, and one at a time can be treated for a bad trait." },
   holding:     { name: "Holding cells", cost: 120, days: 6, engineers: 2, power: 2, upkeep: 10, buildable: true, desc: "Holds 4 captured Insurgents for interrogation. Each yields 1 Intel every 10 days, up to 3." },
   amnestics:   { name: "Amnestics lab", cost: 140, days: 8, engineers: 2, power: 2, upkeep: 15, buildable: true, desc: "Brews Class-A amnestics: 1 dose every 5 days per lab, and room to store 10 per lab. Doses are used on cover-ups and cover stories." },
-  training:    { name: "Training range", cost: 150, days: 8, engineers: 2, power: 2, upkeep: 10, buildable: true, desc: "Operatives at Site-19 gain 1 XP a week, and can retrain into a new class." },
+  training:    { name: "Training range", cost: 150, days: 8, engineers: 2, power: 2, upkeep: 10, buildable: true, desc: "Weekly drills: operatives at Site-19 gain 1 XP a month this way, up to Private First Class at most (missions are where they really learn). Operatives can retrain into a new class here." },
   cont_safe:   { name: "Safe-grade containment wing", cost: 120, days: 8, engineers: 3, power: 2, upkeep: 10, buildable: true, grade: 0, desc: "Basic cells. Anything above Safe breaches three times as often here." },
   cont_euclid: { name: "Euclid-grade containment wing", cost: 250, days: 12, engineers: 4, power: 4, upkeep: 20, buildable: true, grade: 1, desc: "Reinforced cells for Euclid-class anomalies: things that are dangerous and not fully understood, but can be reliably held." },
   cont_keter:  { name: "Keter-grade containment wing", cost: 450, days: 18, engineers: 5, power: 6, upkeep: 35, buildable: true, grade: 2, desc: "The strongest cells Site-19 can build. Anomalies held a grade below the wing's breach half as often." },
@@ -109,8 +109,10 @@ export const neighbors = (c: Campaign, f: Facility) => c.base.facilities.filter(
 export const GEN_TIERS = [
   { name: "Diesel generator", power: 10, upkeep: 0, cost: 0, days: 0, engineers: 0, research: "" },
   { name: "Turbocharged diesel", power: 15, upkeep: 0, cost: 60, days: 4, engineers: 2, research: "efficient_gen" },
-  { name: "Gas turbine", power: 22, upkeep: 5, cost: 120, days: 6, engineers: 3, research: "gas_turbine" },
-  { name: "Compact reactor", power: 35, upkeep: 15, cost: 250, days: 10, engineers: 4, research: "compact_reactor" },
+  { name: "Twin diesel set", power: 20, upkeep: 2, cost: 90, days: 5, engineers: 2, research: "twin_diesel" },
+  { name: "Gas turbine", power: 28, upkeep: 5, cost: 140, days: 6, engineers: 3, research: "gas_turbine" },
+  { name: "Compact reactor", power: 40, upkeep: 12, cost: 260, days: 10, engineers: 4, research: "compact_reactor" },
+  { name: "Uprated reactor", power: 55, upkeep: 15, cost: 200, days: 8, engineers: 4, research: "reactor_uprate" },
 ];
 export const genTierOf = (f: Facility) => GEN_TIERS[f.genTier ?? 0];
 export const generatorOutput = (f: Facility) => genTierOf(f).power;

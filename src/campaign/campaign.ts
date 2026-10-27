@@ -1,4 +1,5 @@
 // Site-19 between missions: the roster, time passing, funding, public exposure and incidents.
+import { pickNick, withNick } from "../data/nicknames";
 import { chronicle, type HistEntry } from "./history";
 import { HEAVY, type MissionResult, type MissionSetup, type ScpId } from "../game/types";
 import { CLASSES, PERKS, TRAITS, type ClassId, type PerkId, type TraitId } from "../data/classes";
@@ -10,7 +11,7 @@ import { addThreat, ciRoles, commanderFate, commanderJoins, disrupt, planActive,
 import { addStanding, councilGrant, issueDirectives, monthlyCouncil, newCouncil, rewardText, grantReward, tickCouncil, transferFought, type CouncilState, type Reward, type Transit } from "./council";
 import { isInert, routineEvery, routineOf, firstSightings, resolveScp, scpName, startingScps, tickContainment, type ScpRecord } from "./containment";
 import { reachMilestone, type Milestone } from "./research";
-import { ITEMS, PROJECTS, armorStats, has, projectLock, monthlyResearch, newResearch, tickResearch, type MaterialId, type ItemId, type Order, type ResearchState } from "./research";
+import { ITEMS, PROJECTS, armorStats, uniformOf, has, projectLock, monthlyResearch, newResearch, tickResearch, type MaterialId, type ItemId, type Order, type ResearchState } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, collapsedCount, COLLAPSE_LIMIT, isContacted, newRegions, regionFunding, tickWorld, travelDays, type RegionState } from "./world";
 import { RAID, raidArrival, raidLoss, tickRaids, ALERTS, breachGuards, guardMember, guardsReady, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
@@ -31,6 +32,8 @@ import { CLASS_WEAPONS, WEAPON_TIERS, model, startingModels, type AmmoId, type A
 export const RANKS = ["Private", "Private First Class", "Corporal", "Sergeant", "Sergeant First Class", "Master Sergeant", "Sergeant Major"];
 export const RANK_SHORT = ["Pvt", "PFC", "Cpl", "Sgt", "SFC", "MSgt", "SGM"];
 export const RANK_XP = [0, 3, 7, 12, 18, 25, 34];
+/** XP a weekly drill gives, and the most drills alone can bring anyone to (just short of Corporal). */
+export const DRILL_XP = 0.25, DRILL_CAP = 6;
 /** Ranks that come with a new perk (Private First Class to Sergeant First Class); the top two give a fixed bonus instead. */
 export const PERK_RANKS = 4;
 export const RANK_BONUS: Record<number, string> = { 5: "+1 HP and +5 aim", 6: "−2% blink chance and +10 max sanity" };
@@ -47,6 +50,10 @@ export interface Operative {
   traits: TraitId[];
   /** Times they have broken down (shut their eyes at zero sanity), across missions. */
   breakdowns: number;
+  /** Given on making Corporal; the player can change it. */
+  nick?: string;
+  /** Part-XP banked from drills. */
+  drill?: number;
   /** Away from duty: in therapy or retraining. */
   busy?: { kind: "therapy" | "retrain" | "travel"; daysLeft: number; trait?: TraitId; from?: RegionId; total?: number };
   /** Chosen weapon type (one of their class's two) and the attachment fitted to it. */
@@ -141,7 +148,7 @@ export interface SiteLogEntry { day: number; text: string; kind: string; }
 export interface Loadout { opId: string; armor: ItemId | ""; items: ItemId[]; }
 
 export interface Campaign {
-  version: 20;
+  version: 22;
   /** The Chaos Insurgency's global agenda, operations, commander and moles. */
   chaos: ChaosState;
   /** Standing with the O5 Council, its orders, requests and transfers. */
@@ -267,10 +274,20 @@ function checkPromotion(c: Campaign, o: Operative, out?: string[]) {
   if (o.rank > before) {
     if (before < 5 && o.rank >= 5) { o.maxHp++; o.hp++; }
     const what = o.rank > PERK_RANKS ? `${RANK_BONUS[o.rank]}.` : `${o.cls ? "Choose a new perk" : "Choose their class"} on the Personnel tab.`;
-    const msg = `${o.call} ${o.name} promoted to ${RANKS[o.rank]}. ${what}`;
+    let nickNote = "";
+    if (o.rank >= NICK_RANK && !o.nick) { giveNick(c, o); nickNote = ` The squad starts calling them "${o.nick}".`; }
+    const msg = `${o.call} ${o.name} promoted to ${RANKS[o.rank]}. ${what}${nickNote}`;
     if (out) out.push(msg); else log(c, msg, "good", "personnel");
   }
 }
+
+/** Nicknames come with Corporal, as in XCOM. */
+export const NICK_RANK = 2;
+export function giveNick(c: Campaign, o: Operative) {
+  o.nick = pickNick(o.cls, new Set(c.roster.filter(x => x.alive && x.nick).map(x => x.nick!)));
+}
+/** How an operative is known in the field: with their nickname, once they have one. */
+export const fieldName = (o: Operative) => withNick(o.name, o.nick);
 
 export const THERAPY = { cost: 30, days: 7 }, RETRAIN = { cost: 50, days: 5 };
 export function canTherapy(c: Campaign, o: Operative): string | null {
@@ -350,7 +367,7 @@ export function newCampaign(): Campaign {
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
-    version: 20, chaos: newChaos(), council: newCouncil(1), morale: 60, dPolicy: "terminate", outbreakDay: rand(945, 1310), materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
+    version: 22, chaos: newChaos(), council: newCouncil(1), morale: 60, dPolicy: "terminate", outbreakDay: rand(945, 1310), materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
     day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
     inventory: {}, orders: [], knownNotes: [], nextD: 9101, nextOp: 1, nextIncident: 1,
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
@@ -411,7 +428,12 @@ export function advanceDay(c: Campaign) {
       }
       o.busy = undefined;
     }
-    if (drill && !o.busy) { o.xp++; checkPromotion(c, o); }
+    // drills keep skills sharp but teach little: a quarter of an XP a week, and never past Private First Class.
+    // Real experience comes from missions.
+    if (drill && !o.busy && o.xp < DRILL_CAP) {
+      o.drill = (o.drill ?? 0) + DRILL_XP;
+      if (o.drill >= 1) { o.drill -= 1; o.xp = Math.min(DRILL_CAP, o.xp + 1); checkPromotion(c, o); }
+    }
   }
   tickGuards(c, heal, sanityPerDay(c));
   tickMorale(c);
@@ -623,11 +645,11 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     // heavy weapons only go with heavy armor
     const items = l.items.filter(i => kind === "armor_heavy" || !HEAVY.includes(i));
     items.forEach(take);
-    const bonus = st.hp;
+    const uni = uniformOf(c), bonus = st.hp + uni.hp;
     return {
-      opId: o.id, name: o.name, call: o.call, hp: o.hp + bonus, maxHp: o.maxHp + bonus, san: Math.min(o.san, maxSanOf(o)),
+      opId: o.id, name: fieldName(o), call: o.call, hp: o.hp + bonus, maxHp: o.maxHp + bonus, san: Math.min(o.san, maxSanOf(o)),
       rankShort: RANK_SHORT[o.rank], maxSan: maxSanOf(o), aim: aimOf(o) + (has(c, "marksmanship") ? 5 : 0), blinkFull: blinkFullOf(o), medals: [...(o.medals ?? [])],
-      armor: st.points, hasArmor: !!kind, armorKind: kind || undefined, armorHp: st.hp, moveBonus: st.move + (o.fleet ? 1 : 0), items: items.map(id => ({ id, uses: ITEMS[id].uses ?? 1 })),
+      armor: st.points + uni.points, hasArmor: !!kind || uni.points > 0, armorKind: kind || undefined, armorHp: st.hp + uni.hp, moveBonus: st.move + (o.fleet ? 1 : 0), items: items.map(id => ({ id, uses: ITEMS[id].uses ?? 1 })),
       cls: o.cls, perks: [...o.perks], traits: [...o.traits], gun: gunFor(c, o),
     };
   }).map(m => {

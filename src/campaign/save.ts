@@ -1,7 +1,7 @@
 // Campaign saves live in this browser only. Storage can be unavailable (private windows,
 // blocked site data), so every access is guarded and the game still runs without it.
 import { newChaos } from "./chaos";
-import { lookOf, newBio, type Campaign } from "./campaign";
+import { NICK_RANK, giveNick, lookOf, newBio, type Campaign } from "./campaign";
 import { withGivenName } from "../data/names";
 
 import { newResearch } from "./research";
@@ -117,7 +117,20 @@ export function parseCampaign(raw: string): Campaign | null {
       // the Insurgency as one organization: its agenda starts low, its first operations arrive next month
       Object.assign(c, { version: 20, chaos: newChaos() });
     }
-    return c.version === 20 ? (c as unknown as Campaign) : null;
+    if (c.version === 20) {
+      // a twin diesel tier went in between turbocharged and gas turbine: refitted generators keep what they were
+      const old = c as unknown as Campaign;
+      for (const f of old.base.facilities) if (f.type === "generator" && (f.genTier ?? 0) >= 2) f.genTier! += 1;
+      if (old.research.done.includes("gas_turbine") && !old.research.done.includes("twin_diesel")) old.research.done.push("twin_diesel");
+      Object.assign(c, { version: 21 });
+    }
+    if (c.version === 21) {
+      // nicknames: anyone already a Corporal or above gets one now
+      const old = c as unknown as Campaign;
+      for (const o of old.roster) if (o.alive && o.rank >= NICK_RANK && !o.nick) giveNick(old, o);
+      Object.assign(c, { version: 22 });
+    }
+    return c.version === 22 ? (c as unknown as Campaign) : null;
   } catch {
     return null;
   }
