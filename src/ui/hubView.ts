@@ -145,8 +145,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       <span class="pill" title="Guards alive / posts at working Security stations">Guards ${guardsAlive(c).length}/${guardCapacity(c)}${unposted(c).length ? ` · ${unposted(c).length} unposted` : ""}</span>
       <span class="pill">Amnestics ${c.amnestics}/${amnesticsCapacity(c)}</span>
       <span class="pill ${c.exposure >= 60 || collapsedCount(c) ? "hot" : ""}">Exposure ${c.exposure}${collapsedCount(c) ? ` · ${collapsedCount(c)} lost` : ""}</span>
-      <span class="pill">Engineers ${engineersFree(c)}/${c.engineers} free</span>
-      <span class="pill">Researchers ${researchersFree(c)}/${c.researchers} free</span>
+      <span class="pill ${c.engineers && engineersFree(c) <= 0 ? "warm" : ""}" title="Engineers not assigned to building, repairs, upgrades, excavation or orders, out of everyone on staff.${c.engineers && engineersFree(c) <= 0 ? " All of them are busy: new work has to wait." : ""}">Engineers ${engineersFree(c)}/${c.engineers} free</span>
+      <span class="pill ${c.researchers && researchersFree(c) <= 0 ? "warm" : ""}" title="Researchers not assigned to a project, out of everyone on staff.${c.researchers && researchersFree(c) <= 0 ? " All of them are busy: new research has to wait." : ""}">Researchers ${researchersFree(c)}/${c.researchers} free</span>
       <span class="pill ${pw ? "hot" : ""}">Power ${powerUse(c)}/${powerSupply(c)}</span>
       ${c.debug ? `<span class="pill hot">Debug save</span>` : ""}
       <button class="act" id="resetBtn" type="button">New campaign</button>
