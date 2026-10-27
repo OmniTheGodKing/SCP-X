@@ -13,51 +13,71 @@ Order and contents are open to change.
 - Phase 3A: time only passes on the World tab; no D-Class on cover-ups; tighter economy (about $200k funding,
   salaries of $10k per operative and $5k per guard, later research at 1.5× cost); day changes no longer close an
   open dropdown; the debug calendar jump runs one real day so expiries happen.
+- Field recovery, and SCP-049, "The Plague Doctor" (Euclid): first sighted at a random point in 1952; kills by touch,
+  raises any fresh body it can see as SCP-049-2 in one turn, staggered but not hurt by gunfire, calmed and led into
+  containment.
 
-## Phase 3B: new anomalies through field recovery
+Each new anomaly's author is checked on the SCP Wiki and credited under CC BY-SA 3.0.
 
-New anomalies turn up as incidents in the world. Capture one and it moves into a cell at Site-19.
-Each author is checked on the SCP Wiki and credited under CC BY-SA 3.0.
+## Phase 3B: SCP-106, "The Old Man" (Keter)
 
-1. (Done) SCP-049, "The Plague Doctor" (Euclid). First sighted at a random point in 1952. Raising a body takes it one
-   turn, and it goes for any fresh body it can see before the living. Slow, and its touch kills. It stops to "cure" bodies, which rise as
-   SCP-049-2 to fight for it. Gunfire staggers it but doesn't hurt it. An operative within 3 tiles can keep it calm
-   (sanity cost) so it follows them into containment.
-2. SCP-106, "The Old Man" (Keter). Walks through walls, corrodes the floor, and takes victims to its pocket dimension.
-   Recontainment uses the femur breaker (a sacrifice whose scream lures it) and the electromagnets. Needs a
-   Keter-grade wing.
-3. SCP-610, "The Flesh that Hates" (Keter). A spreading outbreak on the world map that raises a region's exposure
-   until burned back. Tactical maps where infected flesh spreads each turn; fire is the only cure. Brings in the M2
-   flamethrower.
+- Walks through walls, corrodes the floor, and takes victims to its pocket dimension.
+- Recontainment uses the femur breaker (a sacrifice whose scream lures it) and the electromagnets.
+- Needs a Keter-grade wing. Arrives through field recovery.
 
-## Phase 3C: defending Site-19
+## Phase 3C: tactical depth
+
+From the XCOM 2 comparison.
+
+- Concealment: strikes and cover-ups start hidden; firing or being seen breaks it. Witnesses only run once it's broken.
+- Enemy pods: Insurgents in fire teams that activate together when spotted, then scramble to cover.
+- Hunker down: double the cover bonus for a turn.
+- Procedural maps built from room plots, so every wing, town, farm and port is different.
+- Carrying a downed ally or a body (which also keeps it away from SCP-049).
+- Exfiltration through the exit tiles, so a mission can be abandoned partway and whoever gets out survives.
+
+## Phase 3D: SCP-610, "The Flesh that Hates" (Keter), and fire
+
+- A spreading outbreak on the world map that raises a region's exposure until burned back.
+- Tactical maps where infected flesh spreads each turn; fire is the only cure. Brings in the M2 flamethrower.
+- Fire and destructible environment: burning tiles, fuel drums, breakable walls.
+
+## Phase 3E: defending Site-19
 
 - Insurgency raids on Site-19: a base defense mission where guards hold until Epsilon-11 arrives.
 - Guard equipment: vests and better weapons for Site Security through research.
 - Guard posts: assign guards to specific wings instead of only by station adjacency.
 
-## Phase 3D: the O5 Council
+## Phase 3F: the O5 Council and strategic choices
 
 - Monthly O5 orders (objectives with rewards or penalties).
 - Council standing, separate from exposure, that affects funding and requests.
+- Several incidents at once where only one can be answered (XCOM 2 guerrilla ops).
+- Mission rewards beyond money: engineers, researchers, D-Class, recruits, gear.
+- Establishing fronts: regions must be contacted with money and Intel before the Foundation can operate there.
 
-## Phase 3E: Insurgency threat and endgame
+## Phase 3G: Insurgency threat and endgame
 
-- An Insurgency threat level that grows as cells go unchecked.
-- Cells that act on the world map (stealing, staging breaches, raising exposure).
+- An Insurgency threat level that grows as cells go unchecked (the doom clock).
+- Insurgency operations announced in advance that can be countered (XCOM 2 dark events).
+- A recurring named Insurgency field commander who escapes and returns (XCOM 2 Chosen).
+- Enemy reinforcements arriving mid-mission on long strikes.
 - A campaign ending: what winning looks like, and the final mission.
 
-## Phase 3F: field work
+## Phase 3H: field work and other sites
 
 - Escort transfers: moving an anomaly between sites under threat of ambush.
-
-## Phase 3G: other Foundation sites
-
-- Requests, transfers and calls for help from other sites.
+- Covert actions: field agents sent on off-screen jobs (infiltration, surveillance, procurement) with injury risk.
+- Scanning leads on the world map for supplies, Intel or recruits.
+- Requests, transfers and calls for help from other sites; selling captured gear to them (black market).
 
 ## Later
 
-- More anomalies beyond the three in phase 3B.
+- More anomalies beyond SCP-106 and SCP-610.
+- Soldier bonds, fatigue, renaming operatives and callsigns.
+- Elevation and high ground, hacking objectives, loot from Insurgents.
+- Room upgrades and staffing facilities for bonuses; one-off experimental items.
+- Difficulty levels and an Ironman mode.
 - Art to replace the placeholder SCP-173 drawing, and sound.
 - Save export and import, multiple save slots.
 - A tutorial or first-mission walkthrough.
