@@ -139,10 +139,16 @@ retaliation (done); (5) doors and sirens (done).
   arrive as Privates First Class, at most 2 trainers); anyone else leaves with an honourable discharge. Veterans with 10+ missions may ask
   to retire as a staff incident; talking them out of it risks Nightmares after every mission.
 
-## Phase 3F: defending Site-19
+## Phase 3F: defending Site-19 (done)
 
-- Insurgency raids on Site-19: a base defense mission where guards hold until Epsilon-11 arrives.
-- Guard equipment: vests and better weapons for Site Security through research.
+- (Done) Insurgency raids on Site-19, from early 1952: a new surface compound map (gatehouse, motor pool, offices,
+  barracks, and the lift house). Site Security holds the compound; Epsilon-11 comes up the lift (turn 8 at normal
+  alert, 5 heightened, 3 full). An Insurgent who spends a turn at the lift doors forces them open; win by stopping
+  them all or holding to turn 14. Raids come more often with Insurgents in holding or just after a cell is broken.
+  Losing frees the prisoners (or empties the payroll safe), wrecks a surface building and adds exposure. Can be left
+  to the guards, with the odds shown.
+- (Done) Guard equipment: Guard flak vests (already in), Guard rifles (the squad's service rifle, after the first
+  Insurgency fight) and Perimeter alarms (after the first raid: guards start on overwatch, Epsilon-11 2 turns sooner).
 - (Done early) Guard posts: each guard is posted to a Security station and hired there.
 
 ## Phase 3G: recruiting Epsilon-11 (XCOM style)

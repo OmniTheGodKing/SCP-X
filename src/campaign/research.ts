@@ -47,10 +47,10 @@ export interface ProjectDef {
 }
 
 /** Things that have happened at least once and open up research. */
-export type Milestone = "power_failure" | "guard_veteran" | "insurgents" | "fire";
+export type Milestone = "power_failure" | "guard_veteran" | "insurgents" | "fire" | "raid";
 export const MILESTONES: Record<Milestone, string> = {
   power_failure: "after the first power failure", guard_veteran: "once a guard has survived 3 breaches",
-  insurgents: "after the first fight with the Chaos Insurgency", fire: "after the first fire on a mission",
+  insurgents: "after the first fight with the Chaos Insurgency", fire: "after the first fire on a mission", raid: "after the first raid on Site-19",
 };
 
 export const PROJECTS: Record<string, ProjectDef> = {
@@ -132,6 +132,8 @@ export const PROJECTS: Record<string, ProjectDef> = {
   field_camera:       { name: "Field cameras", branch: "Equipment", days: 20, cost: 40, afterWon: 2, unlocks: "camera", desc: "Photograph an anomaly mid-mission; the film speeds up research on it." },
   restraint_kit:      { name: "Restraint kit", branch: "Equipment", days: 20, cost: 40, needsMaterial: ["prisoners", 1], unlocks: "restraints", desc: "Secure from 2 tiles, and each prisoner yields 1 more Intel." },
   amnestic_darts:     { name: "Amnestic darts", branch: "Equipment", days: 30, cost: 70, afterWon: 4, unlocks: "darts", desc: "A dart pistol loaded with amnestics: Dose witnesses from up to 4 tiles." },
+  guard_rifles:       { name: "Guard rifles", branch: "Equipment", days: 25, cost: 60, afterMilestone: "insurgents", desc: "Site Security is issued the squad's current service rifle instead of carbines." },
+  perimeter_alarms:   { name: "Perimeter alarms", branch: "Site", days: 30, cost: 80, afterMilestone: "raid", desc: "Tripwires and floodlights on the wire. In a raid, Site Security starts in position on overwatch, and Epsilon-11 comes up the lift 2 turns sooner." },
   guard_vests:        { name: "Guard flak vests", branch: "Equipment", days: 25, cost: 60, needs: ["body_armor"], desc: "Site Security gets vests too: +1 HP and 1 armor point for every guard. Refit in the workshop." },
   // ---- breakthroughs: offered now and then, for 30 days ----
   bt_barrels:         { name: "Breakthrough: lapped barrels", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Service rifles do +1 damage." },

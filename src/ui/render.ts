@@ -77,7 +77,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
     ctx.setLineDash(S.sealed ? [] : [4, 4]);
     ctx.beginPath(); ctx.moveTo(x0 * TS, y0 * TS + 1); ctx.lineTo((x1 + 1) * TS, y0 * TS + 1); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = "#e7ecf0"; ctx.font = "9px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText("CONTAINER", (x0 + x1 + 1) / 2 * TS, (y0 + 2) * TS - 5);
+    ctx.fillText(S.setup.kind === "raid" ? "LIFT" : "CONTAINER", (x0 + x1 + 1) / 2 * TS, (y0 + 2) * TS - 5);
   }
 
   function drawFog() {

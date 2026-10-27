@@ -17,7 +17,7 @@ import {
   S, alive, breakConcealment, canAct, canSee, computeVis, full, fx, hooks, humans, isPanicked, isTeam, label, log, loseSanity,
   occupied, reveal, seen, sleep, starers, team, unitAt,
 } from "./state";
-import { THROWN, type Unit } from "./types";
+import { RAID_TURNS, THROWN, type Unit } from "./types";
 
 const DRAG_SANITY = 5;
 
@@ -586,6 +586,10 @@ export function checkEnd() {
   if ((k === "strike" || k === "retaliation") && !alive("raider").length) { finish(true, false); return true; }
   if (k === "outbreak" && S.core && S.core.hp <= 0) { finish(true, false); return true; }
   if (k === "riot" && !S.units.some(u => u.rioter && u.alive && !u.downed && u.side === "zombie")) { finish(true, false); return true; }
+  if (k === "raid") {
+    if (S.stolen) { finish(false, false); return true; }
+    if (!alive("raider").length || (S.turn >= RAID_TURNS && S.phase === "subjects")) { finish(true, false); return true; }
+  }
   if (k === "escort") {
     if (S.stolen) { finish(false, false); return true; }
     if (!alive("raider").length || (S.turn >= ESCORT_TURNS && S.phase === "subjects")) { finish(true, false); return true; }
