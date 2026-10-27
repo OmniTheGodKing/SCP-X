@@ -204,6 +204,16 @@ export function createRenderer(cv: HTMLCanvasElement) {
     if (u.side === "anomaly" && S.has049) { drawDoctor(cx, cy); return; }
     if (u.side === "anomaly" && S.has106) { if (!S.submerged) drawOldMan(cx, cy); return; }
     if (u.side === "anomaly") { drawStatue(u.x, u.y, 1); return; }
+    if (u.side === "zombie" && u.rioter) {
+      // a rioting D-Class: D-Class orange, ringed in dashed red
+      ctx.fillStyle = C.subject; ctx.beginPath(); ctx.arc(cx, cy, 9, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#b8463b"; ctx.lineWidth = 2.5; ctx.setLineDash([3, 2]); ctx.beginPath(); ctx.arc(cx, cy, 11, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = "#0f1317"; ctx.font = "600 9px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("R", cx, cy + 1);
+      const w = 20; ctx.fillStyle = "#0f1317"; ctx.fillRect(cx - w / 2 - 1, cy - 17, w + 2, 4);
+      ctx.fillStyle = C.alert; ctx.fillRect(cx - w / 2, cy - 16, w * u.hp / u.maxHp, 2);
+      if (u.restrained) tag("CUFFED", cx, cy - 18, C.manila);
+      return;
+    }
     if (u.side === "zombie") {
       ctx.fillStyle = u.flesh ? "#8c2c34" : "#6f7a5c";
       ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI * 2); ctx.fill();

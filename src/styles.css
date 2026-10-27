@@ -367,3 +367,6 @@ details.archived summary { cursor: pointer; font-family: var(--font-mono); font-
 .inclist li { display: grid; gap: 1px; }
 .inclist .incmeta { color: var(--muted); font-size: 12px; padding-left: 14px; }
 .worldmap .leader, .worldmap .truept { pointer-events: none; }
+.legend .dia::before { border-radius: 1px; transform: rotate(45deg) scale(.85); }
+.legend .fig::before { width: 7px; height: 11px; border-radius: 3px 3px 1px 1px; border: 1px solid #8a8f94; }
+.legend .ring::before { box-shadow: 0 0 0 2px #0f1317, 0 0 0 3px #b8463b; }
