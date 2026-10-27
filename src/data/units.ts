@@ -1,4 +1,5 @@
 import type { TraitId } from "./classes";
+import { fullName, type Culture } from "./names";
 
 // Where Epsilon-11 recruits come from: special forces units around the world, each opening in the year
 // it existed, with a small lean that shows in the field (XCOM 2's recruits by way of the 1950s).
@@ -8,7 +9,7 @@ export type Lean = "aim" | "san" | "hp" | "move";
 export const LEANS: Record<Lean, string> = { aim: "+6 aim", san: "+15 max sanity", hp: "+1 max HP", move: "+1 move" };
 
 /** `liaison`: an allied unit that only lends people once the Allied liaison office is researched. */
-interface UnitDef { name: string; country: string; from: number; lean: Lean; names: string; homes: string[]; stories: string[]; liaison?: boolean }
+interface UnitDef { name: string; country: string; from: number; lean: Lean; names: Culture; homes: string[]; stories: string[]; liaison?: boolean }
 export const UNITS: Record<UnitId, UnitDef> = {
   rangers: { name: "US Army Rangers", country: "United States", from: 1951, lean: "hp", names: "us",
     homes: ["Columbus, Georgia", "Butte, Montana", "Scranton, Pennsylvania", "Tulsa, Oklahoma", "Mobile, Alabama"],
@@ -22,8 +23,8 @@ export const UNITS: Record<UnitId, UnitDef> = {
   sas: { name: "Special Air Service", country: "United Kingdom", from: 1951, lean: "aim", names: "uk",
     homes: ["Hereford, England", "Leeds, England", "Belfast, Northern Ireland", "Inverness, Scotland"],
     stories: ["Malayan Scouts: months in the jungle hunting insurgent camps.", "Served with the SAS in occupied Europe, then again in Malaya."] },
-  legion: { name: "French Foreign Legion paratroopers", country: "France", from: 1951, lean: "san", names: "legion",
-    homes: ["Sidi Bel Abbès, Algeria", "Marseille, France", "Lyon, France", "Barcelona, Spain", "Budapest, Hungary"],
+  legion: { name: "French Foreign Legion paratroopers", country: "France", from: 1951, lean: "san", names: "fr",
+    homes: ["Sidi Bel Abbès, Algeria", "Marseille, France", "Lyon, France", "Barcelona, Spain", "Budapest, Hungary", "Stuttgart, West Germany", "Naples, Italy"],
     stories: ["Legion paratrooper from Indochina. Joined under a name that wasn't theirs.", "A legionnaire who has already seen what war does to people, and stopped flinching."] },
   gurkha: { name: "Brigade of Gurkhas", country: "Nepal", from: 1951, lean: "san", names: "gurkha",
     homes: ["Gorkha, Nepal", "Pokhara, Nepal", "Dharan, Nepal", "Dehradun, India"],
@@ -34,13 +35,13 @@ export const UNITS: Record<UnitId, UnitDef> = {
   sf: { name: "US Army Special Forces", country: "United States", from: 1952, lean: "aim", names: "us",
     homes: ["Fort Bragg, North Carolina", "Spokane, Washington", "Toledo, Ohio", "Pueblo, Colorado"],
     stories: ["One of the first Green Berets of the 10th Special Forces Group.", "Former OSS Jedburgh, now Special Forces."] },
-  nzsas: { name: "New Zealand SAS", country: "New Zealand", from: 1955, lean: "aim", names: "anz",
+  nzsas: { name: "New Zealand SAS", country: "New Zealand", from: 1955, lean: "aim", names: "uk",
     homes: ["Auckland, New Zealand", "Wellington, New Zealand", "Rotorua, New Zealand"],
     stories: ["New Zealand SAS trooper who served in the Malayan jungle.", "A tracker from the New Zealand SAS who can follow anything that leaves a mark."] },
   matkal: { name: "Sayeret Matkal", country: "Israel", from: 1957, lean: "move", names: "il",
     homes: ["Haifa, Israel", "Tel Aviv, Israel", "Jerusalem, Israel"],
     stories: ["From Sayeret Matkal's first intake. Says very little about it.", "A reconnaissance soldier who crossed borders on foot by night."] },
-  sasr: { name: "Australian SAS", country: "Australia", from: 1957, lean: "aim", names: "anz",
+  sasr: { name: "Australian SAS", country: "Australia", from: 1957, lean: "aim", names: "uk",
     homes: ["Perth, Australia", "Townsville, Australia", "Sydney, Australia"],
     stories: ["Australian SAS from the regiment's first years in Perth.", "Patrolled the Borneo jungle with the Australian SAS."] },
   jaeger: { name: "Danish Jægerkorps", country: "Denmark", from: 1961, lean: "san", names: "dk",
@@ -64,19 +65,6 @@ export const UNITS: Record<UnitId, UnitDef> = {
     stories: ["One of the first SEAL team plank owners.", "A SEAL from the Mekong Delta, hard to surprise."] },
 };
 
-const NAMES: Record<string, string[]> = {
-  us: ["Callahan", "Rourke", "Dawson", "Whitfield", "Kaminski", "Ortega", "Bishop", "Hollis", "Mercer", "Tanaka", "Jefferson", "Lacroix", "Pruitt", "Navarro", "Keane"],
-  uk: ["Ashworth", "Pembroke", "MacLeod", "Fairbairn", "Hartley", "Pryce", "Doyle", "Whitaker", "Stirling", "Carr", "Bowen", "Fraser"],
-  legion: ["Moreau", "Reinholt", "Vásquez", "Kovács", "Lefèvre", "Brandt", "Duval", "Petrov", "Santoro", "Abadie"],
-  gurkha: ["Gurung", "Rai", "Limbu", "Thapa", "Pun", "Magar", "Tamang", "Rana"],
-  anz: ["Ngata", "Harland", "McAlister", "Tupara", "Doherty", "Beaumont", "Kerr", "Walsh"],
-  il: ["Ben-Ami", "Levin", "Shapira", "Golan", "Avidan", "Mizrahi"],
-  dk: ["Kjær", "Lindholm", "Mortensen", "Rasmussen", "Holm", "Sørensen"],
-  nl: ["de Vries", "Bakker", "Visser", "Smit", "Mulder", "van Dijk"],
-  ph: ["Santos", "Bautista", "Ocampo", "Mendoza", "Aquino", "Villanueva"],
-  be: ["Dubois", "Peeters", "Janssens", "Lambert", "Claes", "Wouters"],
-  no: ["Hansen", "Johansen", "Berg", "Haugen", "Dahl", "Solberg"],
-};
 
 export const QUALITY = [
   { name: "Standard", cost: 100, desc: "" },
@@ -84,7 +72,22 @@ export const QUALITY = [
   { name: "Elite", cost: 190, desc: "Arrives as a Private First Class." },
 ];
 
-export interface Candidate { id: string; name: string; unit: UnitId; quality: number; sex: "m" | "f"; aimBase: number; home: string; age: number; story: string;
+/** Countries by the last part of a hometown ("Butte, Montana" is in the United States). */
+const COUNTRY: Record<string, string> = { England: "United Kingdom", Scotland: "United Kingdom", Wales: "United Kingdom", "Northern Ireland": "United Kingdom",
+  Algeria: "France (Algeria)", India: "Nepal" };
+const US_STATES = /Georgia|Montana|Pennsylvania|Oklahoma|Alabama|California|Virginia|Texas|Hawaii|North Carolina|Washington|Ohio|Colorado/;
+export const nationalityOf = (home: string) => { const last = home.split(", ").pop()!; return US_STATES.test(last) ? "United States" : COUNTRY[last] ?? last; };
+/** The naming culture for a candidate: the unit's, except Legionnaires, who are named for where they came from. */
+const LEGION_HOMES: Record<string, Culture> = { Spain: "es", Hungary: "hu", "West Germany": "de", Italy: "it" };
+const ANZ = ["Auckland", "Wellington", "Rotorua"];
+function cultureFor(unit: UnitId, home: string): Culture {
+  const last = home.split(", ").pop()!;
+  if (unit === "legion") return LEGION_HOMES[last] ?? "fr";
+  if ((unit === "nzsas") && ANZ.some(t => home.startsWith(t)) && Math.random() < 0.4) return "maori";
+  return UNITS[unit].names;
+}
+
+export interface Candidate { id: string; name: string; nationality: string; unit: UnitId; quality: number; sex: "m" | "f"; aimBase: number; home: string; age: number; story: string;
   /** Some candidates come with a trait already, good or bad, shown before you hire them. */
   trait?: TraitId; }
 /** Traits a candidate can bring with them (a quarter of candidates have one). */
@@ -93,14 +96,12 @@ const START_TRAITS: TraitId[] = ["steady", "hardened", "steady", "twitchy", "nig
 const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 export const unitsOpen = (year: number, liaison = false) => (Object.keys(UNITS) as UnitId[]).filter(u => UNITS[u].from <= year && (liaison || !UNITS[u].liaison));
 
-/** A fresh candidate from one of the units recruiting this year. Names already in use are skipped where possible. */
+/** A fresh candidate from one of the units recruiting this year. Family names already in use are skipped where possible. */
 export function rollCandidate(id: string, year: number, used: Set<string>, liaison = false, better = false): Candidate {
   const unit = pick(unitsOpen(year, liaison)), u = UNITS[unit];
-  const pool = NAMES[u.names].filter(n => !used.has(n));
-  const name = pool.length ? pick(pool) : `${pick(NAMES[u.names])}-${id.slice(-2)}`;
-  used.add(name);
+  const sex: "m" | "f" = Math.random() < 0.35 ? "f" : "m", home = pick(u.homes);
   const r = Math.random(), quality = r < (better ? 0.35 : 0.6) ? 0 : r < (better ? 0.8 : 0.9) ? 1 : 2;
-  return { id, name, unit, quality, sex: Math.random() < 0.35 ? "f" : "m", aimBase: 62 + Math.floor(Math.random() * 13),
-    home: pick(u.homes), age: 22 + Math.floor(Math.random() * 15), story: pick(u.stories),
+  return { id, name: fullName(cultureFor(unit, home), sex, used), nationality: nationalityOf(home), unit, quality, sex, aimBase: 62 + Math.floor(Math.random() * 13),
+    home, age: 22 + Math.floor(Math.random() * 15), story: pick(u.stories),
     trait: quality === 2 ? "steady" : Math.random() < 0.25 ? pick(START_TRAITS) : undefined };
 }

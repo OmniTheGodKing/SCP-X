@@ -3,8 +3,8 @@ import { STAFF_EVENTS, answerStaff } from "../campaign/staff";
 import { parseCampaign } from "../campaign/save";
 import type { Report } from "../campaign/reports";
 import { MEDALS } from "../data/bios";
-import { LEANS, QUALITY, UNITS } from "../data/units";
-import { FACIAL, HAIR_COLORS, HAIR_STYLES, HEADGEAR, LOOK_PARTS, SKIN, rollLook } from "../data/looks";
+import { LEANS, QUALITY, UNITS, nationalityOf } from "../data/units";
+import { FACIAL, HAIR_BY_SEX, HAIR_COLORS, HAIR_STYLES, HEADGEAR, LOOK_PARTS, SEX_NAMES, SKIN, fitLook, rollLook } from "../data/looks";
 import { portraitSvg } from "./portrait";
 import { INSPECTION, inspectionChecks, inspectionSoon } from "../campaign/inspection";
 import {
@@ -14,7 +14,7 @@ import {
 } from "../campaign/base";
 import {
   DCLASS_COST, DCLASS_MONTHLY, RANKS, RANK_XP, TRAINER, retire, trainerWhy, RANK_BONUS, RECRUIT_COST, advanceDay, aimOf, blinkFullOf, buyDClass,
-  canBuyDClass, canHireEngineer, dayOfMonth, deployable, hireEngineer, maxSanOf, monthOf, monthlyFunding, canHire, candidateCost, hireCandidate, lookOf,
+  canBuyDClass, canHireEngineer, dayOfMonth, deployable, hireEngineer, maxSanOf, monthOf, monthlyFunding, canHire, candidateCost, hireCandidate, lookOf, trainersActive,
   INTEL_PER_PRISONER, INTERROGATION_DAYS, interrogationDays, PRISONER_BOUNTY, holdingCapacity, canRetrain, canTherapy, canWeaken, dateText, fitAttachment, gunFor, loadAmmo, setWeapon, weaken, weaponOf, weaponOptions, chooseClass, choosePerk, perkChoices, promotionDue, startRetrain, startTherapy,
   pendingBreach, type Campaign, type Incident, type Loadout, type Operative,
 } from "../campaign/campaign";
@@ -614,9 +614,11 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         const pool = c.recruits ?? [];
         return box(`Recruitment · ${plural(pool.length, "candidate")} this month`, `
           <p class="muted">Epsilon-11 recruits from special forces around the world. A new pool arrives on the first of every month; each operative costs $10k a month once hired. Units open as they are formed (US Army Special Forces in 1952, Navy SEALs in 1962).</p>
+          ${(() => { const st = (id: string) => has(c, id) ? "done" : c.research.assigned[id] ? "under way" : projectVisible(c, id) ? "available in the lab" : PROJECTS[id].afterWon && c.stats.won < PROJECTS[id].afterWon! ? `opens after ${PROJECTS[id].afterWon} missions won` : "not yet available";
+            return `<p class="specs">Allied liaison office (research, ${st("liaison_office")}): opens the Korps Commandotroepen and Philippine Scout Rangers, the Belgian Paracommandos from 1952 and Norwegian naval commandos from 1953, and 2 more candidates a month. Joint training exchange (research, ${st("joint_exchange")}): far more Veteran and Elite candidates. O5 standing will add to this later.</p>`; })()}
           ${pool.length ? pool.map(k => { const u = UNITS[k.unit], q = QUALITY[k.quality], w = canHire(c, k);
             return `<div class="proj"><div class="ptop">${portraitSvg(rollLook(k.id, k.sex), k.unit, 44)}<b>${esc(k.name)}</b><span class="flag ${k.quality ? "stare" : ""}">${q.name}</span></div>
-              <div class="specs">${esc(u.name)} · ${esc(u.country)} · age ${k.age}, from ${esc(k.home)} · aim ${k.aimBase}</div>
+              <div class="specs">${SEX_NAMES[k.sex]} · ${esc(u.name)} · nationality ${esc(k.nationality ?? nationalityOf(k.home))} · age ${k.age}, from ${esc(k.home)} · starts as ${RANKS[k.quality ? 1 : trainersActive(c) ? 1 : 0]} · aim ${k.aimBase + (u.lean === "aim" ? 6 : 0)}</div>
               <p class="muted">${esc(k.story)} <b>${LEANS[u.lean]}</b> (${esc(u.name)}).${q.desc ? ` ${esc(q.desc)}` : ""}</p>
               ${k.trait ? `<p class="${TRAITS[k.trait].bad ? "warn" : ""}">Comes with <b>${TRAITS[k.trait].name}</b>: ${esc(TRAITS[k.trait].desc)}</p>` : ""}
               <div class="row"><button class="act" type="button" data-hire="${k.id}" ${w ? `disabled title="${esc(w)}"` : ""}>Hire · $${candidateCost(k)}k</button>${w ? `<span class="muted">${esc(w)}</span>` : ""}</div></div>`; }).join("") : `<p class="muted">Nobody left in this month's pool. More arrive on the first.</p>`}`);
@@ -688,11 +690,11 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <p class="muted">Guards, training, therapy, D-Class, engineers and prisoners are managed from their facilities on the Site-19 tab.</p>
       ${c.retired?.length ? `<div class="card">
         <div class="label">Retired</div>
-        <ul class="memorial">${c.retired.map(r => `<li><b>${esc(r.call)} ${esc(r.name)}</b>, ${RANKS[r.rank]} · ${plural(r.missions, "mission")} · ${r.trainer ? "trainer at the range" : "honourable discharge"}, ${dateText(r.day)}</li>`).join("")}</ul>
+        <ul class="memorial">${c.retired.map(r => `<li>${r.look ? portraitSvg(r.look, r.unit, 36) : ""} <b>${esc(r.name)}</b> (${esc(r.call)}), ${RANKS[r.rank]}${r.unit ? `, formerly ${esc(UNITS[r.unit].name)}` : ""} · ${plural(r.missions, "mission")}${r.kills ? `, ${plural(r.kills, "kill")}` : ""}${r.medals?.length ? ` · ${r.medals.map(m => MEDALS[m].name).join(", ")}` : ""} · ${r.trainer ? "trainer at the range" : "honourable discharge"}, ${dateText(r.day)}</li>`).join("")}</ul>
       </div>` : ""}
       ${c.roster.some(o => !o.alive) ? `<div class="card">
         <div class="label">Memorial</div>
-        <ul class="memorial">${c.roster.filter(o => !o.alive).map(o => `<li>${portraitSvg(lookOf(o), o.unit, 36, true)} <b>${esc(o.call)} ${esc(o.name)}</b>, ${RANKS[o.rank]}${o.unit ? `, formerly ${esc(UNITS[o.unit].name)}` : ""} · ${plural(o.missions, "mission")} · killed on day ${o.diedDay}, ${esc(o.diedAt || "")}</li>`).join("")}</ul>
+        <ul class="memorial">${c.roster.filter(o => !o.alive).map(o => `<li>${portraitSvg(lookOf(o), o.unit, 36, true)} <b>${esc(o.name)}</b> (${esc(o.call)}), ${RANKS[o.rank]}${o.unit ? `, formerly ${esc(UNITS[o.unit].name)}` : ""}${o.bio ? `, of ${esc(o.bio.home)}` : ""} · ${plural(o.missions, "mission")}, ${plural(o.kills, "kill")}${o.wounds ? `, wounded ${o.wounds}×` : ""}${o.seals ? `, ${o.seals} sealed` : ""}${o.medals?.length ? ` · ${o.medals.map(m => MEDALS[m].name).join(", ")}` : ""} · killed ${o.diedDay ? dateText(o.diedDay) : ""}${o.diedAt ? `, ${esc(o.diedAt)}` : ""}</li>`).join("")}</ul>
       </div>` : ""}
     </section>
   </div>`;
@@ -707,7 +709,8 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <div class="label">${esc(o.call)} · ${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}</div>
       <div class="row" style="align-items:center">${portraitSvg(lookOf(o), o.unit, 88)}<h3 class="fac">${esc(o.name)}</h3></div>
       ${o.busy ? `<p class="warn">${o.busy.kind === "therapy" ? "In therapy" : o.busy.kind === "travel" ? "Flying home" : "Retraining"}: ${plural(o.busy.daysLeft, "day")} left. Can't deploy until then.</p>` : ""}
-      ${o.unit ? `<div class="specs">Recruited from the ${esc(UNITS[o.unit].name)} (${esc(UNITS[o.unit].country)}) · ${LEANS[UNITS[o.unit].lean]}</div>` : ""}
+      ${o.unit ? `<div class="specs">Recruited from the ${esc(UNITS[o.unit].name)} (${esc(UNITS[o.unit].country)}) · ${LEANS[UNITS[o.unit].lean]}${o.bio ? ` · nationality ${esc(nationalityOf(o.bio.home))}` : ""}</div>` : ""}
+      <div class="specs">Sex: ${SEX_NAMES[o.sex ?? "m"]}</div>
       ${o.bio ? `<p class="muted">Age ${o.bio.age + Math.floor((c.day - 1) / 365)}, from ${esc(o.bio.home)}. ${esc(o.bio.story)}</p>` : ""}
       <div class="specs">Service: ${plural(o.missions, "mission")} · ${plural(o.kills, "kill")} · wounded ${o.wounds ?? 0}× · ${(o.seals ?? 0) === 1 ? "1 anomaly" : `${o.seals ?? 0} anomalies`} sealed${o.faced?.length ? ` · faced ${esc(o.faced.join(", "))}` : ""}</div>
       ${o.medals?.length ? `<ul class="traits">${o.medals.map(m => `<li class="good"><b>${MEDALS[m].name}</b>: ${esc(MEDALS[m].bonus)} <span class="muted">${esc(MEDALS[m].how)}</span></li>`).join("")}</ul>` : ""}
@@ -716,11 +719,11 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         <div class="row"><button class="act" type="button" data-retire="${o.id}">${tw ? "Honourable discharge" : "Retire as a trainer"}</button></div></details>`; })()}
       <details class="archived" ${lookOpen ? "open" : ""}><summary>Appearance</summary>
         ${(() => { const l = lookOf(o), part = (key: string, label: string, value: string) => `<div class="row"><span class="specs" style="min-width:90px">${label}</span><button class="act" type="button" data-look="${key}" data-d="-1" aria-label="Previous ${label.toLowerCase()}">‹</button><span style="min-width:110px">${esc(value)}</span><button class="act" type="button" data-look="${key}" data-d="1" aria-label="Next ${label.toLowerCase()}">›</button></div>`;
-          return part("sex", "Build", o.sex === "f" ? "Feminine" : "Masculine") + part("skin", "Skin tone", `${l.skin + 1} of ${SKIN.length}`) + part("hair", "Hair", HAIR_STYLES[l.hair]) + part("hairColor", "Hair colour", `${l.hairColor + 1} of ${HAIR_COLORS.length}`)
-            + part("facial", "Facial hair", FACIAL[l.facial]) + part("scar", "Scar", l.scar ? "Yes" : "No") + (o.unit && HEADGEAR[o.unit] ? part("headgear", "Headgear", l.headgear ? HEADGEAR[o.unit]![0] : "None") : ""); })()}
+          return part("sex", "Sex", SEX_NAMES[o.sex ?? "m"]) + part("skin", "Skin tone", `${l.skin + 1} of ${SKIN.length}`) + part("hair", "Hair", HAIR_STYLES[l.hair]) + part("hairColor", "Hair colour", `${l.hairColor + 1} of ${HAIR_COLORS.length}`)
+            + (o.sex === "f" ? "" : part("facial", "Facial hair", FACIAL[l.facial])) + part("scar", "Scar", l.scar ? "Yes" : "No") + (o.unit && HEADGEAR[o.unit] ? part("headgear", "Headgear", l.headgear ? HEADGEAR[o.unit]![0] : "None") : ""); })()}
       </details>
       <details class="archived"><summary>Rename</summary><div class="row">
-        <label class="specs" for="renameName">Name</label><input id="renameName" maxlength="24" value="${esc(o.name)}">
+        <label class="specs" for="renameName">Full name</label><input id="renameName" maxlength="40" value="${esc(o.name)}">
         <label class="specs" for="renameCall">Callsign</label><input id="renameCall" maxlength="12" value="${esc(o.call)}">
         <button class="act" type="button" id="renameBtn">Save</button></div></details>
       ${promotionDue(o) && !o.cls ? `<p><b>Choose a class.</b> It decides the abilities they learn from here on.</p>
@@ -867,16 +870,17 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       lookOpen = true;
       if ((k as string) === "sex") {
         // switching build swaps to a fitting hair style and drops facial hair
-        change(() => { o.sex = o.sex === "f" ? "m" : "f"; l.facial = o.sex === "f" ? 0 : l.facial; l.hair = o.sex === "f" ? (l.hair >= 4 ? l.hair : 4) : (l.hair >= 4 ? 0 : l.hair); o.look = l; });
+        change(() => { o.sex = o.sex === "f" ? "m" : "f"; o.look = fitLook(l, o.sex); });
         return;
       }
       if (k === "scar" || k === "headgear") l[k] = !l[k];
+      else if (k === "hair") { const ok = HAIR_BY_SEX[o.sex ?? "m"] as readonly number[], i = ok.indexOf(l.hair); l.hair = ok[(Math.max(0, i) + d + ok.length) % ok.length]; }
       else { const n = LOOK_PARTS[k]; l[k] = (l[k] + d + n) % n; }
       change(() => { o.look = l; });
     });
     on("renameBtn", () => {
       const o = c.roster.find(x => x.id === opSel), n = root.querySelector<HTMLInputElement>("#renameName")!.value.trim(), k = root.querySelector<HTMLInputElement>("#renameCall")!.value.trim();
-      if (o && n && k) change(() => { o.name = n.slice(0, 24); o.call = k.slice(0, 12); });
+      if (o && n && k) change(() => { o.name = n.slice(0, 40); o.call = k.slice(0, 12); });
     });
     root.querySelectorAll<HTMLElement>("[data-staff]").forEach(b => b.onclick = () => change(() => answerStaff(c, Number(b.dataset.staff) as 0 | 1)));
     root.querySelectorAll<HTMLElement>("[data-guards]").forEach(b => b.onclick = () => { const inc = c.incidents.find(i => i.id === b.dataset.guards); if (inc) change(() => inc.kind === "riot" ? letGuardsHandleRiot(c, inc) : inc.kind === "raid" ? letGuardsHandleRaid(c, inc) : letGuardsHandle(c, inc)); });
