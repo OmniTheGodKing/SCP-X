@@ -8,7 +8,7 @@ import { addExposure } from "./world";
 import { HOME } from "../data/regions";
 import { has } from "./research";
 import { log, makeOperative, type Campaign, type Incident } from "./campaign";
-import { goDark, wingOf } from "./containment";
+import { DEPTH, goDark, wingLevel, wingOf } from "./containment";
 
 export interface Guard {
   id: string;
@@ -36,7 +36,8 @@ export const ALERTS: Record<Alert, { name: string; turn: number; sanity: number;
   heightened: { name: "Heightened", turn: 20, sanity: 1, upkeep: 0, desc: "Half the task force stays on station. Epsilon-11 reaches a breach on turn 20." },
   full:       { name: "Full alert", turn: 12, sanity: 0.5, upkeep: 20, desc: "Everyone fit is on station. Epsilon-11 reaches a breach on turn 12, but sanity recovers at half speed and it costs $20k a month." },
 };
-export const mtfArrival = (c: Campaign) => Math.max(5, ALERTS[c.alert].turn - (has(c, "rapid_response") ? 5 : 0) - (has(c, "field_radios") ? 3 : 0) - (has(c, "prc25") ? 2 : 0));
+/** The turn Epsilon-11 reaches a breach; deeper wings take longer to get down to. */
+export const mtfArrival = (c: Campaign, inc?: Incident) => (inc ? DEPTH.turns * wingLevel(c, inc.scpId) : 0) + Math.max(5, ALERTS[c.alert].turn - (has(c, "rapid_response") ? 5 : 0) - (has(c, "field_radios") ? 3 : 0) - (has(c, "prc25") ? 2 : 0));
 
 const NAMES = ["Brennan", "Kowalczyk", "Delgado", "Fairweather", "Haskins", "Lundgren", "Mabry", "Ostrowski", "Pruett", "Quinlan", "Raskin", "Szabo", "Tolliver", "Upshaw", "Vance", "Wexler", "Yeager", "Zielinski", "Ambrose", "Battaglia", "Corcoran", "Dunleavy", "Esposito", "Gallo"];
 const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
@@ -167,7 +168,7 @@ export function letGuardsHandle(c: Campaign, inc: Incident) {
     log(c, `${s.name} tore through the ${nameInText(n.type)} on level ${n.level + 1}. It's out of action until repaired.`, "bad");
   }
   const dead = lost.length ? ` ${lost.join(" and ")} ${lost.length > 1 ? "were" : "was"} killed.` : "";
-  if (Math.random() < 0.4) {
+  if (Math.random() < Math.max(0.1, 0.4 - DEPTH.escape * wingLevel(c, inc.scpId))) {
     addExposure(c, HOME, 10);
     goDark(c, s, `Site Security couldn't hold it.${dead} (+10 exposure.)`);
   } else {

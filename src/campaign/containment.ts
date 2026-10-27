@@ -16,7 +16,10 @@ const D_BLINK = 0.15;
 export const CLEAN_CREW = 3;
 export const CLEAN_RISK = D_BLINK * D_BLINK;
 
-export const CLEAN_EVERY = 7;            // days between scheduled cleanings
+export const CLEAN_EVERY = 7;
+/** Per level below the top: breach risk cut, auto-resolve escape chance cut, and turns added to Epsilon-11's arrival. */
+export const DEPTH = { risk: 0.1, escape: 0.05, turns: 1 };
+export const wingLevel = (c: Campaign, scpId: string) => { const s = c.scps.find(x => x.id === scpId), w = s && wingOf(c, s); return w ? w.level : 0; };            // days between scheduled cleanings
 const decay = (c: Campaign) => has(c, "containment_rev") ? 2 : 4;   // maintenance lost per day
 export const RECOVERY_WINDOW = 3;        // days to answer a sighting
 export const MOVE_COST = 20;
@@ -59,6 +62,8 @@ export function breachRisk(c: Campaign, s: ScpRecord) {
   if (has(c, "reinforced_doors")) { p *= 0.8; why.push("Reinforced doors: ×0.8"); }
   if (s.id === "106" && has(c, "em_containment")) { p *= 0.7; why.push("Electromagnetic containment: ×0.7"); }
   if (powerShort(c)) { p *= 2; why.push("Power shortage: ×2"); }
+  // the deeper a wing sits, the harder it is to get anywhere from it
+  if (wing.level > 0) { p *= 1 - DEPTH.risk * wing.level; why.push(`Level ${wing.level + 1}, deep underground: ×${(1 - DEPTH.risk * wing.level).toFixed(1)}`); }
   return { p: Math.min(0.9, p), why };
 }
 
