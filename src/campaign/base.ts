@@ -3,7 +3,7 @@ import type { Campaign } from "./campaign";
 import { has } from "./research";
 
 export type FacilityType =
-  | "command" | "generator" | "barracks" | "security" | "medical" | "psych" | "lab" | "workshop"
+  | "command" | "generator" | "barracks" | "security" | "medical" | "psych" | "lab" | "workshop" | "training"
   | "cont_safe" | "cont_euclid" | "cont_keter";
 
 export interface FacilityDef {
@@ -26,7 +26,8 @@ export const FACILITIES: Record<FacilityType, FacilityDef> = {
   medical:     { name: "Medical bay", cost: 180, days: 10, engineers: 3, power: 3, upkeep: 15, buildable: true, desc: "Operatives heal 2 HP a day instead of 1." },
   lab:         { name: "Research lab", cost: 200, days: 10, engineers: 3, power: 3, upkeep: 20, buildable: true, desc: "Room for 4 researchers. Needed for research and for tests on SCP-173." },
   workshop:    { name: "Workshop", cost: 180, days: 9, engineers: 3, power: 3, upkeep: 15, buildable: true, desc: "Builds equipment, and houses 4 more engineers." },
-  psych:       { name: "Psychological services", cost: 160, days: 10, engineers: 3, power: 2, upkeep: 15, buildable: true, desc: "Operatives recover 20 sanity a day instead of 10." },
+  psych:       { name: "Psychological services", cost: 160, days: 10, engineers: 3, power: 2, upkeep: 15, buildable: true, desc: "Operatives recover 20 sanity a day instead of 10, and one at a time can be treated for a bad trait." },
+  training:    { name: "Training range", cost: 150, days: 8, engineers: 2, power: 2, upkeep: 10, buildable: true, desc: "Operatives at Site-19 gain 1 XP a week, and can retrain into a new class." },
   cont_safe:   { name: "Safe-grade containment wing", cost: 120, days: 8, engineers: 3, power: 2, upkeep: 10, buildable: true, grade: 0, desc: "Basic cells. Anything above Safe breaches three times as often here." },
   cont_euclid: { name: "Euclid-grade containment wing", cost: 250, days: 12, engineers: 4, power: 4, upkeep: 20, buildable: true, grade: 1, desc: "Reinforced cells suited to Euclid-class anomalies like SCP-173." },
   cont_keter:  { name: "Keter-grade containment wing", cost: 450, days: 18, engineers: 5, power: 6, upkeep: 35, buildable: true, grade: 2, desc: "The strongest cells Site-19 can build. Anomalies held a grade below the wing's breach half as often." },

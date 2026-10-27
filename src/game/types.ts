@@ -1,5 +1,8 @@
 // Shared types for a tactical mission.
 
+import type { ClassId, PerkId, TraitId } from "../data/classes";
+export type { ClassId, PerkId, TraitId };
+
 export type ItemId = "armor" | "eyedrops" | "flashbang" | "smoke" | "tracker";
 export interface Carried { id: ItemId; uses: number; }
 
@@ -46,6 +49,24 @@ export interface Unit {
   blindUntil?: number;
   /** Research bonus: lower blink chance while staring. */
   blinkMod?: number;
+  cls?: ClassId;
+  perks?: PerkId[];
+  traits?: TraitId[];
+  /** At 0 HP an operative goes down and bleeds out unless stabilized. */
+  downed?: boolean;
+  bleed?: number;
+  stabilized?: boolean;
+  suppressedUntil?: number;
+  markedUntil?: number;
+  overwatchShots?: number;
+  /** Per-mission and per-turn ability bookkeeping. */
+  used?: Record<string, number>;
+  // what happened to them this mission, for traits
+  witnessed?: number;
+  panics?: number;
+  minHp?: number;
+  streak?: number;
+  bestStreak?: number;
 }
 
 export interface LogEntry { t: number; text: string; kind: string; }
@@ -61,6 +82,7 @@ export interface SquadMember {
   opId: string; name: string; call: string;
   hp: number; maxHp: number; san: number; maxSan: number; aim: number; blinkFull: number;
   armor: number; hasArmor: boolean; items: Carried[];
+  cls?: ClassId; perks: PerkId[]; traits: TraitId[];
 }
 
 /** Effects of finished research that apply during missions. */
@@ -74,6 +96,7 @@ export interface MissionSetup {
   dclass: string[];
   known: string[];
   mods: MissionMods;
+  insurgentArmor: number;
 }
 
 export interface MissionResult {
@@ -81,7 +104,11 @@ export interface MissionResult {
   win: boolean;
   evacuated: boolean;
   turns: number;
-  squad: { opId: string; alive: boolean; hp: number; san: number; kills: number; sealed: boolean; hasArmor: boolean; items: Carried[] }[];
+  squad: {
+    opId: string; alive: boolean; hp: number; san: number; kills: number; sealed: boolean; hasArmor: boolean; items: Carried[];
+    witnessed: number; panics: number; minHp: number; bestStreak: number;
+  }[];
+  aftercare: boolean;
   known: string[];
   dSent: number;
   dReturned: number;
@@ -100,7 +127,8 @@ export interface MissionState {
   busy: boolean;
   over: boolean;
   called: boolean;
-  mode: "drag" | "throw" | null;
+  mode: "drag" | "throw" | "ability" | null;
+  ability: PerkId | null;
   units: Unit[];
   statue: Unit;
   sealed: boolean;

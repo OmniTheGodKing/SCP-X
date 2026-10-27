@@ -88,15 +88,15 @@ export function viewSpots(x: number, y: number) {
 
 export interface View { f: number; x: number; y: number; }
 /** Best view a person at (x, y) gets of a tile, leaning if that helps. Null means no sight. */
-export function bestView(x: number, y: number, tx: number, ty: number): View | null {
+export function bestView(x: number, y: number, tx: number, ty: number, range = R): View | null {
   let best: View | null = null;
   for (const [sx, sy] of viewSpots(x, y)) {
-    if (d2(sx, sy, tx, ty) > R * R) continue;
+    if (d2(sx, sy, tx, ty) > range * range) continue;
     const f = visFrac(sx, sy, tx, ty);
     if (f >= MIN_SIGHT && (!best || f > best.f || (f === best.f && sx === x && sy === y))) best = { f, x: sx, y: sy };
   }
   return best;
 }
-export const sightFrom = (x: number, y: number, tx: number, ty: number) => !!bestView(x, y, tx, ty);
+export const sightFrom = (x: number, y: number, tx: number, ty: number, range = R) => !!bestView(x, y, tx, ty, range);
 /** Sight without leaning, for things that don't lean (SCP-173). */
 export const rawSight = (x: number, y: number, tx: number, ty: number) => d2(x, y, tx, ty) <= R * R && visFrac(x, y, tx, ty) >= MIN_SIGHT;

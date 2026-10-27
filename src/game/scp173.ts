@@ -21,8 +21,8 @@ export function rollBlinks() {
   return b;
 }
 // Not looking: mid-blink, eyes shut, or a team member who deliberately looked away from it.
-const eyesOpen = (h: Unit, blinked: Set<Unit>) => !blinked.has(h) && !isPanicked(h) && !isBlind(h) && !(isTeam(h) && !h.staring && h.hadLos);
-const watchedAt = (x: number, y: number, blinked: Set<Unit>) => humans().some(h => eyesOpen(h, blinked) && sightFrom(h.x, h.y, x, y));
+const eyesOpen = (h: Unit, blinked: Set<Unit>) => !h.downed && !blinked.has(h) && !isPanicked(h) && !isBlind(h) && !(isTeam(h) && !h.staring && h.hadLos);
+const watchedAt = (x: number, y: number, blinked: Set<Unit>) => humans().some(h => eyesOpen(h, blinked) && canSee(h, x, y));
 
 // What SCP-173 knows: where it last saw people, and roughly where gunfire came from.
 // It never knows exact positions it can't see. Leads fade after 3 turns.
@@ -82,7 +82,6 @@ function step173(path: Pt[], blinked: Set<Unit>) {
 
 function killBy173(v: Unit) {
   const witnessed = isTeam(v) || seen(v.x, v.y);
-  for (const m of team()) if (m !== v && !isPanicked(m) && canSee(m, v.x, v.y)) loseSanity(m, prof(m).witness);
   kill(v, true);
   reveal("hunt");
   if (isTeam(v)) log(`SCP-173 snapped ${full(v)}'s neck. Nobody saw it move.`, "bad");

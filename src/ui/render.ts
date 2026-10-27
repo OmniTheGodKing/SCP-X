@@ -4,6 +4,7 @@ import { sightFrom } from "../core/sight";
 import { center, shotInfo } from "../game/combat";
 import { S, canAct, canSee, isPanicked, isTeam, seen, team, unitAt } from "../game/state";
 import { blastArea, dragOptions, moveCost, reachFor, throwOptions } from "../game/turn";
+import { abilityTargets } from "../game/abilities";
 import type { Unit } from "../game/types";
 
 const C = {
@@ -102,6 +103,14 @@ export function createRenderer(cv: HTMLCanvasElement) {
   function drawUnit(u: Unit) {
     const [cx, cy] = center(u);
     if (u.side === "anomaly") { drawStatue(u.x, u.y, 1); return; }
+    if (u.side === "mtf" && u.downed) {
+      ctx.fillStyle = "#3a4450";
+      ctx.beginPath(); ctx.arc(cx, cy, 11, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = u.stabilized ? C.ok : C.alert; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(cx - 5, cy); ctx.lineTo(cx + 5, cy); ctx.moveTo(cx, cy - 5); ctx.lineTo(cx, cy + 5); ctx.stroke();
+      if (!u.stabilized) tag(`${u.bleed}`, cx + 11, cy - 11, C.alert);
+      return;
+    }
     if (u.side === "mtf") {
       const pan = isPanicked(u);
       ctx.fillStyle = pan ? "#55636f" : C.mtf;
@@ -215,7 +224,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
     }
 
     // motion trackers: anything within 6 tiles of a carrier shows as a blip, walls or not
-    const carriers = team().filter(u => u.side === "mtf" && u.items?.some(i => i.id === "tracker"));
+    const carriers = team().filter(u => u.side === "mtf" && (u.items?.some(i => i.id === "tracker") || u.perks?.includes("scanner")));
     if (carriers.length) {
       const pulse = 0.5 + 0.5 * Math.sin(now / 250);
       for (const u of S.units) {
@@ -225,6 +234,12 @@ export function createRenderer(cv: HTMLCanvasElement) {
         ctx.strokeStyle = u === st ? C.alert : C.manila; ctx.lineWidth = 2; ctx.globalAlpha = 0.5 + pulse * 0.5;
         ctx.beginPath(); ctx.arc(cx, cy, 6 + pulse * 4, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
       }
+    }
+
+    if (playing && sel && S.mode === "ability" && S.ability) {
+      ctx.strokeStyle = C.ok; ctx.lineWidth = 2; ctx.setLineDash([3, 3]);
+      for (const t of abilityTargets(sel, S.ability)) { const [cx, cy] = center(t); ctx.beginPath(); ctx.arc(cx, cy, 16, 0, Math.PI * 2); ctx.stroke(); }
+      ctx.setLineDash([]);
     }
 
     if (sel && sel.alive) {

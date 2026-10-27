@@ -7,8 +7,10 @@ import {
 import {
   DCLASS_COST, DCLASS_MONTHLY, RANKS, RANK_XP, RECRUIT_COST, advanceDay, advanceToEvent, aimOf, blinkFullOf, buyDClass,
   canBuyDClass, canHireEngineer, dayOfMonth, deployable, hireEngineer, maxSanOf, monthOf, monthlyFunding, recruit,
+  canRetrain, canTherapy, chooseClass, choosePerk, perkChoices, promotionDue, startRetrain, startTherapy,
   type Campaign, type Incident, type Loadout, type Operative,
 } from "../campaign/campaign";
+import { CLASSES, PERKS, TRAITS, type ClassId, type PerkId, type TraitId } from "../data/classes";
 import {
   CLEAN_EVERY, breachRisk, breachWindow, canClean, canMove, cleanCell, escapeChance, moveScp, occupantOf, wingOf, workRisk,
   type ScpRecord,
@@ -38,6 +40,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   const watchers = new Set<string>();
   const gear = new Map<string, { armor: boolean; items: (ItemId | "")[] }>();
   let flashMsg = "";
+  let opSel: string | null = null;
   let dCount = 2;
   let sel: { level: number; slot: number } | null = null;
   let resetArmed = 0;
@@ -95,6 +98,9 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     const inc = c.incidents.find(i => i.id === planning) || null;
     return `<div class="hubgrid">
     <section class="col">
+      ${c.roster.some(promotionDue) ? `<div class="card plan"><div class="label">Promotions</div>
+        <p>${c.roster.filter(promotionDue).map(o => `<b>${esc(o.call)} ${esc(o.name)}</b>`).join(", ")} ${c.roster.filter(promotionDue).length > 1 ? "are" : "is"} waiting to choose ${c.roster.filter(promotionDue).some(o => !o.cls) ? "a class or perk" : "a perk"}.</p>
+        <button class="act" type="button" data-goto="personnel">Open Personnel</button></div>` : ""}
       ${scpSummary(scp173())}
       <div class="card">
         <div class="label">Active incidents</div>
@@ -172,7 +178,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
 
   function gearOf(id: string) {
     let g = gear.get(id);
-    if (!g) { g = { armor: false, items: ["", ""] }; gear.set(id, g); }
+    if (!g) { g = { armor: false, items: ["", "", ""] }; gear.set(id, g); }
     return g;
   }
   /** How many of an item are left in storage once everyone else's loadout is counted. */
@@ -195,7 +201,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     const armorLeft = spare("armor", o.id);
     return `<div class="loadrow"><b>${esc(o.call)} ${esc(o.name)}</b>
       <label class="armorpick"><input type="checkbox" id="armor-${o.id}" data-armor="${o.id}" ${g.armor ? "checked" : ""} ${!g.armor && armorLeft < 1 ? "disabled" : ""}> Body armor${(c.inventory.armor || 0) ? ` (${Math.max(0, armorLeft - (g.armor ? 1 : 0))} spare)` : " (none built)"}</label>
-      ${slot(0)}${slot(1)}</div>`;
+      ${slot(0)}${slot(1)}${o.perks.includes("field_kit") ? slot(2) : ""}</div>`;
   }
 
   // ---------- Research ----------
@@ -376,11 +382,13 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     <section class="col">
       <div class="card">
         <div class="label">Epsilon-11 roster</div>
+        <p class="muted">Select an operative to see their class, perks and traits.</p>
         <div class="roster">${c.roster.filter(o => o.alive).map(opRow).join("")}</div>
         <div class="row"><button class="act" id="recruitBtn" type="button" ${c.funds < RECRUIT_COST || c.over ? "disabled" : ""}>Recruit operative · $${RECRUIT_COST}k</button></div>
       </div>
     </section>
     <section class="col">
+      ${opDetail()}
       <div class="card">
         <div class="label">Site staff</div>
         <p>D-Class in holding: <b>${c.dclass}</b> of ${dclassCapacity(c)} barracks spaces. Engineers: <b>${c.engineers}</b>, ${engineersFree(c)} free. Researchers: <b>${c.researchers}</b> (hire them on the Research tab).</p>
@@ -398,14 +406,48 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   </div>`;
   }
 
+  function opDetail() {
+    const o = c.roster.find(x => x.id === opSel && x.alive);
+    if (!o) return "";
+    const pair = perkChoices(o), tw = canTherapy(c, o), rw = canRetrain(c, o);
+    const bad = o.traits.filter(t => TRAITS[t].bad);
+    return `<div class="card plan">
+      <div class="label">${esc(o.call)} · ${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}</div>
+      <h3 class="fac">${esc(o.name)}</h3>
+      ${o.busy ? `<p class="warn">${o.busy.kind === "therapy" ? "In therapy" : "Retraining"}: ${plural(o.busy.daysLeft, "day")} left. Can't deploy until then.</p>` : ""}
+      ${promotionDue(o) && !o.cls ? `<p><b>Choose a class.</b> It decides the abilities they learn from here on.</p>
+        <div class="classpick">${(Object.keys(CLASSES) as ClassId[]).map(k => `<button type="button" class="classopt" data-class="${k}">
+          <b>${CLASSES[k].name}</b><span class="muted">${CLASSES[k].role}</span>
+          <span class="specs">Starts with ${PERKS[CLASSES[k].base].name}: ${esc(PERKS[CLASSES[k].base].desc)}</span>
+          <span class="specs">Later: ${CLASSES[k].choices.map(p => p.map(x => PERKS[x].name).join(" or ")).join(" · ")}</span></button>`).join("")}</div>` : ""}
+      ${pair ? `<p><b>Choose a perk for ${RANKS[o.rank]}.</b></p>
+        <div class="classpick two">${pair.map(p => `<button type="button" class="classopt" data-perk="${p}"><b>${PERKS[p].name}</b><span class="muted">${esc(PERKS[p].desc)}</span></button>`).join("")}</div>` : ""}
+      ${o.cls ? `<div class="label" style="margin-top:10px">Perk tree</div>
+        <ol class="tree">
+          <li><b>${PERKS[CLASSES[o.cls].base].name}</b> <span class="muted">${esc(PERKS[CLASSES[o.cls].base].desc)}</span></li>
+          ${CLASSES[o.cls].choices.map((p, i) => {
+            const got = o.perks[i + 1];
+            return `<li>${RANKS[i + 2]}: ${got ? `<b>${PERKS[got].name}</b> <span class="muted">${esc(PERKS[got].desc)}</span>` : `<span class="muted">${p.map(x => PERKS[x].name).join(" or ")}${o.rank >= i + 2 ? " (choose above)" : ""}</span>`}</li>`;
+          }).join("")}
+        </ol>` : ""}
+      <div class="label" style="margin-top:10px">Traits</div>
+      ${o.traits.length ? `<ul class="traits">${o.traits.map(t => `<li class="${TRAITS[t].bad ? "bad" : "good"}"><b>${TRAITS[t].name}</b>: ${esc(TRAITS[t].desc)} <span class="muted">${esc(TRAITS[t].how)}</span>
+        ${TRAITS[t].bad && !o.busy ? `<button class="act" type="button" data-therapy="${t}" ${tw ? `disabled title="${esc(tw)}"` : ""}>Therapy · $30k · 7 days</button>` : ""}</li>`).join("")}</ul>
+        ${bad.length && tw ? `<p class="muted">${esc(tw)}</p>` : ""}` : `<p class="muted">None yet. Traits come from what happens to them on missions.</p>`}
+      ${o.cls && !o.busy ? `<div class="row"><button class="act" type="button" id="retrainBtn" ${rw ? `disabled title="${esc(rw)}"` : ""}>Retrain · $50k · 5 days</button><span class="muted">${esc(rw || "Clears their class and perks; they choose again, keeping their rank.")}</span></div>` : ""}
+    </div>`;
+  }
+
   function opRow(o: Operative) {
     const next = RANK_XP[o.rank + 1], heal = healPerDay(c);
     const days = Math.ceil((o.maxHp - o.hp) / heal);
-    const status = deployable(o) ? `<span class="flag">Ready</span>` : `<span class="flag bad">Wounded · ${plural(days, "day")}</span>`;
+    const status = o.busy ? `<span class="flag">${o.busy.kind === "therapy" ? "Therapy" : "Retraining"} · ${plural(o.busy.daysLeft, "day")}</span>`
+      : promotionDue(o) ? `<span class="flag stare">Promotion</span>`
+      : deployable(o) ? `<span class="flag">Ready</span>` : `<span class="flag bad">Wounded · ${plural(days, "day")}</span>`;
     const ms = maxSanOf(o);
-    return `<div class="oprow">
+    return `<button type="button" class="oprow ${opSel === o.id ? "sel" : ""}" data-op="${o.id}">
       <span class="tag">${esc(o.call)}</span>
-      <span class="nm">${esc(o.name)} <span class="muted">${RANKS[o.rank]}</span></span>
+      <span class="nm">${esc(o.name)} <span class="muted">${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}</span></span>
       ${status}
       <span class="bars">
         <span>HP ${o.hp}/${o.maxHp}<span class="meter" style="--c: var(--mtf)"><span style="width:${(o.hp / o.maxHp) * 100}%"></span></span></span>
@@ -414,8 +456,9 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         <span>Blink ${Math.round(blinkFullOf(o) * 100)}%</span>
         <span>XP ${o.xp}${next !== undefined ? `/${next}` : ""}</span>
         <span>${plural(o.missions, "mission")} · ${plural(o.kills, "kill")}</span>
+        ${o.traits.map(t => `<span class="flag ${TRAITS[t].bad ? "bad" : ""}">${TRAITS[t].name}</span>`).join("")}
       </span>
-    </div>`;
+    </button>`;
   }
 
   // ---------- events ----------
@@ -445,6 +488,12 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     on("dayBtn", () => change(() => advanceDay(c)));
     on("waitBtn", () => change(() => advanceToEvent(c)));
     on("recruitBtn", () => change(() => recruit(c)));
+    root.querySelectorAll<HTMLElement>("[data-op]").forEach(b => b.onclick = () => { opSel = opSel === b.dataset.op ? null : b.dataset.op!; render(); });
+    const opNow = () => c.roster.find(x => x.id === opSel)!;
+    root.querySelectorAll<HTMLElement>("[data-class]").forEach(b => b.onclick = () => change(() => chooseClass(c, opNow(), b.dataset.class as ClassId)));
+    root.querySelectorAll<HTMLElement>("[data-perk]").forEach(b => b.onclick = () => change(() => choosePerk(c, opNow(), b.dataset.perk as PerkId)));
+    root.querySelectorAll<HTMLElement>("[data-therapy]").forEach(b => b.onclick = () => change(() => startTherapy(c, opNow(), b.dataset.therapy as TraitId)));
+    on("retrainBtn", () => change(() => startRetrain(c, opNow())));
     on("dBuyBtn", () => change(() => buyDClass(c)));
     on("engBtn", () => change(() => hireEngineer(c)));
     on("digBtn", () => change(() => excavate(c)));
