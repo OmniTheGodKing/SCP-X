@@ -901,10 +901,19 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       act.newCampaign();
     });
     on("overBtn", act.newCampaign);
-    on("exportBtn", () => {
+    on("exportBtn", async () => {
+      const text = JSON.stringify(c), filename = `site19-${dateText(c.day).replace(/ /g, "-").toLowerCase()}.json`;
+      // inside the claude.ai viewer, files go out through its downloads capability (the viewer confirms the save)
+      const host = window.parent !== window ? (window as unknown as { claude?: { use(n: string): Promise<{ save(r: { filename: string; data: string }): Promise<unknown> } | null> } }).claude : undefined;
+      const dl = host ? await host.use("downloads").catch(() => null) : null;
+      if (dl) {
+        try { await dl.save({ filename, data: text }); }
+        catch (e) { if ((e as { code?: string })?.code !== "declined") { flashMsg = "The save file couldn't be offered here."; render(); } }
+        return;
+      }
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(new Blob([JSON.stringify(c)], { type: "application/json" }));
-      a.download = `site19-${dateText(c.day).replace(/ /g, "-").toLowerCase()}.json`;
+      a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+      a.download = filename;
       a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     });
     { const f = root.querySelector<HTMLInputElement>("#importFile"); if (f) f.onchange = async () => {
