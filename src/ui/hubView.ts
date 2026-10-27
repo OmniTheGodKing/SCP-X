@@ -8,12 +8,12 @@ import {
   DCLASS_COST, DCLASS_MONTHLY, RANKS, RANK_XP, RECRUIT_COST, advanceDay, advanceToEvent, aimOf, blinkFullOf, buyDClass,
   canBuyDClass, canHireEngineer, dayOfMonth, deployable, hireEngineer, maxSanOf, monthOf, monthlyFunding, recruit,
   INTEL_PER_PRISONER, INTERROGATION_DAYS, PRISONER_BOUNTY, holdingCapacity, canRetrain, canTherapy, canWeaken, dateText, fitAttachment, gunFor, setWeapon, weaken, weaponOf, weaponOptions, chooseClass, choosePerk, perkChoices, promotionDue, startRetrain, startTherapy,
-  type Campaign, type Incident, type Loadout, type Operative,
+  pendingBreach, type Campaign, type Incident, type Loadout, type Operative,
 } from "../campaign/campaign";
 import { CLASSES, PERKS, TRAITS, type ClassId, type PerkId, type TraitId } from "../data/classes";
 import { ATTACHMENTS, TYPES, model, type AttachmentId, type WeaponType } from "../data/weapons";
 import {
-  CLEAN_EVERY, breachRisk, breachWindow, canClean, canMove, cleanCell, escapeChance, moveScp, occupantOf, wingOf, workRisk,
+  CLEAN_CREW, CLEAN_EVERY, CLEAN_RISK, breachRisk, canClean, canMove, cleanCell, moveScp, occupantOf, wingOf, workRisk,
   type ScpRecord,
 } from "../campaign/containment";
 import {
@@ -26,6 +26,10 @@ import {
   COLLAPSE_LIMIT, COVER_STORY, LOCATE_INTEL, amnesticsCapacity, canCoverStory, canLocate, collapsedCount, coverStory, locateCell,
   regionFunding, transportName, travelBlock, travelDays,
 } from "../campaign/world";
+import {
+  ALERTS, GUARD, PROMOTE, canHireGuard, canPromote, guardCapacity, guardOdds, guardsAlive, guardsReady, hireGuard, letGuardsHandle, mtfArrival,
+  promoteGuard, breachGuards, type Alert, type Guard,
+} from "../campaign/security";
 import { esc } from "./util";
 
 const MAX_SQUAD = 4, MAX_DCLASS = 4, MAX_WATCHERS = 2;
@@ -61,7 +65,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let regionSel: RegionId = HOME;
 
   const ready = () => c.roster.filter(deployable);
-  const watchPool = () => c.roster.filter(o => o.alive && o.hp > 0);
+  const watchPool = () => guardsReady(c);
   const scp173 = () => c.scps[0];
 
   function render() {
@@ -82,6 +86,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <span class="pill">Funds $${c.funds}k</span>
       <span class="pill">D-Class ${c.dclass}/${dclassCapacity(c)}</span>
       <span class="pill">Intel ${c.intel}</span>
+      <span class="pill">Guards ${guardsAlive(c).length}/${guardCapacity(c)}</span>
       <span class="pill">Amnestics ${c.amnestics}/${amnesticsCapacity(c)}</span>
       <span class="pill ${c.exposure >= 60 || collapsedCount(c) ? "hot" : ""}">Exposure ${c.exposure}${collapsedCount(c) ? ` · ${collapsedCount(c)} lost` : ""}</span>
       <span class="pill">Engineers ${engineersFree(c)}/${c.engineers} free</span>
@@ -137,10 +142,16 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <div class="card">
         <div class="label">Time</div>
         <div class="row">
-          <button class="act" id="dayBtn" type="button" ${c.over ? "disabled" : ""}>Next day</button>
-          <button class="act primary" id="waitBtn" type="button" ${c.over ? "disabled" : ""}>Advance until something happens</button>
+          <button class="act" id="dayBtn" type="button" ${c.over || pendingBreach(c) ? "disabled" : ""}>Next day</button>
+          <button class="act primary" id="waitBtn" type="button" ${c.over || pendingBreach(c) ? "disabled" : ""}>Advance until something happens</button>
         </div>
+        ${pendingBreach(c) ? `<p class="warn">A breach is under way. Deal with it before time moves on.</p>` : ""}
         <p class="muted">"Advance" skips quiet stretches and stops when something needs you or a new month starts. Next month: $${monthlyFunding(c)}k from the fronts, $${monthlyUpkeep(c)}k upkeep, up to ${DCLASS_MONTHLY} D-Class. Operatives heal ${healPerDay(c)} HP and recover ${sanityPerDay(c)} sanity a day.</p>
+      </div>
+      <div class="card">
+        <div class="label">Alert level · Epsilon-11 reaches a breach on turn ${mtfArrival(c)}</div>
+        <div class="row">${(Object.keys(ALERTS) as Alert[]).map(a => `<button class="act ${c.alert === a ? "on" : ""}" type="button" data-alert="${a}" aria-pressed="${c.alert === a}">${ALERTS[a].name}</button>`).join("")}</div>
+        <p class="muted">${esc(ALERTS[c.alert].desc)}</p>
       </div>
       <div class="card">
         <div class="label">Site log · ${c.stats.won} recontained · ${c.stats.lost} failed · ${c.stats.missed} unanswered</div>
@@ -155,7 +166,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     if (s.status === "loose") return `<div class="card status danger"><div class="label">${s.name} · ${s.title} · ${s.cls}</div>
       <div class="status-line"><b>Escaped.</b> Whereabouts unknown. Exposure rises every day it stays loose; it will surface somewhere eventually.</div></div>`;
     if (s.status === "breach") return `<div class="card status danger"><div class="label">${s.name} · ${s.title} · ${s.cls}</div>
-      <div class="status-line"><b>Breach in progress.</b> Each day it goes unanswered: ${pctText(escapeChance(c, s))} chance it gets out of the site, and it may wreck a neighbouring facility.</div></div>`;
+      <div class="status-line"><b>Breach in progress.</b> Site Security is on it now. Send Epsilon-11 in after them, or leave it to the guards.</div></div>`;
     const r = breachRisk(c, s), due = s.lastCleaned + CLEAN_EVERY - c.day;
     return `<div class="card status held"><div class="label">${s.name} · ${s.title} · ${s.cls}</div>
       <div class="status-line"><b>Contained</b> in the ${wing ? nameInText(wing.type) + ` on level ${wing.level + 1}` : "?"}.<br>
@@ -170,7 +181,9 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <div><b>${esc(i.title)}</b> <span class="flag">${KIND_NAMES[i.kind]}</span></div>
       <div class="muted">${left <= 0 ? "Last day to respond" : `${plural(left, "day")} left to respond`} · ${where} · Insurgency activity: ${i.insurgents >= 4 ? "heavy" : i.insurgents >= 2 ? "reported" : i.insurgents ? "light" : "none reported"}${i.witnesses ? ` · ${i.witnesses} witnesses` : ""}</div>
       ${block ? `<div class="warn">${esc(block)}</div>` : ""}
-      <button class="act ${planning === i.id ? "on" : ""}" type="button" data-plan="${i.id}" ${c.over || block ? "disabled" : ""}>${planning === i.id ? "Planning response" : "Plan response"}</button>
+      ${i.kind === "breach" ? `<p class="muted">Happening now. ${guardsReady(c).length} guard${guardsReady(c).length === 1 ? "" : "s"} can respond; Epsilon-11 would arrive on turn ${mtfArrival(c)} (${ALERTS[c.alert].name.toLowerCase()} alert).</p>` : ""}
+      <div class="row"><button class="act ${planning === i.id ? "on" : ""}" type="button" data-plan="${i.id}" ${c.over || block ? "disabled" : ""}>${planning === i.id ? "Planning response" : i.kind === "breach" ? "Take command" : "Plan response"}</button>
+      ${i.kind === "breach" ? `<button class="act" type="button" data-guards="${i.id}" ${c.over ? "disabled" : ""}>Let the guards handle it · ${pctText(guardOdds(c, i))} chance</button>` : ""}</div>
     </div>`;
   }
 
@@ -179,11 +192,12 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     return `<div class="card plan">
       <div class="label">Deploy to ${esc(inc.title.split(":")[0])}</div>
       <p>${esc(KIND_BRIEF[inc.kind])}</p>
+      ${inc.kind === "breach" ? (() => { const g = breachGuards(c, inc); return `<p>Site Security: <b>${g.first.length}</b> on the scene${g.late.length ? `, ${g.late.length} more on turn 2` : ""}${g.first.length + g.late.length ? ` (${[...g.first, ...g.late].map(m => esc(m.name)).join(", ")})` : ". Nobody is fit to respond"}. Operatives you pick arrive on turn <b>${mtfArrival(c)}</b>; D-Class are on site from the start.</p>`; })() : ""}
       ${t ? `<p class="muted">The ${transportName(c)} takes ${plural(t, "day")} to reach ${REGIONS[inc.region].name}; time at Site-19 passes while the squad is in the air, and the survivors spend as long again flying home.</p>` : ""}
       ${inc.kind === "coverup" ? `<p class="${c.amnestics < (inc.witnesses ?? 0) ? "warn" : "muted"}">The squad carries all ${c.amnestics} amnestic doses in storage, for ${plural(inc.witnesses ?? 0, "witness")}.</p>` : ""}
       ${inc.insurgents ? `<div class="row"><span>Insurgents expected: <b>${inc.insurgents - (inc.weakened ?? 0)}</b>${inc.weakened ? ` (${inc.weakened} intercepted)` : ""}</span>
         <button class="act" type="button" id="intelBtn" ${canWeaken(c, inc) ? `disabled title="${esc(canWeaken(c, inc)!)}"` : ""}>Spend 1 Intel: intercept one</button></div>` : ""}
-      <p class="muted">Pick up to ${MAX_SQUAD} operatives. Only fully healed operatives can deploy; sanity carries over, so watch it.</p>
+      <p class="muted">Pick up to ${MAX_SQUAD} operatives. Only fully healed operatives can deploy; sanity carries over, so watch it.${inc.kind === "breach" ? " You can also send nobody and play it with the guards alone." : ""}</p>
       <div class="pick">${ops.length ? ops.map(o => `<label class="pickop ${chosen.has(o.id) ? "on" : ""}">
         <input type="checkbox" id="pick-${o.id}" data-pick="${o.id}" ${chosen.has(o.id) ? "checked" : ""} ${!chosen.has(o.id) && chosen.size >= MAX_SQUAD ? "disabled" : ""}>
         <span><b>${esc(o.call)} ${esc(o.name)}</b> · ${RANKS[o.rank]} · SAN ${o.san}/${maxSanOf(o)}</span></label>`).join("") : `<p class="muted">Nobody is fit to deploy. Wait for the wounded to heal or recruit.</p>`}</div>
@@ -197,7 +211,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         <span class="muted">of ${c.dclass} in holding</span>
       </div>`}
       <div class="row">
-        <button class="act primary" type="button" id="launchBtn" ${chosen.size ? "" : "disabled"}>Deploy ${plural(chosen.size, "operative")}${noD ? "" : ` and ${dCount} D-Class`}</button>
+        <button class="act primary" type="button" id="launchBtn" ${chosen.size || (inc.kind === "breach" && guardsReady(c).length) ? "" : "disabled"}>Deploy ${plural(chosen.size, "operative")}${noD ? "" : ` and ${dCount} D-Class`}</button>
         <button class="act" type="button" id="cancelPlan">Cancel</button>
       </div>
     </div>`;
@@ -433,7 +447,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       ${f.disabled && f.repairDays === 0 ? `<div class="row"><button class="act primary" id="repairBtn" type="button" ${rw ? `disabled title="${esc(rw)}"` : ""}>Repair · $${REPAIR.cost}k · ${REPAIR.days} days · ${REPAIR.engineers} engineers</button>${rw ? `<span class="muted">${esc(rw)}</span>` : ""}</div>` : ""}
       ${occ ? `<p>Holds <b>${occ.name}</b>.</p>` : ""}
       ${isContainment(f.type) && !occ && operational(f) && s.status === "contained" ? `
-        <p class="muted">Moving ${s.name} here takes one D-Class to shift it while operatives watch, and $20k. The same risk as a cleaning applies.</p>
+        <p class="muted">Moving ${s.name} here takes D-Class to shift it, with guards watching if you post them, and $20k. The same risk as a cleaning applies.</p>
         ${watcherPicker()}
         <div class="row"><button class="act" id="moveBtn" type="button" ${moveWhy ? `disabled title="${esc(moveWhy)}"` : ""}>Move ${s.name} here</button>${moveWhy ? `<span class="muted">${esc(moveWhy)}</span>` : ""}</div>` : ""}
     </div>`;
@@ -450,21 +464,37 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <div class="riskline"><b>Breach risk ${pctText(r.p)} a day</b></div>
       <ul class="why">${r.why.map(w => `<li>${esc(w)}</li>`).join("")}</ul>
       <div class="maint"><span>Maintenance ${s.maintenance}%</span><div class="exp-bar"><span style="width:${s.maintenance}%"></span></div></div>
-      <p>Its cell must be cleaned every ${CLEAN_EVERY} days: a D-Class goes in while others keep their eyes on it. If a breach starts, you have ${breachWindow(c)} days to answer.</p>
-      <label class="armorpick"><input type="checkbox" id="cleanOrder" ${c.cleaningOrder ? "checked" : ""}> Standing order: site staff clean it on schedule (2% chance a D-Class dies each time)</label>
-      <p>${c.cleaningOrder ? `Next scheduled cleaning ${due > 0 ? `in ${plural(due, "day")}` : "today"}.` : `Next cleaning ${due > 0 ? `due in ${plural(due, "day")}` : "<b>overdue</b>"}. Do it yourself below.`} You can also clean now with chosen watchers.</p>
-      ${watcherPicker()}
-      <div class="row"><button class="act primary" id="cleanBtn" type="button" ${cw ? `disabled title="${esc(cw)}"` : ""}>Clean the cell · 1 D-Class</button>${cw ? `<span>${esc(cw)}</span>` : ""}</div>
+      <p>Its cell must be cleaned every ${CLEAN_EVERY} days. D-Class do it alone: ${CLEAN_CREW} go in, one cleans while two keep their eyes on it. If both watchers blink at once (${pctText(CLEAN_RISK)}), the one cleaning dies. A breach has to be answered the moment it starts.</p>
+      <label class="armorpick"><input type="checkbox" id="cleanOrder" ${c.cleaningOrder ? "checked" : ""}> Standing order: D-Class clean it on schedule</label>
+      <p>${c.cleaningOrder ? `Next scheduled cleaning ${due > 0 ? `in ${plural(due, "day")}` : "today"}.` : `Next cleaning ${due > 0 ? `due in ${plural(due, "day")}` : "<b>overdue</b>"}. Order it below.`}</p>
+      <div class="row"><button class="act primary" id="cleanBtn" type="button" ${cw ? `disabled title="${esc(cw)}"` : ""}>Clean the cell now · ${CLEAN_CREW} D-Class</button>${cw ? `<span>${esc(cw)}</span>` : ""}</div>
     </div>`;
   }
 
   function watcherPicker() {
     const pool = watchPool(), w = pool.filter(o => watchers.has(o.id));
     return `<div class="watch">
-      <div class="specs">Watching (up to ${MAX_WATCHERS}): chance a D-Class dies <b>${pctText(workRisk(w))}</b>${w.length ? "" : " with only site guards watching"}. Each watcher loses 8 sanity.</div>
+      <div class="specs">Two D-Class always watch. Post up to ${MAX_WATCHERS} guards at the door as well: chance a D-Class dies <b>${pctText(workRisk(w))}</b>. Each guard loses 8 sanity.</div>
       <div class="pick">${pool.map(o => `<label class="pickop small ${watchers.has(o.id) ? "on" : ""}">
         <input type="checkbox" id="watch-${o.id}" data-watch="${o.id}" ${watchers.has(o.id) ? "checked" : ""} ${!watchers.has(o.id) && watchers.size >= MAX_WATCHERS ? "disabled" : ""}>
-        <span>${esc(o.call)} ${esc(o.name)} · SAN ${o.san}/${maxSanOf(o)}</span></label>`).join("")}</div>
+        <span>Guard ${esc(o.name)} · SAN ${o.san}/${GUARD.maxSan}</span></label>`).join("") || `<span class="muted">No guards available.</span>`}</div>
+    </div>`;
+  }
+
+  function securityCard() {
+    const gw = canHireGuard(c), alive = guardsAlive(c), dead = c.guards.filter(g => !g.alive).length;
+    const row = (g: Guard) => {
+      const pw = canPromote(c, g);
+      return `<li><b>${esc(g.name)}</b> · HP ${g.hp}/${g.maxHp} · SAN ${g.san}/${GUARD.maxSan} · aim ${g.aim} · ${plural(g.breaches, "breach")} survived${g.traits.length ? ` · ${g.traits.map(t => TRAITS[t].name).join(", ")}` : ""}
+        ${g.training !== undefined ? `<span class="flag">MTF training · ${plural(g.training, "day")}</span>`
+          : g.breaches >= PROMOTE.breaches ? `<button class="act" type="button" data-promote="${g.id}" ${pw ? `disabled title="${esc(pw)}"` : ""}>Put forward for Epsilon-11 · $${PROMOTE.cost}k · ${PROMOTE.days} days</button>` : ""}</li>`;
+    };
+    return `<div class="card">
+      <div class="label">Site Security · ${alive.length} of ${guardCapacity(c)} posts filled</div>
+      <p class="muted">Guards are first on the scene of every breach and the only ones you control until Epsilon-11 arrives. Weaker than operatives: aim around 55, ${GUARD.maxSan} sanity, ${GUARD.hp} HP, no armor, and they blink more. Each Security station houses ${GUARD.perStation}. After ${PROMOTE.breaches} breaches a guard can train into Epsilon-11.</p>
+      ${alive.length ? `<ul class="memorial">${alive.map(row).join("")}</ul>` : `<p class="warn">No guards. A breach would have nobody to answer it.</p>`}
+      ${dead ? `<p class="muted">${plural(dead, "guard")} killed on duty.</p>` : ""}
+      <div class="row"><button class="act" id="hireGuardBtn" type="button" ${gw || c.over ? `disabled title="${esc(gw || "")}"` : ""}>Hire guard · $${GUARD.cost}k</button>${gw ? `<span class="muted">${esc(gw)}</span>` : ""}</div>
     </div>`;
   }
 
@@ -482,6 +512,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     </section>
     <section class="col">
       ${opDetail()}
+      ${securityCard()}
       <div class="card">
         <div class="label">Site staff</div>
         <p>D-Class in holding: <b>${c.dclass}</b> of ${dclassCapacity(c)} barracks spaces. Engineers: <b>${c.engineers}</b>, ${engineersFree(c)} free. Researchers: <b>${c.researchers}</b> (hire them on the Research tab).</p>
@@ -623,7 +654,11 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     on("dBuyBtn", () => change(() => buyDClass(c)));
     on("engBtn", () => change(() => hireEngineer(c)));
     on("digBtn", () => change(() => excavate(c)));
-    on("cleanBtn", () => change(() => cleanCell(c, scp173(), chosenWatchers())));
+    on("cleanBtn", () => change(() => cleanCell(c, scp173())));
+    root.querySelectorAll<HTMLElement>("[data-alert]").forEach(b => b.onclick = () => change(() => { c.alert = b.dataset.alert as Alert; }));
+    root.querySelectorAll<HTMLElement>("[data-guards]").forEach(b => b.onclick = () => { const inc = c.incidents.find(i => i.id === b.dataset.guards); if (inc) change(() => letGuardsHandle(c, inc)); });
+    on("hireGuardBtn", () => change(() => hireGuard(c)));
+    root.querySelectorAll<HTMLElement>("[data-promote]").forEach(b => b.onclick = () => { const g = c.guards.find(x => x.id === b.dataset.promote); if (g) change(() => promoteGuard(c, g)); });
     on("repairBtn", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) change(() => repair(c, f)); });
     on("moveBtn", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) change(() => moveScp(c, scp173(), f, chosenWatchers())); });
     root.querySelectorAll<HTMLElement>("[data-slot]").forEach(b => b.onclick = () => {
@@ -656,7 +691,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     on("cancelPlan", () => { planning = null; render(); });
     on("launchBtn", () => {
       const inc = c.incidents.find(i => i.id === planning);
-      if (!inc || !chosen.size) return;
+      if (!inc || (!chosen.size && !(inc.kind === "breach" && guardsReady(c).length))) return;
       const loadouts: Loadout[] = [...chosen].map(id => {
         const g = gearOf(id);
         return { opId: id, armor: g.armor, items: g.items.filter((i): i is ItemId => !!i) };

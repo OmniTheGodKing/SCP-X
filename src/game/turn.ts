@@ -7,7 +7,7 @@ import { abilityTargets, useAbility } from "./abilities";
 import { hasPerk, rangeOf, spend, usesLeft } from "./perks";
 import { recruitStrays, subjectPhase } from "./dclass";
 import { insurgentsStare, raiderPhase } from "./insurgency";
-import { missionResult } from "./mission";
+import { entryTiles, missionResult, spawnMember } from "./mission";
 import { maxSanOf, prof } from "./profiles";
 import { release, rollBlinks } from "./scp173";
 import {
@@ -137,6 +137,7 @@ export function startPlayerTurn(first: boolean) {
     if (u.bleed <= 0) { log(`${full(u)} bled out.`, "bad"); kill(u); }
     else log(`${full(u)} is bleeding out: ${u.bleed} turn${u.bleed > 1 ? "s" : ""} left.`, "bad");
   }
+  arrivals(first);
   for (const m of team()) {
     m.overwatch = false;
     m.ap = isPanicked(m) ? 0 : m.staring ? 1 : 2;
@@ -146,6 +147,25 @@ export function startPlayerTurn(first: boolean) {
   S.selected = team().find(m => m.ap > 0) || null;
   if (!first) log(`Turn ${S.turn}.`, "key");
   hooks.update();
+  // nobody on the map yet but help is coming: let the turns run until it arrives
+  if (!team().length && S.reinforce.length) window.setTimeout(endTurn, 350);
+}
+
+/** Squad members due this turn walk in at the entry points. */
+function arrivals(first: boolean) {
+  if (first) return;
+  for (const r of S.reinforce.filter(r => r.turn <= S.turn)) {
+    S.reinforce = S.reinforce.filter(x => x !== r);
+    const free = entryTiles().filter(([x, y]) => !S.units.some(u => u.alive && !u.saved && u.x === x && u.y === y));
+    const came: string[] = [];
+    for (const m of r.members) {
+      const t = free.shift();
+      if (!t) { S.reinforce.push({ turn: S.turn + 1, members: [m] }); continue; }
+      S.units.push(spawnMember(m, t[0], t[1], S.setup.mods));
+      came.push(m.name);
+    }
+    if (came.length) log(r.members[0].guard ? `More Site Security arrives: ${came.join(", ")}.` : `Epsilon-11 is on the scene: ${came.join(", ")}.`, "good");
+  }
 }
 
 export function select(u: Unit) { S.selected = u; S.pending = null; S.mode = null; hooks.update(); }
@@ -441,7 +461,8 @@ export function checkEnd() {
     finish(w.filter(u => u.dosed).length * 2 >= w.length, false); return true;
   }
   if (k === "strike" && !alive("raider").length) { finish(true, false); return true; }
-  if (!alive("mtf").length) { finish(false, false); return true; }
+  if (S.escaped) { finish(false, false); return true; }
+  if (!alive("mtf").length && !S.reinforce.length) { finish(false, false); return true; }
   return false;
 }
 
@@ -454,7 +475,7 @@ export function evacuate() {
 function finish(win: boolean, evacuated: boolean) {
   S.over = true; S.phase = "over";
   S.result = missionResult(win, evacuated);
-  log(win ? "Incident closed." : evacuated ? "Epsilon-11 has evacuated." : "Incident open. MTF Epsilon-11 lost.", win ? "good" : "bad");
+  log(win ? "Incident closed." : evacuated ? "The team has evacuated." : S.escaped ? "SCP-173 is outside Site-19." : "Incident open. Nobody is left to respond.", win ? "good" : "bad");
   hooks.update();
   hooks.finished(S.result);
 }

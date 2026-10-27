@@ -1,6 +1,7 @@
 // Research projects, SCP-173 tests and the equipment they unlock.
 import { countOperational, engineersFree } from "./base";
-import { log, yearOf, type Campaign, type Operative } from "./campaign";
+import { log, yearOf, type Campaign } from "./campaign";
+import type { Guard } from "./security";
 import { ATTACHMENTS, model, type AttachmentId } from "../data/weapons";
 import { cellWork, type ScpRecord } from "./containment";
 
@@ -30,7 +31,7 @@ export const PROJECTS: Record<string, ProjectDef> = {
   blink_cadence:      { name: "Blink cadence protocol", branch: "SCP-173", days: 30, cost: 60, needsTest: "endurance", desc: "Staff are drilled to blink on a count. Everyone staring at SCP-173 blinks 2% less often." },
   movement_study:     { name: "Movement study", branch: "SCP-173", days: 40, cost: 80, needsTest: "movement", desc: "During missions, shows which room SCP-173 is in even when nobody can see it." },
   containment_rev:    { name: "Containment procedure revision", branch: "SCP-173", days: 40, cost: 80, needsTest: "material", desc: "SCP-173's breach risk −25%, and its cell gets dirty half as fast." },
-  rapid_response:     { name: "Rapid response protocol", branch: "SCP-173", days: 30, cost: 50, needs: ["movement_study"], desc: "One extra day to answer every breach." },
+  rapid_response:     { name: "Rapid response protocol", branch: "SCP-173", days: 30, cost: 50, needs: ["movement_study"], desc: "Epsilon-11 reaches a breach 5 turns sooner at every alert level." },
   ocular_lubricant:   { name: "Ocular lubricant", branch: "Personnel", days: 20, cost: 40, needsTest: "endurance", unlocks: "eyedrops", desc: "Unlocks eye drops: the carrier ignores one blink while staring." },
   trauma_counseling:  { name: "Trauma counseling", branch: "Personnel", days: 30, cost: 60, desc: "Operatives recover 3 more sanity on quiet turns during missions." },
   marksmanship:       { name: "Advanced marksmanship", branch: "Personnel", days: 30, cost: 60, desc: "+5 aim for every operative." },
@@ -54,7 +55,7 @@ export const PROJECTS: Record<string, ProjectDef> = {
   w_m21:              { name: "M21 marksman rifle", branch: "Weapons", days: 80, cost: 160, from: 1967, needs: ["w_m14"], model: "m21", desc: "Replaces the Springfield: 5–7 damage, 4 rounds, +5 aim." },
   powered_jack:       { name: "Powered pallet jack", branch: "Equipment", days: 25, cost: 50, needsTest: "material", desc: "Operatives can drag SCP-173 2 tiles instead of 1." },
   reinforced_doors:   { name: "Reinforced cell doors", branch: "Site", days: 40, cost: 100, needs: ["containment_rev"], desc: "Breach risk −20% in every containment wing." },
-  early_warning:      { name: "Early warning sensors", branch: "Site", days: 30, cost: 80, needs: ["movement_study"], desc: "Breaches are 8% less likely to get out of the site each day." },
+  early_warning:      { name: "Early warning sensors", branch: "Site", days: 30, cost: 80, needs: ["movement_study"], desc: "A hatch lockdown holds for 8 turns instead of 5." },
   c119:               { name: "C-119 Flying Boxcar", branch: "Site", days: 40, cost: 120, desc: "A faster transport for Epsilon-11. Travel to other regions takes a quarter less time." },
   c130:               { name: "C-130 Hercules", branch: "Site", days: 60, cost: 180, from: 1954, needs: ["c119"], desc: "A long-range turboprop transport. Travel to other regions takes half the time a C-47 would." },
   efficient_gen:      { name: "Efficient generators", branch: "Site", days: 30, cost: 70, desc: "Each generator supplies 15 power instead of 10." },
@@ -241,7 +242,7 @@ export function canTest(c: Campaign, s: ScpRecord, t: TestId): string | null {
   if (c.dclass < TESTS[t].dclass) return `Needs ${TESTS[t].dclass} D-Class.`;
   return null;
 }
-export function runTest(c: Campaign, s: ScpRecord, t: TestId, watchers: Operative[]) {
+export function runTest(c: Campaign, s: ScpRecord, t: TestId, watchers: Guard[]) {
   if (canTest(c, s, t)) return;
   const d = TESTS[t];
   const ok = cellWork(c, s, watchers, `the ${d.name.toLowerCase()}`, d.risk, d.dclass, d.breach);

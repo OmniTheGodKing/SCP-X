@@ -9,6 +9,7 @@ import { CLEAN_EVERY, resolveScp, startingScps, tickContainment, type ScpRecord 
 import { ITEMS, armorOf, has, newResearch, tickResearch, type ItemId, type Order, type ResearchState } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, collapsedCount, COLLAPSE_LIMIT, newRegions, regionFunding, tickWorld, travelDays, type RegionState } from "./world";
+import { ALERTS, breachGuards, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
 import { CLASS_WEAPONS, model, startingModels, type AttachmentId, type WeaponType } from "../data/weapons";
 
 export const RANKS = ["Operative", "Specialist", "Sergeant", "Lieutenant", "Captain"];
@@ -70,7 +71,11 @@ export interface SiteLogEntry { day: number; text: string; kind: string; }
 export interface Loadout { opId: string; armor: boolean; items: ItemId[]; }
 
 export interface Campaign {
-  version: 6;
+  version: 7;
+  /** Site Security, and how ready Epsilon-11 is kept for a breach. */
+  guards: Guard[];
+  nextGuard: number;
+  alert: Alert;
   /** Exposure per region; c.exposure is the global average kept in step by addExposure. */
   regions: Record<RegionId, RegionState>;
   amnestics: number;
@@ -175,9 +180,10 @@ export function log(c: Campaign, text: string, kind = "") {
   if (c.log.length > 100) c.log.pop();
 }
 
-function newOperative(c: Campaign): Operative {
+/** A new rank-0 operative; guards promoted into Epsilon-11 keep their own name. */
+export function makeOperative(c: Campaign, given?: string): Operative {
   const used = new Set(c.roster.map(o => o.name));
-  const name = NAMES.find(n => !used.has(n)) ?? `Recruit ${c.nextOp}`;
+  const name = given ?? NAMES.find(n => !used.has(n)) ?? `Recruit ${c.nextOp}`;
   const n = c.nextOp++;
   return { id: "op" + n, name, call: `E11-${String(n).padStart(2, "0")}`, rank: 0, xp: 0, hp: 7, maxHp: 7, san: 100, aimBase: rand(64, 74), missions: 0, kills: 0, alive: true, perks: [], traits: [], breakdowns: 0 };
 }
@@ -186,12 +192,13 @@ export function newCampaign(): Campaign {
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
-    version: 6, regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, prisoners: [], intel: 0, cleaningOrder: true,
+    version: 7, guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, prisoners: [], intel: 0, cleaningOrder: true,
     day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
     inventory: {}, orders: [], knownNotes: [], nextD: 9101, nextOp: 1, nextIncident: 1,
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
   };
-  for (let i = 0; i < 6; i++) c.roster.push(newOperative(c));
+  for (let i = 0; i < 6; i++) c.roster.push(makeOperative(c));
+  for (let i = 0; i < 2; i++) c.guards.push(newGuard(c));
   log(c, "Site-19 Command is online. SCP-173 is held in the Euclid wing on level 2. Keep its cell clean, keep it watched, and keep Epsilon-11 ready for when it gets out.", "key");
   return c;
 }
@@ -211,11 +218,13 @@ export const monthlyFunding = (c: Campaign) => REGION_IDS.reduce((a, r) => a + r
 /** Advance one day. Returns true if something happened that needs the player's attention. */
 export function advanceDay(c: Campaign) {
   if (c.over) return false;
+  // a breach is answered on the spot: time stands still until it's dealt with
+  if (pendingBreach(c)) return true;
   const incidentsBefore = c.incidents.length, logBefore = c.log.length;
   c.day++;
   for (const line of tickConstruction(c)) log(c, line, "good");
   tickResearch(c);
-  const heal = healPerDay(c), calm = sanityPerDay(c), drill = countOperational(c, "training") > 0 && c.day % 7 === 0;
+  const heal = healPerDay(c), calm = sanityPerDay(c) * ALERTS[c.alert].sanity, drill = countOperational(c, "training") > 0 && c.day % 7 === 0;
   for (const o of c.roster) if (o.alive) {
     o.hp = Math.min(o.maxHp, o.hp + heal);
     const rest = (o.traits.includes("hollow") ? calm / 2 : calm) + ((o.aftercareUntil ?? 0) >= c.day ? 10 : 0);
@@ -234,6 +243,7 @@ export function advanceDay(c: Campaign) {
     }
     if (drill && !o.busy) { o.xp++; checkPromotion(c, o); }
   }
+  tickGuards(c, heal, sanityPerDay(c));
   tickContainment(c);
   tickWorld(c);
   for (const s of c.scps) if (s.status === "contained" && c.day - s.lastCleaned === CLEAN_EVERY)
@@ -249,6 +259,8 @@ export function advanceDay(c: Campaign) {
   checkOver(c);
   return c.incidents.length > incidentsBefore || c.log.length !== logBefore || !!c.over;
 }
+
+export const pendingBreach = (c: Campaign) => c.incidents.find(i => i.kind === "breach" && i.id !== c.activeIncident) ?? null;
 
 /** Advance until something needs attention. */
 export function advanceToEvent(c: Campaign) {
@@ -311,7 +323,7 @@ function checkOver(c: Campaign) {
 export function recruit(c: Campaign) {
   if (c.funds < RECRUIT_COST) return;
   c.funds -= RECRUIT_COST;
-  const o = newOperative(c);
+  const o = makeOperative(c);
   c.roster.push(o);
   log(c, `${o.call} ${o.name} joins Epsilon-11.`, "good");
 }
@@ -361,9 +373,10 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
   c.dclass -= dCount;
   c.activeIncident = inc.id;
   const kind = inc.kind === "recovery" ? "manhunt" : inc.kind;
+  const sec = kind === "breach" ? breachGuards(c, inc) : { first: [], late: [] };
   const amnestics = kind === "coverup" ? c.amnestics : 0;
   return {
-    kind, map: inc.map, amnestics, witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
+    kind, map: inc.map, amnestics, guards: sec.first, lateGuards: sec.late, mtfTurn: mtfArrival(c), witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
     incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: Math.max(0, inc.insurgents - (inc.weakened ?? 0)), squad, dclass,
     year: yearOf(c.day),
     known: [...c.knownNotes],
@@ -373,6 +386,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
       recoverBonus: has(c, "trauma_counseling") ? 3 : 0,
       mtfDrag: has(c, "powered_jack") ? 2 : 1,
       track173: has(c, "movement_study"),
+      lockdownTurns: has(c, "early_warning") ? 8 : 5,
     },
   };
 }
@@ -387,6 +401,21 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   const name = inc ? inc.title.split(":")[0] : "Incident";
 
   for (const s of r.squad) {
+    // reinforcements who never arrived just bring their gear back
+    if (s.absent) {
+      if (s.hasArmor) c.inventory.armor = (c.inventory.armor || 0) + 1;
+      for (const it of s.items) if (it.uses > 0) c.inventory[it.id] = (c.inventory[it.id] || 0) + 1;
+      continue;
+    }
+    const g = c.guards.find(x => x.id === s.opId);
+    if (g) {
+      if (!s.alive) { g.alive = false; g.hp = 0; g.diedDay = c.day; lines.push(`Guard ${g.name} was killed in the breach.`); continue; }
+      g.hp = Math.max(1, Math.min(g.maxHp, s.hp)); g.san = s.san; g.kills += s.kills; g.breaches++;
+      for (const t of [rollTrait(c, g, "nightmares", s.witnessed >= 2), rollTrait(c, g, "twitchy", s.panics > 0), rollTrait(c, g, "gunshy", s.minHp <= 2), rollTrait(c, g, "steady", s.bestStreak >= 5)])
+        if (t) promotions.push(t);
+      if (g.breaches === 3) promotions.push(`Guard ${g.name} has survived 3 breaches and can be put forward for Epsilon-11 on the Personnel tab.`);
+      continue;
+    }
     const o = c.roster.find(x => x.id === s.opId);
     if (!o) continue;
     o.missions++;
@@ -437,7 +466,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   } else {
     c.stats.lost++;
     addExposure(c, region, 20);
-    lines.unshift(`${name} failed${r.evacuated ? " after Epsilon-11 evacuated" : ""}. ${REGIONS[region].front} has to clean up after it (+20 exposure in ${where}).`);
+    lines.unshift(`${name} failed${r.escaped ? `: SCP-173 got out through the surface hatch` : r.evacuated ? " after the team evacuated" : ""}. ${REGIONS[region].front} has to clean up after it (+20 exposure in ${where}).`);
   }
   if (r.witnessesEscaped) { addExposure(c, region, r.witnessesEscaped * 5); lines.push(`${r.witnessesEscaped} witness${r.witnessesEscaped > 1 ? "es" : ""} got away undosed (+${r.witnessesEscaped * 5} exposure in ${where}).`); }
   if (r.civiliansKilled) { addExposure(c, region, r.civiliansKilled * 3); lines.push(`${r.civiliansKilled} civilian${r.civiliansKilled > 1 ? "s" : ""} died (+${r.civiliansKilled * 3} exposure in ${where}).`); }

@@ -5,12 +5,13 @@ import { maxSanOf } from "./profiles";
 import { S, alive, canAct, canSee, computeVis, full, hooks, isPanicked, log, seen, team } from "./state";
 import type { AbilityId, PerkId, Unit } from "./types";
 import { PERKS } from "../data/classes";
+import { MAPS } from "../data/maps";
 
 export interface AbilityDef {
   perk: AbilityId;
   label: string;
   desc?: string;
-  target: "ally" | "downed" | "panicked" | "enemy" | "self" | "captive" | "witness";
+  target: "ally" | "downed" | "panicked" | "enemy" | "self" | "captive" | "witness" | "panel";
   endsTurn?: boolean;
   /** Uses per mission, if limited. */
   uses?: (u: Unit) => number;
@@ -25,10 +26,11 @@ export const ABILITIES: AbilityDef[] = [
   { perk: "mark_target", label: "Mark target", target: "enemy" },
   { perk: "run_and_gun", label: "Run and gun", target: "self", uses: () => 1 },
   { perk: "secure", label: "Secure prisoner", target: "captive", desc: "Restrain an adjacent wounded Insurgent so they're taken prisoner even if the mission fails." },
+  { perk: "lockdown", label: "Lock the hatch", target: "panel", endsTurn: true, desc: "At the lockdown panel: seal the surface hatch so SCP-173 can't get out that way for a few turns. Takes both actions." },
   { perk: "dose", label: "Dose with amnestics", target: "witness", desc: "Give an adjacent witness amnestics. They forget what they saw and stop running." },
 ];
 
-const UNIVERSAL: AbilityId[] = ["secure", "dose"];
+const UNIVERSAL: AbilityId[] = ["secure", "dose", "lockdown"];
 const knows = (u: Unit, p: AbilityId) => UNIVERSAL.includes(p)
   ? u.side === "mtf" && abilityTargets(u, p).length > 0 && (p !== "dose" || S.amnestics > 0)
   : hasPerk(u, p as PerkId);
@@ -39,7 +41,7 @@ export const abilityDesc = (p: AbilityId) => UNIVERSAL.includes(p) ? def(p).desc
 const adjacent = (a: Unit, b: Unit) => cheb(a.x, a.y, b.x, b.y) <= 1;
 /** Combat medic: one free medkit per turn. */
 const freeHeal = (u: Unit) => hasPerk(u, "combat_medic") && !(u.used?.["cm" + S.turn]);
-const cost = (u: Unit, p: AbilityId) => p === "run_and_gun" ? 0 : p === "medkit" && freeHeal(u) ? 0 : 1;
+const cost = (u: Unit, p: AbilityId) => p === "run_and_gun" ? 0 : p === "lockdown" ? 2 : p === "medkit" && freeHeal(u) ? 0 : 1;
 
 export function abilityTargets(u: Unit, p: AbilityId): Unit[] {
   const d = def(p);
@@ -47,6 +49,10 @@ export function abilityTargets(u: Unit, p: AbilityId): Unit[] {
     case "captive": return S.units.filter(a => a.side === "raider" && a.alive && a.downed && !a.secured && adjacent(u, a));
     case "witness": return S.units.filter(a => a.witness && a.alive && !a.saved && !a.dosed && adjacent(u, a));
     case "self": return [u];
+    case "panel": {
+      const pn = MAPS[S.setup.map].panel;
+      return pn && S.has173 && !S.sealed && !u.staring && S.lockedUntil < S.turn && cheb(u.x, u.y, pn[0], pn[1]) <= 1 ? [u] : [];
+    }
     case "ally": return team().filter(a => adjacent(u, a) && (p === "medkit" ? a.hp < a.maxHp && a.side === "mtf" : a.san < maxSanOf(a)));
     case "downed": return S.units.filter(a => a.alive && a.downed && !a.stabilized && adjacent(u, a));
     case "panicked": return alive("mtf").filter(a => a !== u && isPanicked(a) && adjacent(u, a));
@@ -70,7 +76,7 @@ export function startAbility(p: AbilityId, flash: (t: string) => void) {
   if (S.mode === "ability" && S.ability === p) { S.mode = null; S.ability = null; hooks.update(); return; }
   const why = abilityCheck(u, p);
   if (why) { flash(why); return; }
-  if (def(p).target === "self") { useAbility(u, p, u); return; }
+  if (def(p).target === "self" || def(p).target === "panel") { useAbility(u, p, u); return; }
   S.mode = "ability"; S.ability = p; S.pending = null;
   hooks.update();
 }
@@ -117,6 +123,10 @@ export function useAbility(u: Unit, p: AbilityId, t: Unit) {
     case "secure":
       t.secured = true;
       log(`${full(u)} restrains the wounded Insurgent. They're coming back to Site-19.`, "good");
+      break;
+    case "lockdown":
+      S.lockedUntil = S.turn + S.setup.mods.lockdownTurns;
+      log(`${full(u)} throws the lockdown: the surface hatch is sealed until turn ${S.lockedUntil + 1}.`, "good");
       break;
     case "run_and_gun":
       u.ap += 1;

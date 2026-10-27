@@ -1,6 +1,7 @@
 // Site-19's facilities: what can be built where, power, engineers, construction and repairs.
 import type { Campaign } from "./campaign";
 import { has } from "./research";
+import { ALERTS } from "./security";
 
 export type FacilityType =
   | "command" | "generator" | "barracks" | "security" | "medical" | "psych" | "lab" | "workshop" | "training" | "holding" | "amnestics"
@@ -22,7 +23,7 @@ export const FACILITIES: Record<FacilityType, FacilityDef> = {
   command:     { name: "Command", cost: 0, days: 0, engineers: 0, power: 0, upkeep: 0, buildable: false, desc: "Site-19's operations center. Runs on its own backup supply." },
   generator:   { name: "Generator", cost: 100, days: 6, engineers: 2, power: -10, upkeep: 5, buildable: true, desc: "Supplies 10 power." },
   barracks:    { name: "D-Class barracks", cost: 80, days: 5, engineers: 2, power: 1, upkeep: 5, buildable: true, desc: "Holds 10 D-Class." },
-  security:    { name: "Security station", cost: 150, days: 7, engineers: 3, power: 2, upkeep: 15, buildable: true, desc: "Each station next to a containment wing cuts that wing's breach risk by 30% and lowers the chance a breach gets out of the site." },
+  security:    { name: "Security station", cost: 150, days: 7, engineers: 3, power: 2, upkeep: 15, buildable: true, desc: "Houses 4 Site Security guards. Each station next to a containment wing cuts that wing's breach risk by 30%, and its guards are already in the wing when a breach starts." },
   medical:     { name: "Medical bay", cost: 180, days: 10, engineers: 3, power: 3, upkeep: 15, buildable: true, desc: "Operatives heal 2 HP a day instead of 1." },
   lab:         { name: "Research lab", cost: 200, days: 10, engineers: 3, power: 3, upkeep: 20, buildable: true, desc: "Room for 4 researchers. Needed for research and for tests on SCP-173." },
   workshop:    { name: "Workshop", cost: 180, days: 9, engineers: 3, power: 3, upkeep: 15, buildable: true, desc: "Builds equipment, and houses 4 more engineers." },
@@ -88,7 +89,7 @@ export const engineersFree = (c: Campaign) => c.engineers - engineersBusy(c);
 
 export const engineerCapacity = (c: Campaign) => 8 + countOperational(c, "workshop") * 4;
 export const dclassCapacity = (c: Campaign) => countOperational(c, "barracks") * 10;
-export const monthlyUpkeep = (c: Campaign) => c.base.facilities.reduce((a, f) => a + FACILITIES[f.type].upkeep, 0);
+export const monthlyUpkeep = (c: Campaign) => c.base.facilities.reduce((a, f) => a + FACILITIES[f.type].upkeep, 0) + ALERTS[c.alert].upkeep;
 export const healPerDay = (c: Campaign) => countOperational(c, "medical") && !powerShort(c) ? 2 : 1;
 export const sanityPerDay = (c: Campaign) => countOperational(c, "psych") && !powerShort(c) ? 20 : 10;
 

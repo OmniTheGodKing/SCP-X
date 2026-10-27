@@ -6,7 +6,7 @@ import { insurgentGuns } from "../data/weapons";
 import { STARTING_NOTES } from "./notes";
 import { PROFILE } from "./profiles";
 import { S, computeVis, log, setMission } from "./state";
-import type { MissionKind, MissionResult, MissionSetup, MissionState, Unit } from "./types";
+import type { MissionKind, MissionResult, MissionSetup, MissionState, SquadMember, Unit } from "./types";
 
 function mk(o: Partial<Unit> & Pick<Unit, "id" | "side" | "name" | "x" | "y" | "hp" | "maxHp" | "san">): Unit {
   return { aim: 0, alive: true, saved: false, ap: 0, overwatch: false, panicUntil: -1, staring: false, hadLos: false, seen173: false, fled: false, kills: 0, ...o };
@@ -17,7 +17,28 @@ const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 
 const CIVILIANS = ["Mr. Delaney", "Mrs. Kowalczyk", "Earl Pruitt", "Dot Hennessey", "Rev. Abernathy", "Lou Marchetti", "Frank Osgood", "June Whitley", "Carl Bjornstad", "Hattie Mae Cole", "Walt Simmons", "Ida Ferraro", "Gus Lindgren", "Peggy Sue Hart"];
 
+let nextSlot = 1;
+/** Puts one squad member (operative or guard) on the map. */
+export function spawnMember(m: SquadMember, x: number, y: number, mods: MissionSetup["mods"]): Unit {
+  const i = nextSlot++;
+  return mk({ id: "m" + i, opId: m.opId, slot: i, side: "mtf", call: m.call, name: m.name, x, y, guard: m.guard,
+    hp: m.hp, maxHp: m.maxHp, san: m.san, maxSan: m.maxSan, aim: m.aim, blinkFull: m.blinkFull,
+    armor: m.armor + (m.perks.includes("plated") ? 1 : 0), hasArmor: m.hasArmor, blinkMod: mods.blinkBonus,
+    items: m.items.map(it => ({ ...it, uses: it.uses + (m.perks.includes("grenadier") && (it.id === "flashbang" || it.id === "smoke" || it.id === "frag") ? 1 : 0) })),
+    cls: m.cls, perks: [...m.perks], traits: [...m.traits], minHp: m.hp, gun: { ...m.gun }, witnessed: 0, panics: 0, streak: 0, bestStreak: 0 });
+}
+
+/** Free floor tiles within 2 of the squad's entry points, nearest first. */
+export function entryTiles(): Pt[] {
+  const def = MAPS[S.setup.map], out: Pt[] = [];
+  for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++)
+    if (tileAt(x, y) === FLOOR && def.squadSpawns.some(([sx, sy]) => Math.max(Math.abs(sx - x), Math.abs(sy - y)) <= 2)) out.push([x, y]);
+  const d = (p: Pt) => Math.min(...def.squadSpawns.map(([sx, sy]) => Math.max(Math.abs(sx - p[0]), Math.abs(sy - p[1]))));
+  return out.sort((a, b) => d(a) - d(b));
+}
+
 export function createMission(setup: MissionSetup) {
+  nextSlot = 1;
   const def = MAPS[setup.map];
   useLevel(new Level(def));
   const taken = new Set<string>();
@@ -30,26 +51,25 @@ export function createMission(setup: MissionSetup) {
   const units: Unit[] = [];
   const has173 = setup.kind === "breach" || setup.kind === "manhunt";
 
-  setup.squad.forEach((m, i) => {
-    const [x, y] = def.squadSpawns[i];
-    taken.add(x + "," + y);
-    units.push(mk({ id: "m" + (i + 1), opId: m.opId, slot: i + 1, side: "mtf", call: m.call, name: m.name, x, y,
-      hp: m.hp, maxHp: m.maxHp, san: m.san, maxSan: m.maxSan, aim: m.aim, blinkFull: m.blinkFull,
-      armor: m.armor + (m.perks.includes("plated") ? 1 : 0), hasArmor: m.hasArmor, blinkMod: setup.mods.blinkBonus,
-      items: m.items.map(it => ({ ...it, uses: it.uses + (m.perks.includes("grenadier") && (it.id === "flashbang" || it.id === "smoke" || it.id === "frag") ? 1 : 0) })),
-      cls: m.cls, perks: [...m.perks], traits: [...m.traits], minHp: m.hp, gun: { ...m.gun }, witnessed: 0, panics: 0, streak: 0, bestStreak: 0 }));
-  });
-  // the D-Class work detail starts beside the squad
+  // On a breach, Site Security is first on the scene and Epsilon-11 follows later; elsewhere the squad goes in together.
+  const first = setup.kind === "breach" ? setup.guards ?? [] : setup.squad;
   const near: Pt[] = [];
   for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++)
     if (tileAt(x, y) === FLOOR && def.squadSpawns.some(([sx, sy]) => Math.max(Math.abs(sx - x), Math.abs(sy - y)) <= 2)) near.push([x, y]);
+  first.forEach((m, i) => {
+    const [x, y] = i < def.squadSpawns.length ? def.squadSpawns[i] : claim(near);
+    taken.add(x + "," + y);
+    units.push(spawnMember(m, x, y, setup.mods));
+  });
+  // the D-Class work detail starts beside the squad
   setup.dclass.forEach((name, i) => {
     const [x, y] = claim(near);
     units.push(mk({ id: "d" + (i + 1), side: "dclass", call: name, name, x, y, hp: 5, maxHp: 5, san: PROFILE.dclass.maxSan, blinkMod: setup.mods.blinkBonus }));
   });
 
   // SCP-173 (if present) and the Insurgency start in different rooms.
-  const scpRoom = has173 ? pick(def.scpRooms) : null;
+  // a breach starts at the cell itself (the middle north room on wing C); a manhunt could be anywhere
+  const scpRoom = !has173 ? null : setup.kind === "breach" && def.scpRooms.length > 1 ? def.scpRooms[1] : pick(def.scpRooms);
   const [sx, sy] = scpRoom ? claim(floorTiles(scpRoom)) : [0, 0];
   const ciRooms = def.insurgentRooms.filter(r => r !== scpRoom);
   const ciRoom = pick(ciRooms);
@@ -86,6 +106,11 @@ export function createMission(setup: MissionSetup) {
     lastSeen: null, raidersActive: setup.kind === "strike", mem: new Map(), checked: new Set(),
     known: new Set([...STARTING_NOTES, ...setup.known]), fresh: new Set(), log: [], effects: [],
     stats: { mtfLost: 0, dLost: 0, escaped: 0, raidersDown: 0 }, smoke: [], throwing: null, ability: null,
+    reinforce: setup.kind === "breach" ? [
+      ...(setup.lateGuards?.length ? [{ turn: 2, members: setup.lateGuards }] : []),
+      ...(setup.squad.length ? [{ turn: setup.mtfTurn ?? 30, members: setup.squad }] : []),
+    ] : [],
+    escapeDrive: 0, lockedUntil: 0, escaped: false,
   };
   setMission(state);
   setSmoke([]);
@@ -96,7 +121,7 @@ export function createMission(setup: MissionSetup) {
 }
 
 export const BRIEFINGS: Record<MissionKind, (s: MissionSetup) => string> = {
-  breach: s => `SCP-173 is loose somewhere in the north rooms. The transport container is open at the dock in the staging room: get it inside and seal it.${s.dclass.length ? ` ${s.dclass.join(" and ")} ${s.dclass.length > 1 ? "are" : "is"} assigned to you.` : ""}`,
+  breach: s => `SCP-173 is out of its cell in the north rooms. Site Security is first on the scene${s.lateGuards?.length ? `, with ${s.lateGuards.length} more guard${s.lateGuards.length > 1 ? "s" : ""} arriving next turn` : ""}. ${s.squad.length ? `Epsilon-11 arrives on turn ${s.mtfTurn}.` : "Epsilon-11 isn't coming: nobody is available."} The transport container is open at the dock in the staging room: get it inside and seal it. If it reaches the surface hatch in the east lab, it's gone; the panel at the east end of the corridor locks the hatch down.${s.dclass.length ? ` ${s.dclass.join(" and ")} ${s.dclass.length > 1 ? "are" : "is"} assigned to you.` : ""}`,
   manhunt: () => "SCP-173 is somewhere nearby, and the locals are out. Every civilian it kills makes the cover story harder. A truck with an open container is waiting: get it inside and seal it.",
   coverup: s => `${s.witnesses} witness${s.witnesses === 1 ? "" : "es"} saw something they shouldn't have. Reach each one and give them amnestics (Dose, 1 action, adjacent) before they get away. Anyone who spots the team will run for the edge of the map. Dose at least half for the job to count.`,
   strike: () => "An Insurgency cell is holed up here. Neutralise every Insurgent. Wounded ones can be secured as prisoners.",
@@ -111,9 +136,13 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
     incidentId: S.setup.incidentId,
     win, evacuated,
     turns: S.turn,
-    squad: S.units.filter(u => u.opId).map(u => ({ opId: u.opId!, alive: survives(u, win), hp: Math.max(1, u.hp), san: u.san, kills: u.kills, sealed: !!u.sealed,
+    escaped: S.escaped,
+    squad: [...S.units.filter(u => u.opId).map(u => ({ opId: u.opId!, alive: survives(u, win), hp: Math.max(1, u.hp), san: u.san, kills: u.kills, sealed: !!u.sealed,
       hasArmor: !!u.hasArmor, items: (u.items || []).map(i => ({ ...i })),
       witnessed: u.witnessed ?? 0, panics: u.panics ?? 0, minHp: u.minHp ?? u.hp, bestStreak: u.bestStreak ?? 0 })),
+      // anyone still on the way when it ended comes home untouched, with their gear
+      ...S.reinforce.flatMap(r => r.members).map(m => ({ opId: m.opId, alive: true, hp: m.hp, san: m.san, kills: 0, sealed: false, hasArmor: m.hasArmor,
+        items: m.items.map(i => ({ ...i })), witnessed: 0, panics: 0, minHp: m.hp, bestStreak: 0, absent: true }))],
     aftercare: S.units.some(u => u.opId && u.alive && !u.downed && u.perks?.includes("aftercare")),
     // incapacitated Insurgents: those restrained are taken; if the mission is won, everyone left down is too
     prisoners: S.units.filter(u => u.side === "raider" && u.alive && u.downed && (u.secured || win)).length,

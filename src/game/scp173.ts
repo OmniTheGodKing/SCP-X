@@ -7,8 +7,14 @@ import { kill } from "./combat";
 import { STRAY_BLINK, blinkChance, prof } from "./profiles";
 import { S, canSee, computeVis, full, fx, hooks, humans, isBlind, isPanicked, isTeam, log, loseSanity, occupied, reveal, seen, sleep, team } from "./state";
 import type { Unit } from "./types";
+import { MAPS } from "../data/maps";
 
 export const LUNGE = 8;
+/** Unseen turns without a kill before SCP-173 makes for the surface hatch. */
+export const ESCAPE_AT = 5;
+const hatchOf = () => MAPS[S.setup.map].hatch;
+/** It heads for the hatch once its drive is up, unless the hatch is locked down. */
+export const escaping = () => !!hatchOf() && S.escapeDrive >= ESCAPE_AT && S.lockedUntil < S.turn;
 
 export function rollBlinks() {
   const b = new Set<Unit>();
@@ -95,9 +101,20 @@ function killBy173(v: Unit) {
 function hunt(blinked: Set<Unit>) {
   const st = S.statue;
   if (watchedAt(st.x, st.y, blinked)) return null;
-  let budget = LUNGE, moved = 0;
+  let budget = LUNGE, moved = 0, kills = 0;
   for (let guard = 0; guard < 30 && budget > 0; guard++) {
     const seenNow = perceive(blinked);
+    const hatch = hatchOf();
+    if (hatch && escaping()) {
+      const next = stepToward([hatch]);
+      if (next) {
+        const r = step173([next], blinked);
+        budget--; moved++;
+        if (st.x === hatch[0] && st.y === hatch[1] && !r.frozen) { S.escaped = true; break; }
+        if (r.frozen) break;
+        continue;
+      }
+    }
     const res = bfs([[st.x, st.y]], budget, (x, y) => occupied(x, y, st));
 
     // easiest kill: someone in view who isn't looking, by the shortest route, preferring people on their own
@@ -116,7 +133,7 @@ function hunt(blinked: Set<Unit>) {
       const r = step173(pathTo(res, best.x, best.y) || [], blinked);
       budget -= r.steps; moved += r.steps;
       if (r.frozen) break;
-      killBy173(best.v); S.mem.delete(best.v.id);
+      killBy173(best.v); S.mem.delete(best.v.id); kills++;
       continue;
     }
 
@@ -126,15 +143,20 @@ function hunt(blinked: Set<Unit>) {
     budget--; moved++;
     if (r.frozen) break;
   }
-  return { moved };
+  return { moved, kills };
 }
 
 /** Lets SCP-173 act with the given people blinking. Returns false if someone still held it. */
 export async function release(blinked: Set<Unit>) {
   const st = S.statue, fromX = st.x, fromY = st.y, wasSeen = seen(st.x, st.y);
+  const before = escaping();
   const r = hunt(blinked);
   if (!r) return false;
+  // a free turn without a kill makes it restless; a kill keeps it busy here
+  S.escapeDrive = r.kills ? Math.max(0, S.escapeDrive - 2) : S.escapeDrive + 1;
   computeVis();
+  if (S.escaped) { log("SCP-173 reached the surface hatch. It is outside Site-19.", "bad"); hooks.update(); await sleep(450); return true; }
+  if (!before && escaping()) log("Something scrapes along the east lab floor, toward the surface hatch.", "bad");
   if (r.moved && wasSeen) {
     fx({ type: "ghost", x: fromX, y: fromY, dur: 1400 });
     if (!seen(st.x, st.y)) log("SCP-173 is no longer where it was.", "bad");

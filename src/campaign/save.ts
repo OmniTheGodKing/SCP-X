@@ -5,6 +5,7 @@ import type { Campaign } from "./campaign";
 import { newResearch } from "./research";
 import { HOME } from "../data/regions";
 import { newRegions } from "./world";
+import { newGuard } from "./security";
 import { startingModels } from "../data/weapons";
 
 const KEY = "site19-campaign-v2";
@@ -33,7 +34,14 @@ export function loadCampaign(): Campaign | null {
       for (const i of old.incidents) Object.assign(i, { region: HOME, map: i.kind === "breach" ? "wingC" : "town", civilians: i.kind === "breach" ? 0 : 3 });
       Object.assign(c, { version: 6, regions: newRegions(old.exposure), amnestics: 4, nextCoverupDay: old.day + 20 });
     }
-    return c.version === 6 ? (c as unknown as Campaign) : null;
+    if (c.version === 6) {
+      const old = c as unknown as Campaign;
+      Object.assign(c, { version: 7, guards: [], nextGuard: 1, alert: "normal" });
+      for (let i = 0; i < 2; i++) old.guards.push(newGuard(old));
+      // breaches used to wait for an answer; now they're dealt with on the spot, so give any open one a fresh day
+      for (const i of old.incidents) if (i.kind === "breach") i.expires = old.day;
+    }
+    return c.version === 7 ? (c as unknown as Campaign) : null;
   } catch {
     return null;
   }

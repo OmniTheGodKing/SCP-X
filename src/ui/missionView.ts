@@ -23,6 +23,8 @@ const ITEM_NAMES: Record<ItemId, string> = { armor: "Flak vest", eyedrops: "Eye 
 import type { MissionResult, Unit } from "../game/types";
 import { esc } from "./util";
 import { createRenderer } from "./render";
+import { ESCAPE_AT, escaping } from "../game/scp173";
+import { MAPS } from "../data/maps";
 
 const TEMPLATE = `
 <main class="wrap">
@@ -43,6 +45,7 @@ const TEMPLATE = `
       <canvas id="cv"></canvas>
       <div class="legend">
         <span style="--c: var(--mtf)">MTF Epsilon-11</span>
+        <span class="sq" style="--c: #9fb3c4">Site Security</span>
         <span style="--c: var(--subject)">D-Class</span>
         <span class="sq" style="--c: #cfc6a8">Civilian · W = witness</span>
         <span class="sq" style="--c: var(--raider)">Chaos Insurgency</span>
@@ -75,7 +78,7 @@ const TEMPLATE = `
         <div class="status-line" id="statusLine"></div>
       </div>
       <div class="card">
-        <div class="label">Mobile Task Force Epsilon-11 “Nine-Tailed Fox”</div>
+        <div class="label" id="squadLabel">Mobile Task Force Epsilon-11 “Nine-Tailed Fox”</div>
         <div class="squad" id="squad"></div>
       </div>
       <div class="card">
@@ -120,6 +123,10 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("fileCard").hidden = true;
     root.querySelectorAll<HTMLElement>(".rules > div").forEach(d => { if (d.id !== "objRule" && /SCP-173|Do not blink|Dragging|Blinks\./.test(d.textContent || "")) d.hidden = true; });
     $("statusLabel").textContent = "Objective";
+  }
+  if (kind === "breach") {
+    $("squadLabel").textContent = "Site Security and Epsilon-11";
+    $("objRule").innerHTML = `<b>Objective.</b> Get SCP-173 into the transport container at the dock in the southwest staging room, with nobody else inside, then seal it. Site Security starts on the scene; Epsilon-11 arrives later. If SCP-173 roams unseen for ${ESCAPE_AT} turns without a kill it heads for the surface hatch in the east lab, and if it gets there it's out of Site-19. Anyone at the panel at the east end of the corridor can spend both actions to lock the hatch for ${S.setup.mods.lockdownTurns} turns.`;
   }
   const cv = $("cv") as HTMLCanvasElement;
   const draw = createRenderer(cv);
@@ -212,6 +219,13 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
       line.innerHTML = `<b>Not in sight.</b>${tracked}<br>It is hunting. Anyone it catches not looking is in danger.`;
     }
 
+    // breach extras: when help arrives, and how close SCP-173 is to leaving
+    if (has173 && MAPS[S.setup.map].hatch && !S.sealed) {
+      const next = [...S.reinforce].sort((a, b) => a.turn - b.turn);
+      const locked = S.lockedUntil >= S.turn;
+      const threat = escaping() ? `<span class="warn">high: it is heading for the hatch</span>` : S.escapeDrive >= ESCAPE_AT - 2 ? "rising" : "low";
+      line.innerHTML += `<br>Escape threat: <b>${threat}</b> · Hatch ${locked ? `<b>locked</b> through turn ${S.lockedUntil}` : "open"}${next.length ? `<br>${next.map(r => `${r.members[0].guard ? "Guards" : "Epsilon-11"} (${r.members.length}) arrive turn ${r.turn}`).join(" · ")}` : ""}`;
+    }
     const ops = S.units.filter(u => u.side === "mtf");
     const ds = S.units.filter(u => u.id.startsWith("d") || u.joined);
     $("squad").innerHTML = ops.map(card).join("") + (ds.length ? `<h3>D-Class work detail</h3>` + ds.map(card).join("") : "");
