@@ -1,5 +1,6 @@
 // Site-19 Command: incidents and time, the base and its containment, and Epsilon-11's roster.
 import { STAFF_EVENTS, answerStaff } from "../campaign/staff";
+import type { Report } from "../campaign/reports";
 import { INSPECTION, inspectionChecks, inspectionSoon } from "../campaign/inspection";
 import {
   UPGRADE, canUpgrade, upgradeFacility, RECREATION, canAddRecreation, addRecreation, DEMOLISH, canDemolish, demolish, demolishDays, demolishLeavesShort, ENGINEER_COST, EXCAVATE, FACILITIES, nameInText, GRADE_NAMES, MAX_LEVELS, REPAIR, SLOTS, build, canBuild, canExcavate, canRepair,
@@ -140,6 +141,23 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   const tabBtn = (t: Tab, label: string) => `<button type="button" class="tab ${tab === t ? "on" : ""}" data-tab="${t}" aria-pressed="${tab === t}">${label}</button>`;
 
   // ---------- Command ----------
+  function reportFile(r: Report) {
+    return `<div class="file report">
+      <div class="label">SCP Foundation · Incident report ${esc(r.number)}</div>
+      <h2>${esc(r.title)} <small>${r.win ? "Closed" : "Failed"}</small></h2>
+      <div class="specs">Date: ${dateText(r.day)} · Location: ${esc(r.location)}${r.anomaly ? ` · Anomaly: ${esc(r.anomaly)}` : ""}</div>
+      <div class="specs">Personnel: ${esc(r.personnel.join(", ") || "none")}</div>
+      ${r.account.map(t => `<p>${esc(t)}</p>`).join("")}
+      <div class="specs">Filed by Site-19 Command.</div></div>`;
+  }
+  function archiveCard() {
+    const a = c.archive ?? [];
+    if (!a.length) return "";
+    return `<div class="card"><div class="label">Archive · ${plural(a.length, "incident report")}</div>
+      ${reportFile(a[0])}
+      ${a.slice(1).map(r => `<details class="archived"><summary>Incident ${esc(r.number)} · ${dateText(r.day)} · ${esc(r.title)} · ${r.win ? "closed" : "failed"}</summary>${reportFile(r)}</details>`).join("")}</div>`;
+  }
+
   function staffCard() {
     const e = c.staffEvent;
     if (!e) return "";
@@ -167,6 +185,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         ${c.incidents.length ? c.incidents.map(incidentCard).join("") : `<p class="muted">No open incidents. Let time run to see what happens next.</p>`}
       </div>
       ${inc ? planPanel(inc) : ""}
+      ${archiveCard()}
       <div class="card">
         <div class="label">Global exposure</div>
         <div class="exposure"><div class="exp-bar"><span style="width:${c.exposure}%"></span></div><b>${c.exposure} / 100</b></div>

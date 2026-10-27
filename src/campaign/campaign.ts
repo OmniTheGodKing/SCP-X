@@ -12,6 +12,7 @@ import { addExposure, collapsedCount, COLLAPSE_LIMIT, newRegions, regionFunding,
 import { ALERTS, breachGuards, guardMember, guardsReady, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
 import { monthlyStaff, tickStaff, type StaffEvent } from "./staff";
 import { tickInspection } from "./inspection";
+import { buildReport, type Report } from "./reports";
 import { newsFor } from "./news";
 import { CLASS_WEAPONS, WEAPON_TIERS, model, startingModels, type AmmoId, type AttachmentId, type WeaponType } from "../data/weapons";
 
@@ -156,6 +157,8 @@ export interface Campaign {
   moleArmor?: boolean;
   /** The day of the next O5 inspection. */
   inspectionDay?: number;
+  /** Incident reports, newest first. */
+  archive?: Report[];
 }
 
 // Perks per rank: steadier aim, fewer blinks, more composure.
@@ -674,6 +677,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   }
   // the Insurgency punishes towns that helped the Foundation
   if (capture && Math.random() < 0.25) (c.retaliations ??= []).push({ region: inc!.region, day: c.day + rand(3, 10) });
+  (c.archive ??= []).unshift(buildReport(c, inc, r));
   checkOver(c);
   return { lines, promotions };
 }

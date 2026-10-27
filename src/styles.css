@@ -282,3 +282,6 @@ ul.traits button { margin-left: 6px; padding: 4px 8px; }
 .notice ul.debrief li.good { color: #2f5a35; }
 .facpanel { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 10px; display: grid; gap: 8px; }
 .facpanel .card { padding: 0; border: 0; background: none; }
+.file.report { margin-top: 6px; }
+details.archived { margin-top: 8px; }
+details.archived summary { cursor: pointer; font-family: var(--font-mono); font-size: 12px; padding: 4px 0; }
