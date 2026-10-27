@@ -69,7 +69,7 @@ export function abilityTargets(u: Unit, p: AbilityId): Unit[] {
       return S.has049 && !S.sealed && d.alive && cheb(u.x, u.y, d.x, d.y) <= 3 && canSee(u, d.x, d.y) ? [d] : [];
     }
     case "panel": {
-      const pn = MAPS[S.setup.map].panel;
+      const pn = L.def.panel;
       return pn && S.has173 && !S.sealed && !u.staring && S.lockedUntil < S.turn && cheb(u.x, u.y, pn[0], pn[1]) <= 1 ? [u] : [];
     }
     case "ally": return team().filter(a => adjacent(u, a) && (p === "medkit" ? a.hp < a.maxHp && a.side === "mtf" : a.san < maxSanOf(a)));

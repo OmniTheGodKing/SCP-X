@@ -12,7 +12,7 @@ import { MAPS } from "../data/maps";
 export const LUNGE = 8;
 /** Unseen turns without a kill before SCP-173 makes for the surface hatch. */
 export const ESCAPE_AT = 5;
-const hatchOf = () => MAPS[S.setup.map].hatch;
+const hatchOf = () => L.def.hatch;
 /** It heads for the hatch once its drive is up, unless the hatch is locked down. */
 export const escaping = () => !!hatchOf() && S.escapeDrive >= ESCAPE_AT && S.lockedUntil < S.turn;
 

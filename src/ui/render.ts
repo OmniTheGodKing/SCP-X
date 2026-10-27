@@ -107,7 +107,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
 
   // The surface hatch SCP-173 can escape through, and the panel that locks it
   function drawHatch() {
-    const def = MAPS[S.setup.map];
+    const def = L.def;
     if (!S.has173 || !def.hatch || !def.panel) return;
     const [hx, hy] = def.hatch, [px, py] = def.panel, locked = S.lockedUntil >= S.turn;
     ctx.fillStyle = locked ? "#4f5c68" : escaping() && !S.sealed ? "rgba(215,91,71,0.55)" : "#3b3226";
