@@ -196,5 +196,7 @@ export interface MissionState {
   escapeDrive: number;
   lockedUntil: number;
   escaped: boolean;
+  /** Debug menu switches. */
+  debug?: { freeze173?: boolean; place173?: boolean; kill?: boolean };
   result?: MissionResult;
 }

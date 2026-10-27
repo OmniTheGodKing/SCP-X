@@ -110,6 +110,8 @@ export interface Campaign {
   stats: { won: number; lost: number; missed: number };
   activeIncident?: string;
   over?: string;
+  /** Set once the debug menu has changed this campaign. */
+  debug?: boolean;
 }
 
 // Perks per rank: steadier aim, fewer blinks, more composure.

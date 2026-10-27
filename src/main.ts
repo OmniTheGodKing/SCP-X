@@ -11,6 +11,7 @@ import type { MissionKind, MissionResult } from "./game/types";
 import { mountHub } from "./ui/hubView";
 import { mountMission } from "./ui/missionView";
 import { esc } from "./ui/util";
+import { mountDebug } from "./ui/debug";
 
 const root = document.getElementById("app")!;
 let campaign: Campaign = loadCampaign() ?? newCampaign();
@@ -38,7 +39,9 @@ function debriefHtml(r: MissionResult, d: Debrief, kind: MissionKind) {
     </dl>`;
 }
 
+let screen: "hub" | "mission" = "hub";
 function showHub() {
+  screen = "hub";
   mountHub(root, campaign, {
     save: () => saveCampaign(campaign),
     newCampaign: () => { clearCampaign(); campaign = newCampaign(); saveCampaign(campaign); showHub(); },
@@ -58,6 +61,7 @@ function showHub() {
       }
       saveCampaign(campaign);
       createMission(setup);
+      screen = "mission";
       mountMission(root, showHub, result => {
         const d = applyResult(campaign, result);
         saveCampaign(campaign);
@@ -73,4 +77,5 @@ function showHub() {
   get campaign() { return campaign; },
 };
 
+mountDebug({ campaign: () => campaign, screen: () => screen, refresh: () => { saveCampaign(campaign); if (screen === "hub") showHub(); } });
 showHub();

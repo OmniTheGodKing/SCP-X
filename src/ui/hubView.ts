@@ -92,6 +92,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <span class="pill">Engineers ${engineersFree(c)}/${c.engineers} free</span>
       <span class="pill">Researchers ${researchersFree(c)}/${c.researchers} free</span>
       <span class="pill ${pw ? "hot" : ""}">Power ${powerUse(c)}/${powerSupply(c)}</span>
+      ${c.debug ? `<span class="pill hot">Debug save</span>` : ""}
       <button class="act" id="resetBtn" type="button">New campaign</button>
     </div>
   </header>

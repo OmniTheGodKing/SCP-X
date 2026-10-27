@@ -1,7 +1,7 @@
 // Anomalies held at Site-19: daily breach risk, cell cleaning, breaches, and escapes.
 import { FACILITIES, isContainment, nameInText, neighbors, operational, powerShort, type Facility } from "./base";
 import { has } from "./research";
-import { HOME, REGIONS, REGION_IDS } from "../data/regions";
+import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, travelDays } from "./world";
 import { log, type Campaign, type Incident } from "./campaign";
 import { GUARD, type Guard } from "./security";
@@ -61,7 +61,7 @@ export function breachRisk(c: Campaign, s: ScpRecord) {
 }
 
 
-function startBreach(c: Campaign, s: ScpRecord, cause: string) {
+export function startBreach(c: Campaign, s: ScpRecord, cause: string) {
   const wing = wingOf(c, s)!;
   s.status = "breach";
   const inc: Incident = {
@@ -85,9 +85,9 @@ export function goDark(c: Campaign, s: ScpRecord, why: string, from = "Site-19")
   log(c, `${why} ${s.name} has slipped away from ${from}. Nobody knows where it is.`, "bad");
 }
 
-function resurface(c: Campaign, s: ScpRecord) {
+export function resurface(c: Campaign, s: ScpRecord, at?: RegionId) {
   const open = REGION_IDS.filter(r => !c.regions[r].collapsed);
-  const region = open[rand(0, open.length - 1)] ?? HOME;
+  const region = at ?? open[rand(0, open.length - 1)] ?? HOME;
   const towns = REGIONS[region].towns, where = towns[rand(0, towns.length - 1)];
   const inc: Incident = {
     id: "inc" + c.nextIncident,

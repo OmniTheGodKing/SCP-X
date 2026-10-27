@@ -183,6 +183,7 @@ export function selectNext() {
 /** Tap/click on a tile. On touch, the first tap previews and the second confirms. */
 export async function onTap(x: number, y: number, touch: boolean, flash: (t: string) => void) {
   if (!canAct()) return;
+  if (S.debug?.place173 || S.debug?.kill) { debugTap(x, y); return; }
   const u = unitAt(x, y);
   const sel = S.selected;
   const confirm = () => {
@@ -430,7 +431,7 @@ export async function endTurn() {
 }
 
 async function anomalyPhase() {
-  if (!S.has173 || S.sealed) return;
+  if (!S.has173 || S.sealed || S.debug?.freeze173) return;
   for (const m of starers()) { loseSanity(m, prof(m).drain, "sight"); reveal("mind"); }
   insurgentsStare();
   computeVis();
@@ -471,6 +472,31 @@ export function evacuate() {
   log(S.has173 ? "Epsilon-11 pulls out. SCP-173 is still loose." : "Epsilon-11 pulls out before the job is done.", "bad");
   finish(false, true);
 }
+
+// ---------- debug menu hooks ----------
+function debugTap(x: number, y: number) {
+  const d = S.debug!;
+  if (d.place173) {
+    if (!passable(x, y) || S.units.some(u => u.alive && !u.saved && u !== S.statue && u.x === x && u.y === y)) return;
+    S.statue.x = x; S.statue.y = y; d.place173 = false;
+    log("Debug: SCP-173 moved.", "key");
+  } else if (d.kill) {
+    const u = S.units.find(v => v.alive && !v.saved && v.x === x && v.y === y && v !== S.statue);
+    if (!u) return;
+    kill(u); d.kill = false;
+    log(`Debug: ${u.name} killed.`, "key");
+  }
+  computeVis();
+  if (!checkEnd()) hooks.update();
+}
+export function debugFinish(win: boolean) { if (!S.over) finish(win, false); }
+export function debugArrive() {
+  for (const r of S.reinforce) r.turn = S.turn;
+  arrivals(false);
+  for (const m of team()) if (m.ap === 0 && !isPanicked(m)) m.ap = m.staring ? 1 : 2;
+  computeVis(); hooks.update();
+}
+export function debugAfter() { computeVis(); if (!checkEnd()) hooks.update(); }
 
 function finish(win: boolean, evacuated: boolean) {
   S.over = true; S.phase = "over";
