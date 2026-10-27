@@ -69,7 +69,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   const SPEEDS = [1, 2, 4], DAY_MS = 4000;
   const hourText = () => `${String(Math.floor(c.hour ?? 0)).padStart(2, "0")}:00`;
   const clockBlocked = () => !!c.over || !!pendingBreach(c) || !!c.notices?.length;
-  const setSpeed = (n: number) => { if (!(n > 0 && clockBlocked())) { speed = n; if (n) lastSpeed = n; } render(); };
+  const setSpeed = (n: number) => { if (n > 0 && tab !== "world") { render(); return; } if (!(n > 0 && clockBlocked())) { speed = n; if (n) lastSpeed = n; } render(); };
 
   const ready = () => c.roster.filter(deployable);
   const watchPool = () => guardsReady(c);
@@ -154,7 +154,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     <section class="col">
       <div class="card">
         <div class="label">Time · ${speed ? `running at ${speed}×` : "paused"}</div>
-        <p class="muted">Time runs from the World tab. Space pauses or resumes from any tab.</p>
+        <p class="muted">Time only passes while the World tab is open. Leaving it pauses the clock.</p>
         <button class="act" type="button" data-goto="world">Open the world map</button>
       </div>
       <div class="card">
@@ -197,7 +197,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   }
 
   function planPanel(inc: Incident) {
-    const ops = ready(), t = travelDays(c, inc.region), noD = inc.kind === "strike";
+    const ops = ready(), t = travelDays(c, inc.region), noD = inc.kind === "strike" || inc.kind === "coverup";
     return `<div class="card plan">
       <div class="label">Deploy to ${esc(inc.title.split(":")[0])}</div>
       <p>${esc(KIND_BRIEF[inc.kind])}</p>
@@ -281,7 +281,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
           ${SPEEDS.map((n, i) => `<button class="act ${speed === n ? "on" : ""}" type="button" data-speed="${n}" aria-pressed="${speed === n}" ${clockBlocked() ? "disabled" : ""}>${n}× <kbd>${i + 1}</kbd></button>`).join("")}
         </div>
         ${pendingBreach(c) ? `<p class="warn">A breach is under way. Deal with it before time moves on.</p>` : ""}
-        <p class="muted">At 1× a day passes every ${DAY_MS / 1000} seconds. The clock pauses itself when something needs you. Next month: $${monthlyFunding(c)}k from the fronts, $${monthlyUpkeep(c)}k upkeep, up to ${DCLASS_MONTHLY} D-Class. Operatives heal ${healPerDay(c)} HP and recover ${sanityPerDay(c)} sanity a day.</p>
+        <p class="muted">At 1× a day passes every ${DAY_MS / 1000} seconds. The clock pauses itself when something needs you. Next month: $${monthlyFunding(c)}k from the fronts, $${monthlyUpkeep(c)}k upkeep and salaries, up to ${DCLASS_MONTHLY} D-Class. Operatives heal ${healPerDay(c)} HP and recover ${sanityPerDay(c)} sanity a day.</p>
       </div>
     <div class="card worldcard">
         <div class="label">The world · ${dateText(c.day)} · global exposure ${c.exposure} · ${collapsedCount(c)} of ${COLLAPSE_LIMIT} fronts lost</div>
@@ -512,7 +512,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <p class="muted">Guards are first on the scene of every breach and the only ones you control until Epsilon-11 arrives. Weaker than operatives: aim around 55, ${GUARD.maxSan} sanity, ${GUARD.hp} HP, no armor, and they blink more. Each Security station houses ${GUARD.perStation}. After ${PROMOTE.breaches} breaches a guard can train into Epsilon-11.</p>
       ${alive.length ? `<ul class="memorial">${alive.map(row).join("")}</ul>` : `<p class="warn">No guards. A breach would have nobody to answer it.</p>`}
       ${dead ? `<p class="muted">${plural(dead, "guard")} killed on duty.</p>` : ""}
-      <div class="row"><button class="act" id="hireGuardBtn" type="button" ${gw || c.over ? `disabled title="${esc(gw || "")}"` : ""}>Hire guard · $${GUARD.cost}k</button>${gw ? `<span class="muted">${esc(gw)}</span>` : ""}</div>
+      <div class="row"><button class="act" id="hireGuardBtn" type="button" ${gw || c.over ? `disabled title="${esc(gw || "")}"` : ""}>Hire guard · $${GUARD.cost}k · $5k a month</button>${gw ? `<span class="muted">${esc(gw)}</span>` : ""}</div>
     </div>`;
   }
 
@@ -525,7 +525,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         <div class="label">Epsilon-11 roster</div>
         <p class="muted">Select an operative to see their class, perks and traits.</p>
         <div class="roster">${c.roster.filter(o => o.alive).map(opRow).join("")}</div>
-        <div class="row"><button class="act" id="recruitBtn" type="button" ${c.funds < RECRUIT_COST || c.over ? "disabled" : ""}>Recruit operative · $${RECRUIT_COST}k</button></div>
+        <div class="row"><button class="act" id="recruitBtn" type="button" ${c.funds < RECRUIT_COST || c.over ? "disabled" : ""}>Recruit operative · $${RECRUIT_COST}k · $10k a month</button></div>
       </div>
     </section>
     <section class="col">
@@ -632,6 +632,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     root.querySelectorAll<HTMLElement>("[data-tab],[data-goto]").forEach(b => b.onclick = () => {
       flashMsg = "";
       tab = (b.dataset.tab || b.dataset.goto) as Tab;
+      if (tab !== "world") speed = 0;   // time only passes on the world map
       try { localStorage.setItem("site19-tab", tab); } catch { /* fine */ }
       render();
     });
@@ -716,7 +717,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         const g = gearOf(id);
         return { opId: id, armor: g.armor, items: g.items.filter((i): i is ItemId => !!i) };
       });
-      act.deploy(inc, loadouts, inc.kind === "strike" ? 0 : dCount);
+      act.deploy(inc, loadouts, inc.kind === "strike" || inc.kind === "coverup" ? 0 : dCount);
     });
     on("resetBtn", () => {
       const b = $("resetBtn")!;
@@ -749,14 +750,18 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         newDay = true;
         if (clockBlocked()) { speed = 0; c.hour = 0; break; }
       }
-      if (newDay) { act.save(); render(); }
+      if (newDay) { act.save(); if (busyField()) redrawLater = true; else render(); }
       else { const el = document.getElementById("clockHour"); if (el) el.textContent = hourText(); }
     }
     requestAnimationFrame(tick);
   };
+  let redrawLater = false;
+  const busyField = () => { const a = document.activeElement; return !!a && root.contains(a) && a.matches("select,input,textarea"); };
+  root.addEventListener("focusout", () => { if (redrawLater) { redrawLater = false; setTimeout(() => { if (!busyField()) render(); else redrawLater = true; }, 0); } });
   const onKey = (e: KeyboardEvent) => {
     const t = e.target as HTMLElement;
     if (!stillHere() || (t.closest && t.closest("input,textarea,select"))) return;
+    if (tab !== "world") return;
     if (e.key === " ") { e.preventDefault(); setSpeed(speed ? 0 : lastSpeed); }
     else if (["1", "2", "3"].includes(e.key)) setSpeed(SPEEDS[Number(e.key) - 1]);
   };

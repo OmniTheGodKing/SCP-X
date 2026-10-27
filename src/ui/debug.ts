@@ -197,7 +197,8 @@ export function mountDebug(host: DebugHost) {
     else if (t.matches("[data-dbg-year]")) {
       // jumps the calendar without simulating the days in between
       const d = dayOfYear(Number(t.value));
-      if (d > c.day) { c.day = d; c.debug = true; log(c, `Debug: the calendar jumps to ${dateText(d)}.`, "key"); host.refresh(); }
+      // land the day before and run one real day, so expiries and the month tick happen
+      if (d > c.day) { c.day = d - 1; advanceDay(c); c.debug = true; log(c, `Debug: the calendar jumps to ${dateText(d)}.`, "key"); host.refresh(); }
       else note = "Jumping only goes forward.";
     }
     render();

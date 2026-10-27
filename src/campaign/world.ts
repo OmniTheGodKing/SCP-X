@@ -36,7 +36,7 @@ export function addExposure(c: Campaign, r: RegionId, n: number) {
 
 export const collapsedCount = (c: Campaign) => REGION_IDS.filter(r => c.regions[r].collapsed).length;
 export const regionFunding = (c: Campaign, r: RegionId) =>
-  c.regions[r].collapsed ? 0 : Math.max(5, Math.round(400 / REGION_IDS.length - c.regions[r].exposure * 0.5));
+  c.regions[r].collapsed ? 0 : Math.max(3, Math.round(200 / REGION_IDS.length - c.regions[r].exposure * 0.25));
 
 export const transportName = (c: Campaign) => has(c, "c130") ? "C-130 Hercules" : has(c, "c119") ? "C-119 Flying Boxcar" : "C-47 Skytrain";
 export function travelDays(c: Campaign, r: RegionId) {

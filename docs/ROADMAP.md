@@ -10,14 +10,9 @@ Order and contents are open to change.
 - World map: regional exposure, fronts, travel, manhunts, cover-ups, strikes, amnestics.
 - Site Security guards, immediate breaches, alert levels, SCP-173 escaping through the hatch.
 - Debug menu, running clock with pause and speeds (controls on the World tab).
-
-## Phase 3A: polish and fixes
-
-- Hub redraws once per game day while time runs, closing any open dropdown. Update only what changed.
-- Jumping the calendar with the debug menu leaves open incidents unexpired until the next day.
-- Decide whether D-Class should go on cover-ups (in public) or only on breaches and manhunts.
-- Economy balance: money piles up when nothing goes wrong (about $3.6M after a quiet year).
-- Decide whether time should only run while the World tab is open (as in XCOM 2) or on every tab.
+- Phase 3A: time only passes on the World tab; no D-Class on cover-ups; tighter economy (about $200k funding,
+  salaries of $10k per operative and $5k per guard, later research at 1.5× cost); day changes no longer close an
+  open dropdown; the debug calendar jump runs one real day so expiries happen.
 
 ## Phase 3B: new anomalies through field recovery
 

@@ -124,7 +124,7 @@ Built in pass 2E:
 
 ### Running clock
 
-Time on the hub runs on its own, like the XCOM 2 Avenger scan. Pause, 1×, 2× and 4× (Space, 1, 2, 3); at 1× a day takes 4 seconds. Daily systems still tick once per day at midnight. The clock pauses with a notice for new incidents, breaches, unanswered incidents, finished research, construction or workshop orders, promotions, finished therapy or training, collapsed fronts and the monthly report. Opening a deployment plan pauses it, and it starts paused whenever the hub opens.
+Time on the hub runs on its own, like the XCOM 2 Avenger scan, and only while the World tab is open. Pause, 1×, 2× and 4× (Space, 1, 2, 3); at 1× a day takes 4 seconds. Daily systems still tick once per day at midnight. The clock pauses with a notice for new incidents, breaches, unanswered incidents, finished research, construction or workshop orders, promotions, finished therapy or training, collapsed fronts and the monthly report. Opening a deployment plan pauses it, and it starts paused whenever the hub opens.
 
 ### Debug menu
 
