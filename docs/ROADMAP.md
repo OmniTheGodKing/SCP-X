@@ -106,6 +106,10 @@ retaliation (done); (5) doors and sirens (done).
   enlisted ladder: Private, Private First Class, Corporal, Sergeant, Sergeant First Class, Master Sergeant, Sergeant Major.
 - (Done) Guards who pass Epsilon-11 selection join as Privates; Selection cadre research makes them Privates First
   Class.
+- (Done) Research only appears once everything behind it is in place (finished prerequisites, the test, the anomaly
+  held, the first material brought back, the year), and many projects also wait for missions won (2 to 6) or a
+  milestone (first power failure, a veteran guard, first Insurgency fight, first fire). New projects get a notice.
+  12 projects are open at the start.
 - (Done) SCP-173 tests are paid up front ($20k/$30k/$50k) and take researcher-days (5/8/12) like other research; the
   cell work happens on the last day, watched by the guards chosen at the start. One test at a time.
 - (Done) D-Class morale: overcrowding, deaths and termination orders lower it, a recreation room raises it, and below

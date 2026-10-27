@@ -207,6 +207,7 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
     infectedLost: S.units.filter(u => u.opId && (u.infectedTurn !== undefined || u.flesh)).length,
     coreBurned: !!S.core && S.core.hp <= 0,
     riotersKilled: S.units.filter(u => u.rioter && !u.alive).length,
+    hadFire: !!S.hadFire,
     photos: [...S.photos],
     restraints: S.units.some(u => u.side === "mtf" && u.items?.some(i => i.id === "restraints")),
     zombiesKilled: S.units.filter(u => u.side === "zombie" && !u.alive).length,

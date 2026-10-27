@@ -33,6 +33,10 @@ export interface ProjectDef {
   needsMaterial?: [MaterialId, number];
   /** Only offered now and then, and only for a while (War of the Chosen breakthroughs). */
   breakthrough?: boolean;
+  /** Hidden until this many missions have been won (XCOM: research opens up as the war goes on). */
+  afterWon?: number;
+  /** Hidden until something has happened at least once (see Campaign.milestones). */
+  afterMilestone?: Milestone;
   /** A weapon model this project makes available for refitting. */
   model?: string;
   attachment?: AttachmentId;
@@ -42,26 +46,33 @@ export interface ProjectDef {
   desc: string;
 }
 
+/** Things that have happened at least once and open up research. */
+export type Milestone = "power_failure" | "guard_veteran" | "insurgents" | "fire";
+export const MILESTONES: Record<Milestone, string> = {
+  power_failure: "after the first power failure", guard_veteran: "once a guard has survived 3 breaches",
+  insurgents: "after the first fight with the Chaos Insurgency", fire: "after the first fire on a mission",
+};
+
 export const PROJECTS: Record<string, ProjectDef> = {
   blink_cadence:      { name: "Blink cadence protocol", branch: "SCP-173", days: 30, cost: 60, needsTest: "endurance", desc: "Staff are drilled to blink on a count. Everyone staring at SCP-173 blinks 2% less often." },
   movement_study:     { name: "Movement study", branch: "SCP-173", days: 40, cost: 80, needsTest: "movement", desc: "During missions, shows which room SCP-173 is in even when nobody can see it." },
   containment_rev:    { name: "Containment procedure revision", branch: "SCP-173", days: 40, cost: 80, needsTest: "material", desc: "SCP-173's breach risk −25%, and its cell gets dirty half as fast." },
   rapid_response:     { name: "Rapid response protocol", branch: "SCP-173", days: 30, cost: 50, needs: ["movement_study"], desc: "Epsilon-11 reaches a breach 5 turns sooner at every alert level." },
   ocular_lubricant:   { name: "Ocular lubricant", branch: "Personnel", days: 20, cost: 40, needsTest: "endurance", unlocks: "eyedrops", desc: "Unlocks eye drops: the carrier ignores one blink while staring." },
-  selection_cadre:    { name: "Selection cadre", branch: "Personnel", days: 20, cost: 60, desc: "A permanent cadre runs Epsilon-11 selection for Site Security. Guards who pass join as Privates First Class instead of Privates." },
+  selection_cadre:    { name: "Selection cadre", branch: "Personnel", days: 20, cost: 60, afterMilestone: "guard_veteran", desc: "A permanent cadre runs Epsilon-11 selection for Site Security. Guards who pass join as Privates First Class instead of Privates." },
   trauma_counseling:  { name: "Trauma counseling", branch: "Personnel", days: 30, cost: 60, desc: "Operatives recover 3 more sanity on quiet turns during missions." },
-  marksmanship:       { name: "Advanced marksmanship", branch: "Personnel", days: 30, cost: 60, desc: "+5 aim for every operative." },
+  marksmanship:       { name: "Advanced marksmanship", branch: "Personnel", days: 30, cost: 60, afterWon: 2, desc: "+5 aim for every operative." },
   body_armor:         { name: "M1951 flak vest", branch: "Equipment", days: 25, cost: 50, unlocks: "armor", armorTier: 1, desc: "Issue the Korean War flak vest: +2 HP and 1 armor point, which cuts the damage of every hit by 1." },
   m69_vest:           { name: "M69 fragmentation vest", branch: "Equipment", days: 60, cost: 180, from: 1967, needs: ["body_armor"], armorTier: 2, desc: "A lighter, stronger vest: +3 HP and 1 armor point. Every vest is refitted in the workshop." },
   ceramic_plate:      { name: "Foundation ceramic plate", branch: "Equipment", days: 90, cost: 300, needs: ["body_armor"], needsTest: "material", armorTier: 3, desc: "Ceramic armor developed from Site-19's materials work: +4 HP and 2 armor points. Every vest is refitted in the workshop." },
   frag:               { name: "M26 fragmentation grenade", branch: "Equipment", days: 15, cost: 30, unlocks: "frag", desc: "Unlocks frag grenades: 3 damage to everyone within a tile of the blast, and it destroys desks and other half cover." },
-  flashbangs:         { name: "Foundation stun grenade", branch: "Equipment", days: 20, cost: 40, unlocks: "flashbang", desc: "A Foundation prototype decades ahead of its time. It blinds everyone in the blast, including anyone holding SCP-173." },
+  flashbangs:         { name: "Foundation stun grenade", branch: "Equipment", days: 20, cost: 40, afterWon: 2, unlocks: "flashbang", desc: "A Foundation prototype decades ahead of its time. It blinds everyone in the blast, including anyone holding SCP-173." },
   smoke:              { name: "M18 smoke grenade", branch: "Equipment", days: 15, cost: 30, unlocks: "smoke", desc: "Unlocks smoke. It blocks sight for two turns, including sight of SCP-173." },
   motion_tracker:     { name: "Seismic intrusion sensor", branch: "Equipment", days: 50, cost: 140, from: 1966, unlocks: "tracker", desc: "A portable ground sensor of the kind fielded in Vietnam: the carrier detects anything within 6 tiles, through walls." },
   att_scope:          { name: "Telescopic sights", branch: "Weapons", days: 20, cost: 40, attachment: "scope", desc: "Weapon attachment: +5 aim." },
-  att_trigger:        { name: "Match trigger groups", branch: "Weapons", days: 25, cost: 50, attachment: "trigger", desc: "Weapon attachment: +10% crit." },
-  att_extmag:         { name: "Extended magazines", branch: "Weapons", days: 20, cost: 40, attachment: "extmag", desc: "Weapon attachment: +1 round." },
-  att_stock:          { name: "Padded stocks", branch: "Weapons", days: 20, cost: 40, attachment: "stock", desc: "Weapon attachment: a miss still does 1 damage." },
+  att_trigger:        { name: "Match trigger groups", branch: "Weapons", days: 25, cost: 50, afterWon: 4, attachment: "trigger", desc: "Weapon attachment: +10% crit." },
+  att_extmag:         { name: "Extended magazines", branch: "Weapons", days: 20, cost: 40, afterWon: 2, attachment: "extmag", desc: "Weapon attachment: +1 round." },
+  att_stock:          { name: "Padded stocks", branch: "Weapons", days: 20, cost: 40, afterWon: 2, attachment: "stock", desc: "Weapon attachment: a miss still does 1 damage." },
   w_m60:              { name: "M60 machine gun", branch: "Weapons", days: 70, cost: 210, from: 1955, model: "m60", desc: "Replaces the BAR: 5–6 damage, 5 rounds." },
   w_m14:              { name: "M14 rifle", branch: "Weapons", days: 70, cost: 210, from: 1957, model: "m14", desc: "Replaces the M1 Garand: 4–6 damage, 5 rounds." },
   w_m16:              { name: "M16 rifle", branch: "Weapons", days: 80, cost: 240, from: 1962, needs: ["w_m14"], model: "m16", desc: "Replaces the M14: 4–6 damage, 6 rounds, +5 aim." },
@@ -76,20 +87,20 @@ export const PROJECTS: Record<string, ProjectDef> = {
   c130:               { name: "C-130 Hercules", branch: "Site", days: 60, cost: 180, from: 1954, needs: ["c119"], desc: "A long-range turboprop transport. Travel to other regions takes half the time a C-47 would." },
   pestilence_theory:  { name: "Pestilence theory", branch: "SCP-049", days: 30, cost: 60, needsScp: "049", desc: "Interviews with SCP-049 about the \"Pestilence\" it claims to see. Calming it holds for two turns instead of one." },
   necrotic_study:     { name: "Necrotic tissue study", branch: "SCP-049", days: 40, cost: 80, needsScp: "049", needsMaterial: ["tissue", 1], desc: "Autopsies on SCP-049-2 tissue lead to better wound care. Operatives and guards heal 1 HP a day faster." },
-  keter_containment:  { name: "Keter-grade containment", branch: "Site", days: 50, cost: 150, desc: "Designs for cells that can hold the worst anomalies: lead-lined, suspended, and wired for electromagnets. Keter-grade wings can be built." },
+  keter_containment:  { name: "Keter-grade containment", branch: "Site", days: 50, cost: 150, afterWon: 6, desc: "Designs for cells that can hold the worst anomalies: lead-lined, suspended, and wired for electromagnets. Keter-grade wings can be built." },
   em_containment:     { name: "Electromagnetic containment", branch: "SCP-106", days: 40, cost: 120, needsScp: "106", needs: ["keter_containment"], desc: "Electromagnets around SCP-106's cell hold it in place. Its breach risk drops by 30%." },
   pocket_study:       { name: "Pocket dimension study", branch: "SCP-106", days: 50, cost: 120, needsScp: "106", needsMaterial: ["survivors", 1], desc: "Interviews with the few who came back map parts of the pocket dimension. People SCP-106 takes come back half the time instead of a quarter." },
   // ---- the research expansion ----
-  psych_screening:    { name: "Psychological screening", branch: "Personnel", days: 30, cost: 70, desc: "Better selection and preparation. Operatives get +10 max sanity, and a quarter of new recruits arrive Steady." },
-  field_medicine:     { name: "Field medicine", branch: "Personnel", days: 30, cost: 60, desc: "Medkits heal 4 instead of 3, and a stabilized operative gets back on their feet at 1 HP." },
+  psych_screening:    { name: "Psychological screening", branch: "Personnel", days: 30, cost: 70, afterWon: 4, desc: "Better selection and preparation. Operatives get +10 max sanity, and a quarter of new recruits arrive Steady." },
+  field_medicine:     { name: "Field medicine", branch: "Personnel", days: 30, cost: 60, afterWon: 2, desc: "Medkits heal 4 instead of 3, and a stabilized operative gets back on their feet at 1 HP." },
   field_radios:       { name: "SCR-300 field radios", branch: "Equipment", days: 30, cost: 60, desc: "Backpack radios tie Site Security to Epsilon-11. Epsilon-11 reaches breaches 3 turns sooner, and overwatch shots lose only 10 aim." },
   prc25:              { name: "AN/PRC-25 radios", branch: "Equipment", days: 40, cost: 120, from: 1962, needs: ["field_radios"], desc: "Lighter radios with better range. Epsilon-11 reaches breaches 2 more turns sooner." },
   night_optics:       { name: "AN/PVS-2 night optics", branch: "Equipment", days: 50, cost: 150, from: 1962, desc: "Starlight scopes. Operatives see 2 tiles farther." },
-  classb_amnestics:   { name: "Class-B amnestics", branch: "Site", days: 40, cost: 90, desc: "A stronger, more targeted formula. Cover stories need 1 dose instead of 2, and amnestics labs make twice as many." },
+  classb_amnestics:   { name: "Class-B amnestics", branch: "Site", days: 40, cost: 90, afterWon: 3, desc: "A stronger, more targeted formula. Cover stories need 1 dose instead of 2, and amnestics labs make twice as many." },
   auto_cleaning:      { name: "Automated cell cleaning", branch: "Site", days: 40, cost: 120, from: 1960, desc: "Remote scrubbing arms do the work. Cleanings no longer put D-Class at risk." },
-  cell_lock:          { name: "Cell lock override", branch: "Site", days: 30, cost: 70, desc: "The D-Class block stays locked when the breach alarm cuts the power. Only one D-Class gets loose in a breach instead of four." },
+  cell_lock:          { name: "Cell lock override", branch: "Site", days: 30, cost: 70, afterWon: 2, desc: "The D-Class block stays locked when the breach alarm cuts the power. Only one D-Class gets loose in a breach instead of four." },
   front_accounting:   { name: "Front company accounting", branch: "Site", days: 30, cost: 80, desc: "The fronts learn to hide more money. +10% funding from every region that hasn't collapsed." },
-  sigint:             { name: "Signals intelligence", branch: "Site", days: 40, cost: 100, desc: "Listening posts pick up Insurgency traffic. +1 Intel a month." },
+  sigint:             { name: "Signals intelligence", branch: "Site", days: 40, cost: 100, afterWon: 4, desc: "Listening posts pick up Insurgency traffic. +1 Intel a month." },
   interrogation:      { name: "Interrogation techniques", branch: "Insurgency", days: 30, cost: 60, needsMaterial: ["prisoners", 1], desc: "Prisoners give up Intel twice as fast." },
   codebooks:          { name: "Insurgency codebooks", branch: "Insurgency", days: 30, cost: 70, needsMaterial: ["intelTotal", 5], desc: "Locating a cell costs 2 Intel instead of 3, and incidents show exactly how many Insurgents to expect." },
   weapon_analysis:    { name: "Captured weapon analysis", branch: "Insurgency", days: 30, cost: 70, needsMaterial: ["ciWeapons", 3], desc: "Knowing their guns means knowing where armor helps. Insurgents get −5 aim against operatives wearing armor." },
@@ -97,30 +108,30 @@ export const PROJECTS: Record<string, ProjectDef> = {
   foundation_arms:    { name: "Foundation special issue", branch: "Weapons", days: 50, cost: 200, needs: ["weapon_analysis"], weaponTier: 2, desc: "Foundation armorers hand-fit every weapon, using what was learned from Insurgency guns. All weapons: +1 damage, +5 aim. Refit in the workshop." },
   coil_weapons:       { name: "Electromagnetic coil weapons", branch: "Weapons", days: 90, cost: 350, needs: ["foundation_arms", "em_containment"], weaponTier: 3, desc: "SCP-106's electromagnets, scaled down to a rifle. All weapons: +2 damage, +5 aim, and every hit ignores 1 armor point. Refit in the workshop." },
   m79:                { name: "M79 grenade launcher", branch: "Weapons", days: 40, cost: 120, from: 1959, desc: "Grenadiers fire grenades 4 tiles farther." },
-  ammo_ap:            { name: "Armor-piercing rounds", branch: "Weapons", days: 25, cost: 60, ammo: "ap", desc: "Special ammunition: hits ignore 1 armor point. Built in the workshop, loaded on the Personnel tab." },
-  ammo_tracer:        { name: "Tracer rounds", branch: "Weapons", days: 20, cost: 40, ammo: "tracer", desc: "Special ammunition: +10 aim on overwatch shots." },
-  ammo_hollow:        { name: "Hollow-point rounds", branch: "Weapons", days: 25, cost: 50, ammo: "hollow", desc: "Special ammunition: critical hits do 1 more damage." },
-  ammo_sedative:      { name: "Sedative rounds", branch: "Weapons", days: 35, cost: 80, ammo: "sedative", desc: "Foundation special ammunition: Insurgents, civilians and loose D-Class brought to 0 HP are knocked out instead of killed." },
-  att_suppressor:     { name: "Suppressors", branch: "Weapons", days: 25, cost: 50, attachment: "suppressor", desc: "Weapon attachment: shots make no noise." },
+  ammo_ap:            { name: "Armor-piercing rounds", branch: "Weapons", days: 25, cost: 60, afterMilestone: "insurgents", afterWon: 5, ammo: "ap", desc: "Special ammunition: hits ignore 1 armor point. Built in the workshop, loaded on the Personnel tab." },
+  ammo_tracer:        { name: "Tracer rounds", branch: "Weapons", days: 20, cost: 40, afterWon: 4, ammo: "tracer", desc: "Special ammunition: +10 aim on overwatch shots." },
+  ammo_hollow:        { name: "Hollow-point rounds", branch: "Weapons", days: 25, cost: 50, afterWon: 4, ammo: "hollow", desc: "Special ammunition: critical hits do 1 more damage." },
+  ammo_sedative:      { name: "Sedative rounds", branch: "Weapons", days: 35, cost: 80, afterWon: 6, ammo: "sedative", desc: "Foundation special ammunition: Insurgents, civilians and loose D-Class brought to 0 HP are knocked out instead of killed." },
+  att_suppressor:     { name: "Suppressors", branch: "Weapons", days: 25, cost: 50, afterWon: 5, attachment: "suppressor", desc: "Weapon attachment: shots make no noise." },
   att_bayonet:        { name: "Bayonets", branch: "Weapons", days: 15, cost: 20, attachment: "bayonet", desc: "Weapon attachment: a sure 3-damage thrust against an adjacent enemy, using no ammo." },
   att_sights:         { name: "Improved sights", branch: "Weapons", days: 30, cost: 70, needs: ["att_scope"], attachment: "sights", desc: "Weapon attachment: +10 aim." },
   // ---- armor and kit ----
-  light_armor:        { name: "Recon smocks", branch: "Equipment", days: 20, cost: 40, needs: ["body_armor"], unlocks: "armor_light", desc: "Light armor: less protection, +1 move." },
-  heavy_armor:        { name: "Heavy plate", branch: "Equipment", days: 30, cost: 70, needs: ["body_armor"], unlocks: "armor_heavy", desc: "Heavy armor: +2 HP and +1 armor point over the vest, −1 move, and it carries heavy weapons." },
-  hazmat_suit:        { name: "Hazmat suits", branch: "Equipment", days: 25, cost: 50, unlocks: "hazmat", desc: "Sealed suits. SCP-106's rot does nothing to the wearer." },
+  light_armor:        { name: "Recon smocks", branch: "Equipment", days: 20, cost: 40, afterWon: 3, needs: ["body_armor"], unlocks: "armor_light", desc: "Light armor: less protection, +1 move." },
+  heavy_armor:        { name: "Heavy plate", branch: "Equipment", days: 30, cost: 70, afterWon: 3, needs: ["body_armor"], unlocks: "armor_heavy", desc: "Heavy armor: +2 HP and +1 armor point over the vest, −1 move, and it carries heavy weapons." },
+  hazmat_suit:        { name: "Hazmat suits", branch: "Equipment", days: 25, cost: 50, afterWon: 2, unlocks: "hazmat", desc: "Sealed suits. SCP-106's rot does nothing to the wearer." },
   lead_suit:          { name: "Lead-lined suits", branch: "SCP-106", days: 40, cost: 120, needsScp: "106", needs: ["hazmat_suit"], unlocks: "leadsuit", desc: "SCP-106 needs to hold the wearer for two turns to drag them under." },
   m20:                { name: "M20 super bazooka", branch: "Weapons", days: 30, cost: 80, needs: ["heavy_armor"], unlocks: "bazooka", desc: "Heavy weapon for heavy armor: 5 damage in a blast, out to 10 tiles." },
   m72:                { name: "M72 LAW", branch: "Weapons", days: 30, cost: 100, from: 1961, needs: ["m20"], unlocks: "law", desc: "A light one-shot rocket: 4 damage in a blast, out to 8 tiles. Cheaper to build." },
   flares:             { name: "M127 signal flares", branch: "Equipment", days: 10, cost: 20, unlocks: "flare", desc: "Throwable flares that light a 2-tile radius for 3 turns on night missions. Throwing one gives the team away." },
-  incendiaries:       { name: "M14 incendiary grenades", branch: "Equipment", days: 20, cost: 50, unlocks: "incendiary", desc: "Thermite grenades that set an area alight." },
-  ammo_incendiary:    { name: "Incendiary rounds", branch: "Weapons", days: 25, cost: 60, ammo: "incendiary", desc: "Special ammunition: hits set the target's tile alight for a turn." },
+  incendiaries:       { name: "M14 incendiary grenades", branch: "Equipment", days: 20, cost: 50, afterMilestone: "fire", unlocks: "incendiary", desc: "Thermite grenades that set an area alight." },
+  ammo_incendiary:    { name: "Incendiary rounds", branch: "Weapons", days: 25, cost: 60, afterMilestone: "fire", ammo: "incendiary", desc: "Special ammunition: hits set the target's tile alight for a turn." },
   m2_flamer:          { name: "M2 flamethrower", branch: "Weapons", days: 40, cost: 120, needs: ["heavy_armor"], unlocks: "flamer", desc: "Heavy weapon for heavy armor: a jet of burning fuel. The surest way to burn out SCP-610." },
   containment_suit:   { name: "Containment suits", branch: "Equipment", days: 35, cost: 120, needsMaterial: ["outbreaks", 1], unlocks: "contsuit", desc: "Sealed suits for working on SCP-610's flesh. A blow from an instance can still tear one." },
   medkits:            { name: "Field medkits", branch: "Equipment", days: 15, cost: 30, unlocks: "medkit", desc: "A medkit anyone can use once: heal themselves or an adjacent ally." },
-  cs_gas:             { name: "CS gas grenades", branch: "Equipment", days: 20, cost: 40, unlocks: "csgas", desc: "Tear gas: −30 aim for Insurgents and civilians caught in it." },
-  field_camera:       { name: "Field cameras", branch: "Equipment", days: 20, cost: 40, unlocks: "camera", desc: "Photograph an anomaly mid-mission; the film speeds up research on it." },
+  cs_gas:             { name: "CS gas grenades", branch: "Equipment", days: 20, cost: 40, afterWon: 2, unlocks: "csgas", desc: "Tear gas: −30 aim for Insurgents and civilians caught in it." },
+  field_camera:       { name: "Field cameras", branch: "Equipment", days: 20, cost: 40, afterWon: 2, unlocks: "camera", desc: "Photograph an anomaly mid-mission; the film speeds up research on it." },
   restraint_kit:      { name: "Restraint kit", branch: "Equipment", days: 20, cost: 40, needsMaterial: ["prisoners", 1], unlocks: "restraints", desc: "Secure from 2 tiles, and each prisoner yields 1 more Intel." },
-  amnestic_darts:     { name: "Amnestic darts", branch: "Equipment", days: 30, cost: 70, unlocks: "darts", desc: "A dart pistol loaded with amnestics: Dose witnesses from up to 4 tiles." },
+  amnestic_darts:     { name: "Amnestic darts", branch: "Equipment", days: 30, cost: 70, afterWon: 4, unlocks: "darts", desc: "A dart pistol loaded with amnestics: Dose witnesses from up to 4 tiles." },
   guard_vests:        { name: "Guard flak vests", branch: "Equipment", days: 25, cost: 60, needs: ["body_armor"], desc: "Site Security gets vests too: +1 HP and 1 armor point for every guard. Refit in the workshop." },
   // ---- breakthroughs: offered now and then, for 30 days ----
   bt_barrels:         { name: "Breakthrough: lapped barrels", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Service rifles do +1 damage." },
@@ -131,7 +142,7 @@ export const PROJECTS: Record<string, ProjectDef> = {
   bt_cold_storage:    { name: "Breakthrough: cold storage", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Each amnestics lab stores 5 more doses." },
   bt_jigs:            { name: "Breakthrough: production jigs", branch: "Breakthrough", days: 10, cost: 30, breakthrough: true, desc: "Workshop items cost half as much." },
   efficient_gen:      { name: "Efficient generators", branch: "Site", days: 30, cost: 70, desc: "Each generator supplies 15 power instead of 10." },
-  backup_gen:         { name: "Backup generators", branch: "Site", days: 25, cost: 60, desc: "Containment wings get their own backup supply: a power shortage no longer doubles breach risk or lets cells fail." },
+  backup_gen:         { name: "Backup generators", branch: "Site", days: 25, cost: 60, afterMilestone: "power_failure", desc: "Containment wings get their own backup supply: a power shortage no longer doubles breach risk or lets cells fail." },
 };
 
 export interface TestDef { name: string; cost: number; days: number; risk: number; breach: number; dclass: number; desc: string; notes: string[]; }
@@ -196,6 +207,8 @@ export interface ResearchState {
   progress: Record<string, number>;
   assigned: Record<string, number>;
   tests: TestId[];
+  /** Projects the player has already been told about. */
+  seen?: string[];
   /** The test under way: its D-Class are already in holding for it, and these guards will watch the cell work. */
   testing?: { id: TestId; watchers: string[] };
   /** A breakthrough on offer, and a project inspired to take half the time, each until a day. */
@@ -227,6 +240,33 @@ export function projectDays(c: Campaign, id: string) {
 /** What a project costs to start: 10% less in the year after Sputnik. */
 export const projectCost = (c: Campaign, id: string) => Math.round(PROJECTS[id].cost * (newsActive(dateOf(c.day), "sputnik") ? 0.9 : 1));
 export const offered = (c: Campaign, id: string) => c.research.offer?.id === id || c.research.paid.includes(id);
+
+/** Whether a project shows on the research list at all: everything behind it has to be in place first. Projects
+ *  that need material show once the first of it is brought back, with the rest still to collect. */
+export function projectVisible(c: Campaign, id: string) {
+  const p = PROJECTS[id], r = c.research;
+  if (has(c, id) || r.paid.includes(id) || (r.progress[id] ?? 0) > 0) return true;
+  if (p.breakthrough) return offered(c, id);
+  if ((p.needs ?? []).some(n => !has(c, n))) return false;
+  if (p.needsTest && !r.tests.includes(p.needsTest)) return false;
+  if (p.needsScp && !c.scps.some(s => s.id === p.needsScp)) return false;
+  if (p.needsMaterial && (c.materials[p.needsMaterial[0]] ?? 0) < 1) return false;
+  if (p.from && yearOf(c.day) < p.from) return false;
+  if (p.afterWon && c.stats.won < p.afterWon) return false;
+  if (p.afterMilestone && !(c.milestones ?? []).includes(p.afterMilestone) && !(p.afterMilestone === "fire" && (c.materials.outbreaks ?? 0) > 0)) return false;
+  return true;
+}
+/** Record that something happened; research it opens appears on the next day's tick. */
+export function reachMilestone(c: Campaign, m: Milestone) { if (!(c.milestones ??= []).includes(m)) c.milestones.push(m); }
+/** New projects that have just become visible get a notice, as in XCOM. The first call only takes stock. */
+function announceResearch(c: Campaign) {
+  const r = c.research, now = Object.keys(PROJECTS).filter(id => !PROJECTS[id].breakthrough && projectVisible(c, id));
+  if (!r.seen) { r.seen = now; return; }
+  const fresh = now.filter(id => !r.seen!.includes(id));
+  if (!fresh.length) return;
+  r.seen.push(...fresh);
+  log(c, `New research available: ${fresh.map(id => PROJECTS[id].name).join(", ")}.`, "good", "research");
+}
 
 export function projectLock(c: Campaign, id: string): string | null {
   const p = PROJECTS[id];
@@ -278,6 +318,7 @@ export function hireResearcher(c: Campaign) {
 /** One day of research and workshop production. */
 export function tickResearch(c: Campaign) {
   const r = c.research;
+  announceResearch(c);
   // researchers beyond lab space (a lab was damaged) stop working on the newest assignments
   while (researchersAssigned(c) > Math.min(c.researchers, researcherCapacity(c))) {
     const k = Object.keys(r.assigned).reverse().find(k => r.assigned[k] > 0)!;
