@@ -6,6 +6,7 @@ import { addExposure, travelDays } from "./world";
 import { dateOf, dclassDied, log, type Campaign, type Incident } from "./campaign";
 import type { ScpId } from "../game/types";
 import { GUARD, type Guard } from "./security";
+import { noteMissed } from "./council";
 
 export type ScpClass = "Safe" | "Euclid" | "Keter";
 const CLASS_GRADE: Record<ScpClass, number> = { Safe: 0, Euclid: 1, Keter: 2 };
@@ -29,7 +30,7 @@ export interface ScpRecord {
   name: string;
   title: string;
   cls: ScpClass;
-  status: "contained" | "breach" | "loose" | "away";
+  status: "contained" | "breach" | "loose" | "away" | "leaving";
   /** While held at another site for safekeeping: the day it comes back. */
   returnDay?: number;
   wingId: string;
@@ -49,6 +50,7 @@ export function breachRisk(c: Campaign, s: ScpRecord) {
   const why: string[] = [];
   const wing = wingOf(c, s);
   if (s.status !== "contained" || !wing) return { p: 0, why };
+  if (isInert(s)) { why.push("An object: it doesn't breach"); return { p: 0, why }; }
   let p = BASE_RISK[s.cls];
   why.push(`${s.cls} class: ${Math.round(p * 100)}% base`);
   const grade = FACILITIES[wing.type].grade ?? 0, need = CLASS_GRADE[s.cls];
@@ -186,6 +188,7 @@ export function tickContainment(c: Campaign) {
   for (const s of c.scps) {
     if (s.status === "contained") {
       s.maintenance = Math.max(0, s.maintenance - decay(c));
+      if (isInert(s)) continue;
       if (c.cleaningOrder && c.day - s.lastCleaned >= CLEAN_EVERY && c.dclass >= CLEAN_CREW) clean(c, s, "A routine cleaning");
       if (Math.random() < breachRisk(c, s).p) startBreach(c, s, "Containment alarm.");
     } else if (s.status === "away") {
@@ -199,7 +202,7 @@ export function tickContainment(c: Campaign) {
     const s = c.scps.find(x => x.id === inc.scpId);
     if (inc.first && c.day > inc.expires && inc.id !== c.activeIncident) {
       // a new anomaly nobody went for: it moves on, and turns up somewhere else later
-      c.incidents = c.incidents.filter(i => i !== inc); addExposure(c, inc.region, 10); c.stats.missed++;
+      c.incidents = c.incidents.filter(i => i !== inc); addExposure(c, inc.region, 10); noteMissed(c, inc.title.split(":")[0]);
       c.sightings[inc.scpId as ScpId] = c.day + rand(60, 150);
       log(c, `${inc.title.split(":")[0]} went unanswered (+10 exposure in ${REGIONS[inc.region].name}). Whatever it was has moved on.`, "bad", "command");
       continue;
@@ -208,7 +211,7 @@ export function tickContainment(c: Campaign) {
     const drop = () => { c.incidents = c.incidents.filter(i => i !== inc); };
     // breaches are answered on the spot, so only sightings can run out of time
     if (inc.kind === "recovery" && c.day > inc.expires) {
-      drop(); addExposure(c, inc.region, 15); c.stats.missed++;
+      drop(); addExposure(c, inc.region, 15); noteMissed(c, inc.title.split(":")[0]);
       log(c, `${inc.title.split(":")[0]} went unanswered.`, "bad", "command");
       goDark(c, s, `The sighting went unanswered (+15 exposure in ${REGIONS[inc.region].name}).`, REGIONS[inc.region].name);
     }
@@ -289,11 +292,16 @@ export function moveScp(c: Campaign, s: ScpRecord, to: Facility, watchers: Guard
 
 // ---- new anomalies: first sightings in the world ----
 
-export const SCP_DEFS: Record<ScpId, { name: string; title: string; cls: ScpClass; sighting: string }> = {
+/** `inert`: an object that never breaches or needs cleaning (Safe-class objects that only arrive by transfer). */
+export const SCP_DEFS: Record<ScpId, { name: string; title: string; cls: ScpClass; sighting: string; inert?: boolean; use?: string }> = {
   "173": { name: "SCP-173", title: "The Sculpture", cls: "Euclid", sighting: "" },
   "049": { name: "SCP-049", title: "The Plague Doctor", cls: "Euclid", sighting: "a man in a plague doctor's mask, and patients who stopped breathing" },
   "106": { name: "SCP-106", title: "The Old Man", cls: "Keter", sighting: "an old man seen walking through a cellar wall, and people missing from locked rooms" },
+  "500": { name: "SCP-500", title: "Panacea", cls: "Safe", sighting: "", inert: true, use: "A pill cures an operative of every wound and every bad trait, from its cell on the Site-19 tab. There are only a few." },
+  "914": { name: "SCP-914", title: "The Clockworks", cls: "Safe", sighting: "", inert: true, use: "Once a week it can refine a piece of equipment into something better, from its cell on the Site-19 tab. It doesn't always work." },
+  "005": { name: "SCP-005", title: "The Skeleton Key", cls: "Safe", sighting: "", inert: true, use: "It opens Insurgency strongboxes: every Insurgency cell broken yields 1 more Intel." },
 };
+export const isInert = (s: { id: string }) => !!SCP_DEFS[s.id as ScpId]?.inert;
 export const scpName = (id: string) => SCP_DEFS[id as ScpId]?.name ?? `SCP-${id}`;
 /** The first sighting of each anomaly not yet found: SCP-049 turns up some time in 1952. */
 export const firstSightings = (): Partial<Record<ScpId, number>> => ({ "049": rand(215, 580), "106": rand(580, 945) });

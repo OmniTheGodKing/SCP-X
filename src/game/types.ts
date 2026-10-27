@@ -22,7 +22,7 @@ export interface Carried { id: ItemId; uses: number; }
 
 export type Side = "mtf" | "dclass" | "subject" | "civilian" | "raider" | "anomaly" | "zombie";
 /** Anomalies a mission can be about. */
-export type ScpId = "173" | "049" | "106";
+export type ScpId = "173" | "049" | "106" | "500" | "914" | "005";
 /** Raids: the Insurgency pulls back if the lift still holds at the end of this turn. */
 export const RAID_TURNS = 14;
 export type MissionKind = "breach" | "manhunt" | "coverup" | "strike" | "escort" | "retaliation" | "outbreak" | "riot" | "raid";

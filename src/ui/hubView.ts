@@ -4,6 +4,8 @@ import { parseCampaign } from "../campaign/save";
 import type { Report } from "../campaign/reports";
 import { WEATHER, type Weather } from "../data/weather";
 import { MIN_RANGE } from "../game/perks";
+import { AUDIT_BELOW, PARTNERS, PAY_FOR, REQUESTS, answerOffer, canAcceptOffer, canRequest, canSendAway, councilGrant, directiveProgress, directiveText, makeRequest, rewardText, sendAway, tierOf, type RequestId } from "../campaign/council";
+import { REFINE_EVERY, canGivePill, canRefine, givePill, pillsLeft, refine, refineRecipes } from "../campaign/objects";
 import { TERRITORY, localHour, missionWeather, weatherAt, weatherLine, nightAt, nightPolygon, AMNESTIC_TEAM, BURY, FACILITIES_WORLD, FIELD_OPS, INVESTIGATE, buryCost, buryStory, canBury, canSendTeam, incidentName, sendAmnesticsTeam, briefing, canFieldOp, canInvestigate, groupOf, incidentPlace, incidentState, investigate, startFieldOp, type FieldOpKind, type MarkerGroup } from "../campaign/geo";
 import { MEDALS } from "../data/bios";
 import { LEANS, QUALITY, UNITS, nationalityOf } from "../data/units";
@@ -17,14 +19,14 @@ import {
 } from "../campaign/base";
 import {
   DCLASS_COST, DCLASS_MONTHLY, RANKS, RANK_XP, TRAINER, retire, trainerWhy, RANK_BONUS, RECRUIT_COST, advanceDay, aimOf, blinkFullOf, buyDClass,
-  canBuyDClass, canHireEngineer, dayOfMonth, deployable, hireEngineer, maxSanOf, monthOf, monthlyFunding, canHire, candidateCost, hireCandidate, lookOf, trainersActive,
+  canBuyDClass, canHireEngineer, dayOfMonth, deployable, hireEngineer, maxSanOf, monthOf, monthlyFunding, frontsFunding, canHire, candidateCost, hireCandidate, lookOf, trainersActive,
   INTEL_PER_PRISONER, INTERROGATION_DAYS, interrogationDays, PRISONER_BOUNTY, holdingCapacity, canRetrain, canTherapy, canWeaken, dateText, fitAttachment, gunFor, loadAmmo, setWeapon, weaken, weaponOf, weaponOptions, chooseClass, choosePerk, perkChoices, promotionDue, startRetrain, startTherapy,
   pendingBreach, type Campaign, type Incident, type Loadout, type Operative,
 } from "../campaign/campaign";
 import { CLASSES, PERKS, TRAITS, type ClassId, type PerkId, type TraitId } from "../data/classes";
 import { AMMO, ATTACHMENTS, SIDEARM, TYPES, model, type AmmoId, type AttachmentId, type WeaponType } from "../data/weapons";
 import {
-  CLEAN_CREW, CLEAN_EVERY, CLEAN_RISK, EVAC, breachRisk, canClean, canEvacuate, canMove, cleanCell, evacuate, freeWings, moveScp, occupantOf, transferOut, unpowered, wingOf, workRisk,
+  CLEAN_CREW, CLEAN_EVERY, CLEAN_RISK, EVAC, SCP_DEFS, isInert, scpName, breachRisk, canClean, canEvacuate, canMove, cleanCell, evacuate, freeWings, moveScp, occupantOf, transferOut, unpowered, wingOf, workRisk,
   type ScpRecord,
 } from "../campaign/containment";
 import {
@@ -34,7 +36,7 @@ import {
 } from "../campaign/research";
 import { HOME, LAND, REGIONS, REGION_IDS, SITE19, project, type RegionId } from "../data/regions";
 import {
-  COLLAPSE_LIMIT, COVER_STORY, coverDoses, locateIntel, amnesticsCapacity, canCoverStory, canLocate, collapsedCount, coverStory, locateCell,
+  COLLAPSE_LIMIT, COVER_STORY, CONTACT, LINKS, canContact, contactCost, isContacted, makeContact, coverDoses, locateIntel, amnesticsCapacity, canCoverStory, canLocate, collapsedCount, coverStory, locateCell,
   flightOut, regionFunding, transportName, travelBlock, travelDays,
 } from "../campaign/world";
 import {
@@ -142,6 +144,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       <span class="pill">Funds $${c.funds}k</span>
       <span class="pill">D-Class ${c.dclass}/${dclassCapacity(c)}</span>
       <span class="pill">Intel ${c.intel}</span>
+      <span class="pill ${c.council.standing < AUDIT_BELOW ? "hot" : c.council.standing < 40 ? "warm" : ""}" title="Standing with the O5 Council: ${esc(tierOf(c.council.standing).name)}. It sets the Council's monthly grant ($${councilGrant(c)}k now) and what Site-19 can ask for. See the Command tab.">Standing ${c.council.standing}</span>
       <span class="pill" title="Guards alive / posts at working Security stations">Guards ${guardsAlive(c).length}/${guardCapacity(c)}${unposted(c).length ? ` · ${unposted(c).length} unposted` : ""}</span>
       <span class="pill">Amnestics ${c.amnestics}/${amnesticsCapacity(c)}</span>
       <span class="pill ${c.exposure >= 60 || collapsedCount(c) ? "hot" : ""}">Exposure ${c.exposure}${collapsedCount(c) ? ` · ${collapsedCount(c)} lost` : ""}</span>
@@ -210,6 +213,28 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       <p class="muted">Left unanswered, the second choice is taken.</p></div>`;
   }
 
+  function councilCard() {
+    const k = c.council, t = tierOf(k.standing);
+    const open = k.directives.filter(d => !d.state);
+    return `<div class="card council">
+      <div class="label">O5 Council · standing ${k.standing} · ${esc(t.name)}${k.audit ? ` · <span class="warn">audit ${dateText(c.inspectionDay!)}</span>` : ""}</div>
+      <div class="exposure"><div class="exp-bar standing"><span style="width:${k.standing}%"></span></div><b>${k.standing} / 100</b></div>
+      <p class="muted">${esc(t.desc)} The Council grants $${councilGrant(c)}k a month (60 + standing${k.grantBonus ? ` + ${k.grantBonus}` : ""}); the fronts add $${frontsFunding(c)}k. Below ${AUDIT_BELOW} it sends an auditor.</p>
+      ${k.history.length ? `<details class="archived"><summary>Why it moved</summary><ul class="why">${k.history.slice(0, 12).map(h => `<li class="${h.n < 0 ? "warn" : ""}">${h.n > 0 ? "+" : ""}${h.n} · ${esc(h.why)} <span class="muted">(${dateText(h.day)})</span></li>`).join("")}</ul></details>` : ""}
+      <div class="label" style="margin-top:10px">Orders</div>
+      ${open.length ? `<ul class="orders">${open.map(d => `<li><b>${esc(directiveText(c, d))}</b> by ${dateText(d.due)} <span class="muted">· ${esc(directiveProgress(c, d))} · reward ${esc(rewardText(d.reward))}, +${d.standing} standing; failing costs 6</span></li>`).join("")}</ul>` : `<p class="muted">No orders open. New ones arrive on the first of the month.</p>`}
+      ${k.offers.map(o => { const w = canAcceptOffer(c, o); return `<div class="facpanel"><div class="label">Transfer ${o.kind === "order" ? "order" : "offer"} from ${esc(o.from)} · decide by ${dateText(o.until)}</div>
+        <p>${esc(o.text)}</p>
+        <div class="row"><button class="act primary" type="button" data-offer="${o.id}" data-yes="1" ${w ? `disabled title="${esc(w)}"` : ""}>${o.kind === "order" ? "Accept the transfer" : o.kind === "sale" ? `Sell it · +$${o.funds}k` : "Make the trade"}</button>
+          <button class="act" type="button" data-offer="${o.id}" data-yes="">${o.kind === "order" ? "Refuse (−6 standing)" : "Decline"}</button>${w ? `<span class="muted">${esc(w)}</span>` : ""}</div>
+        <p class="muted">Left unanswered, it ${o.kind === "order" ? "counts as refused" : "lapses"}.</p></div>`; }).join("")}
+      ${k.transit.length ? `<p class="muted">On the road: ${k.transit.map(t => `${esc(scpName(t.scp))} ${t.dir === "in" ? `from ${esc(t.site)}` : `to ${esc(t.site)}`}, arriving ${dateText(t.arrive)}`).join("; ")}.</p>` : ""}
+      <div class="label" style="margin-top:10px">Requests</div>
+      ${(Object.keys(REQUESTS) as RequestId[]).filter(id => k.standing >= REQUESTS[id].min - 15 || k.requests[id] !== undefined).map(id => { const q = REQUESTS[id], w = canRequest(c, id);
+        return `<div class="row"><button class="act" type="button" data-request="${id}" ${w ? `disabled title="${esc(w)}"` : ""}>${esc(q.name)}${q.cost ? ` · −${q.cost} standing` : ""}</button><span class="muted">${esc(w ? `${q.desc} ${w}` : q.desc)}</span></div>`; }).join("") || `<p class="muted">Raise standing to ${REQUESTS.funding.min} to start asking the Council for help.</p>`}
+    </div>`;
+  }
+
   function commandTab() {
     const inc = c.incidents.find(i => i.id === planning) || null;
     return `<div class="hubgrid">
@@ -218,6 +243,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         <p>${c.roster.filter(promotionDue).map(o => `<b>${esc(o.call)} ${esc(o.name)}</b>`).join(", ")} ${c.roster.filter(promotionDue).length > 1 ? "are" : "is"} waiting to choose ${c.roster.filter(promotionDue).some(o => !o.cls) ? "a class or perk" : "a perk"}.</p>
         <button class="act" type="button" data-goto="personnel">Open Personnel</button></div>` : ""}
       ${staffCard()}
+      ${councilCard()}
       ${inspectionSoon(c) ? `<div class="card plan"><div class="label">O5 inspection · ${dateText(c.inspectionDay!)}</div>
         <p>If the inspector came today: $${INSPECTION.perCheck}k for each check passed${inspectionChecks(c).filter(k => !k.ok).length >= INSPECTION.failAt ? `, and <span class="warn">$${INSPECTION.penalty}k docked</span> for failing ${INSPECTION.failAt} or more` : ""}.</p>
         <ul class="why">${inspectionChecks(c).map(k => `<li class="${k.ok ? "" : "warn"}">${k.ok ? "✓" : "✗"} ${esc(k.label)}</li>`).join("")}</ul></div>` : ""}
@@ -257,6 +283,11 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     const wing = wingOf(c, s);
     if (s.status === "loose") return `<div class="card status danger"><div class="label">${s.name} · ${s.title} · ${s.cls}</div>
       <div class="status-line"><b>Escaped.</b> Whereabouts unknown. Exposure rises every day it stays loose; it will surface somewhere eventually.</div></div>`;
+    if (s.status === "leaving") return `<div class="card status"><div class="label">${s.name} · ${s.title} · ${s.cls}</div>
+      <div class="status-line"><b>On the road</b> to ${esc(c.council.transit.find(t => t.scp === s.id)?.site ?? "another site")}, for good.</div></div>`;
+    if (isInert(s) && s.status === "contained") return `<div class="card status held"><div class="label">${s.name} · ${s.title} · ${s.cls}</div>
+      <div class="status-line"><b>Held</b> in the ${wing ? nameInText(wing.type) + ` on level ${wing.level + 1}` : "?"}. An object: it doesn't breach or need cleaning.${s.id === "500" ? ` ${plural(pillsLeft(c), "dose")} of SCP-500 left.` : ""}</div>
+      <button class="act" type="button" data-goto="site">Open its cell</button></div>`;
     if (s.status === "away") return `<div class="card status"><div class="label">${s.name} · ${s.title} · ${s.cls}</div>
       <div class="status-line"><b>Held at Site-17</b> for safekeeping. It comes back ${dateText(s.returnDay ?? c.day)}.</div></div>`;
     if (s.status === "breach") return `<div class="card status danger"><div class="label">${s.name} · ${s.title} · ${s.cls}</div>
@@ -270,11 +301,13 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
 
   function incidentCard(i: Incident) {
     const left = i.expires - c.day, t = flightOut(c, i), block = travelBlock(c, i), w = missionWeather(c, i);
-    const where = i.kind === "breach" ? "Inside Site-19" : `${REGIONS[i.region].name} · ${t ? `${plural(t, "day")} away` : "a drive from Site-19"}${w !== "clear" ? ` · ${WEATHER[w].name.toLowerCase()}` : ""}`;
+    const where = i.kind === "breach" ? "Inside Site-19" : `${REGIONS[i.region].name} · ${t ? `${plural(t, "day")} away` : "a drive from Site-19"}${w !== "clear" ? ` · ${WEATHER[w].name.toLowerCase()}` : ""}${isContacted(c, i.region) ? "" : " · no front"}`;
     return `<div class="incident ${planning === i.id ? "sel" : ""}">
       <div><b>${esc(i.title)}</b> <span class="flag">${KIND_NAMES[i.kind]}</span></div>
       <div class="muted">${left <= 0 ? "Last day to respond" : `${plural(left, "day")} left to respond`} · ${where} · Insurgency activity: ${has(c, "codebooks") ? `${i.insurgents - (i.weakened ?? 0)} Insurgents` : i.insurgents >= 4 ? "heavy" : i.insurgents >= 2 ? "reported" : i.insurgents ? "light" : "none reported"}${i.witnesses ? ` · ${i.witnesses} witnesses` : ""}</div>
       ${block ? `<div class="warn">${esc(block)}</div>` : ""}
+      ${i.reward ? `<div class="ok">Council reward for answering it: ${esc(rewardText(i.reward))}.</div>` : ""}
+      ${i.group ? `<div class="warn">Arrived with ${plural(c.incidents.filter(x => x.group === i.group && x !== i).length, "other incident")}: only one can be answered.</div>` : ""}
       ${i.kind === "breach" ? `<p class="muted">Happening now. ${guardsReady(c).length} guard${guardsReady(c).length === 1 ? "" : "s"} can respond; Epsilon-11 would arrive on turn ${mtfArrival(c, i)} (${ALERTS[c.alert].name.toLowerCase()} alert).</p>` : ""}
       <div class="row"><button class="act ${planning === i.id ? "on" : ""}" type="button" data-plan="${i.id}" ${c.over || block ? "disabled" : ""}>${i.kind === "breach" ? "Take command on the map" : "Open on the World Map"}</button>
       ${i.kind === "breach" ? `<button class="act" type="button" data-guards="${i.id}" ${c.over ? "disabled" : ""}>Let the guards handle it · ${pctText(guardOdds(c, i))} chance</button>` : ""}
@@ -282,11 +315,12 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     </div>`;
   }
 
+  const briefText = (i: Incident) => i.transfer ? `A transfer convoy bringing ${scpName(i.transfer.scp)} from ${i.transfer.site} is under attack an hour from Site-19. Whoever is fit to go has to hold the truck: neutralise the Insurgents or last 8 turns.` : KIND_BRIEF[i.kind];
   function planPanel(inc: Incident) {
     const ops = readyFor(inc), t = flightOut(c, inc), noD = inc.kind === "strike" || inc.kind === "coverup" || inc.kind === "escort" || inc.kind === "retaliation" || inc.kind === "outbreak" || inc.kind === "riot" || inc.kind === "raid";
     return `<div class="card plan">
       <div class="label">Deploy to ${esc(inc.title.split(":")[0])}</div>
-      <p>${esc(KIND_BRIEF[inc.kind])}</p>
+      <p>${esc(briefText(inc))}</p>
       ${nightAt(c, inc) ? `<p class="warn">Night there (${String(Math.floor(localHour(c.hour ?? 0, incidentPlace(inc).lon))).padStart(2, "0")}:00 local): deploying now means fighting in the dark (everyone sees 4 tiles less). Flares help. Wait for daylight on the World Map if you'd rather.</p>` : ""}
       ${missionWeather(c, inc) !== "clear" ? `<p class="warn">${esc(weatherLine(c, inc))}${nightAt(c, inc) ? ` This stacks with the dark, though nobody's sight drops below ${MIN_RANGE} tiles.` : ""}</p>` : ""}
       ${inc.kind === "breach" ? (() => { const g = breachGuards(c, inc); return `<p>Site Security: <b>${g.first.length}</b> on the scene${g.late.length ? `, ${g.late.length} more on turn 2` : ""}${g.first.length + g.late.length ? ` (${[...g.first, ...g.late].map(m => esc(m.name)).join(", ")})` : ". Nobody is fit to respond"}. Operatives you pick arrive on turn <b>${mtfArrival(c, inc)}</b>; D-Class are on site from the start.</p>`; })() : ""}
@@ -367,8 +401,16 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     // regions as territories: the land inside each region's boxes, tinted by its exposure
     const landPaths = LAND.map(p => path(p)).join(" ");
     const clips = REGION_IDS.map(r => `<clipPath id="terr-${r}">${TERRITORY[r].map(([w0, s0, e0, n0]) => { const [ax, ay] = project(w0, n0), [bx, by] = project(e0, s0); return `<rect x="${ax}" y="${ay}" width="${bx - ax}" height="${by - ay}"/>`; }).join("")}</clipPath>`).join("");
+    const LABEL_AT: Record<RegionId, [number, number]> = { west_us: [-118, 52], east_us: [-88, 30], latam: [-60, -14], europe: [2, 60], africa: [20, 2], east_asia: [140, 6] };
     const territories = REGION_IDS.map(r => { const st = c.regions[r];
-      return `<path d="${landPaths}" clip-path="url(#terr-${r})" class="terr ${st.collapsed ? "lost" : ""} ${selReg && regionSel === r ? "on" : ""}" style="--heat:${st.collapsed ? 100 : st.exposure};--base:${TERR_TINT[r]}" data-region="${r}" tabindex="0" role="button" aria-label="${esc(REGIONS[r].name)}, exposure ${st.exposure}${st.collapsed ? ", collapsed" : ""}"><title>${esc(REGIONS[r].name)} · exposure ${st.exposure}${st.collapsed ? " · front collapsed" : ""}</title></path>`; }).join("");
+      return `<path d="${landPaths}" clip-path="url(#terr-${r})" class="terr ${st.collapsed ? "lost" : ""} ${isContacted(c, r) ? "" : "nofront"} ${selReg && regionSel === r ? "on" : ""}" style="--heat:${st.collapsed ? 100 : st.exposure};--base:${TERR_TINT[r]}" data-region="${r}" tabindex="0" role="button" aria-label="${esc(REGIONS[r].name)}, exposure ${st.exposure}${st.collapsed ? ", collapsed" : ""}"><title>${esc(REGIONS[r].name)} · exposure ${st.exposure}${st.collapsed ? " · front collapsed" : isContacted(c, r) ? "" : " · no front yet"}</title></path>`; }).join("");
+    // routes between fronts: solid where both ends have one, dashed out to regions a front could reach next
+    const links = LINKS.filter(([a, b]) => isContacted(c, a) || isContacted(c, b)).map(([a, b]) => {
+      const [x1, y1] = project(...LABEL_AT[a]), [x2, y2] = project(...LABEL_AT[b]), both = isContacted(c, a) && isContacted(c, b);
+      // the Pacific route wraps around the map edge: draw it as two stubs
+      if (Math.abs(x1 - x2) > 180) { const [l, r] = x1 < x2 ? [[x1, y1], [x2, y2]] : [[x2, y2], [x1, y1]];
+        return [`<line x1="${l[0]}" y1="${l[1]}" x2="${l[0] - 18}" y2="${(l[1] + r[1]) / 2}" class="link ${both ? "both" : ""}" style="stroke-width:${0.5 * k}"/>`, `<line x1="${r[0]}" y1="${r[1]}" x2="${r[0] + 18}" y2="${(l[1] + r[1]) / 2}" class="link ${both ? "both" : ""}" style="stroke-width:${0.5 * k}"/>`].join(""); }
+      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="link ${both ? "both" : ""}" style="stroke-width:${0.5 * k}"/>`; }).join("");
     const shape = (g: MarkerGroup, x: number, y: number) => { const m = 2.4 * k;
       return g === "site" ? `<path d="M${x} ${y - 1.25 * m}L${x + 1.25 * m} ${y + 0.85 * m}L${x - 1.25 * m} ${y + 0.85 * m}Z"/>`
         : g === "insurgency" ? `<rect x="${x - 0.9 * m}" y="${y - 0.9 * m}" width="${1.8 * m}" height="${1.8 * m}" transform="rotate(45 ${x} ${y})"/>`
@@ -384,14 +426,13 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       g.forEach((m, n) => { const a = -Math.PI / 2 + (n + (near19 ? 0.5 : 0)) * 2 * Math.PI / (g.length + (near19 ? 1 : 0)); m.mx = cx0 + Math.cos(a) * rad; m.my = cy0 + Math.sin(a) * rad; });
     }
     // labels sit away from where markers gather (towns and Site-19)
-    const LABEL_AT: Record<RegionId, [number, number]> = { west_us: [-118, 52], east_us: [-88, 30], latam: [-60, -14], europe: [2, 60], africa: [20, 2], east_asia: [140, 6] };
     const regionLabels = REGION_IDS.map(r => { const st = c.regions[r], [ax, ay] = project(...LABEL_AT[r]);
       // step the label off any marker, facility or Site-19 near it
       const busy: [number, number][] = [[sx, sy], ...shown.map(m => [m.mx, m.my] as [number, number]), ...FACILITIES_WORLD.map(f => project(f.lon, f.lat))];
       const tries: [number, number][] = [[0, 0], [0, 9], [0, -9], [14, 0], [-14, 0], [0, 16], [0, -16]];
       const [ox, oy] = tries.find(([dx, dy]) => busy.every(([bx, by]) => Math.abs(bx - (ax + dx * k)) > 11 * k || Math.abs(by - (ay + dy * k)) > 6 * k)) ?? [0, 0];
       const px = ax + ox * k, py = ay + oy * k;
-      return `<g class="rlabel" style="font-size:${3.6 * k}px"><text x="${px}" y="${py}">${esc(label(r))}</text><text x="${px}" y="${py + 4.5 * k}" class="rexp ${st.exposure >= 60 ? "hot" : st.exposure >= 35 ? "warm" : ""}">${st.collapsed ? "LOST" : `exposure ${st.exposure}`}</text>${(() => { const w = weatherAt(c, r); return mapShow.has("weather") && w !== "clear" ? `<text x="${px}" y="${py + 8.6 * k}" class="rwx ${w}">${WX_ICON[w]} ${WEATHER[w].name.toLowerCase()}<title>${esc(`${WEATHER[w].name} over ${REGIONS[r].name}: ${WEATHER[w].desc}`)}</title></text>` : ""; })()}</g>`; }).join("");
+      return `<g class="rlabel" style="font-size:${3.6 * k}px"><text x="${px}" y="${py}">${esc(label(r))}</text><text x="${px}" y="${py + 4.5 * k}" class="rexp ${st.exposure >= 60 ? "hot" : st.exposure >= 35 ? "warm" : ""}">${st.collapsed ? "LOST" : st.contactDue ? `contact ${dateText(st.contactDue)}` : !isContacted(c, r) ? "no front" : `exposure ${st.exposure}`}</text>${(() => { const w = weatherAt(c, r); return mapShow.has("weather") && w !== "clear" ? `<text x="${px}" y="${py + 8.6 * k}" class="rwx ${w}">${WX_ICON[w]} ${WEATHER[w].name.toLowerCase()}<title>${esc(`${WEATHER[w].name} over ${REGIONS[r].name}: ${WEATHER[w].desc}`)}</title></text>` : ""; })()}</g>`; }).join("");
     const markers = shown.map(({ i, tx, ty, mx, my }) => { const st = incidentState(c, i), b = briefing(c, i), moved = mx !== tx || my !== ty;
       return `<g class="marker ${groupOf(i)} ${st} ${i.dispatch ? "dispatched" : ""} ${mapSel === "inc:" + i.id ? "on" : ""}" data-mapinc="${i.id}" tabindex="0" role="button" aria-label="${esc(incidentName(i))}, ${esc(b.short)}">
         ${moved ? `<line x1="${tx}" y1="${ty}" x2="${mx}" y2="${my}" class="leader" style="stroke-width:${0.4 * k}"/><circle cx="${tx}" cy="${ty}" r="${0.8 * k}" class="truept"/>` : ""}
@@ -415,12 +456,14 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     const r = regionSel, d = REGIONS[r], st = c.regions[r], cw = canCoverStory(c, r), lw = canLocate(c, r), t = travelDays(c, r);
     const regionPanel = () => `<div class="card ${st.collapsed ? "status danger" : ""}">
         <div class="label">Region · ${esc(d.name)}</div>
-        <p>Front: <b>${esc(d.front)}</b>${st.collapsed ? " (collapsed)" : ""}</p>
+        <p>Front: <b>${esc(d.front)}</b>${st.collapsed ? " (collapsed)" : st.contactDue ? ` (contact ${dateText(st.contactDue)})` : isContacted(c, r) ? "" : " (not yet established)"}</p>
         <div class="exposure"><div class="exp-bar"><span style="width:${st.collapsed ? 100 : st.exposure}%"></span></div><b>${st.collapsed ? "Lost" : `${st.exposure} / 100`}</b></div>
         ${(() => { const w = weatherAt(c, r); return `<p class="muted">Weather: <b>${WEATHER[w].name}</b>${st.weatherUntil ? `, likely until ${dateText(st.weatherUntil)}` : ""}. ${esc(WEATHER[w].desc)}</p>`; })()}
         <p class="muted">Funding: $${regionFunding(c, r)}k a month. ${t ? `${plural(t, "day")} away by ${transportName(c)}.` : "Site-19 is here; teams go by road."}</p>
         ${(() => { const here = c.incidents.filter(i => i.region === r); return here.length ? `<p>Active here: ${here.map(i => `<button class="linkbtn" type="button" data-mapinc="${i.id}">${esc(incidentName(i))}</button>`).join(" · ")}</p>` : `<p class="muted">Nothing active here.</p>`; })()}
-        ${st.collapsed ? `<p class="warn">The public knows too much here. This region sends nothing and can't be recovered.</p>` : `
+        ${st.collapsed ? `<p class="warn">The public knows too much here. This region sends nothing and can't be recovered.</p>` : !isContacted(c, r) ? (() => { const cw = canContact(c, r), k = contactCost(c);
+          return `<p class="muted">With no front here, ${esc(d.name)} sends no funding, exposure here never eases, and field operations, cover stories and cell hunts can't be run. Anomalies still turn up, and Epsilon-11 can still go: a day longer, with nobody to arrange the landing.</p>
+          ${st.contactDue ? `<p class="ok">Agents are setting up ${esc(d.front)}. Contact ${dateText(st.contactDue)}.</p>` : `<div class="row"><button class="act primary" type="button" data-contact="${r}" ${cw ? `disabled title="${esc(cw)}"` : ""}>Make contact · $${k.funds}k${k.intel ? ` · ${k.intel} Intel` : ""} · ${plural(CONTACT.days, "day")}</button><span class="muted">${esc(cw || `Sets up ${d.front} as the Foundation's front here. Each new front costs more than the last.`)}</span></div>`}`; })() : `
         <div class="row"><button class="act" type="button" id="coverBtn" ${cw ? `disabled title="${esc(cw)}"` : ""}>Cover story · $${COVER_STORY.cost}k · ${plural(coverDoses(c), "amnestic dose")}</button><span class="muted">${esc(cw || `${d.front} plants a story: −${COVER_STORY.cut} exposure here. Once every ${COVER_STORY.cooldown} days.`)}</span></div>
         <div class="row"><button class="act" type="button" id="locateBtn" ${lw ? `disabled title="${esc(lw)}"` : ""}>Locate an Insurgency cell · ${locateIntel(c)} Intel</button><span class="muted">${esc(lw || "Creates a strike mission here. Breaking the cell pays $80k and lowers exposure.")}</span></div>
         <div class="label" style="margin-top:10px">Field operations</div>
@@ -438,8 +481,9 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       return `<div class="file brief">
         <div class="label">${KIND_NAMES[i.kind]} · ${esc(b.place.name)}${stt === "urgent" ? " · urgent" : stt === "new" ? " · new" : ""}</div>
         <h2>${esc(incidentName(i))} <small>${esc(i.title.split(":")[0])}</small></h2>
-        <p>${esc(i.kind === "coverup" ? "Witnesses need amnestics before the story spreads." : KIND_BRIEF[i.kind])}</p>
+        <p>${esc(i.kind === "coverup" ? "Witnesses need amnestics before the story spreads." : briefText(i))}</p>
         <div class="specs">Deadline: <b>${esc(b.deadline)}</b>${i.dispatch ? "" : ` · ${esc(b.arrival)}`}</div>
+        ${i.group ? `<p class="warn"><b>Only one can be answered.</b> This came in with ${c.incidents.filter(x => x.group === i.group && x !== i).map(x => `<button class="linkbtn" type="button" data-mapinc="${x.id}">${esc(incidentName(x))}</button>`).join(" and ")}. Sending Epsilon-11 to one means the others go unanswered.</p>` : ""}
         ${(() => { const wl = i.dispatch ? "" : weatherLine(c, i); return wl ? `<p class="${missionWeather(c, i) === "clear" ? "muted" : "warn"}">${esc(wl)}</p>` : ""; })()}
         ${i.dispatch ? `<p class="ok">${i.dispatch.how === "team" ? `An amnestics team with ${plural(i.dispatch.doses, "dose")} is on its way.` : "The front is working on it."} Result ${dateText(i.dispatch.done)}.</p>` : ""}
         ${b.known.length ? `<p><b>Known.</b> ${b.known.map(esc).join(" ")}</p>` : ""}
@@ -466,10 +510,10 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     const overview = `<div class="card">
         <div class="label">Active incidents · ${c.incidents.length}</div>
         ${order.length ? `<ul class="inclist">${order.map(i => { const stt = incidentState(c, i), b = briefing(c, i);
-          return `<li class="${stt} ${i.dispatch ? "dispatched" : ""}"><button class="linkbtn" type="button" data-mapinc="${i.id}"><span class="dot ${groupOf(i)}"></span>${esc(incidentName(i))}</button><span class="incmeta">${KIND_NAMES[i.kind]} · ${esc(b.place.name)} · ${esc(b.short)}${stt === "urgent" && !i.dispatch ? " · urgent" : ""}</span></li>`; }).join("")}</ul>` : `<p class="muted">Nothing needs Site-19 right now. Let time run.</p>`}
+          return `<li class="${stt} ${i.dispatch ? "dispatched" : ""}"><button class="linkbtn" type="button" data-mapinc="${i.id}"><span class="dot ${groupOf(i)}"></span>${esc(incidentName(i))}</button><span class="incmeta">${KIND_NAMES[i.kind]} · ${esc(b.place.name)} · ${esc(b.short)}${stt === "urgent" && !i.dispatch ? " · urgent" : ""}${i.group ? " · choose one" : ""}${i.reward ? ` · ${esc(rewardText(i.reward))}` : ""}</span></li>`; }).join("")}</ul>` : `<p class="muted">Nothing needs Site-19 right now. Let time run.</p>`}
         ${away.length ? `<p class="muted">In the air: ${away.map(o => esc(o.name)).join(", ")}, back ${dateText(c.day + Math.max(...away.map(o => o.busy!.daysLeft)))}.</p>` : ""}
         ${(c.ops ?? []).length ? `<p class="muted">Field operations: ${c.ops!.map(op => `${esc(FIELD_OPS[op.kind].name)} in ${esc(REGIONS[op.region].name)} (${dateText(op.done)})`).join("; ")}.</p>` : ""}
-        <p class="muted">Next month: $${monthlyFunding(c)}k from the fronts, $${monthlyUpkeep(c)}k upkeep and salaries. Global exposure ${c.exposure}; ${collapsedCount(c)} of ${COLLAPSE_LIMIT} fronts lost. Select a region on the map for its front and field operations.</p>
+        <p class="muted">Next month: $${councilGrant(c)}k from the O5 Council and $${frontsFunding(c)}k from the fronts, $${monthlyUpkeep(c)}k upkeep and salaries. Global exposure ${c.exposure}; ${collapsedCount(c)} of ${COLLAPSE_LIMIT} fronts lost. Select a region on the map for its front and field operations.</p>
       </div>`;
     const side = selInc ? briefPanel(selInc) : selFac ? facPanel(selFac) : selReg ? regionPanel() : overview;
     const clock = `<div class="geobar">
@@ -490,6 +534,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
           ${[-120, -60, 0, 60, 120].map(lo => `<line y1="${y0}" y2="${y0 + h}" x1="${lo + 180}" x2="${lo + 180}" class="grat" style="stroke-width:${0.3 * k}"></line>`).join("")}
           <path d="${landPaths}" class="land" style="stroke-width:${0.4 * k}"></path>
           ${territories}
+          ${links}
           ${mapShow.has("night") ? `<polygon points="${night}" class="night"><title>Night side of the world</title></polygon>` : ""}
           ${regionLabels}
           ${flights}
@@ -511,6 +556,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
 
   function researchTab() {
     const branches: Branch[] = ["SCP-173", ...(["049", "106"] as const).filter(id => c.scps.some(s => s.id === id)).map(id => `SCP-${id}` as Branch),
+      ...(c.scps.some(isInert) ? ["Objects" as Branch] : []),
       ...((c.materials.prisoners ?? 0) > 0 ? ["Insurgency" as Branch] : []), "Personnel", "Weapons", "Equipment", "Site"];
     const offer = c.research.offer, insp = c.research.inspired;
     const bt = Object.keys(PROJECTS).filter(id => PROJECTS[id].breakthrough && !has(c, id) && offered(c, id));
@@ -688,6 +734,14 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     const wing = wingOf(c, s);
     const r = breachRisk(c, s), due = s.lastCleaned + CLEAN_EVERY - c.day, cw = canClean(c, s);
     if (s.status !== "contained") return scpSummary(s);
+    if (isInert(s)) return `<div class="file">
+      <div class="label">Containment · ${s.name}</div>
+      <h2>${s.name} · ${s.title} <small>${s.cls}</small></h2>
+      <p>Held in the ${wing ? `${nameInText(wing.type)} on level ${wing.level + 1}` : "?"}. An object: it doesn't breach and its cell needs no cleaning.</p>
+      <p class="muted">${esc(SCP_DEFS[s.id].use ?? "")}</p>
+      ${objectUse(s)}
+      ${sendAwayBlock(s)}
+    </div>`;
     return `<div class="file">
       <div class="label">Containment · ${s.name}</div>
       <h2>${s.name} · ${s.title} <small>${s.cls}</small></h2>
@@ -700,7 +754,33 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       <p>${c.cleaningOrder ? `Next scheduled cleaning ${due > 0 ? `in ${plural(due, "day")}` : "today"}.` : `Next cleaning ${due > 0 ? `due in ${plural(due, "day")}` : "<b>overdue</b>"}. Order it below.`}</p>
       <div class="row"><button class="act primary" data-clean="${s.id}" type="button" ${cw ? `disabled title="${esc(cw)}"` : ""}>Clean the cell now · ${CLEAN_CREW} D-Class</button>${cw ? `<span>${esc(cw)}</span>` : ""}</div>
       ${evacBlock(s)}
+      ${sendAwayBlock(s)}
     </div>`;
+  }
+
+  /** SCP-500's pills and SCP-914's refining, used from the object's own cell. */
+  function objectUse(s: ScpRecord) {
+    if (s.id === "500") {
+      const pool = c.roster.filter(o => o.alive && !canGivePill(c, o));
+      return `<div class="facpanel"><div class="label">SCP-500 · ${plural(pillsLeft(c), "dose")} left${has(c, "panacea_assay") ? " (half a pill each)" : ""}</div>
+        ${pool.length ? `<div class="row">${pool.map(o => `<button class="act" type="button" data-pill="${o.id}">${esc(o.call)} ${esc(o.name)} · HP ${o.hp}/${o.maxHp}${o.traits.some(t => TRAITS[t].bad) ? ` · ${o.traits.filter(t => TRAITS[t].bad).map(t => TRAITS[t].name).join(", ")}` : ""}</button>`).join("")}</div>`
+          : `<p class="muted">${pillsLeft(c) ? "Nobody needs it right now: it only helps the wounded, the shaken, or anyone with a bad trait." : "The pills are gone."}</p>`}</div>`;
+    }
+    if (s.id === "914") {
+      const wait = c.lastRefine !== undefined && c.day - c.lastRefine < REFINE_EVERY ? REFINE_EVERY - (c.day - c.lastRefine) : 0;
+      return `<div class="facpanel"><div class="label">SCP-914 · ${has(c, "very_fine") ? "Fine and Very Fine" : "Fine"}${wait ? ` · ready in ${plural(wait, "day")}` : " · ready"}</div>
+        <p class="muted">One item a week from stores. It fails ${has(c, "very_fine") ? "1 time in 10" : "1 time in 5"}, and the item is lost.</p>
+        <div class="row">${refineRecipes(c).map(r => { const w = canRefine(c, r.from); return `<button class="act" type="button" data-refine="${r.from}" ${w ? `disabled title="${esc(w)}"` : ""}>${esc(ITEMS[r.from].name)} (${c.inventory[r.from] ?? 0}) → ${esc(ITEMS[r.to].name)}</button>`; }).join("")}</div></div>`;
+    }
+    return "";
+  }
+
+  /** Hand an anomaly to a partner site for good: they pay for it, and it never breaches here again. */
+  function sendAwayBlock(s: ScpRecord) {
+    if (canSendAway(c, s.id)) return "";
+    return `<details class="archived"><summary>Transfer it to another site for good</summary>
+      <p class="muted">A partner site takes it and pays $${PAY_FOR[s.cls]}k (+2 standing). It travels by road for a few days; its research at Site-19 stops.</p>
+      <div class="row">${PARTNERS.map(p => `<button class="act" type="button" data-sendaway="${s.id}" data-site="${p}">Send it to ${p}</button>`).join("")}</div></details>`;
   }
 
   /** Only while its wing is damaged or without power: rush it somewhere safer. */
@@ -987,6 +1067,15 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     on("engBtn", () => change(() => hireEngineer(c)));
     on("digBtn", () => change(() => excavate(c)));
     root.querySelectorAll<HTMLElement>("[data-evac]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.evac), f = c.base.facilities.find(x => x.id === b.dataset.to); if (s && f) change(() => evacuate(c, s, f, chosenWatchers())); });
+    root.querySelectorAll<HTMLElement>("[data-offer]").forEach(b => b.onclick = () => change(() => answerOffer(c, b.dataset.offer!, !!b.dataset.yes)));
+    root.querySelectorAll<HTMLElement>("[data-request]").forEach(b => b.onclick = () => change(() => makeRequest(c, b.dataset.request as RequestId)));
+    root.querySelectorAll<HTMLElement>("[data-pill]").forEach(b => b.onclick = () => { const o = c.roster.find(x => x.id === b.dataset.pill); if (o) change(() => givePill(c, o)); });
+    root.querySelectorAll<HTMLElement>("[data-refine]").forEach(b => b.onclick = () => change(() => refine(c, b.dataset.refine as ItemId)));
+    root.querySelectorAll<HTMLElement>("[data-sendaway]").forEach(b => b.onclick = () => {
+      const s = c.scps.find(x => x.id === b.dataset.sendaway);
+      if (s && confirm(`Send ${s.name} to ${b.dataset.site} for good? Site-19 won't hold or study it again.`)) change(() => sendAway(c, s.id, b.dataset.site!));
+    });
+    root.querySelectorAll<HTMLElement>("[data-contact]").forEach(b => b.onclick = () => change(() => makeContact(c, b.dataset.contact as RegionId)));
     root.querySelectorAll<HTMLElement>("[data-transfer]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.transfer); if (s) change(() => transferOut(c, s)); });
     root.querySelectorAll<HTMLElement>("[data-clean]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.clean); if (s) change(() => cleanCell(c, s)); });
     root.querySelectorAll<HTMLElement>("[data-alert]").forEach(b => b.onclick = () => change(() => { c.alert = b.dataset.alert as Alert; }));
