@@ -7,6 +7,7 @@ import { STAFF_EVENTS, answerStaff } from "../campaign/staff";
 import { HIST_CATS, type HistCat } from "../campaign/history";
 import { FIELDS, FIELD_BONUS, TRADES, syncStaff, type StaffKind } from "../campaign/people";
 import { AGENT, COOP, ETA10, NU7, SPECIALIST, TF_NAMES, agentsFree, attachNu7, borrow, canAttachNu7, canBorrow, canBringAmnestics, canBringResearcher, canCallNu7, canFormEta10, canHireAgent, canSellWeapons, formEta10, hireAgent, sellWeapons, siteOf, tfOf, type TaskForce } from "../campaign/taskforces";
+import { playMusic, soundControl, transition, ui, wireSound } from "./audio";
 import { DISRUPT_INTEL, INQUIRY, PLANS, goalText, whenText, REVEAL_INTEL, THREAT_STEPS, canDisrupt, canInvestigateBreach, canReveal, disrupt, investigateBreach, reveal } from "../campaign/chaos";
 import { parseCampaign } from "../campaign/save";
 import type { Report } from "../campaign/reports";
@@ -29,7 +30,7 @@ import {
 import {
   DCLASS_COST, DCLASS_MONTHLY, RANKS, RANK_XP, TRAINER, retire, trainerWhy, RANK_BONUS, RECRUIT_COST, advanceDay, aimOf, blinkFullOf, buyDClass,
   answerWhileAway, NICK_RANK, fieldName, canBuyDClass, canHireEngineer, dayOfMonth, deployable, hireEngineer, maxSanOf, monthOf, monthlyFunding, frontsFunding, canHire, candidateCost, hireCandidate, lookOf, trainersActive,
-  INTEL_PER_PRISONER, INTERROGATION_DAYS, interrogationDays, PRISONER_BOUNTY, holdingCapacity, canRetrain, canTherapy, canWeaken, dateText, fitAttachment, gunFor, loadAmmo, setWeapon, weaken, weaponOf, weaponOptions, chooseClass, choosePerk, perkChoices, promotionDue, startRetrain, startTherapy,
+  INTEL_PER_PRISONER, INTERROGATION_DAYS, interrogationDays, PRISONER_BOUNTY, holdingCapacity, canRetrain, canTherapy, canWeaken, dateText, dateOf, fitAttachment, gunFor, loadAmmo, setWeapon, weaken, weaponOf, weaponOptions, chooseClass, choosePerk, perkChoices, promotionDue, startRetrain, startTherapy,
   pendingBreach, type Campaign, type Incident, type Extras, type Loadout, type Operative,
 } from "../campaign/campaign";
 import { CLASSES, PERKS, TRAITS, type ClassId, type PerkId, type TraitId } from "../data/classes";
@@ -115,6 +116,7 @@ function researchCat(id: string): ResearchCat {
   return "gear";
 }
 
+const clickSounds = new WeakSet<HTMLElement>();
 export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let planning: string | null = null;
   const chosen = new Set<string>();
@@ -178,6 +180,18 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
   const watchPool = () => guardsReady(c);
   const scp173 = () => c.scps.find(s => s.id === "173")!;
 
+  // sounds for what changed since the last render: news on the board, a new month, an alarm at Site-19
+  let heard = { notices: c.notices?.length ?? 0, month: dateOf(c.day).getUTCMonth(), alarm: pendingBreach(c)?.id ?? "" };
+  function hubSounds() {
+    const n = c.notices?.length ?? 0, m = dateOf(c.day).getUTCMonth(), b = pendingBreach(c);
+    if (b && b.id !== heard.alarm && b.kind !== "escort") transition.breach();
+    else if (m !== heard.month) ui.month();
+    else if (n > heard.notices) ui.notice();
+    heard = { notices: n, month: m, alarm: b?.id ?? "" };
+    playMusic(b ? "tense" : tab === "site" ? "site" : "world");
+  }
+  if (!clickSounds.has(root)) { clickSounds.add(root); root.addEventListener("click", e => { const t = (e.target as HTMLElement).closest?.("button,summary,label.act"); if (!t) return; if (t.matches(".tab")) ui.tab(); else if ((t as HTMLButtonElement).disabled) ui.deny(); else ui.click(); }); }
+
   function render() {
     if (planning && !c.incidents.some(i => i.id === planning)) planning = null;
     { const pl = c.incidents.find(i => i.id === planning); for (const id of [...chosen]) if (!(pl ? readyFor(pl) : ready()).some(o => o.id === id)) chosen.delete(id); }
@@ -208,6 +222,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       <button class="act" id="exportBtn" type="button" title="Download this campaign as a file, to keep or move to another browser">Export save</button>
       ${c.ironman ? `<span class="act disabled" title="Ironman: this campaign can't be replaced by loading a save over it.">Import save</span>` : `<label class="act" for="importFile" title="Load a campaign from an exported file. It replaces the current one.">Import save</label>`}
       <input type="file" id="importFile" accept=".json,application/json" hidden>
+      ${soundControl()}
     </div>
   </header>
   <nav class="tabs" aria-label="Site-19 sections">
@@ -235,7 +250,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     <button class="act primary" type="button" id="overBtn">Start a new campaign</button>
   </div></div>` : ""}
 </main>`;
-    bind();
+    bind(); wireSound(root); hubSounds();
   }
 
   const nightPoints = () => nightPointsOf(c);

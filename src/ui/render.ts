@@ -7,6 +7,7 @@ import { blastArea, dragOptions, moveCost, reachFor, throwOptions } from "../gam
 import { abilityTargets } from "../game/abilities";
 import type { Unit } from "../game/types";
 import { mapLayer, noise } from "./tiles";
+import { sfx, transition } from "./audio";
 import { animOf, badge, drawBase, drawFallen, drawPerson, drawRadio, drawRecords, lookFor, noteEffects, placeOf, resetAnims } from "./sprites";
 import { escaping } from "../game/scp173";
 import { detectRange } from "../game/insurgency";
@@ -277,10 +278,27 @@ export function createRenderer(cv: HTMLCanvasElement) {
     }
   }
 
+  // sounds for things that change state rather than leave an effect: turns, doors, SCP-106 coming and going, the end
+  let last = { turn: S.turn, phase: S.phase, doors: S.lockedDoors.length, sub: S.submerged, over: !!S.over };
+  function stateSounds() {
+    if (S.turn !== last.turn) sfx.radio();
+    if (S.phase !== last.phase && last.phase === "player" && S.phase !== "over") { sfx.enemyTurn(); if (S.has173 && !S.sealed) setTimeout(() => sfx.blink(), 350); }
+    if (S.lockedDoors.length !== last.doors) sfx.door();
+    if (S.submerged !== last.sub) sfx.corrode();
+    if (!!S.over && !last.over) { if (S.result?.win) transition.victory(); else transition.defeat(); }
+    last = { turn: S.turn, phase: S.phase, doors: S.lockedDoors.length, sub: S.submerged, over: !!S.over };
+  }
+
   return function draw(now: number) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, L.W * TS, L.H * TS);
-    noteEffects(S.effects, S.units);
+    noteEffects(S.effects, S.units, (e, by) => {
+      if (e.type === "line") sfx.shot(by?.gun?.type);
+      else if (e.type === "text") { if (/^\d/.test(e.text ?? "")) sfx.hit(); else if (/miss|graze/.test(e.text ?? "")) sfx.miss(); }
+      else if (e.type === "flash") sfx.explosion();
+      else if (e.type === "ghost") sfx.scrape();
+    });
+    stateSounds();
     drawTiles();
     drawFog();
     // night: the map is dark except where flares burn

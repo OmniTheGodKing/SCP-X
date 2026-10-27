@@ -41,6 +41,7 @@ import { ESCORT_TURNS, MAX_SEALED } from "../game/turn";
 import { freshBodies, isCalm, isStaggered } from "../game/scp049";
 import { bait, isFeeding } from "../game/scp106";
 import { MAPS } from "../data/maps";
+import { playMusic, soundControl, transition, wireSound } from "./audio";
 
 const TEMPLATE = `
 <main class="wrap">
@@ -56,6 +57,7 @@ const TEMPLATE = `
       <span class="pill" id="nightPill" hidden title="Night: everyone sees 4 tiles less, except inside a flare's light.">Night</span>
       <span class="pill" id="weatherPill" hidden></span>
       <span class="pill" id="concealPill" hidden title="Insurgents haven't noticed the team. They only spot you within 4 tiles. Firing or throwing anything gives you away.">Concealed</span>
+      <span id="sndSlot"></span>
       <button class="act" id="evacBtn" type="button" title="Ends the mission. Anyone who hasn't left through an exit is left behind.">Abort mission</button>
     </div>
   </header>
@@ -159,6 +161,8 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   root.innerHTML = TEMPLATE;
   const $ = (id: string) => root.querySelector<HTMLElement>("#" + id)!;
   $("mEyebrow").textContent = `SCP Foundation · ${S.setup.title}`;
+  $("sndSlot").innerHTML = soundControl(); wireSound(root);
+  transition.missionStart(); playMusic(S.setup.kind === "breach" || S.setup.kind === "raid" ? "tense" : "mission");
   const has173 = S.has173, kind = S.setup.kind;
   $("legend").innerHTML = legendHtml();
   // the first mission walks through the basics, one step at a time
