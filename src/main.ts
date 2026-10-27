@@ -36,6 +36,8 @@ const WIN: Record<MissionKind, [string, string]> = {
   outbreak: ["Burned out", "SCP-610's core here is ash."],
   escort: ["Convoy safe", "The convoy is moving again with its cargo."],
   retaliation: ["Town held", "The Insurgency attack is broken."],
+  rescue: ["Team found", "The survivors are coming home."],
+  emergency: ["Emergency answered", "The team pulled out with what it could save."],
 };
 function debriefHtml(r: MissionResult, d: Debrief, kind: MissionKind, scp: string) {
   return `
@@ -59,9 +61,9 @@ function showHub() {
     save: () => saveCampaign(campaign),
     newCampaign: () => { clearCampaign(); campaign = newCampaign(); saveCampaign(campaign); showHub(); },
     importCampaign: (c: Campaign) => { campaign = c; resolveInterrupted(campaign); saveCampaign(campaign); log(campaign, "Campaign loaded from an exported save.", "key"); showHub(); },
-    deploy: (inc, loadouts, dCount) => {
+    deploy: (inc, loadouts, dCount, extras) => {
       if (travelBlock(campaign, inc)) return;
-      const setup = buildSetup(campaign, inc, loadouts, dCount);
+      const setup = buildSetup(campaign, inc, loadouts, dCount, extras);
       forfeitGroup(campaign, inc);
       { const b = briefing(campaign, inc); const first = (t: string) => t.split(/(?<=\.) /)[0];
         inc.briefed = [...b.known.map(first), ...b.estimated.map(t => `Estimated: ${first(t)}`), ...b.unknown.map(t => `Unknown: ${first(t)}`)].join(" "); }

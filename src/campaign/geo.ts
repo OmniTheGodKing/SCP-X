@@ -1,7 +1,8 @@
 // The Geoscape: where everything on the World Map sits, what state it's in, and what the player knows about it.
 // Incidents are placed at the town they happened in (or at Site-19 for anything inside the site); independent
 // Foundation facilities are shown too, but Site-19 is the only one the player runs.
-import { scanReveals } from "./chaos";
+import { agentRisk, agentsFree } from "./taskforces";
+import { addThreat, reveal, scanReveals } from "./chaos";
 import { REGIONS, SITE19, type RegionId } from "../data/regions";
 import { anomalyProgress, has } from "./research";
 import { rewardText } from "./council";
@@ -33,6 +34,7 @@ export const FACILITIES_WORLD = [
 /** Where an incident is: its town if the title names one, Site-19 for anything inside the site, else the region. */
 export function incidentPlace(inc: Incident): { name: string; lon: number; lat: number } {
   if (inc.kind === "breach" || inc.kind === "riot" || inc.kind === "raid") return { name: "Site-19", ...SITE19 };
+  if (inc.kind === "emergency") { const f = FACILITIES_WORLD.find(x => x.name === inc.site); if (f) return { name: f.name, lon: f.lon, lat: f.lat }; }
   const town = REGIONS[inc.region].towns.find(t => inc.title.includes(t.split(",")[0]));
   if (town && TOWN_POS[town]) return { name: town, lon: TOWN_POS[town][0], lat: TOWN_POS[town][1] };
   // no town in the title (an outbreak, say): one of the region's towns, fixed by the incident id
@@ -85,17 +87,23 @@ export function briefing(c: Campaign, inc: Incident) {
   else if (inc.first && inc.recon) known.push(`Anomaly: ${scpName(inc.scpId)}, identified by investigation.`);
   else if (inc.first) unknown.push("Anomaly: unidentified. Witnesses describe something new; investigating would identify it.");
   if (inc.witnesses) known.push(`${inc.witnesses} witness${inc.witnesses === 1 ? "" : "es"} to dose.`);
+  if (inc.kind === "rescue") estimated.push(`${inc.survivors ?? 2} or so of ${inc.team} may still be alive, hiding.`);
+  if (inc.kind === "emergency") { estimated.push(`${inc.survivors ?? 2} researchers trapped, records at risk, the power out.`); unknown.push(`Cause: ${inc.causeText ?? "unknown"}, according to the first report.${inc.hazard === "scp" ? ` ${scpName(inc.scpId)}, held there since Site-19 handed it over, is loose.` : " What's loose inside isn't clear."}`); }
   if (inc.civilians) (inc.recon ? known : estimated).push(`${inc.recon ? "" : "About "}${inc.civilians} civilian${inc.civilians === 1 ? "" : "s"} in the area.`);
   if (inc.kind !== "breach" && inc.kind !== "riot" && inc.kind !== "raid" && inc.kind !== "escort") known.push(`Weather and light: ${missionWeather(c, inc) === "clear" ? "clear" : WEATHER[missionWeather(c, inc)].name.toLowerCase()}${nightAt(c, inc) ? ", dark" : ""} right now.`);
   const bonus = MISSION_BONUS[inc.kind] ?? 0;
   const rewards = [bonus ? `$${bonus}k from the O5 Council` : "", inc.kind === "coverup" ? "−10 exposure here" : inc.kind === "riot" || inc.kind === "raid" ? "" : "−5 exposure here",
     inc.kind === "strike" || inc.kind === "retaliation" || inc.kind === "raid" ? "captured Insurgent weapons and prisoners for research" : "",
     inc.first ? (inc.recon ? `${scpName(inc.scpId)} for Site-19 to hold and study (opens ${anomalyProgress(c, inc.scpId).projects.map(p => p.name).join(", ") || "new research"})` : "a new anomaly for Site-19 to hold and study") : "", inc.kind === "outbreak" ? "SCP-610 burned back a stage" : "",
-    inc.reward ? `${rewardText(inc.reward)} from the Council for answering this one` : "", inc.transfer ? `${scpName(inc.transfer.scp)} delivered to Site-19` : ""].filter(Boolean);
+    inc.reward ? `${rewardText(inc.reward)} from the Council for answering this one` : "",
+    inc.kind === "rescue" ? `${inc.site}'s gratitude (relations and standing for each survivor brought home), and maybe a transfer to Epsilon-11` : "",
+    inc.kind === "emergency" ? `${inc.site}'s gratitude for every part done: researchers out, records recovered (Intel), power restored, the threat dealt with` : "", inc.transfer ? `${scpName(inc.transfer.scp)} delivered to Site-19` : ""].filter(Boolean);
   const ignore = inc.kind === "breach" ? "Site Security faces it alone; it may escape or wreck neighbouring facilities."
     : inc.kind === "riot" ? "Leave it to the guards: a few D-Class die."
     : inc.kind === "raid" ? "Leave it to the guards; if they lose, prisoners go free or the payroll is taken and a building is wrecked."
     : inc.kind === "escort" ? "The convoy is lost with its cargo."
+    : inc.kind === "rescue" ? `${inc.team} is never heard from again; ${inc.site} won't forget it (−15 relations, −4 standing).`
+    : inc.kind === "emergency" ? `${inc.site} copes alone: staff die, records are lost${inc.scpId ? `, and ${scpName(inc.scpId)} may get away` : ""} (−15 relations, −4 standing, +6 exposure).`
     : inc.kind === "coverup" ? "The story gets out: +12 exposure here. An amnestics team or paying the front handles it without Epsilon-11."
     : inc.kind === "retaliation" ? "People die in the streets: +12 exposure here."
     : inc.kind === "strike" ? "The cell moves on; the Intel spent to find it is wasted."
@@ -144,16 +152,19 @@ export function worsening(inc: Incident): string | null {
 }
 
 // ---- field operations: scanning a region for leads, and surveillance of Insurgency activity ----
-export type FieldOpKind = "scan" | "surveil";
+export type FieldOpKind = "scan" | "surveil" | "procure" | "infiltrate";
 export interface FieldOp { kind: FieldOpKind; region: RegionId; done: number; }
 export const FIELD_OPS: Record<FieldOpKind, { name: string; cost: number; days: number; desc: string }> = {
   scan: { name: "Scan for leads", cost: 20, days: 4, desc: "Front staff work their contacts. Turns up Intel, money, a strong recruit, or sometimes an Insurgency cell." },
   surveil: { name: "Surveillance", cost: 30, days: 6, desc: "Watch the Insurgency's movements here. Usually finds a cell to strike; otherwise yields Intel." },
+  procure: { name: "Procurement", cost: 30, days: 5, desc: "Quiet buying through the front: equipment, amnestic precursors or cash from a deal gone right. Low risk." },
+  infiltrate: { name: "Infiltration", cost: 40, days: 8, desc: "Put an agent inside the Insurgency's local network: sets its agenda back and turns up its operations. One in five comes back hurt; a few don't come back." },
 };
 export function canFieldOp(c: Campaign, r: RegionId, k: FieldOpKind): string | null {
   if (c.regions[r].collapsed) return "The front here has collapsed.";
   if (!isContacted(c, r)) return "No front here yet. Make contact first.";
   if ((c.ops ?? []).some(o => o.region === r)) return "An operation is already running here.";
+  if (agentsFree(c) < 1) return `Every field agent is busy or hurt (${c.tf.agents} on staff). Hire more at the Command facility.`;
   if (k === "surveil" && c.incidents.some(i => i.kind === "strike" && i.region === r)) return "A cell here is already located.";
   if (c.funds < FIELD_OPS[k].cost) return `Needs $${FIELD_OPS[k].cost}k.`;
   return null;
@@ -168,6 +179,21 @@ function finishOp(c: Campaign, op: FieldOp) {
   const where = REGIONS[op.region].name, roll = Math.random();
   // either kind of field work uncovers a hidden Insurgency operation aimed at this region
   if (scanReveals(c, op.region)) log(c, `Field work in ${where} uncovered an Insurgency operation aimed there.`, "key", "world");
+  const risk = op.kind === "infiltrate" ? agentRisk(c, 0.2, 0.05, where) : agentRisk(c, op.kind === "procure" ? 0.03 : 0.06, 0.01, where);
+  if (risk) log(c, `Field work in ${where}:${risk}`, "bad", "world");
+  if (op.kind === "procure") {
+    if (roll < 0.4) { const items = ["frag", "medkit", "smoke", "flashbang", "eyedrops"] as const; const it = items[Math.floor(Math.random() * items.length)]; c.inventory[it] = (c.inventory[it] ?? 0) + 3; log(c, `Procurement in ${where} brought in 3 × ${it === "eyedrops" ? "eye drops" : it}.`, "good", "world"); }
+    else if (roll < 0.7) { c.amnestics += 2; log(c, `Procurement in ${where} brought in amnestic precursors (+2 doses).`, "good", "world"); }
+    else { const k = 30 + Math.floor(Math.random() * 3) * 10; c.funds += k; log(c, `Procurement in ${where} closed a profitable deal (+$${k}k).`, "good", "world"); }
+    return;
+  }
+  if (op.kind === "infiltrate") {
+    addThreat(c, -5, `an agent inside the Insurgency in ${where}`);
+    for (const p of c.chaos.plans.filter(x => !x.known)) reveal(c, p.id, "scan");
+    gainIntel(c, 1);
+    log(c, `Infiltration in ${where}: the agent fed the Insurgency bad information and came back with its plans (agenda −5, +1 Intel${c.chaos.plans.length ? ", every operation identified" : ""}).`, "good", "world");
+    return;
+  }
   if (op.kind === "surveil") {
     if (roll < 0.7 && !c.incidents.some(i => i.kind === "strike" && i.region === op.region)) { locateCell(c, op.region, true); return; }
     gainIntel(c, 2); log(c, `Surveillance in ${where} found no cell, but picked up their radio traffic (+2 Intel).`, "key", "world"); return;

@@ -1,5 +1,6 @@
 // Campaign saves live in this browser only. Storage can be unavailable (private windows,
 // blocked site data), so every access is guarded and the game still runs without it.
+import { newTf } from "./taskforces";
 import { newChaos } from "./chaos";
 import { NICK_RANK, giveNick, lookOf, newBio, type Campaign } from "./campaign";
 import { withGivenName } from "../data/names";
@@ -130,7 +131,13 @@ export function parseCampaign(raw: string): Campaign | null {
       for (const o of old.roster) if (o.alive && o.rank >= NICK_RANK && !o.nick) giveNick(old, o);
       Object.assign(c, { version: 22 });
     }
-    return c.version === 22 ? (c as unknown as Campaign) : null;
+    if (c.version === 22) {
+      // task forces and partner sites; the sites remember what Site-19 already handed them
+      const old = c as unknown as Campaign;
+      Object.assign(c, { version: 23, tf: newTf(old.day) });
+      for (const h of old.history ?? []) { const m = h.text.match(/^(SCP-\d+) was transferred to (.+) for good\.$/); if (m) old.tf.sites[m[2]]?.holds.push(m[1].slice(4) as never); }
+    }
+    return c.version === 23 ? (c as unknown as Campaign) : null;
   } catch {
     return null;
   }

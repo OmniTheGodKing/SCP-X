@@ -1,4 +1,5 @@
 // Player actions and the turn cycle: your move, SCP-173, the Insurgency, then loose D-Class.
+import { hazardDealt } from "./mission";
 import { reinforcementsTick } from "./ciTactics";
 import { DRUM, FLOOR, HALF, L, STEEL, TS, area, area as area_, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, setSlow, setVault, tileAt, DIRS, type Pt } from "../core/grid";
 import { setSmoke, sightFrom } from "../core/sight";
@@ -590,6 +591,19 @@ export function checkEnd() {
     finish(w.filter(u => u.dosed).length * 2 >= w.length, false); return true;
   }
   if ((k === "strike" || k === "retaliation") && !alive("raider").length) { finish(true, false); return true; }
+  // a lost team: over once nobody is left out there to bring home
+  if (k === "rescue") {
+    const lost = S.units.filter(u => u.researcher), out = lost.filter(u => u.alive && u.saved).length;
+    if (!lost.some(u => u.alive && !u.saved)) { finish(out > 0, false); return true; }
+  }
+  // another site's emergency: done when everything is done, or when the team has pulled out with what it could
+  if (k === "emergency") {
+    const people = S.units.filter(u => u.researcher), records = S.units.filter(u => u.record);
+    const all = !people.some(u => u.alive && !u.saved) && !records.some(u => !u.saved) && !!S.powerOn && hazardDealt();
+    const score = people.filter(u => u.alive && u.saved).length + records.filter(u => u.saved).length + (S.powerOn ? 1 : 0) + (hazardDealt() ? 1 : 0);
+    if (all) { finish(true, false); return true; }
+    if (!alive("mtf").length && !S.reinforce.length) { finish(score > 0, false); return true; }
+  }
   if (k === "outbreak" && S.core && S.core.hp <= 0) { finish(true, false); return true; }
   if (k === "riot" && !S.units.some(u => u.rioter && u.alive && !u.downed && u.side === "zombie")) { finish(true, false); return true; }
   if (k === "raid") {
@@ -600,7 +614,8 @@ export function checkEnd() {
     if (S.stolen) { finish(false, false); return true; }
     if (!alive("raider").length || (S.turn >= ESCORT_TURNS && S.phase === "subjects")) { finish(true, false); return true; }
   }
-  if (S.escaped) { finish(false, false); return true; }
+  if (S.escaped && k === "emergency") { if (S.statue.alive) { S.statue.alive = false; log("SCP-173 is out through the hatch and gone from this site. The rest of the job still stands.", "bad"); } }
+  else if (S.escaped) { finish(false, false); return true; }
   // nobody left on the map: either everyone got out through an exit, or nobody is left at all
   if (!alive("mtf").length && !S.reinforce.length) { finish(false, S.units.some(u => u.side === "mtf" && u.saved && u.alive)); return true; }
   return false;

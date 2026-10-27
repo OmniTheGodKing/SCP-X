@@ -30,7 +30,8 @@ export function spawnMember(m: SquadMember, x: number, y: number, mods: MissionS
     hp: m.hp, maxHp: m.maxHp, san: m.san, maxSan: m.maxSan, aim: m.aim, blinkFull: m.blinkFull,
     armor: m.armor + (m.perks.includes("plated") ? 1 : 0), hasArmor: m.hasArmor, armorKind: m.armorKind, moveBonus: m.moveBonus, blinkMod: mods.blinkBonus,
     items: m.items.map(it => ({ ...it, uses: it.uses + (m.perks.includes("grenadier") && (it.id === "flashbang" || it.id === "smoke" || it.id === "frag") ? 1 : 0) })),
-    cls: m.cls, perks: [...m.perks], traits: [...m.traits], medals: m.medals, minHp: m.hp, gun: { ...m.gun }, witnessed: 0, panics: 0, streak: 0, bestStreak: 0 });
+    cls: m.cls, perks: [...m.perks], traits: [...m.traits], medals: m.medals, minHp: m.hp, gun: { ...m.gun }, witnessed: 0, panics: 0, streak: 0, bestStreak: 0,
+    goggles: m.goggles, specialist: m.specialist });
 }
 
 /** Free floor tiles within 2 of the squad's entry points, nearest first. */
@@ -55,11 +56,12 @@ export function createMission(setup: MissionSetup) {
     return t;
   };
   const units: Unit[] = [];
-  const contain = setup.kind === "breach" || setup.kind === "manhunt";
+  const contain = setup.kind === "breach" || setup.kind === "manhunt" || (setup.kind === "emergency" && setup.hazard === "scp");
   const has173 = contain && (setup.scp ?? "173") === "173", has049 = contain && setup.scp === "049", has106 = contain && setup.scp === "106";
 
   // On a breach, Site Security is first on the scene and Epsilon-11 follows later; elsewhere the squad goes in together.
-  const first = setup.kind === "breach" || setup.kind === "riot" || setup.kind === "raid" ? setup.guards ?? [] : setup.squad;
+  // at another site's emergency, its own surviving security fights alongside the squad from the start
+  const first = setup.kind === "breach" || setup.kind === "riot" || setup.kind === "raid" ? setup.guards ?? [] : setup.kind === "emergency" ? [...setup.squad, ...(setup.guards ?? [])] : setup.squad;
   const near: Pt[] = [];
   for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++)
     if (tileAt(x, y) === FLOOR && def.squadSpawns.some(([sx, sy]) => Math.max(Math.abs(sx - x), Math.abs(sy - y)) <= 2)) near.push([x, y]);
@@ -86,7 +88,7 @@ export function createMission(setup: MissionSetup) {
   const arsenal = insurgentGuns(setup.year);
   for (let i = 0; i < setup.insurgents; i++) {
     // on a strike the cell is spread through the building; elsewhere a team arrives together
-    const spread = setup.kind === "strike" || setup.kind === "escort" || setup.kind === "retaliation" || setup.kind === "raid";
+    const spread = setup.kind === "strike" || setup.kind === "escort" || setup.kind === "retaliation" || setup.kind === "raid" || setup.kind === "rescue";
     const room = spread ? Math.floor(i / 2) % ciRooms.length : 0;   // fire teams of two
     const [x, y] = claim(floorTiles(spread ? ciRooms[room] : ciRoom));
     const g = pick(arsenal);
@@ -99,11 +101,22 @@ export function createMission(setup: MissionSetup) {
     const name = "D-" + (4400 + Math.floor(Math.random() * 600));
     units.push(mk({ id: "t" + (i + 1), side: "subject", call: name, name, x, y, hp: 5, maxHp: 5, san: PROFILE.dclass.maxSan, blinkMod: setup.mods.blinkBonus, stray: true }));
   }
-  // researchers caught in the wing hide where they were working
+  // researchers caught in the wing hide where they were working; a lost team's survivors hide the same way
   const doctors = shuffle([...RESEARCHERS]);
-  for (let i = 0; i < (setup.researchers ?? 0); i++) {
+  const hiding = (setup.researchers ?? 0) + (setup.survivors ?? 0);
+  for (let i = 0; i < hiding; i++) {
     const [x, y] = claim(floorTiles(strayRooms[(i + 1) % strayRooms.length]));
-    units.push(mk({ id: "rs" + (i + 1), side: "civilian", call: doctors[i], name: doctors[i], x, y, hp: 4, maxHp: 4, san: 60, researcher: true }));
+    const name = i < (setup.researchers ?? 0) ? doctors[i % doctors.length] : `${setup.survivorName ?? "Lost operative"} ${i + 1 - (setup.researchers ?? 0)}`;
+    units.push(mk({ id: "rs" + (i + 1), side: "civilian", call: name, name, x, y, hp: 4, maxHp: 4, san: 60, researcher: true }));
+  }
+  // classified records at risk, and what got loose at another site
+  for (let i = 0; i < (setup.records ?? 0); i++) {
+    const [x, y] = claim(floorTiles(strayRooms[(i + 2) % strayRooms.length]));
+    units.push(mk({ id: "rec" + (i + 1), side: "civilian", name: "Classified records", x, y, hp: 1, maxHp: 1, san: 0, record: true }));
+  }
+  if (setup.hazard === "instances") for (let i = 0; i < 4; i++) {
+    const [x, y] = claim(floorTiles(pick(def.scpRooms)));
+    units.push(mk({ id: "zi" + (i + 1), side: "zombie", name: "Escaped instance", x, y, hp: 5, maxHp: 5, san: 0 }));
   }
   const names = shuffle([...CIVILIANS]);
   const people = setup.civilians + setup.witnesses;
@@ -134,6 +147,7 @@ export function createMission(setup: MissionSetup) {
     reinforce: setup.kind === "breach" || setup.kind === "raid" ? [
       ...(setup.lateGuards?.length ? [{ turn: 2, members: setup.lateGuards }] : []),
       ...(setup.squad.length ? [{ turn: setup.mtfTurn ?? 30, members: setup.squad }] : []),
+      ...(setup.nu7?.length ? [{ turn: Math.max(3, (setup.mtfTurn ?? 3) + 1), members: setup.nu7 }] : []),
     ] : [],
     escapeDrive: 0, lockedUntil: 0, escaped: false, photos: [],
     siren: setup.kind === "breach", lockedDoors: [], fires: new Map(), flesh: new Set(), core: null,
@@ -179,7 +193,12 @@ function seedOutbreak(setup: MissionSetup, rooms: [number, number, number, numbe
   }
 }
 
+/** An emergency's hazard is dealt with when the anomaly is sealed or everything hostile is down. */
+export const hazardDealt = () => S.sealed || (!S.has173 && !S.has049 && !S.has106 && !S.units.some(u => (u.side === "zombie" || u.side === "raider") && u.alive && !u.downed));
+
 export const BRIEFINGS: Record<MissionKind, (s: MissionSetup) => string> = {
+  rescue: s => `${s.survivorName ?? "A lost team"}'s survivors are hiding somewhere out here, and the Insurgency is still around. Reach them and they'll follow you; bring them out through an exit.`,
+  emergency: s => `${s.site ?? "The site"} is dark: the power is out and ${s.hazard === "scp" ? `${s.scp ? `SCP-${s.scp}` : "an anomaly"} is loose` : s.hazard === "insurgents" ? "an Insurgency team is inside" : "escaped instances are loose in the wing"}. ${s.researchers ?? 0} researchers are trapped and ${s.records ?? 0} files of records are at risk. Restore power at the panel, get the researchers out, recover the records${s.hazard === "scp" ? ", and seal the anomaly in the container if you can" : ""}. Exfiltrate when you've done what you can.`,
   riot: s => `The D-Class block is rioting: ${s.rioters} prisoners are out of their cells. They have nothing but their fists, but there are a lot of them. Restrain them (next to them, 1 action) or put them down; every one killed is a D-Class you won't have. Only Site Security answers this.`,
   outbreak: s => `SCP-610 has taken hold here. Flesh spreads from a core somewhere in the area, more every turn. Anyone who ends a turn on it without a sealed containment suit is infected, and turns into one of its instances 5 turns later: nothing saves them, not even leaving. Its instances infect with every blow. Only fire kills the core: incendiaries, a flamethrower, or fuel drums. Burn it out.${s.night ? " It's dark: everyone sees 4 tiles less." : ""}`,
   breach: s => s.scp === "106" ? `SCP-106 is out of its cell. It walks through walls, and anyone it reaches is dragged into its pocket dimension. Shooting it only sends it under the floor for a turn. The only way to recontain it is bait: put a D-Class (or a secured Insurgent) in the transport container in the staging room. It will go straight for them and stay a turn to feed. Seal it in during that turn.${s.squad.length ? ` Epsilon-11 arrives on turn ${s.mtfTurn}.` : ""}` : s.scp === "049" ? `SCP-049 is out of its cell in the north rooms and looking for patients. Its touch kills, and it will raise anyone who dies as SCP-049-2. Gunfire only staggers it. Talk it down (Calm, within ${3} tiles) and lead it into the transport container in the staging room, then seal it.${s.squad.length ? ` Epsilon-11 arrives on turn ${s.mtfTurn}.` : ""}` : `SCP-173 is out of its cell in the north rooms. Site Security is first on the scene${s.lateGuards?.length ? `, with ${s.lateGuards.length} more guard${s.lateGuards.length > 1 ? "s" : ""} arriving next turn` : ""}. ${s.squad.length ? `Epsilon-11 arrives on turn ${s.mtfTurn}.` : "Epsilon-11 isn't coming: nobody is available."} The transport container is open at the dock in the staging room: get it inside and seal it. If it reaches the surface hatch in the east lab, it's gone; the panel at the east end of the corridor locks the hatch down.${s.dclass.length ? ` ${s.dclass.join(" and ")} ${s.dclass.length > 1 ? "are" : "is"} assigned to you.` : ""}`,
@@ -248,5 +267,9 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
     commander: (() => { const c = S.units.find(u => u.role === "commander"); return !c ? "absent" : c.escaped ? "escaped" : !c.alive ? "killed" : c.downed && (c.secured || win) ? "captured" : "escaped"; })(),
     charms: win ? S.units.filter(u => u.hadCharm && (!u.alive || u.downed)).length : 0,
     gru: !!S.setup.gru,
+    survivorsSaved: S.units.filter(u => u.researcher && u.alive && u.saved).length, survivorsTotal: (S.setup.researchers ?? 0) + (S.setup.survivors ?? 0),
+    recordsRecovered: S.units.filter(u => u.record && u.saved).length, recordsTotal: S.setup.records ?? 0,
+    powerRestored: !!S.powerOn, hazardDealt: hazardDealt(), scans: { ...(S.scans ?? {}) },
+    specialistsLost: S.units.filter(u => u.specialist && (!u.alive || (!u.saved && !win && u.downed))).map(u => u.specialist!),
   };
 }

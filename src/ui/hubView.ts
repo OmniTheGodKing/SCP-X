@@ -1,6 +1,7 @@
 // Site-19 Command: incidents and time, the base and its containment, and Epsilon-11's roster.
 import { STAFF_EVENTS, answerStaff } from "../campaign/staff";
 import { HIST_CATS, type HistCat } from "../campaign/history";
+import { AGENT, COOP, ETA10, NU7, SPECIALIST, TF_NAMES, agentsFree, attachNu7, borrow, canAttachNu7, canBorrow, canBringAmnestics, canBringResearcher, canCallNu7, canFormEta10, canHireAgent, canSellWeapons, formEta10, hireAgent, sellWeapons, siteOf, tfOf, type TaskForce } from "../campaign/taskforces";
 import { DISRUPT_INTEL, INQUIRY, PLANS, goalText, REVEAL_INTEL, THREAT_STEPS, canDisrupt, canInvestigateBreach, canReveal, disrupt, investigateBreach, reveal } from "../campaign/chaos";
 import { parseCampaign } from "../campaign/save";
 import type { Report } from "../campaign/reports";
@@ -24,7 +25,7 @@ import {
   DCLASS_COST, DCLASS_MONTHLY, RANKS, RANK_XP, TRAINER, retire, trainerWhy, RANK_BONUS, RECRUIT_COST, advanceDay, aimOf, blinkFullOf, buyDClass,
   NICK_RANK, fieldName, canBuyDClass, canHireEngineer, dayOfMonth, deployable, hireEngineer, maxSanOf, monthOf, monthlyFunding, frontsFunding, canHire, candidateCost, hireCandidate, lookOf, trainersActive,
   INTEL_PER_PRISONER, INTERROGATION_DAYS, interrogationDays, PRISONER_BOUNTY, holdingCapacity, canRetrain, canTherapy, canWeaken, dateText, fitAttachment, gunFor, loadAmmo, setWeapon, weaken, weaponOf, weaponOptions, chooseClass, choosePerk, perkChoices, promotionDue, startRetrain, startTherapy,
-  pendingBreach, type Campaign, type Incident, type Loadout, type Operative,
+  pendingBreach, type Campaign, type Incident, type Extras, type Loadout, type Operative,
 } from "../campaign/campaign";
 import { CLASSES, PERKS, TRAITS, type ClassId, type PerkId, type TraitId } from "../data/classes";
 import { AMMO, ATTACHMENTS, SIDEARM, TYPES, model, type AmmoId, type AttachmentId, type WeaponType } from "../data/weapons";
@@ -56,13 +57,15 @@ let histCat: HistCat | "all" = "all", openReport: string | null = null;
 
 export interface HubActions {
   save: () => void;
-  deploy: (inc: Incident, loadouts: Loadout[], dCount: number) => void;
+  deploy: (inc: Incident, loadouts: Loadout[], dCount: number, extras: Extras) => void;
   newCampaign: () => void;
   importCampaign: (c: Campaign) => void;
 }
 
-const KIND_NAMES = { raid: "Raid", riot: "Riot", outbreak: "SCP-610", breach: "Breach", recovery: "Manhunt", coverup: "Cover-up", strike: "Strike", escort: "Ambush", retaliation: "Retaliation" } as const;
+const KIND_NAMES = { raid: "Raid", riot: "Riot", outbreak: "SCP-610", breach: "Breach", recovery: "Manhunt", coverup: "Cover-up", strike: "Strike", escort: "Ambush", retaliation: "Retaliation", rescue: "Lost team", emergency: "Site emergency" } as const;
 const KIND_BRIEF = {
+  rescue: "Another site's task force has gone quiet out here. Find the survivors, get them to follow you, and bring them out through an exit. The Insurgency is still in the area.",
+  emergency: "Another Foundation site has a breach it can't handle. Get the trapped researchers out, recover the records at risk, restore power at the panel, and deal with whatever got loose, as much of it as you can. Leave through the exit when you're done: partial success still counts.",
   raid: "The Chaos Insurgency is attacking Site-19's surface compound to reach the lift down into the site. Site Security holds the wire; Epsilon-11 can come up the lift to help.",
   riot: "The D-Class block is rioting. Only Site Security answers: restrain the rioters or put them down. Every one killed is a D-Class lost.",
   outbreak: "Burn out SCP-610's core with fire. Bring incendiaries or the flamethrower, and containment suits for anyone going near the flesh: anyone infected turns 5 turns later and is lost for good. Each win brings the outbreak down a stage.",
@@ -92,6 +95,9 @@ const nightPointsOf = (c: Campaign) => nightPolygon(c).map(([lo, la]) => project
 export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let planning: string | null = null;
   const chosen = new Set<string>();
+  /** Which task force is being sent, and the support people and units going with it. */
+  let tfPick: TaskForce = "e11";
+  const extras: Extras = {};
   const watchers = new Set<string>();
   const gear = new Map<string, { armor: ItemId | ""; items: (ItemId | "")[] }>();
   let flashMsg = "";
@@ -129,7 +135,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
 
   const ready = () => c.roster.filter(deployable);
   // an ambushed convoy is defended by whoever made the capture, wounded or not
-  const readyFor = (inc: Incident) => inc.kind === "escort" && inc.squad ? c.roster.filter(o => o.alive && inc.squad!.includes(o.id)) : ready();
+  const readyFor = (inc: Incident) => inc.kind === "escort" && inc.squad ? c.roster.filter(o => o.alive && inc.squad!.includes(o.id)) : c.tf.eta10 ? ready().filter(o => tfOf(o) === tfPick) : ready();
   const watchPool = () => guardsReady(c);
   const scp173 = () => c.scps.find(s => s.id === "173")!;
 
@@ -262,6 +268,10 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       <div class="label" style="margin-top:10px">Requests</div>
       ${(Object.keys(REQUESTS) as RequestId[]).filter(id => k.standing >= REQUESTS[id].min - 15 || k.requests[id] !== undefined).map(id => { const q = REQUESTS[id], w = canRequest(c, id);
         return `<div class="row"><button class="act" type="button" data-request="${id}" ${w ? `disabled title="${esc(w)}"` : ""}>${esc(q.name)}${q.cost ? ` · −${q.cost} standing` : ""}</button><span class="muted">${esc(w ? `${q.desc} ${w}` : q.desc)}</span></div>`; }).join("") || `<p class="muted">Raise standing to ${REQUESTS.funding.min} to start asking the Council for help.</p>`}
+      <div class="label" style="margin-top:10px">Task forces</div>
+      ${(() => { const ew = canFormEta10(c), nw = canAttachNu7(c);
+        return `${c.tf.eta10 ? `<p class="muted">MTF Eta-10 "See No Evil": ${c.roster.filter(o => o.alive && tfOf(o) === "eta10").length} operatives assigned (Personnel tab).</p>` : `<div class="row"><button class="act" type="button" id="eta10Btn" ${ew ? `disabled title="${esc(ew)}"` : ""}>Form MTF Eta-10 "See No Evil" · $${ETA10.cost}k</button><span class="muted">${esc(ew ?? "A second task force with video goggles: answer two incidents at once.")}</span></div>`}
+        ${c.tf.nu7 ? `<p class="muted">MTF Nu-7 "Hammer Down" is on call for raids and Keter-class breaches ($${NU7.call}k a call, from the deploy panel).</p>` : `<div class="row"><button class="act" type="button" id="nu7Btn" ${nw ? `disabled title="${esc(nw)}"` : ""}>Put MTF Nu-7 "Hammer Down" on call · $${NU7.cost}k</button><span class="muted">${esc(nw ?? "Heavy troopers who join the fight against raids and Keter-class breaches.")}</span></div>`}`; })()}
     </div>`;
   }
 
@@ -375,7 +385,9 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
   const confirmedIns = (i: Incident) => has(c, "codebooks") || !!i.recon || i.kind === "raid" || i.kind === "breach" || i.kind === "escort";
   const briefText = (i: Incident) => i.transfer ? `A transfer convoy bringing ${scpName(i.transfer.scp)} from ${i.transfer.site} is under attack an hour from Site-19. Whoever is fit to go has to hold the truck: neutralise the Insurgents or last 8 turns.` : KIND_BRIEF[i.kind];
   function planPanel(inc: Incident) {
-    const ops = readyFor(inc), t = flightOut(c, inc), noD = inc.kind === "strike" || inc.kind === "coverup" || inc.kind === "escort" || inc.kind === "retaliation" || inc.kind === "outbreak" || inc.kind === "riot" || inc.kind === "raid";
+    const ops = readyFor(inc), t = flightOut(c, inc), noD = ["strike", "coverup", "escort", "retaliation", "outbreak", "riot", "raid", "rescue", "emergency"].includes(inc.kind);
+    const extraRow = (key: keyof Extras, label: string, why: string | null, desc: string) => why && (key === "nu7" ? !c.tf.nu7 || why.startsWith("Nu-7 only") : !why.startsWith("Needs")) ? "" :
+      `<label class="armorpick"><input type="checkbox" data-extra="${key}" ${extras[key] && !why ? "checked" : ""} ${why ? "disabled" : ""}> ${esc(label)} <span class="muted">${esc(why ?? desc)}</span></label>`;
     return `<div class="card plan">
       <div class="label">Deploy to ${esc(inc.title.split(":")[0])}</div>
       <p>${esc(briefText(inc))}</p>
@@ -392,12 +404,17 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         <button class="act" type="button" id="intelBtn" ${canWeaken(c, inc) ? `disabled title="${esc(canWeaken(c, inc)!)}"` : ""}>Spend 1 Intel: intercept one</button></div>` : ""}
       ${inc.kind === "raid" ? (() => { const g = guardsReady(c).slice(0, 8); return `<p>Site Security: <b>${g.length}</b> ${g.length === 1 ? "guard holds" : "guards hold"} the compound${g.length ? ` (${g.map(x => esc(x.name)).join(", ")})` : ""}${has(c, "perimeter_alarms") ? ", already on overwatch" : ""}. Insurgents: about <b>${inc.insurgents}</b>. Operatives you pick come up the lift on turn <b>${raidArrival(c)}</b>.</p>`; })() : ""}
       ${inc.kind === "riot" ? (() => { const g = guardsReady(c).slice(0, 8); return `<p>Site Security: <b>${g.length}</b> ${g.length === 1 ? "guard answers" : "guards answer"}${g.length ? ` (${g.map(x => esc(x.name)).join(", ")})` : ". Nobody is fit to respond"}. D-Class left: <b>${c.dclass}</b>.</p>`; })() : `
+      ${c.tf.eta10 && inc.kind !== "escort" ? `<div class="row">${(["e11", "eta10"] as TaskForce[]).map(t => `<button class="act ${tfPick === t ? "on" : ""}" type="button" data-tf="${t}" aria-pressed="${tfPick === t}">Send ${esc(TF_NAMES[t])}</button>`).join("")}</div>
+        <p class="muted">${tfPick === "eta10" ? "Eta-10 wear video goggles: staring, they blink half as often and lose half the sanity to what they see, at −10 aim." : "Epsilon-11, the site's main task force."}</p>` : ""}
       <p class="muted">Pick up to ${squadSize(c)} operatives. Only fully healed operatives can deploy; sanity carries over, so watch it.${inc.kind === "breach" ? " You can also send nobody and play it with the guards alone." : ""}</p>
       <div class="pick">${ops.length ? ops.map(o => `<label class="pickop ${chosen.has(o.id) ? "on" : ""}">
         <input type="checkbox" id="pick-${o.id}" data-pick="${o.id}" ${chosen.has(o.id) ? "checked" : ""} ${!chosen.has(o.id) && chosen.size >= squadSize(c) ? "disabled" : ""}>
         <span><b>${esc(o.call)} ${esc(fieldName(o))}</b> · ${RANKS[o.rank]} · SAN ${o.san}/${maxSanOf(o)}</span></label>`).join("") : `<p class="muted">Nobody is fit to deploy. Wait for the wounded to heal or recruit.</p>`}</div>
       ${chosen.size ? `<div class="loadouts"><div class="specs">Loadout: weapon, one armor slot and two item slots each. Unused items come back; gear on anyone killed is lost.</div>
         ${[...chosen].map(id => loadoutRow(c.roster.find(o => o.id === id)!)).join("")}</div>` : ""}`}
+      ${extraRow("researcher", "Bring a field researcher", canBringResearcher(c, inc), "Unarmed but for a pistol. Scans the anomaly for research (up to 3 times); if they die, Site-19 loses a researcher.")}
+      ${extraRow("amnestics", "Bring an amnestics specialist", canBringAmnestics(c, inc), `Doses witnesses from 4 tiles with a dart pistol and brings ${SPECIALIST.doses} doses of their own.`)}
+      ${extraRow("nu7", `Call Nu-7 "Hammer Down" · $${NU7.call}k`, canCallNu7(c, inc), `Four heavy troopers with machine guns join from turn ${NU7.turn} or so.`)}
       ${noD ? "" : `<div class="row dpick">
         <span>D-Class work detail</span>
         <button class="act" type="button" id="dMinus" ${dCount <= 0 ? "disabled" : ""}>−</button>
@@ -571,7 +588,14 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       </div>`; };
     const facPanel = (f: typeof FACILITIES_WORLD[number]) => `<div class="card"><div class="label">Independent Foundation facility · ${esc(REGIONS[f.region].name)}</div>
         <h3 class="fac">${esc(f.name)}</h3><p class="muted">${esc(f.desc)}</p>
-        <p class="muted">Site-19 doesn't run ${esc(f.name)}: it has its own staff and command. It can take transfers, and later it may call for help.</p>
+        <p class="muted">Site-19 doesn't run ${esc(f.name)}: it has its own staff and command. It can take transfers, lend people, buy what Site-19 captures, and sometimes calls for help.</p>
+        ${(() => { const st = siteOf(c, f.name), sw = canSellWeapons(c), ew = canBorrow(c, f.name, "engineers"), gw = canBorrow(c, f.name, "guards"), loan = c.tf.loans.find(l => l.site === f.name);
+          return `<div class="exposure"><div class="exp-bar standing"><span style="width:${st.rel}%"></span></div><b>Relations ${st.rel}</b></div>
+          ${st.holds.length ? `<p class="muted">Holds, from Site-19: ${st.holds.map(id => esc(scpName(id))).join(", ")}.</p>` : ""}
+          ${loan ? `<p class="ok">${loan.n} of its ${loan.kind} are on loan to Site-19 until ${dateText(loan.until)}.</p>` : ""}
+          <div class="row"><button class="act" type="button" data-sell="${f.name}" ${sw ? `disabled title="${esc(sw)}"` : ""}>Sell captured Insurgency weapons · $${COOP.sell.per}k each</button><span class="muted">${esc(sw ?? `${c.materials.ciWeapons ?? 0} in stores. Selling them uses them up for research too.`)}</span></div>
+          <div class="row"><button class="act" type="button" data-borrow="engineers" data-site="${f.name}" ${ew ? `disabled title="${esc(ew)}"` : ""}>Borrow ${COOP.engineers.n} engineers for ${COOP.engineers.days} days</button><span class="muted">${esc(ew ?? `Costs ${COOP.engineers.cost} relations.`)}</span></div>
+          <div class="row"><button class="act" type="button" data-borrow="guards" data-site="${f.name}" ${gw ? `disabled title="${esc(gw)}"` : ""}>Borrow ${COOP.guards.n} guards for ${COOP.guards.days} days</button><span class="muted">${esc(gw ?? `Costs ${COOP.guards.cost} relations. Post them on the Site-19 tab.`)}</span></div>`; })()}
         <div class="row">${back}</div></div>`;
     const rank = (i: Incident) => ({ active: 0, urgent: 1, new: 2, open: 3 }[incidentState(c, i)]) + (i.dispatch ? 4 : 0);
     const order = [...c.incidents].sort((a, b) => rank(a) - rank(b) || a.expires - b.expires);
@@ -931,7 +955,10 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     switch (f.type) {
       case "command": {
         const pool = c.recruits ?? [];
+        const aw = canHireAgent(c);
         return box(`Recruitment · ${plural(pool.length, "candidate")} this month`, `
+          <div class="row"><span>Field agents: <b>${c.tf.agents}</b> (${agentsFree(c)} free${c.tf.hurt.length ? `, ${c.tf.hurt.length} hurt` : ""})</span><button class="act" type="button" id="agentBtn" ${aw ? `disabled title="${esc(aw)}"` : ""}>Hire a field agent · $${AGENT.cost}k</button></div>
+          <p class="muted">Agents run field operations on the World Map: scans, surveillance, procurement and infiltration. Each takes one agent until it's done, and some come back hurt.</p>
           <p class="muted">Epsilon-11 recruits from special forces around the world. A new pool arrives on the first of every month; each operative costs $10k a month once hired. Units open as they are formed (US Army Special Forces in 1952, Navy SEALs in 1962).</p>
           ${(() => { const st = (id: string) => has(c, id) ? "done" : c.research.assigned[id] ? "under way" : projectVisible(c, id) ? "available in the lab" : PROJECTS[id].afterWon && c.stats.won < PROJECTS[id].afterWon! ? `opens after ${PROJECTS[id].afterWon} missions won` : "not yet available";
             return `<p class="specs">Allied liaison office (research, ${st("liaison_office")}): opens the Korps Commandotroepen and Philippine Scout Rangers, the Belgian Paracommandos from 1952 and Norwegian naval commandos from 1953, and 2 more candidates a month. Joint training exchange (research, ${st("joint_exchange")}): far more Veteran and Elite candidates. O5 standing will add to this later.</p>`; })()}
@@ -1047,6 +1074,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
           return part("sex", "Sex", SEX_NAMES[o.sex ?? "m"]) + part("skin", "Skin tone", `${l.skin + 1} of ${SKIN.length}`) + part("hair", "Hair", HAIR_STYLES[l.hair]) + part("hairColor", "Hair colour", `${l.hairColor + 1} of ${HAIR_COLORS.length}`)
             + (o.sex === "f" ? "" : part("facial", "Facial hair", FACIAL[l.facial])) + part("scar", "Scar", l.scar ? "Yes" : "No") + (o.unit && HEADGEAR[o.unit] ? part("headgear", "Headgear", l.headgear ? HEADGEAR[o.unit]![0] : "None") : ""); })()}
       </details>
+      ${c.tf.eta10 ? `<div class="row"><span class="specs">Task force</span>${(["e11", "eta10"] as TaskForce[]).map(t => `<button class="act ${tfOf(o) === t ? "on" : ""}" type="button" data-assigntf="${t}" aria-pressed="${tfOf(o) === t}">${esc(TF_NAMES[t])}</button>`).join("")}</div>` : ""}
       <details class="archived"><summary>Rename</summary><div class="row">
         <label class="specs" for="renameName">Full name</label><input id="renameName" maxlength="40" value="${esc(o.name)}">
         <label class="specs" for="renameNick">Nickname</label><input id="renameNick" maxlength="16" value="${esc(o.nick ?? "")}" placeholder="${o.rank >= NICK_RANK ? "none" : "given at Corporal"}">
@@ -1196,6 +1224,14 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     on("digBtn", () => change(() => excavate(c)));
     root.querySelectorAll<HTMLElement>("[data-evac]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.evac), f = c.base.facilities.find(x => x.id === b.dataset.to); if (s && f) change(() => evacuate(c, s, f, chosenWatchers())); });
     root.querySelectorAll<HTMLElement>("[data-refit]").forEach(b => b.onclick = () => { const f = c.base.facilities.find(x => x.id === b.dataset.refit); if (f) change(() => refitGenerator(c, f)); });
+    on("eta10Btn", () => change(() => formEta10(c)));
+    on("nu7Btn", () => change(() => attachNu7(c)));
+    on("agentBtn", () => change(() => hireAgent(c)));
+    root.querySelectorAll<HTMLElement>("[data-sell]").forEach(b => b.onclick = () => change(() => sellWeapons(c, b.dataset.sell!)));
+    root.querySelectorAll<HTMLElement>("[data-borrow]").forEach(b => b.onclick = () => change(() => borrow(c, b.dataset.site!, b.dataset.borrow as "engineers" | "guards")));
+    root.querySelectorAll<HTMLElement>("[data-assigntf]").forEach(b => b.onclick = () => { const o = c.roster.find(x => x.id === opSel); if (o) change(() => { o.tf = b.dataset.assigntf === "eta10" ? "eta10" : undefined; }); });
+    root.querySelectorAll<HTMLElement>("[data-tf]").forEach(b => b.onclick = () => { tfPick = b.dataset.tf as TaskForce; chosen.clear(); render(); });
+    root.querySelectorAll<HTMLInputElement>("[data-extra]").forEach(b => b.onchange = () => { extras[b.dataset.extra as keyof Extras] = b.checked; });
     root.querySelectorAll<HTMLElement>("[data-disrupt]").forEach(b => b.onclick = () => change(() => disrupt(c, b.dataset.disrupt!)));
     root.querySelectorAll<HTMLElement>("[data-reveal]").forEach(b => b.onclick = () => change(() => reveal(c, b.dataset.reveal!)));
     root.querySelectorAll<HTMLElement>("[data-inquiry]").forEach(b => b.onclick = () => change(() => investigateBreach(c, b.dataset.inquiry!)));
@@ -1326,7 +1362,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         const g = gearOf(id);
         return { opId: id, armor: g.armor, items: g.items.filter((i): i is ItemId => !!i) };
       });
-      act.deploy(inc, inc.kind === "riot" ? [] : loadouts, ["strike", "coverup", "escort", "retaliation", "outbreak", "riot", "raid"].includes(inc.kind) ? 0 : dCount);
+      act.deploy(inc, inc.kind === "riot" ? [] : loadouts, ["strike", "coverup", "escort", "retaliation", "outbreak", "riot", "raid", "rescue", "emergency"].includes(inc.kind) ? 0 : dCount, { ...extras });
+      extras.researcher = extras.amnestics = extras.nu7 = false;
     });
     on("resetBtn", () => {
       const b = $("resetBtn")!;

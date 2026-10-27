@@ -7,6 +7,7 @@ import { captureNow, firstSighting, resurface, startBreach, wreckFacility } from
 import { addExposure, locateCell, spawnCoverup, locateIntel } from "../campaign/world";
 import { newGuard, startRaid, type Alert } from "../campaign/security";
 import { inspect } from "../campaign/inspection";
+import { lostTeam, siteEmergency, siteOf } from "../campaign/taskforces";
 import { addThreat, monthlyChaos, sabotage, tickChaos } from "../campaign/chaos";
 import { addStanding, crisis, issueDirectives, newOffer, receive } from "../campaign/council";
 import type { ScpId } from "../game/types";
@@ -72,6 +73,7 @@ export function mountDebug(host: DebugHost) {
       group("Research and building", btn("materials", "+5 of every material") + btn("offer", "Offer a breakthrough") + btn("research", "Finish current research") + btn("unlockall", "Unlock all research") + btn("build", "Finish construction and orders") + btn("genfail", "Generator fault") + btn("inspwarn", "O5 inspection in 14 days") + btn("inspnow", "O5 inspection now")),
       group("O5 Council", btn("st+20", "+20 standing") + btn("st-20", "−20 standing") + btn("orders", "New orders") + btn("xoffer", "Transfer offer") + btn("crisis", "Forced choice") + btn("contactall", "Contact every region") + btn("get500", "Receive SCP-500") + btn("get914", "Receive SCP-914") + btn("get005", "Receive SCP-005")),
       group("Chaos Insurgency", btn("th+20", "+20 agenda") + btn("th-20", "−20 agenda") + btn("ciops", "New operations") + btn("ciexec", "Carry out operations now") + btn("cicmd", "Commander now") + btn("cimole", "+1 mole") + btn("cisab", "Sabotage now")),
+      group("Task forces and sites", btn("eta10", "Form Eta-10 free") + btn("nu7", "Nu-7 on call free") + btn("lostteam", "Lost team") + btn("emerg", "Site emergency") + btn("emerg-scp", "Emergency (SCP-049 loose)") + btn("agents", "+2 agents")),
       group("Operatives and guards", btn("heal", "Heal everyone") + btn("sanity", "Restore sanity") + btn("unbusy", "Clear busy and training") + btn("rankup", "+1 rank to all operatives") + btn("guardvet", "Guards: 3 breaches survived")),
       group("Alert level", (["normal", "heightened", "full"] as Alert[]).map(a => btn("alert-" + a, a)).join("")),
       group(`World · ${esc(REGIONS[region].name)} (exposure ${c.regions[region].exposure}${c.regions[region].collapsed ? ", collapsed" : ""})`,
@@ -161,6 +163,12 @@ export function mountDebug(host: DebugHost) {
       case "inspnow": inspect(c); break;
       case "st+20": addStanding(c, 20, "debug"); break;
       case "th+20": addThreat(c, 20, "debug"); break;
+      case "eta10": c.tf.eta10 = true; break;
+      case "nu7": c.tf.nu7 = true; break;
+      case "lostteam": lostTeam(c); break;
+      case "emerg": siteEmergency(c); break;
+      case "emerg-scp": { const s = siteOf(c, "Site-17"); if (!s.holds.includes("049")) s.holds.push("049"); const r = Math.random; Math.random = () => 0.1; try { siteEmergency(c); } finally { Math.random = r; } break; }
+      case "agents": c.tf.agents += 2; break;
       case "th-20": addThreat(c, -20, "debug"); break;
       case "ciops": monthlyChaos(c); break;
       case "ciexec": for (const p of c.chaos.plans) p.due = c.day; tickChaos(c); break;
