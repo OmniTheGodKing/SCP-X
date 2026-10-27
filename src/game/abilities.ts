@@ -40,6 +40,8 @@ const def = (p: AbilityId) => ABILITIES.find(a => a.perk === p)!;
 export const abilityName = (p: AbilityId) => UNIVERSAL.includes(p) ? def(p).label : PERKS[p as PerkId].name;
 export const abilityDesc = (p: AbilityId) => UNIVERSAL.includes(p) ? def(p).desc! : PERKS[p as PerkId].desc;
 const adjacent = (a: Unit, b: Unit) => cheb(a.x, a.y, b.x, b.y) <= 1;
+const carries = (u: Unit, id: string) => !!u.items?.some(i => i.id === id);
+const within = (a: Unit, b: Unit, r: number) => cheb(a.x, a.y, b.x, b.y) <= r && (r <= 1 || canSee(a, b.x, b.y));
 /** Combat medic: one free medkit per turn. */
 const freeHeal = (u: Unit) => hasPerk(u, "combat_medic") && !(u.used?.["cm" + S.turn]);
 const cost = (u: Unit, p: AbilityId) => p === "run_and_gun" ? 0 : p === "lockdown" ? 2 : p === "medkit" && freeHeal(u) ? 0 : 1;
@@ -47,8 +49,8 @@ const cost = (u: Unit, p: AbilityId) => p === "run_and_gun" ? 0 : p === "lockdow
 export function abilityTargets(u: Unit, p: AbilityId): Unit[] {
   const d = def(p);
   switch (d.target) {
-    case "captive": return S.units.filter(a => a.side === "raider" && a.alive && a.downed && !a.secured && adjacent(u, a));
-    case "witness": return S.units.filter(a => a.witness && a.alive && !a.saved && !a.dosed && adjacent(u, a));
+    case "captive": return S.units.filter(a => a.side === "raider" && a.alive && a.downed && !a.secured && within(u, a, carries(u, "restraints") ? 2 : 1));
+    case "witness": return S.units.filter(a => a.witness && a.alive && !a.saved && !a.dosed && within(u, a, carries(u, "darts") ? 4 : 1));
     case "self": return [u];
     case "doctor": {
       const d = S.statue;

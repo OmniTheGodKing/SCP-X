@@ -23,7 +23,7 @@ export function spawnMember(m: SquadMember, x: number, y: number, mods: MissionS
   const i = nextSlot++;
   return mk({ id: "m" + i, opId: m.opId, slot: i, side: "mtf", call: m.call, name: m.name, x, y, guard: m.guard,
     hp: m.hp, maxHp: m.maxHp, san: m.san, maxSan: m.maxSan, aim: m.aim, blinkFull: m.blinkFull,
-    armor: m.armor + (m.perks.includes("plated") ? 1 : 0), hasArmor: m.hasArmor, blinkMod: mods.blinkBonus,
+    armor: m.armor + (m.perks.includes("plated") ? 1 : 0), hasArmor: m.hasArmor, armorKind: m.armorKind, moveBonus: m.moveBonus, blinkMod: mods.blinkBonus,
     items: m.items.map(it => ({ ...it, uses: it.uses + (m.perks.includes("grenadier") && (it.id === "flashbang" || it.id === "smoke" || it.id === "frag") ? 1 : 0) })),
     cls: m.cls, perks: [...m.perks], traits: [...m.traits], minHp: m.hp, gun: { ...m.gun }, witnessed: 0, panics: 0, streak: 0, bestStreak: 0 });
 }
@@ -114,7 +114,7 @@ export function createMission(setup: MissionSetup) {
       ...(setup.lateGuards?.length ? [{ turn: 2, members: setup.lateGuards }] : []),
       ...(setup.squad.length ? [{ turn: setup.mtfTurn ?? 30, members: setup.squad }] : []),
     ] : [],
-    escapeDrive: 0, lockedUntil: 0, escaped: false,
+    escapeDrive: 0, lockedUntil: 0, escaped: false, photos: [],
   };
   setMission(state);
   setSmoke([]);
@@ -150,13 +150,15 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
     win, evacuated,
     turns: S.turn,
     escaped: S.escaped,
+    photos: [...S.photos],
+    restraints: S.units.some(u => u.side === "mtf" && u.items?.some(i => i.id === "restraints")),
     zombiesKilled: S.units.filter(u => u.side === "zombie" && !u.alive).length,
     pocketReturned,
     squad: [...S.units.filter(u => u.opId).map(u => ({ opId: u.opId!, alive: survives(u, win), hp: Math.max(1, u.hp), san: u.san, kills: u.kills, sealed: !!u.sealed,
-      hasArmor: !!u.hasArmor, items: (u.items || []).map(i => ({ ...i })),
+      hasArmor: !!u.hasArmor, armorKind: u.armorKind, armorHp: S.setup.squad.concat(S.setup.guards ?? [], S.setup.lateGuards ?? []).find(m => m.opId === u.opId)?.armorHp ?? 0, items: (u.items || []).map(i => ({ ...i })),
       witnessed: u.witnessed ?? 0, panics: u.panics ?? 0, minHp: u.minHp ?? u.hp, bestStreak: u.bestStreak ?? 0 })),
       // anyone still on the way when it ended comes home untouched, with their gear
-      ...S.reinforce.flatMap(r => r.members).map(m => ({ opId: m.opId, alive: true, hp: m.hp, san: m.san, kills: 0, sealed: false, hasArmor: m.hasArmor,
+      ...S.reinforce.flatMap(r => r.members).map(m => ({ opId: m.opId, alive: true, hp: m.hp, san: m.san, kills: 0, sealed: false, hasArmor: m.hasArmor, armorKind: m.armorKind, armorHp: m.armorHp,
         items: m.items.map(i => ({ ...i })), witnessed: 0, panics: 0, minHp: m.hp, bestStreak: 0, absent: true }))],
     aftercare: S.units.some(u => u.opId && u.alive && !u.downed && u.perks?.includes("aftercare")),
     // incapacitated Insurgents: those restrained are taken; if the mission is won, everyone left down is too

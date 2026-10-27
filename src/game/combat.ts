@@ -172,7 +172,7 @@ export async function moveUnit(u: Unit, path: Pt[]) {
     if (!u.alive) return;
     u.x = x; u.y = y;
     // SCP-106's rot eats at anyone who walks through it
-    if (S.corroded.has(y * L.W + x) && u.side !== "anomaly") { log(`${full(u)} steps in the black rot (1 damage).`, "bad"); damage(u, 1); }
+    if (S.corroded.has(y * L.W + x) && u.side !== "anomaly" && u.armorKind !== "hazmat") { log(`${full(u)} steps in the black rot (1 damage).`, "bad"); damage(u, 1); }
     if (isTeam(u)) computeVis();
     if (u.side === "raider") {
       for (const m of alive("mtf")) {

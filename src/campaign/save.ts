@@ -59,7 +59,8 @@ export function loadCampaign(): Campaign | null {
     }
     if (c.version === 9) Object.assign(c, { version: 10, materials: {}, purchases: [] });
     if (c.version === 10) Object.assign(c, { version: 11, ammo: {}, weaponTier: 1 });
-    return c.version === 11 ? (c as unknown as Campaign) : null;
+    if (c.version === 11) Object.assign(c, { version: 12 });
+    return c.version === 12 ? (c as unknown as Campaign) : null;
   } catch {
     return null;
   }

@@ -25,7 +25,7 @@ they can be used, to keep the bar clear.
 
 Each new anomaly's author is checked on the SCP Wiki and credited under CC BY-SA 3.0.
 
-## Phase 3B: research expansion (lined up with XCOM 2 and War of the Chosen)
+## Phase 3B (done): research expansion (lined up with XCOM 2 and War of the Chosen)
 
 Part 1 (done): lab projects (psychological screening, field medicine, SCR-300 and AN/PRC-25 radios, AN/PVS-2 night
 optics, Class-B amnestics, automated cleaning, cell lock override, front company accounting, signals intelligence);
@@ -45,7 +45,7 @@ Part 2 (done): weapons
 - Attachments: suppressor (shots don't alert anything), bayonet (3 damage to an adjacent enemy, no roll), improved
   sights (+10 aim).
 
-Part 3: armor and kit
+Part 3 (done): armor and kit
 - Heavy weapons (heavy armor only): M20 bazooka, M72 LAW (1963); the M2 flamethrower waits for SCP-610.
 - Each armor tier in light (+1 HP, +1 move), medium (the current vest) and heavy (+4 HP, 2 armor, −1 move, carries
   heavy weapons) versions; a hazmat suit (immune to SCP-106's rot) and a later lead-lined suit (SCP-106 needs two turns

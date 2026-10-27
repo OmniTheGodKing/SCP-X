@@ -16,7 +16,7 @@ import {
   S, alive, canAct, canSee, computeVis, full, fx, hooks, humans, isPanicked, isTeam, label, log, loseSanity,
   occupied, reveal, seen, sleep, starers, team, unitAt,
 } from "./state";
-import type { Unit } from "./types";
+import { THROWN, type Unit } from "./types";
 
 const DRAG_SANITY = 5;
 
@@ -36,7 +36,7 @@ export function reachFor(u: Unit | null) {
   for (let i = 0; i < res.dist.length; i++) if (res.dist[i] > 0 && tileAt(i % L.W, (i / L.W) | 0) === HALF) res.dist[i] = -res.dist[i] - 100;
   return res;
 }
-export const moveOf = (u: Unit) => prof(u).move + (u.gun ? TYPES[u.gun.type].move : 0);
+export const moveOf = (u: Unit) => Math.max(1, prof(u).move + (u.gun ? TYPES[u.gun.type].move : 0) + (u.moveBonus ?? 0));
 export const moveCost = (u: Unit, d: number) => d <= moveOf(u) ? 1 : 2;
 
 /** Why this unit can't fire right now, or null. */
@@ -371,7 +371,8 @@ export function doSeal(flash: (t: string) => void) {
 
 // ---------- grenades ----------
 export const THROW_RANGE = 6;
-export const throwRange = (u: Unit) => THROW_RANGE + (hasPerk(u, "grenadier") ? 3 + (S.setup.mods.m79 ? 4 : 0) : 0);
+export const throwRange = (u: Unit) => S.throwing?.id === "bazooka" ? 10 : S.throwing?.id === "law" ? 8
+  : THROW_RANGE + (hasPerk(u, "grenadier") ? 3 + (S.setup.mods.m79 ? 4 : 0) : 0);
 /** Tiles the unit can throw to: within range and in sight. */
 export function throwOptions(u: Unit) {
   const out = new Set<number>();
@@ -384,7 +385,7 @@ export const blastArea = (x: number, y: number): Pt[] => DIRS.concat([[0, 0]]).m
 export function throwCheck(u: Unit | null, idx: number) {
   if (!u || u.side !== "mtf") return "Select an operative.";
   const it = u.items?.[idx];
-  if (!it || (it.id !== "flashbang" && it.id !== "smoke" && it.id !== "frag")) return "Nothing to throw in that slot.";
+  if (!it || !THROWN.includes(it.id)) return "Nothing to throw in that slot.";
   if (it.uses < 1) return "Used up.";
   if (u.ap < 1) return "No actions left this turn.";
   return null;
@@ -399,17 +400,52 @@ export function toggleThrow(idx: number, flash: (t: string) => void) {
   hooks.update();
 }
 
+/** Items used in place: a medkit on the most hurt person within reach, or the camera on an anomaly in sight. */
+export function useCheck(u: Unit | null, idx: number) {
+  const it = u?.items?.[idx];
+  if (!u || !it || (it.id !== "medkit" && it.id !== "camera")) return "Nothing to use in that slot.";
+  if (it.uses < 1) return "Used up.";
+  if (u.ap < 1) return "No actions left this turn.";
+  if (it.id === "medkit" && !medkitTarget(u)) return "Nobody within reach is hurt.";
+  if (it.id === "camera" && !cameraTarget(u)) return "No anomaly in sight to photograph.";
+  return null;
+}
+const medkitTarget = (u: Unit) => team().filter(a => a.side === "mtf" && a.hp < a.maxHp && cheb(a.x, a.y, u.x, u.y) <= 1).sort((a, b) => a.hp - b.hp)[0];
+const cameraTarget = (u: Unit) => {
+  const st = S.statue, id = S.has049 ? "049" : S.has106 ? "106" : S.has173 ? "173" : null;
+  return id && st.alive && !S.sealed && !(S.has106 && S.submerged) && canSee(u, st.x, st.y) && !S.photos.includes(id) ? id : null;
+};
+export function useItem(idx: number, flash: (t: string) => void) {
+  const u = S.selected;
+  if (!canAct() || !u) return;
+  const why = useCheck(u, idx);
+  if (why) { flash(why); return; }
+  const it = u.items![idx];
+  it.uses--; u.ap--;
+  if (it.id === "medkit") {
+    const t = medkitTarget(u)!;
+    t.hp = Math.min(t.maxHp, t.hp + S.setup.mods.medkitHeal);
+    log(`${full(u)} uses a medkit on ${t === u ? "themselves" : full(t)} (+${S.setup.mods.medkitHeal} HP).`, "good");
+  } else {
+    const id = cameraTarget(u)!;
+    S.photos.push(id as "173" | "049" | "106");
+    log(`${full(u)} photographs SCP-${id}. The film will help the researchers.`, "good");
+  }
+  afterAction();
+}
+
 function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y: number) {
   item.uses--; u.ap = 0;
   S.mode = null; S.throwing = null; S.pending = null;
   const area = blastArea(x, y);
   const inArea = (v: Unit) => area.some(([a, b]) => a === v.x && b === v.y);
-  if (item.id === "frag") {
+  if (item.id === "frag" || item.id === "bazooka" || item.id === "law") {
+    const power = item.id === "bazooka" ? 5 : item.id === "law" ? 4 : 3;
     fx({ type: "flash", x: x * TS + TS / 2, y: y * TS + TS / 2, dur: 500 });
-    log(`${full(u)} throws a frag grenade.`, "key");
-    for (const v of humans().filter(inArea)) {
-      const soak = Math.min(v.armor ?? 0, 3);
-      damage(v, 3 - soak, u);
+    log(item.id === "frag" ? `${full(u)} throws a frag grenade.` : `${full(u)} fires the ${item.id === "bazooka" ? "bazooka" : "LAW"}.`, "key");
+    for (const v of S.units.filter(v => v.alive && !v.saved && v.side !== "anomaly").filter(inArea)) {
+      const soak = Math.min(v.armor ?? 0, power);
+      damage(v, power - soak, u);
       if (v.armor && hasPerk(u, "shredder")) v.armor--;
     }
     for (const [a, b] of area.concat(DIRS.map(([dx, dy]) => [x + dx, y + dy] as Pt))) if (tileAt(a, b) === HALF) { L.grid[b][a] = FLOOR; }
@@ -422,6 +458,10 @@ function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y
     log(`${full(u)} throws a flashbang.${theirs.length ? ` ${theirs.length} Insurgent${theirs.length > 1 ? "s" : ""} blinded.` : ""}${ours.length ? ` ${ours.map(label).join(", ")} ${ours.length > 1 ? "are" : "is"} blinded too.` : ""}`, ours.length ? "bad" : "good");
     if (ours.some(v => v.hadLos)) log("Anyone blinded can't hold SCP-173 until next turn.", "bad");
     if (!hasPerk(u, "quiet_steps")) S.mem.set("bang-" + u.id, { x, y, turn: S.turn });   // SCP-173 hears it
+  } else if (item.id === "csgas") {
+    const hit = S.units.filter(v => v.alive && !v.saved && (v.side === "raider" || v.side === "civilian")).filter(inArea);
+    for (const v of hit) v.suppressedUntil = S.turn + 1;
+    log(`${full(u)} throws CS gas.${hit.length ? ` ${hit.length} caught in it, coughing and half-blind (−30 aim).` : ""}`, "good");
   } else {
     for (const [a, b] of area) S.smoke.push({ x: a, y: b, until: S.turn + 1 });
     setSmoke(S.smoke.map(s => [s.x, s.y]));

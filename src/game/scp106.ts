@@ -106,7 +106,14 @@ export async function oldManPhase() {
     if (target) {
       phaseToward(target.x, target.y, OLD_MAN_MOVE);
       const near = humans().filter(h => cheb(h.x, h.y, m.x, m.y) <= 1);
-      if (near.length) { grab(near[rand(0, near.length - 1)]); sink(SINK_AFTER_GRAB); }
+      if (near.length) {
+        const v = near[rand(0, near.length - 1)];
+        // a lead-lined suit holds for a turn: it has to keep its grip
+        if (v.armorKind === "leadsuit" && v.seizedTurn !== S.turn - 1) {
+          v.seizedTurn = S.turn;
+          log(`SCP-106 takes hold of ${full(v)}, but the lead lining won't give. Get them away before next turn.`, "bad");
+        } else { grab(v); sink(SINK_AFTER_GRAB); }
+      }
     }
   }
   computeVis();
