@@ -144,7 +144,7 @@ export function mountDebug(host: DebugHost) {
       case "sanity": for (const o of c.roster) if (o.alive) o.san = maxSanOf(o); for (const g of c.guards) if (g.alive) g.san = 80; break;
       case "unbusy": for (const o of c.roster) o.busy = undefined; for (const g of c.guards) g.training = undefined; break;
       case "rankup": for (const o of c.roster) if (o.alive && o.rank < RANKS.length - 1) { o.rank++; o.xp = Math.max(o.xp, RANK_XP[o.rank]); } break;
-      case "staff-breakdown": case "staff-asleep": case "staff-engineer": case "staff-mole": case "staff-discovery": case "staff-letter": case "staff-shortfall": case "staff-visitor": {
+      case "staff-breakdown": case "staff-asleep": case "staff-engineer": case "staff-mole": case "staff-discovery": case "staff-letter": case "staff-shortfall": case "staff-visitor": case "staff-retire": {
         const id = id_.slice(6) as StaffEventId;
         if (c.staffEvent) note = "A staff incident is already waiting for a decision.";
         else if (!STAFF_EVENTS[id].when(c)) note = "That incident can't happen right now.";

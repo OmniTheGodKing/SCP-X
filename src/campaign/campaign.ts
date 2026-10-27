@@ -64,7 +64,12 @@ export interface Operative {
   seals?: number;
   faced?: string[];
   survivor?: boolean;
+  /** Asked to retire and was talked into staying. */
+  refusedRetire?: boolean;
 }
+
+/** Someone who left Epsilon-11 alive: as a trainer at the training range, or with an honourable discharge. */
+export interface Retiree { name: string; call: string; rank: number; missions: number; day: number; trainer: boolean; }
 
 export interface Incident {
   id: string;
@@ -168,6 +173,7 @@ export interface Campaign {
   inspectionDay?: number;
   /** Incident reports, newest first. */
   archive?: Report[];
+  retired?: Retiree[];
 }
 
 // Perks per rank: steadier aim, fewer blinks, more composure.
@@ -247,12 +253,33 @@ export function log(c: Campaign, text: string, kind = "", pause?: HubTab) {
 }
 
 /** A new rank-0 operative; guards promoted into Epsilon-11 keep their own name. */
+// ---- retirement: Majors and Colonels can stay on as trainers; anyone else leaves with an honourable discharge ----
+export const TRAINER = { minRank: 5, max: 2 };
+const trainerCount = (c: Campaign) => (c.retired ?? []).filter(r => r.trainer).length;
+/** Trainers only teach while there's a working training range. */
+export const trainersActive = (c: Campaign) => countOperational(c, "training") ? trainerCount(c) : 0;
+export function trainerWhy(c: Campaign, o: Operative): string | null {
+  if (o.rank < TRAINER.minRank) return `Only a ${RANKS[TRAINER.minRank]} or ${RANKS[TRAINER.minRank + 1]} can become a trainer.`;
+  if (!countOperational(c, "training")) return "Needs a working training range.";
+  if (trainerCount(c) >= TRAINER.max) return `There are already ${TRAINER.max} trainers.`;
+  return null;
+}
+export function retire(c: Campaign, o: Operative) {
+  if (!o.alive || o.busy) return;
+  const trainer = !trainerWhy(c, o);
+  c.roster = c.roster.filter(x => x !== o);
+  (c.retired ??= []).push({ name: o.name, call: o.call, rank: o.rank, missions: o.missions, day: c.day, trainer });
+  log(c, trainer ? `${RANKS[o.rank]} ${o.name} retires from the field to train recruits at the range. New operatives arrive as Specialists.`
+    : `${o.call} ${o.name} leaves Epsilon-11 with an honourable discharge after ${plural(o.missions, "mission")}.`, "key");
+}
+
 export function makeOperative(c: Campaign, given?: string): Operative {
-  const used = new Set(c.roster.map(o => o.name));
+  const used = new Set([...c.roster.map(o => o.name), ...(c.retired ?? []).map(r => r.name)]);
   const name = given ?? NAMES.find(n => !used.has(n)) ?? `Recruit ${c.nextOp}`;
   const n = c.nextOp++;
   const steady = has(c, "psych_screening") && Math.random() < 0.25;
-  return { sanBonus: has(c, "psych_screening") ? 10 : 0, id: "op" + n, name, call: `E11-${String(n).padStart(2, "0")}`, rank: 0, xp: 0, hp: 7, maxHp: 7, san: 100, aimBase: rand(64, 74), missions: 0, kills: 0, alive: true, perks: [], traits: steady ? ["steady"] : [], breakdowns: 0, bio: newBio(), medals: [], wounds: 0, seals: 0, faced: [] };
+  const trained = trainersActive(c) > 0;
+  return { sanBonus: has(c, "psych_screening") ? 10 : 0, id: "op" + n, name, call: `E11-${String(n).padStart(2, "0")}`, rank: trained ? 1 : 0, xp: trained ? RANK_XP[1] : 0, hp: 7, maxHp: 7, san: 100, aimBase: rand(64, 74), missions: 0, kills: 0, alive: true, perks: [], traits: steady ? ["steady"] : [], breakdowns: 0, bio: newBio(), medals: [], wounds: 0, seals: 0, faced: [] };
 }
 
 export function newCampaign(): Campaign {
@@ -597,7 +624,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     // what happened to them may leave a mark: each trigger sticks half the time
     const earned: TraitId[] = [];
     const roll = (t: TraitId, hit: boolean) => { if (hit && !o.traits.includes(t) && Math.random() < 0.5) { o.traits.push(t); earned.push(t); } };
-    roll("nightmares", s.witnessed >= 2);
+    roll("nightmares", s.witnessed >= 2 || !!o.refusedRetire);
     roll("twitchy", s.panics > 0);
     roll("gunshy", s.minHp <= 2);
     roll("hollow", o.breakdowns >= 2);
