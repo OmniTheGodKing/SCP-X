@@ -3,7 +3,7 @@
 import type { ClassId, PerkId, TraitId } from "../data/classes";
 export type { ClassId, PerkId, TraitId };
 /** Class abilities plus Secure, which every operative can do. */
-export type AbilityId = PerkId | "secure" | "dose";
+export type AbilityId = PerkId | "secure" | "dose" | "lockdown";
 
 import type { AttachmentId, WeaponType } from "../data/weapons";
 export type { AttachmentId, WeaponType };
@@ -58,6 +58,8 @@ export interface Unit {
   blindUntil?: number;
   /** Research bonus: lower blink chance while staring. */
   blinkMod?: number;
+  /** Site Security: guards are weaker than operatives and have no class. */
+  guard?: boolean;
   /** Civilians who saw too much; dosed ones have had amnestics. */
   witness?: boolean;
   dosed?: boolean;
@@ -100,10 +102,11 @@ export interface SquadMember {
   armor: number; hasArmor: boolean; items: Carried[];
   cls?: ClassId; perks: PerkId[]; traits: TraitId[];
   gun: Gun;
+  guard?: boolean;
 }
 
 /** Effects of finished research that apply during missions. */
-export interface MissionMods { blinkBonus: number; recoverBonus: number; mtfDrag: number; track173: boolean; }
+export interface MissionMods { blinkBonus: number; recoverBonus: number; mtfDrag: number; track173: boolean; lockdownTurns: number; }
 
 export interface MissionSetup {
   kind: MissionKind;
@@ -115,6 +118,10 @@ export interface MissionSetup {
   title: string;
   insurgents: number;
   squad: SquadMember[];
+  /** Breaches: Site Security on the map from turn 1, guards who come in on turn 2, and when Epsilon-11 arrives. */
+  guards?: SquadMember[];
+  lateGuards?: SquadMember[];
+  mtfTurn?: number;
   dclass: string[];
   known: string[];
   mods: MissionMods;
@@ -130,7 +137,11 @@ export interface MissionResult {
   squad: {
     opId: string; alive: boolean; hp: number; san: number; kills: number; sealed: boolean; hasArmor: boolean; items: Carried[];
     witnessed: number; panics: number; minHp: number; bestStreak: number;
+    /** Reinforcements who never reached the map before it ended. */
+    absent?: boolean;
   }[];
+  /** SCP-173 got out through the surface hatch. */
+  escaped: boolean;
   aftercare: boolean;
   prisoners: number;
   civiliansKilled: number;
@@ -179,5 +190,11 @@ export interface MissionState {
   stats: { mtfLost: number; dLost: number; escaped: number; raidersDown: number };
   smoke: { x: number; y: number; until: number }[];
   throwing: Carried | null;
+  /** Squad members still on their way, and the turn they arrive. */
+  reinforce: { turn: number; members: SquadMember[] }[];
+  /** SCP-173's urge to leave: it grows each turn it roams unseen without a kill. */
+  escapeDrive: number;
+  lockedUntil: number;
+  escaped: boolean;
   result?: MissionResult;
 }

@@ -6,6 +6,8 @@ import { S, canAct, canSee, isPanicked, isTeam, seen, team, unitAt } from "../ga
 import { blastArea, dragOptions, moveCost, reachFor, throwOptions } from "../game/turn";
 import { abilityTargets } from "../game/abilities";
 import type { Unit } from "../game/types";
+import { MAPS } from "../data/maps";
+import { escaping } from "../game/scp173";
 
 const C = {
   floor: "#222a32", floor2: "#252e37", wall: "#3a4551", wallTop: "#4b5866",
@@ -100,6 +102,21 @@ export function createRenderer(cv: HTMLCanvasElement) {
     ctx.fillStyle = C.manila; ctx.beginPath(); ctx.arc(cx, cy, 1.8, 0, Math.PI * 2); ctx.fill();
   }
 
+  // The surface hatch SCP-173 can escape through, and the panel that locks it
+  function drawHatch() {
+    const def = MAPS[S.setup.map];
+    if (!S.has173 || !def.hatch || !def.panel) return;
+    const [hx, hy] = def.hatch, [px, py] = def.panel, locked = S.lockedUntil >= S.turn;
+    ctx.fillStyle = locked ? "#4f5c68" : escaping() && !S.sealed ? "rgba(215,91,71,0.55)" : "#3b3226";
+    ctx.fillRect(hx * TS + 3, hy * TS + 3, TS - 6, TS - 6);
+    ctx.strokeStyle = locked ? C.ok : C.manila; ctx.lineWidth = 2;
+    ctx.strokeRect(hx * TS + 3, hy * TS + 3, TS - 6, TS - 6);
+    ctx.beginPath(); ctx.moveTo(hx * TS + 6, hy * TS + TS / 2); ctx.lineTo(hx * TS + TS - 6, hy * TS + TS / 2); ctx.stroke();
+    ctx.fillStyle = locked ? C.ok : C.alert;
+    ctx.fillRect(px * TS + TS / 2 - 5, py * TS + 4, 10, 7);
+    ctx.fillStyle = "#0f1317"; ctx.fillRect(px * TS + TS / 2 - 1, py * TS + 11, 2, 6);
+  }
+
   function drawUnit(u: Unit) {
     const [cx, cy] = center(u);
     if (u.side === "anomaly") { drawStatue(u.x, u.y, 1); return; }
@@ -113,8 +130,11 @@ export function createRenderer(cv: HTMLCanvasElement) {
     }
     if (u.side === "mtf") {
       const pan = isPanicked(u);
-      ctx.fillStyle = pan ? "#55636f" : C.mtf;
-      ctx.beginPath(); ctx.arc(cx, cy, 11, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = pan ? "#55636f" : u.guard ? "#9fb3c4" : C.mtf;
+      ctx.beginPath();
+      // guards are drawn as rounded squares, Epsilon-11 as circles
+      if (u.guard) ctx.roundRect(cx - 10, cy - 10, 20, 20, 5); else ctx.arc(cx, cy, 11, 0, Math.PI * 2);
+      ctx.fill();
       ctx.strokeStyle = "#0f1317"; ctx.lineWidth = 2; ctx.stroke();
       ctx.fillStyle = "#0f1317"; ctx.font = "600 11px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText(pan ? "––" : String(u.slot ?? ""), cx, cy + 1);
@@ -173,6 +193,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
     ctx.clearRect(0, 0, L.W * TS, L.H * TS);
     drawTiles();
     drawFog();
+    drawHatch();
     const sel = S.selected, playing = canAct();
     const st = S.statue;
     const known = S.has173 && !S.sealed && seen(st.x, st.y);

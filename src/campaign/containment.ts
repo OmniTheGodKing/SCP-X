@@ -3,17 +3,20 @@ import { FACILITIES, isContainment, nameInText, neighbors, operational, powerSho
 import { has } from "./research";
 import { HOME, REGIONS, REGION_IDS } from "../data/regions";
 import { addExposure, travelDays } from "./world";
-import { blinkFullOf, log, maxSanOf, type Campaign, type Incident, type Operative } from "./campaign";
+import { log, type Campaign, type Incident } from "./campaign";
+import { GUARD, type Guard } from "./security";
 
 export type ScpClass = "Safe" | "Euclid" | "Keter";
 const CLASS_GRADE: Record<ScpClass, number> = { Safe: 0, Euclid: 1, Keter: 2 };
 // Breaches are rare events spread across years: a well-kept Euclid cell breaches every few months.
 const BASE_RISK: Record<ScpClass, number> = { Safe: 0.004, Euclid: 0.012, Keter: 0.02 };
-const CLEAN_RISK = 0.02;   // standing-order cleanings by trained site staff
+// D-Class do the cleaning: two watch while the third scrubs, so it goes wrong when both watchers blink together.
+const D_BLINK = 0.15;
+export const CLEAN_CREW = 3;
+export const CLEAN_RISK = D_BLINK * D_BLINK;
 
 export const CLEAN_EVERY = 7;            // days between scheduled cleanings
 const decay = (c: Campaign) => has(c, "containment_rev") ? 2 : 4;   // maintenance lost per day
-export const breachWindow = (c: Campaign) => has(c, "rapid_response") ? 3 : 2;   // days to answer a breach
 export const RECOVERY_WINDOW = 3;        // days to answer a sighting
 export const MOVE_COST = 20;
 
@@ -57,11 +60,6 @@ export function breachRisk(c: Campaign, s: ScpRecord) {
   return { p: Math.min(0.9, p), why };
 }
 
-// Chance that, on a day a breach goes unanswered, the anomaly gets out of Site-19 entirely.
-export function escapeChance(c: Campaign, s: ScpRecord) {
-  const wing = wingOf(c, s);
-  return Math.max(0.03, 0.25 - 0.08 * (wing ? securityNear(c, wing) : 0) - (has(c, "early_warning") ? 0.08 : 0));
-}
 
 function startBreach(c: Campaign, s: ScpRecord, cause: string) {
   const wing = wingOf(c, s)!;
@@ -72,16 +70,16 @@ function startBreach(c: Campaign, s: ScpRecord, cause: string) {
     scpId: s.id,
     title: `Incident ${String(c.nextIncident).padStart(3, "0")}: ${s.name} breach, ${nameInText(wing.type)} on level ${wing.level + 1}`,
     appeared: c.day,
-    expires: c.day + breachWindow(c),
-    insurgents: Math.min(4, rand(0, 2) + Math.floor((c.day - 1) / 60)),
+    expires: c.day,
+    insurgents: Math.min(3, rand(0, 1) + Math.floor((c.day - 1) / 120)),
     region: HOME, map: "wingC",
   };
   c.nextIncident++;
   c.incidents.push(inc);
-  log(c, `${cause} ${s.name} is out of its cell. Respond within ${breachWindow(c)} days before it gets out of the site.`, "bad");
+  log(c, `${cause} ${s.name} is out of its cell. Site Security is responding now: send Epsilon-11 in after them, or leave it to the guards.`, "bad");
 }
 
-function goDark(c: Campaign, s: ScpRecord, why: string, from = "Site-19") {
+export function goDark(c: Campaign, s: ScpRecord, why: string, from = "Site-19") {
   s.status = "loose";
   s.resurfaceDay = c.day + rand(30, 120);
   log(c, `${why} ${s.name} has slipped away from ${from}. Nobody knows where it is.`, "bad");
@@ -113,10 +111,7 @@ export function tickContainment(c: Campaign) {
   for (const s of c.scps) {
     if (s.status === "contained") {
       s.maintenance = Math.max(0, s.maintenance - decay(c));
-      if (c.cleaningOrder && c.day - s.lastCleaned >= CLEAN_EVERY && c.dclass > 0) {
-        s.lastCleaned = c.day; s.maintenance = 100;
-        if (Math.random() < CLEAN_RISK) { c.dclass--; log(c, `A routine cleaning of ${s.name}'s cell went wrong. The D-Class inside was killed.`, "bad"); }
-      }
+      if (c.cleaningOrder && c.day - s.lastCleaned >= CLEAN_EVERY && c.dclass >= CLEAN_CREW) clean(c, s, "A routine cleaning");
       if (Math.random() < breachRisk(c, s).p) startBreach(c, s, "Containment alarm.");
     } else if (s.status === "loose") {
       if ((c.day - (s.resurfaceDay ?? 0)) % 4 === 0) addExposure(c, HOME, 1);
@@ -127,26 +122,8 @@ export function tickContainment(c: Campaign) {
     const s = c.scps.find(x => x.id === inc.scpId);
     if (!s || inc.appeared === c.day || inc.id === c.activeIncident) continue;
     const drop = () => { c.incidents = c.incidents.filter(i => i !== inc); };
-    if (inc.kind === "breach") {
-      if (c.day > inc.expires) {
-        drop(); addExposure(c, inc.region, 15); c.stats.missed++;
-        goDark(c, s, `Nobody answered ${inc.title.split(":")[0]} (+15 exposure).`);
-        continue;
-      }
-      const wing = wingOf(c, s);
-      if (wing && Math.random() < 0.4) {
-        const hit = neighbors(c, wing).filter(n => n.type !== "command" && !n.disabled && n.daysLeft === 0);
-        if (hit.length) {
-          const n = hit[rand(0, hit.length - 1)];
-          n.disabled = true;
-          log(c, `${s.name} tore through the ${nameInText(n.type)} on level ${n.level + 1}. It's out of action until repaired.`, "bad");
-        }
-      }
-      if (Math.random() < escapeChance(c, s)) {
-        drop(); addExposure(c, inc.region, 10); c.stats.missed++;
-        goDark(c, s, "The breach wasn't contained in time (+10 exposure).");
-      }
-    } else if (c.day > inc.expires) {
+    // breaches are answered on the spot, so only sightings can run out of time
+    if (inc.kind === "recovery" && c.day > inc.expires) {
       drop(); addExposure(c, inc.region, 15); c.stats.missed++;
       goDark(c, s, `The sighting went unanswered (+15 exposure in ${REGIONS[inc.region].name}).`, REGIONS[inc.region].name);
     }
@@ -166,27 +143,29 @@ export function resolveScp(c: Campaign, inc: Incident, recovered: boolean) {
   }
 }
 
-// ---- cleaning and moving: D-Class work inside the cell while operatives watch ----
+// ---- cleaning, tests and moving: D-Class work inside the cell ----
 
-const watcherBlink = (o: Operative) => {
-  const full = blinkFullOf(o);
-  return full + (0.5 - full) * (1 - Math.min(o.san, maxSanOf(o)) / maxSanOf(o));
-};
-/** Chance a D-Class dies doing work in the cell: everyone watching blinks at once. Site guards watch if nobody is assigned. */
-export const workRisk = (watchers: Operative[]) => watchers.length ? watchers.reduce((p, o) => p * watcherBlink(o), 1) : 0.25;
+const watcherBlink = (g: Guard) => GUARD.blink + (0.5 - GUARD.blink) * (1 - Math.min(g.san, GUARD.maxSan) / GUARD.maxSan);
+/** Chance a D-Class dies working in the cell: two D-Class watch, and any guards posted at the door watch too.
+ *  It only happens when every one of them blinks at once. */
+export const workRisk = (watchers: Guard[]) => watchers.reduce((p, g) => p * watcherBlink(g), CLEAN_RISK);
 
 export function canClean(c: Campaign, s: ScpRecord): string | null {
   if (s.status !== "contained") return `${s.name} isn't in its cell.`;
-  if (c.dclass < 1) return "Needs a D-Class.";
+  if (c.dclass < CLEAN_CREW) return `Needs ${CLEAN_CREW} D-Class: one cleans while two watch.`;
   return null;
+}
+function clean(c: Campaign, s: ScpRecord, what: string) {
+  s.lastCleaned = c.day; s.maintenance = 100;
+  if (Math.random() < CLEAN_RISK) { c.dclass--; log(c, `${what} of ${s.name}'s cell went wrong: both watchers blinked at once and the D-Class cleaning was killed.`, "bad"); }
 }
 
 /** D-Class work in the cell while operatives watch. `mult` scales the danger; `breach` is an extra
  *  chance the work itself lets it loose. Returns false if it ended in a breach. */
-export function cellWork(c: Campaign, s: ScpRecord, watchers: Operative[], what: string, mult = 1, dclass = 1, breach = 0) {
+export function cellWork(c: Campaign, s: ScpRecord, watchers: Guard[], what: string, mult = 1, dclass = 1, breach = 0) {
   const risk = Math.min(0.95, workRisk(watchers) * mult);
   for (const o of watchers) o.san = Math.max(0, o.san - 8);
-  const names = watchers.length ? watchers.map(o => o.name).join(" and ") : "site guards";
+  const names = watchers.length ? `two D-Class and guard${watchers.length > 1 ? "s" : ""} ${watchers.map(o => o.name).join(" and ")}` : "the two D-Class watching";
   const crew = dclass > 1 ? `one of the ${dclass} D-Class inside` : "the D-Class inside";
   if (Math.random() < risk) {
     c.dclass--;
@@ -197,9 +176,10 @@ export function cellWork(c: Campaign, s: ScpRecord, watchers: Operative[], what:
   return true;
 }
 
-export function cleanCell(c: Campaign, s: ScpRecord, watchers: Operative[]) {
+export function cleanCell(c: Campaign, s: ScpRecord) {
   if (canClean(c, s)) return;
-  if (cellWork(c, s, watchers, `cleaning of ${s.name}'s cell`)) { s.maintenance = 100; s.lastCleaned = c.day; }
+  clean(c, s, "A cleaning");
+  if (s.lastCleaned === c.day) log(c, `${s.name}'s cell is clean.`, "good");
 }
 
 export function canMove(c: Campaign, s: ScpRecord, to: Facility): string | null {
@@ -212,7 +192,7 @@ export function canMove(c: Campaign, s: ScpRecord, to: Facility): string | null 
   return null;
 }
 
-export function moveScp(c: Campaign, s: ScpRecord, to: Facility, watchers: Operative[]) {
+export function moveScp(c: Campaign, s: ScpRecord, to: Facility, watchers: Guard[]) {
   if (canMove(c, s, to)) return;
   c.funds -= MOVE_COST;
   if (cellWork(c, s, watchers, `the transfer of ${s.name}`) && s.status === "contained") {

@@ -33,6 +33,8 @@ export const WING_C: MapDef = {
   scpRooms: [[1, 1, 9, 5], [11, 1, 17, 5], [19, 1, 26, 5]],
   insurgentRooms: [[19, 1, 26, 5], [18, 12, 26, 16], [1, 1, 9, 5]],
   strayRooms: [[1, 1, 9, 5], [11, 1, 17, 5], [19, 1, 26, 5], [10, 12, 16, 16], [18, 12, 26, 16]],
+  hatch: [26, 1],
+  panel: [26, 7],
 };
 
 // Field maps for missions outside Site-19. Edge tiles marked E are where civilians run.

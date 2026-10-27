@@ -18,6 +18,9 @@ export interface MapDef {
   scpRooms: [number, number, number, number][];
   insurgentRooms: [number, number, number, number][];
   strayRooms: [number, number, number, number][];
+  /** Site-19 maps: the surface hatch SCP-173 can escape through, and the panel that locks it. */
+  hatch?: Pt;
+  panel?: Pt;
 }
 
 export class Level {

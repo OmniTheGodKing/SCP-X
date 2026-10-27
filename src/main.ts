@@ -3,6 +3,8 @@ import { advanceDay, applyResult, buildSetup, log, newCampaign, resolveInterrupt
 import { clearCampaign, loadCampaign, saveCampaign } from "./campaign/save";
 import { REGIONS } from "./data/regions";
 import { travelBlock, travelDays, transportName } from "./campaign/world";
+import { letGuardsHandle } from "./campaign/security";
+import { pendingBreach } from "./campaign/campaign";
 import { createMission } from "./game/mission";
 import { S } from "./game/state";
 import type { MissionKind, MissionResult } from "./game/types";
@@ -47,7 +49,12 @@ function showHub() {
       const t = travelDays(campaign, inc.region);
       if (t) {
         log(campaign, `Epsilon-11 flies out to ${REGIONS[inc.region].name} on the ${transportName(campaign)}: ${t} day${t > 1 ? "s" : ""}.`);
-        for (let i = 0; i < t && !campaign.over; i++) advanceDay(campaign);
+        for (let i = 0; i < t && !campaign.over; i++) {
+          advanceDay(campaign);
+          // a breach while the squad is in the air is Site Security's problem
+          const b = pendingBreach(campaign);
+          if (b) { log(campaign, "Epsilon-11 is in the air. Site Security has to handle the breach alone.", "bad"); letGuardsHandle(campaign, b); }
+        }
       }
       saveCampaign(campaign);
       createMission(setup);

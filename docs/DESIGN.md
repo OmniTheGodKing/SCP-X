@@ -112,6 +112,16 @@ Built in pass 2E:
 - Amnestics lab facility, and cover stories ($50k plus 2 amnestics for −10 regional exposure, 30-day cooldown).
 - Field recovery of new anomalies is deferred.
 
+### Site Security (pass 2E.1)
+
+- Guards are Site-19's own staff: aim around 55, 80 sanity, 5 HP, no armor or class, M2 Carbine. Each Security station houses 4; hiring costs $30k. Two come with a new campaign.
+- Breaches are immediate. Guards posted at a station next to the wing start on the map, the rest come in on turn 2, and Epsilon-11 arrives on turn 30, 20 or 12 depending on the alert level (Rapid response: 5 sooner).
+- Alert levels: Normal (sanity recovers 25% faster), Heightened, Full alert (half sanity recovery, +$20k a month).
+- "Let the guards handle it" auto-resolves: about 10% per guard plus 10% per adjacent station, less for Insurgents and low sanity, capped at 95%.
+- SCP-173 builds an escape drive each unseen turn without a kill; at 5 it heads for the surface hatch in the east lab. The lockdown panel seals the hatch for 5 turns (8 with Early warning sensors).
+- Guards who survive 3 breaches can train into Epsilon-11 ($80k, 10 days).
+- Cleaning is D-Class only: three go in, two watch. Tests and moves can add guards at the door as watchers.
+
 ## 8. Mission types
 
 | Mission | Where | Goal |
