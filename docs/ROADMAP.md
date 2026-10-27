@@ -194,6 +194,9 @@ The World Map should become the main strategic screen and the normal starting po
   Paracommandos 1952, Norwegian Marinejegerkommandoen 1953) and adds 2 candidates a month; Joint training exchange
   (after 6 wins) makes Veteran and Elite candidates far more common. O5 standing comes with Phase 3H.
 - (Done) The memorial keeps each fallen operative's portrait and unit.
+- (Done) The founding team of six is drawn from the same 1951 units as later recruits (standard quality, no traits),
+  so every operative has a unit, nationality, lean and headgear. The appearance editor includes build (masculine or
+  feminine) as in XCOM. Campaigns started before this keep their original six.
 
 ## Phase 3H: the O5 Council and strategic choices
 

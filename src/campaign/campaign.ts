@@ -312,7 +312,12 @@ export function newCampaign(): Campaign {
     inventory: {}, orders: [], knownNotes: [], nextD: 9101, nextOp: 1, nextIncident: 1,
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
   };
-  for (let i = 0; i < 6; i++) c.roster.push(makeOperative(c));
+  // the founding team comes from the same special forces units as later recruits (standard quality, no traits)
+  const used = new Set<string>();
+  for (let i = 0; i < 6; i++) {
+    const k = rollCandidate(`start-${i}`, 1951, used);
+    c.roster.push(operativeFrom(c, { ...k, quality: 0, trait: undefined }));
+  }
   refreshRecruits(c);
   const station = c.base.facilities.find(f => f.type === "security");
   for (let i = 0; i < 2; i++) { const g = newGuard(c); g.stationId = station?.id; c.guards.push(g); }
@@ -514,6 +519,12 @@ export function hireCandidate(c: Campaign, k: Candidate) {
   if (canHire(c, k)) return;
   c.funds -= candidateCost(k);
   c.recruits = (c.recruits ?? []).filter(x => x !== k);
+  const o = operativeFrom(c, k);
+  c.roster.push(o);
+  log(c, `${o.call} ${o.name}, from the ${UNITS[k.unit].name}, joins Epsilon-11.`, "good");
+}
+/** An operative made from a candidate: their unit, look, file, lean, quality and trait. */
+function operativeFrom(c: Campaign, k: Candidate): Operative {
   const o = makeOperative(c, k.name);
   Object.assign(o, { unit: k.unit, sex: k.sex, aimBase: k.aimBase, bio: { home: k.home, age: k.age, story: k.story }, look: rollLook(k.id, k.sex) });
   const lean = UNITS[k.unit].lean;
@@ -524,8 +535,7 @@ export function hireCandidate(c: Campaign, k: Candidate) {
   if (k.quality >= 1 && o.rank < 1) { o.rank = 1; o.xp = RANK_XP[1]; }
   if (k.trait && !o.traits.includes(k.trait)) o.traits.push(k.trait);
   o.san = maxSanOf(o);
-  c.roster.push(o);
-  log(c, `${o.call} ${o.name}, from the ${UNITS[k.unit].name}, joins Epsilon-11.`, "good");
+  return o;
 }
 
 export const canBuyDClass = (c: Campaign) =>

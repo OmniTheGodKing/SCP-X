@@ -716,7 +716,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         <div class="row"><button class="act" type="button" data-retire="${o.id}">${tw ? "Honourable discharge" : "Retire as a trainer"}</button></div></details>`; })()}
       <details class="archived" ${lookOpen ? "open" : ""}><summary>Appearance</summary>
         ${(() => { const l = lookOf(o), part = (key: string, label: string, value: string) => `<div class="row"><span class="specs" style="min-width:90px">${label}</span><button class="act" type="button" data-look="${key}" data-d="-1" aria-label="Previous ${label.toLowerCase()}">‹</button><span style="min-width:110px">${esc(value)}</span><button class="act" type="button" data-look="${key}" data-d="1" aria-label="Next ${label.toLowerCase()}">›</button></div>`;
-          return part("skin", "Skin tone", `${l.skin + 1} of ${SKIN.length}`) + part("hair", "Hair", HAIR_STYLES[l.hair]) + part("hairColor", "Hair colour", `${l.hairColor + 1} of ${HAIR_COLORS.length}`)
+          return part("sex", "Build", o.sex === "f" ? "Feminine" : "Masculine") + part("skin", "Skin tone", `${l.skin + 1} of ${SKIN.length}`) + part("hair", "Hair", HAIR_STYLES[l.hair]) + part("hairColor", "Hair colour", `${l.hairColor + 1} of ${HAIR_COLORS.length}`)
             + part("facial", "Facial hair", FACIAL[l.facial]) + part("scar", "Scar", l.scar ? "Yes" : "No") + (o.unit && HEADGEAR[o.unit] ? part("headgear", "Headgear", l.headgear ? HEADGEAR[o.unit]![0] : "None") : ""); })()}
       </details>
       <details class="archived"><summary>Rename</summary><div class="row">
@@ -865,6 +865,11 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       const o = c.roster.find(x => x.id === opSel); if (!o) return;
       const l = { ...lookOf(o) }, k = b.dataset.look as keyof typeof l, d = Number(b.dataset.d);
       lookOpen = true;
+      if ((k as string) === "sex") {
+        // switching build swaps to a fitting hair style and drops facial hair
+        change(() => { o.sex = o.sex === "f" ? "m" : "f"; l.facial = o.sex === "f" ? 0 : l.facial; l.hair = o.sex === "f" ? (l.hair >= 4 ? l.hair : 4) : (l.hair >= 4 ? 0 : l.hair); o.look = l; });
+        return;
+      }
       if (k === "scar" || k === "headgear") l[k] = !l[k];
       else { const n = LOOK_PARTS[k]; l[k] = (l[k] + d + n) % n; }
       change(() => { o.look = l; });
