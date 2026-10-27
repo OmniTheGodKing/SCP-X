@@ -1,5 +1,5 @@
 import "./styles.css";
-import { advanceDay, applyResult, buildSetup, log, newCampaign, resolveInterrupted, type Campaign, type Debrief } from "./campaign/campaign";
+import { advanceDay, applyResult, buildSetup, log, newCampaign, refreshRecruits, resolveInterrupted, type Campaign, type Debrief } from "./campaign/campaign";
 import { clearCampaign, loadCampaign, saveCampaign } from "./campaign/save";
 import { REGIONS } from "./data/regions";
 import { travelBlock, travelDays, transportName } from "./campaign/world";
@@ -17,6 +17,7 @@ import { mountDebug } from "./ui/debug";
 const root = document.getElementById("app")!;
 let campaign: Campaign = loadCampaign() ?? newCampaign();
 resolveInterrupted(campaign);
+if (!campaign.recruits) refreshRecruits(campaign);   // saves from before the recruit pool
 saveCampaign(campaign);
 
 const WIN: Record<MissionKind, [string, string]> = {

@@ -89,8 +89,8 @@ canvas { display: block; width: 100%; max-width: 100%; height: auto; border: 1px
 .flag.bad { border-color: var(--alert); color: var(--alert); }
 .actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .actions .wide { grid-column: 1 / -1; }
-button.act { font-family: var(--font-mono); font-size: 12px; letter-spacing: .04em; padding: 9px 10px; background: var(--panel-2); color: var(--ink); border: 1px solid var(--line); cursor: pointer; }
-button.act:hover:not(:disabled) { border-color: var(--manila); }
+button.act, label.act { font-family: var(--font-mono); font-size: 12px; letter-spacing: .04em; padding: 9px 10px; background: var(--panel-2); color: var(--ink); border: 1px solid var(--line); cursor: pointer; }
+button.act:hover:not(:disabled), label.act:hover { border-color: var(--manila); }
 button.act:focus-visible { outline: 2px solid var(--manila); outline-offset: 1px; }
 button.act:disabled { opacity: .4; cursor: not-allowed; }
 button.act.primary { background: var(--manila); color: var(--bg); border-color: var(--manila); font-weight: 500; }

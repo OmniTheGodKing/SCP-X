@@ -153,6 +153,12 @@ retaliation (done); (5) doors and sirens (done).
 
 ## Phase 3G: recruiting Epsilon-11 (XCOM style)
 
+- (Done, part A) The recruit pool in the Command facility: 4 to 6 candidates a month from 13 special forces units
+  (7 from 1951; US Army Special Forces 1952, New Zealand SAS 1955, Sayeret Matkal and the Australian SAS 1957, the
+  Danish Jægerkorps 1961, Navy SEALs 1962), men and women, each with a unit-fitting hometown and backstory and a unit
+  lean (+6 aim, +15 sanity, +1 HP or +1 move). Standard $100k, Veteran $140k (arrives as PFC), Elite $190k (PFC and
+  Steady). Still to come below: portraits and liaison research.
+
 - A recruit pool in the Command facility's panel: 4 to 6 candidates, refreshed monthly, men and women. Each has a name,
   age, nationality, home unit, backstory, a stat lean and sometimes a starting trait. Better candidates cost more.
 - Recruited from special forces around the world, opening by year: from 1951 US Army Ranger companies, Navy Underwater

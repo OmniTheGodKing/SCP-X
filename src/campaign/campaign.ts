@@ -12,6 +12,7 @@ import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, collapsedCount, COLLAPSE_LIMIT, newRegions, regionFunding, tickWorld, travelDays, type RegionState } from "./world";
 import { RAID, raidArrival, raidLoss, tickRaids, ALERTS, breachGuards, guardMember, guardsReady, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
 import { MEDALS, rollBio, type MedalId } from "../data/bios";
+import { QUALITY, UNITS, rollCandidate, type Candidate, type UnitId } from "../data/units";
 import { monthlyStaff, tickStaff, type StaffEvent } from "./staff";
 import { tickInspection } from "./inspection";
 import { buildReport, type Report } from "./reports";
@@ -25,7 +26,8 @@ export const RANK_XP = [0, 3, 7, 12, 18, 25, 34];
 /** Ranks that come with a new perk (Private First Class to Sergeant First Class); the top two give a fixed bonus instead. */
 export const PERK_RANKS = 4;
 export const RANK_BONUS: Record<number, string> = { 5: "+1 HP and +5 aim", 6: "−2% blink chance and +10 max sanity" };
-export const RECRUIT_COST = 120;
+/** The cheapest recruit in the pool (a standard candidate). */
+export const RECRUIT_COST = QUALITY[0].cost;
 export const DCLASS_COST = 15;
 export const DCLASS_MONTHLY = 6;
 export const MONTH = 30;
@@ -69,6 +71,10 @@ export interface Operative {
   survivor?: boolean;
   /** Asked to retire and was talked into staying. */
   refusedRetire?: boolean;
+  /** Where they were recruited from, and what that gives them in the field. */
+  unit?: UnitId;
+  sex?: "m" | "f";
+  fleet?: boolean;
 }
 
 /** Someone who left Epsilon-11 alive: as a trainer at the training range, or with an honourable discharge. */
@@ -182,6 +188,8 @@ export interface Campaign {
   lastStrike?: number;
   /** Things that have happened at least once, which open up research. */
   milestones?: Milestone[];
+  /** This month's recruit pool in the Command facility. */
+  recruits?: Candidate[];
 }
 
 // Perks per rank: steadier aim, fewer blinks, more composure.
@@ -300,6 +308,7 @@ export function newCampaign(): Campaign {
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
   };
   for (let i = 0; i < 6; i++) c.roster.push(makeOperative(c));
+  refreshRecruits(c);
   const station = c.base.facilities.find(f => f.type === "security");
   for (let i = 0; i < 2; i++) { const g = newGuard(c); g.stationId = station?.id; c.guards.push(g); }
   log(c, "Site-19 Command is online. SCP-173 is held in the Euclid wing on level 2. Keep its cell clean, keep it watched, and keep Epsilon-11 ready for when it gets out.", "key");
@@ -362,6 +371,7 @@ export function advanceDay(c: Campaign) {
     monthlyResearch(c);
     monthlyDClass(c);
     monthlyStaff(c);
+    refreshRecruits(c);
     if (has(c, "sigint")) gainIntel(c, 1);
     const funds = monthlyFunding(c), upkeep = monthlyUpkeep(c);
     const room = Math.max(0, dclassCapacity(c) - c.dclass), d = Math.min(DCLASS_MONTHLY, room);
@@ -482,12 +492,34 @@ function checkOver(c: Campaign) {
   }
 }
 
-export function recruit(c: Campaign) {
-  if (c.funds < RECRUIT_COST) return;
-  c.funds -= RECRUIT_COST;
-  const o = makeOperative(c);
+// ---- the recruit pool: special forces candidates from around the world, refreshed every month ----
+export const POOL_SIZE = [4, 6];
+export function refreshRecruits(c: Campaign) {
+  const used = new Set([...c.roster.map(o => o.name), ...(c.retired ?? []).map(r => r.name)]);
+  c.recruits = Array.from({ length: rand(POOL_SIZE[0], POOL_SIZE[1]) }, (_, i) => rollCandidate(`cand${c.day}-${i}`, yearOf(c.day), used));
+}
+export const candidateCost = (k: Candidate) => QUALITY[k.quality].cost;
+export function canHire(c: Campaign, k: Candidate): string | null {
+  if (c.over) return "The campaign is over.";
+  if (c.funds < candidateCost(k)) return `Needs $${candidateCost(k)}k.`;
+  return null;
+}
+export function hireCandidate(c: Campaign, k: Candidate) {
+  if (canHire(c, k)) return;
+  c.funds -= candidateCost(k);
+  c.recruits = (c.recruits ?? []).filter(x => x !== k);
+  const o = makeOperative(c, k.name);
+  Object.assign(o, { unit: k.unit, sex: k.sex, aimBase: k.aimBase, bio: { home: k.home, age: k.age, story: k.story } });
+  const lean = UNITS[k.unit].lean;
+  if (lean === "aim") o.aimBase += 6;
+  else if (lean === "san") o.sanBonus = (o.sanBonus ?? 0) + 15;
+  else if (lean === "hp") { o.maxHp++; o.hp++; }
+  else o.fleet = true;
+  if (k.quality >= 1 && o.rank < 1) { o.rank = 1; o.xp = RANK_XP[1]; }
+  if (k.quality >= 2 && !o.traits.includes("steady")) o.traits.push("steady");
+  o.san = maxSanOf(o);
   c.roster.push(o);
-  log(c, `${o.call} ${o.name} joins Epsilon-11.`, "good");
+  log(c, `${o.call} ${o.name}, from the ${UNITS[k.unit].name}, joins Epsilon-11.`, "good");
 }
 
 export const canBuyDClass = (c: Campaign) =>
@@ -523,7 +555,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     return {
       opId: o.id, name: o.name, call: o.call, hp: o.hp + bonus, maxHp: o.maxHp + bonus, san: Math.min(o.san, maxSanOf(o)),
       rankShort: RANK_SHORT[o.rank], maxSan: maxSanOf(o), aim: aimOf(o) + (has(c, "marksmanship") ? 5 : 0), blinkFull: blinkFullOf(o), medals: [...(o.medals ?? [])],
-      armor: st.points, hasArmor: !!kind, armorKind: kind || undefined, armorHp: st.hp, moveBonus: st.move, items: items.map(id => ({ id, uses: ITEMS[id].uses ?? 1 })),
+      armor: st.points, hasArmor: !!kind, armorKind: kind || undefined, armorHp: st.hp, moveBonus: st.move + (o.fleet ? 1 : 0), items: items.map(id => ({ id, uses: ITEMS[id].uses ?? 1 })),
       cls: o.cls, perks: [...o.perks], traits: [...o.traits], gun: gunFor(c, o),
     };
   }).map(m => {
