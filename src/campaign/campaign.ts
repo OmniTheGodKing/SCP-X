@@ -263,7 +263,7 @@ export function advanceDay(c: Campaign) {
     const room = Math.max(0, dclassCapacity(c) - c.dclass), d = Math.min(DCLASS_MONTHLY, room);
     c.funds += funds - upkeep; c.dclass += d;
     for (const r of REGION_IDS) addExposure(c, r, -3);   // the public slowly forgets
-    log(c, `${monthName(c.day)}: the fronts pass on $${funds}k (less where exposure is high); facility upkeep costs $${upkeep}k. ${d} D-Class transferred in${d < DCLASS_MONTHLY ? " (the barracks are full)" : ""}. Exposure eases by 3 in every region.`, "key", "command");
+    log(c, `${monthName(c.day)}: the fronts pass on $${funds}k (less where exposure is high); upkeep and salaries cost $${upkeep}k. ${d} D-Class transferred in${d < DCLASS_MONTHLY ? " (the barracks are full)" : ""}. Exposure eases by 3 in every region.`, "key", "command");
   }
   checkOver(c);
   return c.incidents.length > incidentsBefore || c.log.length !== logBefore || !!c.over;

@@ -89,7 +89,10 @@ export const engineersFree = (c: Campaign) => c.engineers - engineersBusy(c);
 
 export const engineerCapacity = (c: Campaign) => 8 + countOperational(c, "workshop") * 4;
 export const dclassCapacity = (c: Campaign) => countOperational(c, "barracks") * 10;
-export const monthlyUpkeep = (c: Campaign) => c.base.facilities.reduce((a, f) => a + FACILITIES[f.type].upkeep, 0) + ALERTS[c.alert].upkeep;
+export const SALARY = { operative: 10, guard: 5 };
+export const salaries = (c: Campaign) => c.roster.filter(o => o.alive).length * SALARY.operative + c.guards.filter(g => g.alive).length * SALARY.guard;
+/** Facility upkeep, the alert level's cost, and staff salaries, per month. */
+export const monthlyUpkeep = (c: Campaign) => c.base.facilities.reduce((a, f) => a + FACILITIES[f.type].upkeep, 0) + ALERTS[c.alert].upkeep + salaries(c);
 export const healPerDay = (c: Campaign) => countOperational(c, "medical") && !powerShort(c) ? 2 : 1;
 export const sanityPerDay = (c: Campaign) => countOperational(c, "psych") && !powerShort(c) ? 20 : 10;
 
