@@ -2,9 +2,9 @@
 // once a month one comes up on the Command tab with two choices, each with a clear cost. Left
 // unanswered for a week, the second choice (usually letting it go) is taken for you.
 import { ITEMS, type ItemId } from "./research";
-import { holdingCapacity, log, type Campaign } from "./campaign";
+import { RANKS, holdingCapacity, log, retire, trainerWhy, type Campaign, type Operative } from "./campaign";
 
-export type StaffEventId = "breakdown" | "asleep" | "engineer" | "mole" | "discovery" | "letter" | "shortfall" | "visitor";
+export type StaffEventId = "breakdown" | "asleep" | "engineer" | "mole" | "discovery" | "letter" | "shortfall" | "visitor" | "retire";
 export interface StaffEvent { id: StaffEventId; who?: string; item?: ItemId; until: number; }
 interface Choice { label: string; why?: (c: Campaign, e: StaffEvent) => string | null; run: (c: Campaign, e: StaffEvent) => string; }
 interface EventDef { title: string; when: (c: Campaign) => boolean; setup?: (c: Campaign, e: StaffEvent) => void; text: (c: Campaign, e: StaffEvent) => string; choices: [Choice, Choice]; }
@@ -14,6 +14,7 @@ const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 const op = (c: Campaign, e: StaffEvent) => c.roster.find(o => o.id === e.who);
 const guard = (c: Campaign, e: StaffEvent) => c.guards.find(g => g.id === e.who);
 const opName = (c: Campaign, e: StaffEvent) => { const o = op(c, e); return o ? `${o.call} ${o.name}` : "The operative"; };
+const veteran = (o: Operative) => o.alive && !o.busy && o.missions >= 10 && !o.refusedRetire;
 const busiest = (c: Campaign) => Object.entries(c.research.assigned).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1])[0]?.[0];
 
 export const STAFF_EVENTS: Record<StaffEventId, EventDef> = {
@@ -89,6 +90,18 @@ export const STAFF_EVENTS: Record<StaffEventId, EventDef> = {
     choices: [
       { label: "Buy replacements ($15k)", why: c => c.funds < 15 ? "Needs $15k." : null, run: c => { c.funds -= 15; return "Stores are made up from a civilian supplier."; } },
       { label: "Make do (lose the item)", run: (c, e) => { if (e.item && c.inventory[e.item]) c.inventory[e.item]!--; return `One ${ITEMS[e.item!]?.name.toLowerCase() ?? "item"} is gone from stores.`; } },
+    ],
+  },
+  retire: {
+    title: "A request to retire",
+    when: c => c.roster.some(veteran),
+    setup: (c, e) => { e.who = c.roster.filter(veteran).sort((a, b) => b.rank - a.rank)[0].id; },
+    text: (c, e) => { const o = op(c, e); if (!o) return "An operative has asked to retire.";
+      const t = trainerWhy(c, o);
+      return `${RANKS[o.rank]} ${o.name} has served on ${o.missions} missions and has asked to step back from the field. ${t ? `They would leave with an honourable discharge (${t.charAt(0).toLowerCase() + t.slice(1, -1)}).` : "They would stay on as a trainer: new recruits would arrive as Specialists."}`; },
+    choices: [
+      { label: "Let them retire", run: (c, e) => { const o = op(c, e); if (o) retire(c, o); return "The request is granted."; } },
+      { label: "Ask them to stay (they may develop Nightmares after each mission)", run: (c, e) => { const o = op(c, e); if (o) o.refusedRetire = true; return `${opName(c, e)} stays on. They don't ask again.`; } },
     ],
   },
   visitor: {

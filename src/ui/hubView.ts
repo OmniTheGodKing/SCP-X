@@ -9,7 +9,7 @@ import {
   powerShort, powerSupply, powerUse, repair, sanityPerDay, type Facility, type FacilityType,
 } from "../campaign/base";
 import {
-  DCLASS_COST, DCLASS_MONTHLY, RANKS, RANK_XP, RANK_BONUS, RECRUIT_COST, advanceDay, aimOf, blinkFullOf, buyDClass,
+  DCLASS_COST, DCLASS_MONTHLY, RANKS, RANK_XP, TRAINER, retire, trainerWhy, RANK_BONUS, RECRUIT_COST, advanceDay, aimOf, blinkFullOf, buyDClass,
   canBuyDClass, canHireEngineer, dayOfMonth, deployable, hireEngineer, maxSanOf, monthOf, monthlyFunding, recruit,
   INTEL_PER_PRISONER, INTERROGATION_DAYS, interrogationDays, PRISONER_BOUNTY, holdingCapacity, canRetrain, canTherapy, canWeaken, dateText, fitAttachment, gunFor, loadAmmo, setWeapon, weaken, weaponOf, weaponOptions, chooseClass, choosePerk, perkChoices, promotionDue, startRetrain, startTherapy,
   pendingBreach, type Campaign, type Incident, type Loadout, type Operative,
@@ -604,6 +604,9 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         <div class="projects">${Object.entries(TRAINING).map(([id, t]) => { const w = canTrain(c, id), got = c.purchases.includes(id);
           return `<div class="proj ${got ? "done" : ""}"><div class="ptop"><b>${esc(t.name)}</b>${got ? `<span class="flag">Done</span>` : ""}</div><div class="muted">${esc(t.desc)}</div>
           ${got ? "" : `<div class="row"><button class="act" type="button" data-train="${id}" ${w ? `disabled title="${esc(w)}"` : ""}>Buy · $${t.cost}k</button>${w ? `<span class="muted">${esc(w)}</span>` : ""}</div>`}</div>`; }).join("")}</div>
+        <div class="label" style="margin-top:10px">Trainers · ${(c.retired ?? []).filter(r => r.trainer).length} of ${TRAINER.max}</div>
+        ${(c.retired ?? []).some(r => r.trainer) ? `<p>${c.retired!.filter(r => r.trainer).map(r => `<b>${RANKS[r.rank]} ${esc(r.name)}</b>`).join(", ")} ${c.retired!.filter(r => r.trainer).length > 1 ? "train" : "trains"} recruits here: new operatives arrive as Specialists.</p>`
+          : `<p class="muted">A Major or Colonel can retire here as a trainer (from their page on the Personnel tab). While one is here, new recruits arrive as Specialists.</p>`}
         <div class="label" style="margin-top:10px">Retraining · $50k · 5 days</div>
         ${c.roster.filter(o => o.alive && o.cls).map(o => { const rw = canRetrain(c, o); return `<div class="row"><span>${esc(o.call)} ${esc(o.name)} · ${CLASSES[o.cls!].name}</span><button class="act" type="button" data-retrain="${o.id}" ${rw ? `disabled title="${esc(rw)}"` : ""}>Retrain</button>${rw && rw !== "Already away from duty." ? "" : rw ? `<span class="muted">${esc(rw)}</span>` : ""}</div>`; }).join("") || `<p class="muted">Nobody has a class yet.</p>`}`);
       case "psych": {
@@ -653,6 +656,10 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     <section class="col">
       ${opDetail()}
       <p class="muted">Guards, training, therapy, D-Class, engineers and prisoners are managed from their facilities on the Site-19 tab.</p>
+      ${c.retired?.length ? `<div class="card">
+        <div class="label">Retired</div>
+        <ul class="memorial">${c.retired.map(r => `<li><b>${esc(r.call)} ${esc(r.name)}</b>, ${RANKS[r.rank]} · ${plural(r.missions, "mission")} · ${r.trainer ? "trainer at the range" : "honourable discharge"}, ${dateText(r.day)}</li>`).join("")}</ul>
+      </div>` : ""}
       ${c.roster.some(o => !o.alive) ? `<div class="card">
         <div class="label">Memorial</div>
         <ul class="memorial">${c.roster.filter(o => !o.alive).map(o => `<li><b>${esc(o.call)} ${esc(o.name)}</b>, ${RANKS[o.rank]} · ${plural(o.missions, "mission")} · killed on day ${o.diedDay}, ${esc(o.diedAt || "")}</li>`).join("")}</ul>
@@ -673,6 +680,9 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       ${o.bio ? `<p class="muted">Age ${o.bio.age + Math.floor((c.day - 1) / 365)}, from ${esc(o.bio.home)}. ${esc(o.bio.story)}</p>` : ""}
       <div class="specs">Service: ${plural(o.missions, "mission")} · ${plural(o.kills, "kill")} · wounded ${o.wounds ?? 0}× · ${(o.seals ?? 0) === 1 ? "1 anomaly" : `${o.seals ?? 0} anomalies`} sealed${o.faced?.length ? ` · faced ${esc(o.faced.join(", "))}` : ""}</div>
       ${o.medals?.length ? `<ul class="traits">${o.medals.map(m => `<li class="good"><b>${MEDALS[m].name}</b>: ${esc(MEDALS[m].bonus)} <span class="muted">${esc(MEDALS[m].how)}</span></li>`).join("")}</ul>` : ""}
+      ${o.busy ? "" : (() => { const tw = trainerWhy(c, o); return `<details class="archived"><summary>Retire</summary>
+        <p class="muted">${tw ? `${esc(tw)} They can still leave with an honourable discharge.` : "As a trainer at the range, new recruits arrive as Specialists while they're there."}</p>
+        <div class="row"><button class="act" type="button" data-retire="${o.id}">${tw ? "Honourable discharge" : "Retire as a trainer"}</button></div></details>`; })()}
       <details class="archived"><summary>Rename</summary><div class="row">
         <label class="specs" for="renameName">Name</label><input id="renameName" maxlength="24" value="${esc(o.name)}">
         <label class="specs" for="renameCall">Callsign</label><input id="renameCall" maxlength="12" value="${esc(o.call)}">
@@ -809,6 +819,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     root.querySelectorAll<HTMLElement>("[data-transfer]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.transfer); if (s) change(() => transferOut(c, s)); });
     root.querySelectorAll<HTMLElement>("[data-clean]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.clean); if (s) change(() => cleanCell(c, s)); });
     root.querySelectorAll<HTMLElement>("[data-alert]").forEach(b => b.onclick = () => change(() => { c.alert = b.dataset.alert as Alert; }));
+    root.querySelectorAll<HTMLElement>("[data-retire]").forEach(b => b.onclick = () => { const o = c.roster.find(x => x.id === b.dataset.retire); if (o) { opSel = null; change(() => retire(c, o)); } });
     on("renameBtn", () => {
       const o = c.roster.find(x => x.id === opSel), n = root.querySelector<HTMLInputElement>("#renameName")!.value.trim(), k = root.querySelector<HTMLInputElement>("#renameCall")!.value.trim();
       if (o && n && k) change(() => { o.name = n.slice(0, 24); o.call = k.slice(0, 12); });

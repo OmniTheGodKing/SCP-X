@@ -100,7 +100,7 @@ retaliation (done); (5) doors and sirens (done).
   instances infect with every blow, and tear a containment suit 60% of the time.
 - Author credit for SCP-610 still to be confirmed.
 
-## Phase 3E: a living Site-19
+## Phase 3E: a living Site-19 (done)
 
 - (Done) Security stations defend their whole level; Major and Colonel ranks above the perk tree.
 - (Done) D-Class morale: overcrowding, deaths and termination orders lower it, a recreation room raises it, and below
@@ -126,8 +126,9 @@ retaliation (done); (5) doors and sirens (done).
 - (Done) Personnel files: hometown, age and a line of backstory, service history (missions, kills, wounds, seals,
   anomalies faced), and renaming operatives and callsigns. Medals with small bonuses: Sealed in, Iron nerve, Purple
   Heart, Survivor, Distinguished service.
-- Retirement: Majors and Colonels can retire as trainers (recruits arrive as Specialists, at most 2 trainers); lower
-  ranks get an honourable discharge.
+- (Done) Retirement: Majors and Colonels can retire as trainers at a working training range (recruits arrive as
+  Specialists, at most 2 trainers); anyone else leaves with an honourable discharge. Veterans with 10+ missions may ask
+  to retire as a staff incident; talking them out of it risks Nightmares after every mission.
 
 ## Phase 3F: defending Site-19
 
