@@ -5,7 +5,9 @@ import { blinkFullOf, log, maxSanOf, type Campaign, type Incident, type Operativ
 
 export type ScpClass = "Safe" | "Euclid" | "Keter";
 const CLASS_GRADE: Record<ScpClass, number> = { Safe: 0, Euclid: 1, Keter: 2 };
-const BASE_RISK: Record<ScpClass, number> = { Safe: 0.02, Euclid: 0.06, Keter: 0.1 };
+// Breaches are rare events spread across years: a well-kept Euclid cell breaches every few months.
+const BASE_RISK: Record<ScpClass, number> = { Safe: 0.004, Euclid: 0.012, Keter: 0.02 };
+const CLEAN_RISK = 0.02;   // standing-order cleanings by trained site staff
 
 export const CLEAN_EVERY = 7;            // days between scheduled cleanings
 const decay = (c: Campaign) => has(c, "containment_rev") ? 2 : 4;   // maintenance lost per day
@@ -79,7 +81,7 @@ function startBreach(c: Campaign, s: ScpRecord, cause: string) {
 
 function goDark(c: Campaign, s: ScpRecord, why: string) {
   s.status = "loose";
-  s.resurfaceDay = c.day + rand(10, 30);
+  s.resurfaceDay = c.day + rand(30, 120);
   log(c, `${why} ${s.name} has escaped Site-19. Nobody knows where it is.`, "bad");
 }
 
@@ -106,9 +108,13 @@ export function tickContainment(c: Campaign) {
   for (const s of c.scps) {
     if (s.status === "contained") {
       s.maintenance = Math.max(0, s.maintenance - decay(c));
+      if (c.cleaningOrder && c.day - s.lastCleaned >= CLEAN_EVERY && c.dclass > 0) {
+        s.lastCleaned = c.day; s.maintenance = 100;
+        if (Math.random() < CLEAN_RISK) { c.dclass--; log(c, `A routine cleaning of ${s.name}'s cell went wrong. The D-Class inside was killed.`, "bad"); }
+      }
       if (Math.random() < breachRisk(c, s).p) startBreach(c, s, "Containment alarm.");
     } else if (s.status === "loose") {
-      c.exposure = Math.min(100, c.exposure + 1);
+      if ((c.day - (s.resurfaceDay ?? 0)) % 4 === 0) c.exposure = Math.min(100, c.exposure + 1);
       if (s.resurfaceDay !== undefined && c.day >= s.resurfaceDay) resurface(c, s);
     }
   }

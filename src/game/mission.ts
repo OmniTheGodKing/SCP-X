@@ -1,6 +1,7 @@
 // Building a mission from what Site-19 sends, and turning its outcome into a result.
 import { Level, floorTiles, useLevel, type MapDef, type Pt } from "../core/grid";
 import { setSmoke } from "../core/sight";
+import { insurgentGuns } from "../data/weapons";
 import { STARTING_NOTES } from "./notes";
 import { PROFILE } from "./profiles";
 import { S, computeVis, log, setMission } from "./state";
@@ -31,7 +32,7 @@ export function createMission(def: MapDef, setup: MissionSetup) {
       hp: m.hp, maxHp: m.maxHp, san: m.san, maxSan: m.maxSan, aim: m.aim, blinkFull: m.blinkFull,
       armor: m.armor + (m.perks.includes("plated") ? 1 : 0), hasArmor: m.hasArmor, blinkMod: setup.mods.blinkBonus,
       items: m.items.map(it => ({ ...it, uses: it.uses + (m.perks.includes("grenadier") && (it.id === "flashbang" || it.id === "smoke") ? 1 : 0) })),
-      cls: m.cls, perks: [...m.perks], traits: [...m.traits], minHp: m.hp, witnessed: 0, panics: 0, streak: 0, bestStreak: 0 }));
+      cls: m.cls, perks: [...m.perks], traits: [...m.traits], minHp: m.hp, gun: { ...m.gun }, witnessed: 0, panics: 0, streak: 0, bestStreak: 0 }));
   });
   const staging = floorTiles([1, 12, 8, 14]);
   setup.dclass.forEach((name, i) => {
@@ -44,9 +45,12 @@ export function createMission(def: MapDef, setup: MissionSetup) {
   const [sx, sy] = claim(floorTiles(scpRoom));
   const ciRoom = pick(def.insurgentRooms.filter(r => r !== scpRoom));
   const ciTiles = floorTiles(ciRoom);
+  const arsenal = insurgentGuns(setup.year);
   for (let i = 0; i < setup.insurgents; i++) {
     const [x, y] = claim(ciTiles);
-    units.push(mk({ id: "r" + (i + 1), side: "raider", name: "Insurgent", x, y, hp: 4, maxHp: 4, aim: 60, san: PROFILE.raider.maxSan, armor: setup.insurgentArmor }));
+    const g = pick(arsenal);
+    units.push(mk({ id: "r" + (i + 1), side: "raider", name: "Insurgent", x, y, hp: 4, maxHp: 4, aim: 60, san: PROFILE.raider.maxSan, armor: setup.insurgentArmor,
+      gun: { name: g.name, type: g.type, dmg: g.dmg, mag: g.mag, ammo: g.mag, aim: 0 } }));
   }
   const strayRooms = shuffle(def.strayRooms.filter(r => r !== ciRoom));
   for (let i = 0; i < 4; i++) {
@@ -87,6 +91,8 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
       hasArmor: !!u.hasArmor, items: (u.items || []).map(i => ({ ...i })),
       witnessed: u.witnessed ?? 0, panics: u.panics ?? 0, minHp: u.minHp ?? u.hp, bestStreak: u.bestStreak ?? 0 })),
     aftercare: S.units.some(u => u.opId && u.alive && !u.downed && u.perks?.includes("aftercare")),
+    // incapacitated Insurgents: those restrained are taken; if the mission is won, everyone left down is too
+    prisoners: S.units.filter(u => u.side === "raider" && u.alive && u.downed && (u.secured || win)).length,
     known: [...S.known],
     dSent: S.setup.dclass.length,
     dReturned: detail.filter(u => u.alive).length,

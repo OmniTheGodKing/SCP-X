@@ -3,12 +3,14 @@ import { cheb } from "../core/grid";
 import { hasPerk, spend, usesLeft } from "./perks";
 import { maxSanOf } from "./profiles";
 import { S, alive, canAct, canSee, computeVis, full, hooks, isPanicked, log, seen, team } from "./state";
-import type { PerkId, Unit } from "./types";
+import type { AbilityId, Unit } from "./types";
+import { PERKS } from "../data/classes";
 
 export interface AbilityDef {
-  perk: PerkId;
+  perk: AbilityId;
   label: string;
-  target: "ally" | "downed" | "panicked" | "enemy" | "self";
+  desc?: string;
+  target: "ally" | "downed" | "panicked" | "enemy" | "self" | "captive";
   endsTurn?: boolean;
   /** Uses per mission, if limited. */
   uses?: (u: Unit) => number;
@@ -22,18 +24,23 @@ export const ABILITIES: AbilityDef[] = [
   { perk: "suppression", label: "Suppress", target: "enemy", endsTurn: true },
   { perk: "mark_target", label: "Mark target", target: "enemy" },
   { perk: "run_and_gun", label: "Run and gun", target: "self", uses: () => 1 },
+  { perk: "secure", label: "Secure prisoner", target: "captive", desc: "Restrain an adjacent wounded Insurgent so they're taken prisoner even if the mission fails." },
 ];
 
-export const abilitiesOf = (u: Unit | null) => u ? ABILITIES.filter(a => hasPerk(u, a.perk)) : [];
-const def = (p: PerkId) => ABILITIES.find(a => a.perk === p)!;
+const knows = (u: Unit, p: AbilityId) => p === "secure" ? u.side === "mtf" && abilityTargets(u, "secure").length > 0 : hasPerk(u, p);
+export const abilitiesOf = (u: Unit | null) => u ? ABILITIES.filter(a => knows(u, a.perk)) : [];
+const def = (p: AbilityId) => ABILITIES.find(a => a.perk === p)!;
+export const abilityName = (p: AbilityId) => p === "secure" ? def(p).label : PERKS[p].name;
+export const abilityDesc = (p: AbilityId) => p === "secure" ? def(p).desc! : PERKS[p].desc;
 const adjacent = (a: Unit, b: Unit) => cheb(a.x, a.y, b.x, b.y) <= 1;
 /** Combat medic: one free medkit per turn. */
 const freeHeal = (u: Unit) => hasPerk(u, "combat_medic") && !(u.used?.["cm" + S.turn]);
-const cost = (u: Unit, p: PerkId) => p === "run_and_gun" ? 0 : p === "medkit" && freeHeal(u) ? 0 : 1;
+const cost = (u: Unit, p: AbilityId) => p === "run_and_gun" ? 0 : p === "medkit" && freeHeal(u) ? 0 : 1;
 
-export function abilityTargets(u: Unit, p: PerkId): Unit[] {
+export function abilityTargets(u: Unit, p: AbilityId): Unit[] {
   const d = def(p);
   switch (d.target) {
+    case "captive": return S.units.filter(a => a.side === "raider" && a.alive && a.downed && !a.secured && adjacent(u, a));
     case "self": return [u];
     case "ally": return team().filter(a => adjacent(u, a) && (p === "medkit" ? a.hp < a.maxHp && a.side === "mtf" : a.san < maxSanOf(a)));
     case "downed": return S.units.filter(a => a.alive && a.downed && !a.stabilized && adjacent(u, a));
@@ -42,8 +49,8 @@ export function abilityTargets(u: Unit, p: PerkId): Unit[] {
   }
 }
 
-export function abilityCheck(u: Unit | null, p: PerkId): string | null {
-  if (!u || !hasPerk(u, p)) return "Select someone with that ability.";
+export function abilityCheck(u: Unit | null, p: AbilityId): string | null {
+  if (!u || !knows(u, p)) return "Select someone with that ability.";
   const d = def(p);
   if (d.uses && usesLeft(u, p, d.uses(u)) < 1) return "No uses left this mission.";
   if (u.ap < cost(u, p)) return "No actions left this turn.";
@@ -52,7 +59,7 @@ export function abilityCheck(u: Unit | null, p: PerkId): string | null {
 }
 
 /** Start using an ability: self-targeted ones happen at once, the rest wait for a target. */
-export function startAbility(p: PerkId, flash: (t: string) => void) {
+export function startAbility(p: AbilityId, flash: (t: string) => void) {
   const u = S.selected;
   if (!canAct() || !u) return;
   if (S.mode === "ability" && S.ability === p) { S.mode = null; S.ability = null; hooks.update(); return; }
@@ -63,7 +70,7 @@ export function startAbility(p: PerkId, flash: (t: string) => void) {
   hooks.update();
 }
 
-export function useAbility(u: Unit, p: PerkId, t: Unit) {
+export function useAbility(u: Unit, p: AbilityId, t: Unit) {
   const d = def(p);
   if (abilityCheck(u, p) || !abilityTargets(u, p).includes(t)) return;
   const c = cost(u, p);
@@ -97,6 +104,10 @@ export function useAbility(u: Unit, p: PerkId, t: Unit) {
     case "mark_target":
       t.markedUntil = S.turn;
       log(`${full(u)} marks an Insurgent: everyone gets +15 aim against it for the rest of this turn.`, "good");
+      break;
+    case "secure":
+      t.secured = true;
+      log(`${full(u)} restrains the wounded Insurgent. They're coming back to Site-19.`, "good");
       break;
     case "run_and_gun":
       u.ap += 1;

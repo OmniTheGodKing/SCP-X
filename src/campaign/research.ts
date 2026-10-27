@@ -1,9 +1,10 @@
 // Research projects, SCP-173 tests and the equipment they unlock.
 import { countOperational, engineersFree } from "./base";
-import { log, type Campaign, type Operative } from "./campaign";
+import { log, yearOf, type Campaign, type Operative } from "./campaign";
+import { ATTACHMENTS, model, type AttachmentId } from "../data/weapons";
 import { cellWork, type ScpRecord } from "./containment";
 
-export type Branch = "SCP-173" | "Personnel" | "Equipment" | "Site";
+export type Branch = "SCP-173" | "Personnel" | "Weapons" | "Equipment" | "Site";
 export type TestId = "endurance" | "material" | "movement";
 import type { ItemId } from "../game/types";
 export type { ItemId };
@@ -16,6 +17,12 @@ export interface ProjectDef {
   needs?: string[];        // finished projects
   needsTest?: TestId;
   unlocks?: ItemId;
+  /** Earliest year research can start (2 years before US service). */
+  from?: number;
+  /** A weapon model this project makes available for refitting. */
+  model?: string;
+  attachment?: AttachmentId;
+  armorTier?: number;
   desc: string;
 }
 
@@ -27,10 +34,24 @@ export const PROJECTS: Record<string, ProjectDef> = {
   ocular_lubricant:   { name: "Ocular lubricant", branch: "Personnel", days: 20, cost: 40, needsTest: "endurance", unlocks: "eyedrops", desc: "Unlocks eye drops: the carrier ignores one blink while staring." },
   trauma_counseling:  { name: "Trauma counseling", branch: "Personnel", days: 30, cost: 60, desc: "Operatives recover 3 more sanity on quiet turns during missions." },
   marksmanship:       { name: "Advanced marksmanship", branch: "Personnel", days: 30, cost: 60, desc: "+5 aim for every operative." },
-  body_armor:         { name: "Body armor", branch: "Equipment", days: 25, cost: 50, unlocks: "armor", desc: "Unlocks body armor: +2 HP and 1 armor point, which cuts the damage of every hit by 1." },
-  flashbangs:         { name: "Flashbangs", branch: "Equipment", days: 20, cost: 40, unlocks: "flashbang", desc: "Unlocks flashbangs. They blind everyone in the blast, including anyone holding SCP-173." },
-  smoke:              { name: "Smoke grenades", branch: "Equipment", days: 15, cost: 30, unlocks: "smoke", desc: "Unlocks smoke. It blocks sight for two turns, including sight of SCP-173." },
-  motion_tracker:     { name: "Motion tracker", branch: "Equipment", days: 35, cost: 70, unlocks: "tracker", desc: "Unlocks motion trackers: the carrier detects anything within 6 tiles, through walls." },
+  body_armor:         { name: "M1951 flak vest", branch: "Equipment", days: 25, cost: 50, unlocks: "armor", armorTier: 1, desc: "Issue the Korean War flak vest: +2 HP and 1 armor point, which cuts the damage of every hit by 1." },
+  m69_vest:           { name: "M69 fragmentation vest", branch: "Equipment", days: 60, cost: 120, from: 1967, needs: ["body_armor"], armorTier: 2, desc: "A lighter, stronger vest: +3 HP and 1 armor point. Every vest is refitted in the workshop." },
+  ceramic_plate:      { name: "Foundation ceramic plate", branch: "Equipment", days: 90, cost: 200, needs: ["body_armor"], needsTest: "material", armorTier: 3, desc: "Ceramic armor developed from Site-19's materials work: +4 HP and 2 armor points. Every vest is refitted in the workshop." },
+  frag:               { name: "M26 fragmentation grenade", branch: "Equipment", days: 15, cost: 30, unlocks: "frag", desc: "Unlocks frag grenades: 3 damage to everyone within a tile of the blast, and it destroys desks and other half cover." },
+  flashbangs:         { name: "Foundation stun grenade", branch: "Equipment", days: 20, cost: 40, unlocks: "flashbang", desc: "A Foundation prototype decades ahead of its time. It blinds everyone in the blast, including anyone holding SCP-173." },
+  smoke:              { name: "M18 smoke grenade", branch: "Equipment", days: 15, cost: 30, unlocks: "smoke", desc: "Unlocks smoke. It blocks sight for two turns, including sight of SCP-173." },
+  motion_tracker:     { name: "Seismic intrusion sensor", branch: "Equipment", days: 50, cost: 90, from: 1966, unlocks: "tracker", desc: "A portable ground sensor of the kind fielded in Vietnam: the carrier detects anything within 6 tiles, through walls." },
+  att_scope:          { name: "Telescopic sights", branch: "Weapons", days: 20, cost: 40, attachment: "scope", desc: "Weapon attachment: +5 aim." },
+  att_trigger:        { name: "Match trigger groups", branch: "Weapons", days: 25, cost: 50, attachment: "trigger", desc: "Weapon attachment: +10% crit." },
+  att_extmag:         { name: "Extended magazines", branch: "Weapons", days: 20, cost: 40, attachment: "extmag", desc: "Weapon attachment: +1 round." },
+  att_stock:          { name: "Padded stocks", branch: "Weapons", days: 20, cost: 40, attachment: "stock", desc: "Weapon attachment: a miss still does 1 damage." },
+  w_m60:              { name: "M60 machine gun", branch: "Weapons", days: 70, cost: 140, from: 1955, model: "m60", desc: "Replaces the BAR: 5–6 damage, 5 rounds." },
+  w_m14:              { name: "M14 rifle", branch: "Weapons", days: 70, cost: 140, from: 1957, model: "m14", desc: "Replaces the M1 Garand: 4–6 damage, 5 rounds." },
+  w_m16:              { name: "M16 rifle", branch: "Weapons", days: 80, cost: 160, from: 1962, needs: ["w_m14"], model: "m16", desc: "Replaces the M14: 4–6 damage, 6 rounds, +5 aim." },
+  w_r870:             { name: "Remington 870", branch: "Weapons", days: 50, cost: 100, from: 1964, model: "r870", desc: "Replaces the trench gun: 5–7 damage, 4 rounds." },
+  w_xm177:            { name: "XM177 carbine", branch: "Weapons", days: 60, cost: 120, from: 1964, model: "xm177", desc: "Replaces the M2 Carbine: 4–5 damage, +5 aim." },
+  w_m45:              { name: "Carl Gustaf m/45", branch: "Weapons", days: 50, cost: 100, from: 1964, model: "m45", desc: "Replaces the M3 Grease Gun: 3–4 damage, 6 rounds, +5 aim." },
+  w_m21:              { name: "M21 marksman rifle", branch: "Weapons", days: 80, cost: 160, from: 1967, needs: ["w_m14"], model: "m21", desc: "Replaces the Springfield: 5–7 damage, 4 rounds, +5 aim." },
   powered_jack:       { name: "Powered pallet jack", branch: "Equipment", days: 25, cost: 50, needsTest: "material", desc: "Operatives can drag SCP-173 2 tiles instead of 1." },
   reinforced_doors:   { name: "Reinforced cell doors", branch: "Site", days: 40, cost: 100, needs: ["containment_rev"], desc: "Breach risk −20% in every containment wing." },
   early_warning:      { name: "Early warning sensors", branch: "Site", days: 30, cost: 80, needs: ["movement_study"], desc: "Breaches are 8% less likely to get out of the site each day." },
@@ -49,13 +70,21 @@ export const TESTS: Record<TestId, TestDef> = {
 
 export interface ItemDef { name: string; cost: number; days: number; uses: number | null; armor?: boolean; desc: string; }
 export const ITEMS: Record<ItemId, ItemDef> = {
-  armor:     { name: "Body armor", cost: 60, days: 4, uses: null, armor: true, desc: "+2 HP, 1 armor point. Worn in the armor slot." },
+  armor:     { name: "Flak vest", cost: 60, days: 4, uses: null, armor: true, desc: "Worn in the armor slot. Its protection depends on the vest model researched." },
   eyedrops:  { name: "Eye drops", cost: 10, days: 1, uses: 1, desc: "Ignores one blink while staring." },
-  flashbang: { name: "Flashbang", cost: 15, days: 1, uses: 1, desc: "Blinds everyone within 1 tile of where it lands until the next turn." },
-  smoke:     { name: "Smoke grenade", cost: 10, days: 1, uses: 1, desc: "Blocks sight within 1 tile of where it lands for two turns." },
-  tracker:   { name: "Motion tracker", cost: 50, days: 3, uses: null, desc: "Detects anything within 6 tiles, through walls." },
+  frag:      { name: "M26 frag grenade", cost: 15, days: 1, uses: 1, desc: "3 damage within 1 tile of where it lands; destroys half cover." },
+  flashbang: { name: "Stun grenade", cost: 15, days: 1, uses: 1, desc: "Blinds everyone within 1 tile of where it lands until the next turn." },
+  smoke:     { name: "M18 smoke grenade", cost: 10, days: 1, uses: 1, desc: "Blocks sight within 1 tile of where it lands for two turns." },
+  tracker:   { name: "Seismic sensor", cost: 50, days: 3, uses: null, desc: "Detects anything within 6 tiles, through walls." },
 };
-export const ARMOR = { hp: 2, points: 1 };
+/** Vest protection by researched tier. */
+export const ARMOR_TIERS = [
+  { name: "None", hp: 0, points: 0 },
+  { name: "M1951 flak vest", hp: 2, points: 1 },
+  { name: "M69 fragmentation vest", hp: 3, points: 1 },
+  { name: "Foundation ceramic plate", hp: 4, points: 2 },
+];
+export const armorOf = (c: Campaign) => ARMOR_TIERS[c.armorTier] || ARMOR_TIERS[1];
 
 export interface ResearchState {
   done: string[];
@@ -64,7 +93,8 @@ export interface ResearchState {
   assigned: Record<string, number>;
   tests: TestId[];
 }
-export interface Order { item: ItemId; daysLeft: number; }
+export interface Order { item?: ItemId; attachment?: AttachmentId; refit?: string; daysLeft: number; }
+export const REFIT = { cost: 100, days: 7 };
 
 export const newResearch = (): ResearchState => ({ done: [], paid: [], progress: {}, assigned: {}, tests: [] });
 export const has = (c: Campaign, id: string) => c.research.done.includes(id);
@@ -76,6 +106,7 @@ export const unlockedItems = (c: Campaign) => Object.entries(PROJECTS).filter(([
 
 export function projectLock(c: Campaign, id: string): string | null {
   const p = PROJECTS[id];
+  if (p.from && yearOf(c.day) < p.from) return `Available from ${p.from}.`;
   if (p.needsTest && !c.research.tests.includes(p.needsTest)) return `Needs the ${TESTS[p.needsTest].name.toLowerCase()}.`;
   const missing = (p.needs || []).filter(n => !has(c, n));
   if (missing.length) return `Needs ${missing.map(n => PROJECTS[n].name).join(", ")}.`;
@@ -121,8 +152,10 @@ export function tickResearch(c: Campaign) {
     r.progress[id] = (r.progress[id] || 0) + n;
     if (r.progress[id] >= PROJECTS[id].days) {
       r.done.push(id); delete r.assigned[id];
-      const u = PROJECTS[id].unlocks;
-      log(c, `Research complete: ${PROJECTS[id].name}.${u ? ` ${ITEMS[u].name} can now be built in the workshop.` : ""}`, "good");
+      const p = PROJECTS[id], u = p.unlocks;
+      const next = u ? ` ${ITEMS[u].name} can now be built in the workshop.` : p.model || (p.armorTier ?? 0) > 1 ? " Refit the squad in the workshop." : p.attachment ? ` ${ATTACHMENTS[p.attachment].name} can now be built in the workshop.` : "";
+      if (p.armorTier === 1) c.armorTier = Math.max(c.armorTier, 1);
+      log(c, `Research complete: ${p.name}.${next}`, "good");
     }
   }
   const working = countOperational(c, "workshop") > 0;
@@ -130,10 +163,59 @@ export function tickResearch(c: Campaign) {
     if (!working) break;
     if (--o.daysLeft <= 0) {
       c.orders = c.orders.filter(x => x !== o);
-      c.inventory[o.item] = (c.inventory[o.item] || 0) + 1;
-      log(c, `Workshop: ${ITEMS[o.item].name} ready.`, "good");
+      if (o.item) {
+        c.inventory[o.item] = (c.inventory[o.item] || 0) + 1;
+        log(c, `Workshop: ${ITEMS[o.item].name} ready.`, "good");
+      } else if (o.attachment) {
+        c.attachments[o.attachment] = (c.attachments[o.attachment] || 0) + 1;
+        log(c, `Workshop: ${ATTACHMENTS[o.attachment].name} ready. Fit it on the Personnel tab.`, "good");
+      } else if (o.refit?.startsWith("armor:")) {
+        c.armorTier = Number(o.refit.slice(6));
+        log(c, `Workshop: every vest refitted as ${ARMOR_TIERS[c.armorTier].name}.`, "good");
+      } else if (o.refit) {
+        const m = model(o.refit);
+        c.models[m.type] = m.id;
+        log(c, `Workshop: Epsilon-11 is now issued the ${m.name}.`, "good");
+      }
     }
   }
+}
+
+/** Refits waiting to be ordered: researched weapon models and vest tiers not yet issued. */
+export function pendingRefits(c: Campaign): { key: string; name: string }[] {
+  const out: { key: string; name: string }[] = [];
+  for (const [id, p] of Object.entries(PROJECTS)) {
+    if (!has(c, id) || c.orders.some(o => o.refit === (p.model ?? `armor:${p.armorTier}`))) continue;
+    if (p.model && c.models[model(p.model).type] !== p.model && model(c.models[model(p.model).type]).year < model(p.model).year) out.push({ key: p.model, name: model(p.model).name });
+    if ((p.armorTier ?? 0) > 1 && c.armorTier < p.armorTier!) out.push({ key: `armor:${p.armorTier}`, name: ARMOR_TIERS[p.armorTier!].name });
+  }
+  return out;
+}
+export function canRefit(c: Campaign): string | null {
+  if (!countOperational(c, "workshop")) return "Needs a working workshop.";
+  if (c.funds < REFIT.cost) return `Needs $${REFIT.cost}k.`;
+  if (engineersFree(c) < 1) return "Needs a free engineer.";
+  return null;
+}
+export function orderRefit(c: Campaign, key: string) {
+  if (canRefit(c) || !pendingRefits(c).some(r => r.key === key)) return;
+  c.funds -= REFIT.cost;
+  c.orders.push({ refit: key, daysLeft: REFIT.days });
+}
+export const unlockedAttachments = (c: Campaign) =>
+  Object.entries(PROJECTS).filter(([id, p]) => p.attachment && has(c, id)).map(([, p]) => p.attachment!);
+export const ATTACHMENT_COST = { cost: 30, days: 3 };
+export function canOrderAttachment(c: Campaign, a: AttachmentId): string | null {
+  if (!countOperational(c, "workshop")) return "Needs a working workshop.";
+  if (!unlockedAttachments(c).includes(a)) return "Not researched yet.";
+  if (c.funds < ATTACHMENT_COST.cost) return `Needs $${ATTACHMENT_COST.cost}k.`;
+  if (engineersFree(c) < 1) return "Needs a free engineer.";
+  return null;
+}
+export function orderAttachment(c: Campaign, a: AttachmentId) {
+  if (canOrderAttachment(c, a)) return;
+  c.funds -= ATTACHMENT_COST.cost;
+  c.orders.push({ attachment: a, daysLeft: ATTACHMENT_COST.days });
 }
 
 export function canOrder(c: Campaign, item: ItemId): string | null {

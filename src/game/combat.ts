@@ -2,6 +2,7 @@
 import { DIRS, FULL, HALF, STEEL, TS, WALL, L, bfs, tileAt, type Pt } from "../core/grid";
 import { bestView, type View } from "../core/sight";
 import { hasPerk, rangeOf } from "./perks";
+import { TYPES, rangeMod } from "../data/weapons";
 import { prof } from "./profiles";
 import { S, alive, canSee, full, fx, hooks, isPanicked, team, isTeam, log, loseSanity, rand, reveal, seen, sleep, computeVis } from "./state";
 import type { Unit } from "./types";
@@ -30,15 +31,18 @@ export function shotInfo(sh: Unit, tg: Unit, reaction = false): ShotInfo {
   const cover = coverAgainst(tg.x, tg.y, v.x, v.y);
   const leaning = v.x !== sh.x || v.y !== sh.y;
   const partial = v.f < 0.5 || leaning;
+  const gun = sh.gun;
   const mods: [string, number][] = [["Aim", sh.aim]];
+  if (gun?.aim) mods.push([gun.name, gun.aim]);
+  if (gun?.attachment === "scope") mods.push(["Telescopic sight", 5]);
   if (cover === 40) mods.push(["Full cover", -40]);
   else if (cover === 20) mods.push(["Half cover", -20]);
   else mods.push(["Flanked", 10]);
   if (leaning) mods.push(["Leaning out", -15]);
   else if (partial) mods.push(["Partly hidden", -15]);
-  if (dist <= 3) mods.push(["Close range", 10]);
-  else if (dist > 7) mods.push(["Long range", -Math.round((dist - 7) * 4)]);
-  if (reaction && !hasPerk(sh, "covering_fire")) mods.push(["Reaction shot", -15]);
+  const rm = rangeMod(gun?.type ?? "rifle", dist);
+  if (rm) mods.push(rm);
+  if (reaction && !hasPerk(sh, "covering_fire")) mods.push(["Reaction shot", gun?.type === "mg" ? -5 : -15]);
   if (sh.side === "mtf" && sh.san <= 30) mods.push(["Shaken", -10]);
   if (cover === 0 && hasPerk(sh, "hunter")) mods.push(["Hunter", 20]);
   if (dist <= 3 && hasPerk(sh, "shotgun_drills")) mods.push(["Shotgun drills", 20]);
@@ -46,7 +50,8 @@ export function shotInfo(sh: Unit, tg: Unit, reaction = false): ShotInfo {
   if (isTeam(sh) && (tg.markedUntil ?? -1) >= S.turn) mods.push(["Marked", 15]);
   if (isTeam(sh) && team().some(a => a !== sh && hasPerk(a, "spotter") && canSee(a, tg.x, tg.y))) mods.push(["Spotted", 10]);
   const raw = mods.reduce((a, m) => a + m[1], 0);
-  const crit = (cover === 0 && !partial ? 40 : 0) + (hasPerk(sh, "sharpshooter") ? 20 : 0);
+  const crit = (cover === 0 && !partial ? 40 : 0) + (hasPerk(sh, "sharpshooter") ? 20 : 0)
+    + (gun ? TYPES[gun.type].crit : 0) + (gun?.attachment === "trigger" ? 10 : 0);
   return { chance: Math.max(5, Math.min(95, raw)), mods, crit, from: v };
 }
 
@@ -54,6 +59,7 @@ export const center = (u: { x: number; y: number }): Pt => [u.x * TS + TS / 2, u
 
 export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
   const info = shotInfo(sh, tg, reaction);
+  if (sh.gun) sh.gun.ammo = Math.max(0, sh.gun.ammo - 1);
   const hit = Math.random() * 100 < info.chance;
   const [x0, y0] = center(info.from), [x1, y1] = center(tg);
   const ox = hit ? 0 : (Math.random() - .5) * 26, oy = hit ? 0 : (Math.random() - .5) * 26;
@@ -68,7 +74,7 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
   if (sh.side === "mtf") reveal("hear");
   if (hit) {
     const crit = Math.random() * 100 < info.crit;
-    let dmg = sh.side === "mtf" ? rand(3, 4) : rand(2, 3);
+    let dmg = sh.gun ? rand(sh.gun.dmg[0], sh.gun.dmg[1]) : rand(3, 4);
     if (crit) dmg += 2;
     if (hasPerk(sh, "shotgun_drills") && Math.hypot(tg.x - info.from.x, tg.y - info.from.y) <= 3) dmg += 2;
     const soak = Math.min(tg.armor ?? 0, dmg);   // each armor point cuts the hit by 1
@@ -78,8 +84,10 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
     if (hasPerk(sh, "shredder") && (tg.armor ?? 0) > 0) { tg.armor!--; log("The hit shreds a point of armor.", "good"); }
     damage(tg, dmg, sh);
   } else {
-    fx({ type: "text", x: x1, y: y1 - 14, text: "miss", color: "#8b939b", dur: 800 });
-    if (visibleShot) log(`${reaction ? "Overwatch: " : ""}${full(sh)} misses ${full(tg)} (${info.chance}%).`);
+    const graze = sh.gun?.attachment === "stock" ? Math.max(0, 1 - (tg.armor ?? 0)) : 0;
+    fx({ type: "text", x: x1, y: y1 - 14, text: graze ? "graze 1" : "miss", color: "#8b939b", dur: 800 });
+    if (visibleShot) log(`${reaction ? "Overwatch: " : ""}${full(sh)} misses ${full(tg)} (${info.chance}%)${graze ? ", but the round grazes for 1" : ""}.`);
+    if (graze) damage(tg, 1, sh);
   }
   hooks.update();
   await sleep(380);
@@ -92,6 +100,12 @@ export function damage(u: Unit, dmg: number, by?: Unit) {
   u.hp -= dmg;
   if (u.side === "mtf") u.minHp = Math.min(u.minHp ?? u.hp, Math.max(0, u.hp));
   if (u.hp <= 0 && u.side === "mtf" && !u.downed) { goDown(u); return; }
+  if (u.hp <= 0 && u.side === "raider" && !u.downed && Math.random() < 0.15) {
+    // sometimes an Insurgent is left alive but out of the fight: a possible prisoner
+    u.hp = 0; u.downed = true; S.stats.raidersDown++; if (by) by.kills++;
+    log("An Insurgent goes down wounded but alive. Secure them to take a prisoner.", "good");
+    return;
+  }
   if (u.hp <= 0) { kill(u); if (by) by.kills++; return; }
   if (isTeam(u)) loseSanity(u, 5);
 }

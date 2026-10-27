@@ -137,7 +137,8 @@ Regions with their own exposure and a Foundation cover-up front.
 | 2A (done) | Base building, containment cells, breaches inside Site-19, escapes (escaped anomalies go dark and resurface; manhunts wait for the world map) |
 | 2B (done) | Research labs and researchers assigned freely across projects, three tests on SCP-173, 15 projects, a workshop, and loadouts: an armor slot (XCOM 2 style: HP plus armor points) and two item slots |
 | 2C (done) | Five player-chosen classes (Rifleman, Breacher, Recon, Containment specialist, Medic) with a choice of two perks per rank, XCOM 2-style bleeding out, traits from mission events (50% to stick), therapy at psychological services, retraining and weekly XP at a training range |
-| 2D | World map, manhunts, field recovery, cover-ups |
-| 2E | O5 orders and standing, Insurgency threat and raids, endgame |
+| 2D (done) | Weapons and time: a real calendar from June 1951 with incidents spread over years and standing orders for cell cleaning; period American weapons by class (service rifle, marksman rifle, shotgun, machine gun, carbine, submachine gun) with ammo and reloading; research gated to 2 years before US service; workshop refits; attachments; flak vest tiers; M26 frag grenades; Soviet-bloc Insurgency weapons; a 15% chance downed Insurgents survive as prisoners; holding cells and Intel |
+| 2E | World map, manhunts, field recovery, cover-ups |
+| 2F | O5 orders and standing, Insurgency threat and raids, endgame |
 
 Every SCP added must credit its article's authors in-game and in the README (CC BY-SA 3.0).

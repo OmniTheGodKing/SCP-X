@@ -7,15 +7,17 @@ import {
 import {
   DCLASS_COST, DCLASS_MONTHLY, RANKS, RANK_XP, RECRUIT_COST, advanceDay, advanceToEvent, aimOf, blinkFullOf, buyDClass,
   canBuyDClass, canHireEngineer, dayOfMonth, deployable, hireEngineer, maxSanOf, monthOf, monthlyFunding, recruit,
-  canRetrain, canTherapy, chooseClass, choosePerk, perkChoices, promotionDue, startRetrain, startTherapy,
+  INTEL_PER_PRISONER, INTERROGATION_DAYS, PRISONER_BOUNTY, holdingCapacity, canRetrain, canTherapy, canWeaken, dateText, fitAttachment, gunFor, setWeapon, weaken, weaponOf, weaponOptions, chooseClass, choosePerk, perkChoices, promotionDue, startRetrain, startTherapy,
   type Campaign, type Incident, type Loadout, type Operative,
 } from "../campaign/campaign";
 import { CLASSES, PERKS, TRAITS, type ClassId, type PerkId, type TraitId } from "../data/classes";
+import { ATTACHMENTS, TYPES, model, type AttachmentId, type WeaponType } from "../data/weapons";
 import {
   CLEAN_EVERY, breachRisk, breachWindow, canClean, canMove, cleanCell, escapeChance, moveScp, occupantOf, wingOf, workRisk,
   type ScpRecord,
 } from "../campaign/containment";
 import {
+  ARMOR_TIERS, ATTACHMENT_COST, REFIT, canOrderAttachment, canRefit, orderAttachment, orderRefit, pendingRefits, unlockedAttachments,
   ITEMS, PROJECTS, TESTS, assign, canHireResearcher, canOrder, canTest, has, hireResearcher, order, projectLock,
   researcherCapacity, researchersFree, runTest, unlockedItems, type Branch, type ItemId, type TestId,
 } from "../campaign/research";
@@ -61,11 +63,12 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   <header class="top">
     <div>
       <div class="eyebrow">SCP Foundation · Site-19 Command · Mobile Task Force Epsilon-11</div>
-      <h1>Site-19 <small>Day ${c.day} · Month ${monthOf(c.day)}, day ${dayOfMonth(c.day)}</small></h1>
+      <h1>Site-19 <small>${dateText(c.day)}</small></h1>
     </div>
     <div class="turnbox">
       <span class="pill">Funds $${c.funds}k</span>
       <span class="pill">D-Class ${c.dclass}/${dclassCapacity(c)}</span>
+      <span class="pill">Intel ${c.intel}</span>
       <span class="pill">Engineers ${engineersFree(c)}/${c.engineers} free</span>
       <span class="pill">Researchers ${researchersFree(c)}/${c.researchers} free</span>
       <span class="pill ${pw ? "hot" : ""}">Power ${powerUse(c)}/${powerSupply(c)}</span>
@@ -110,7 +113,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <div class="card">
         <div class="label">Public exposure</div>
         <div class="exposure"><div class="exp-bar"><span style="width:${c.exposure}%"></span></div><b>${c.exposure} / 100</b></div>
-        <p class="muted">At 100 the O5 Council relieves Site-19's command. Breaches that escape add 10 to 15, failed missions 20, and an anomaly on the loose adds 1 a day. Each recontainment removes 5.</p>
+        <p class="muted">At 100 the O5 Council relieves Site-19's command. Breaches that escape add 10 to 15, failed missions 20, and an anomaly on the loose adds 1 every 4 days. Each recontainment removes 5, and exposure eases by 3 each month.</p>
       </div>
     </section>
     <section class="col">
@@ -120,7 +123,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
           <button class="act" id="dayBtn" type="button" ${c.over ? "disabled" : ""}>Next day</button>
           <button class="act primary" id="waitBtn" type="button" ${c.over ? "disabled" : ""}>Advance until something happens</button>
         </div>
-        <p class="muted">Next month: $${monthlyFunding(c)}k from the O5 Council, $${monthlyUpkeep(c)}k upkeep, up to ${DCLASS_MONTHLY} D-Class. Operatives heal ${healPerDay(c)} HP and recover ${sanityPerDay(c)} sanity a day.</p>
+        <p class="muted">"Advance" skips quiet stretches and stops when something needs you or a new month starts. Next month: $${monthlyFunding(c)}k from the O5 Council, $${monthlyUpkeep(c)}k upkeep, up to ${DCLASS_MONTHLY} D-Class. Operatives heal ${healPerDay(c)} HP and recover ${sanityPerDay(c)} sanity a day.</p>
       </div>
       <div class="card">
         <div class="label">Site log · ${c.stats.won} recontained · ${c.stats.lost} failed · ${c.stats.missed} unanswered</div>
@@ -156,11 +159,13 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     const ops = ready();
     return `<div class="card plan">
       <div class="label">Deploy to ${esc(inc.title.split(":")[0])}</div>
+      ${inc.insurgents ? `<div class="row"><span>Insurgents expected: <b>${inc.insurgents - (inc.weakened ?? 0)}</b>${inc.weakened ? ` (${inc.weakened} intercepted)` : ""}</span>
+        <button class="act" type="button" id="intelBtn" ${canWeaken(c, inc) ? `disabled title="${esc(canWeaken(c, inc)!)}"` : ""}>Spend 1 Intel: intercept one</button></div>` : ""}
       <p class="muted">Pick up to ${MAX_SQUAD} operatives. Only fully healed operatives can deploy; sanity carries over, so watch it.</p>
       <div class="pick">${ops.length ? ops.map(o => `<label class="pickop ${chosen.has(o.id) ? "on" : ""}">
         <input type="checkbox" id="pick-${o.id}" data-pick="${o.id}" ${chosen.has(o.id) ? "checked" : ""} ${!chosen.has(o.id) && chosen.size >= MAX_SQUAD ? "disabled" : ""}>
         <span><b>${esc(o.call)} ${esc(o.name)}</b> · ${RANKS[o.rank]} · SAN ${o.san}/${maxSanOf(o)}</span></label>`).join("") : `<p class="muted">Nobody is fit to deploy. Wait for the wounded to heal or recruit.</p>`}</div>
-      ${chosen.size ? `<div class="loadouts"><div class="specs">Loadout: one armor slot and two item slots each. Unused items come back; gear on anyone killed is lost.</div>
+      ${chosen.size ? `<div class="loadouts"><div class="specs">Loadout: weapon, one armor slot and two item slots each. Unused items come back; gear on anyone killed is lost.</div>
         ${[...chosen].map(id => loadoutRow(c.roster.find(o => o.id === id)!)).join("")}</div>` : ""}
       <div class="row dpick">
         <span>D-Class work detail</span>
@@ -200,13 +205,15 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     </select>`;
     const armorLeft = spare("armor", o.id);
     return `<div class="loadrow"><b>${esc(o.call)} ${esc(o.name)}</b>
-      <label class="armorpick"><input type="checkbox" id="armor-${o.id}" data-armor="${o.id}" ${g.armor ? "checked" : ""} ${!g.armor && armorLeft < 1 ? "disabled" : ""}> Body armor${(c.inventory.armor || 0) ? ` (${Math.max(0, armorLeft - (g.armor ? 1 : 0))} spare)` : " (none built)"}</label>
+      <span class="specs">${esc(gunFor(c, o).name)}${o.attachment ? ` + ${ATTACHMENTS[o.attachment].name}` : ""}</span>
+      ${weaponOptions(o).length > 1 ? `<select id="wpn-${o.id}" data-weapon="${o.id}" aria-label="${esc(o.name)} weapon">${weaponOptions(o).map(t => `<option value="${t}" ${weaponOf(o) === t ? "selected" : ""}>${TYPES[t].name}: ${model(c.models[t]).name}</option>`).join("")}</select>` : ""}
+      <label class="armorpick"><input type="checkbox" id="armor-${o.id}" data-armor="${o.id}" ${g.armor ? "checked" : ""} ${!g.armor && (armorLeft < 1 || !c.armorTier) ? "disabled" : ""}> ${c.armorTier ? ARMOR_TIERS[c.armorTier].name : "Flak vest (research it first)"}${(c.inventory.armor || 0) ? ` (${Math.max(0, armorLeft - (g.armor ? 1 : 0))} spare)` : c.armorTier ? " (none built)" : ""}</label>
       ${slot(0)}${slot(1)}${o.perks.includes("field_kit") ? slot(2) : ""}</div>`;
   }
 
   // ---------- Research ----------
   function researchTab() {
-    const branches: Branch[] = ["SCP-173", "Personnel", "Equipment", "Site"];
+    const branches: Branch[] = ["SCP-173", "Personnel", "Weapons", "Equipment", "Site"];
     const rw = canHireResearcher(c);
     const s = scp173();
     return `<div class="hubgrid">
@@ -263,7 +270,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   }
 
   function workshopCard() {
-    const items = unlockedItems(c);
+    const items = unlockedItems(c), refits = pendingRefits(c), rfw = canRefit(c), atts = unlockedAttachments(c);
     return `<div class="card">
       <div class="label">Workshop</div>
       ${items.length ? `<div class="projects">${items.map(i => {
@@ -272,7 +279,16 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
           <div class="muted">${esc(d.desc)}</div>
           <div class="row"><button class="act" type="button" data-order="${i}" ${why ? `disabled title="${esc(why)}"` : ""}>Build · $${d.cost}k · ${plural(d.days, "day")} · 1 engineer</button>${why ? `<span class="muted">${esc(why)}</span>` : ""}</div></div>`;
       }).join("")}</div>` : `<p class="muted">Nothing to build yet. Equipment research unlocks items here.</p>`}
-      ${c.orders.length ? `<div class="specs">In production: ${c.orders.map(o => `${ITEMS[o.item].name} (${plural(o.daysLeft, "day")})`).join(", ")}</div>` : ""}
+      ${refits.length ? `<div class="label" style="margin-top:10px">Refits</div><div class="projects">${refits.map(r => `<div class="proj"><div class="ptop"><b>Issue the ${esc(r.name)}</b></div>
+        <div class="muted">Replaces the current model for everyone at once.</div>
+        <div class="row"><button class="act" type="button" data-refit="${r.key}" ${rfw ? `disabled title="${esc(rfw)}"` : ""}>Refit · $${REFIT.cost}k · ${REFIT.days} days · 1 engineer</button>${rfw ? `<span class="muted">${esc(rfw)}</span>` : ""}</div></div>`).join("")}</div>` : ""}
+      ${atts.length ? `<div class="label" style="margin-top:10px">Attachments</div><div class="projects">${atts.map(a => {
+        const why = canOrderAttachment(c, a), fitted = c.roster.filter(o => o.alive && o.attachment === a).length;
+        return `<div class="proj"><div class="ptop"><b>${ATTACHMENTS[a].name}</b><span class="flag">${c.attachments[a] ?? 0} spare · ${fitted} fitted</span></div>
+          <div class="muted">${esc(ATTACHMENTS[a].desc)} Fit one per operative on the Personnel tab.</div>
+          <div class="row"><button class="act" type="button" data-att="${a}" ${why ? `disabled title="${esc(why)}"` : ""}>Build · $${ATTACHMENT_COST.cost}k · ${plural(ATTACHMENT_COST.days, "day")}</button>${why ? `<span class="muted">${esc(why)}</span>` : ""}</div></div>`;
+      }).join("")}</div>` : ""}
+      ${c.orders.length ? `<div class="specs">In production: ${c.orders.map(o => `${o.item ? ITEMS[o.item].name : o.attachment ? ATTACHMENTS[o.attachment].name : o.refit!.startsWith("armor:") ? `${ARMOR_TIERS[Number(o.refit!.slice(6))].name} refit` : `${model(o.refit!).name} refit`} (${plural(o.daysLeft, "day")})`).join(", ")}</div>` : ""}
     </div>`;
   }
 
@@ -359,7 +375,9 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <div class="riskline"><b>Breach risk ${pctText(r.p)} a day</b></div>
       <ul class="why">${r.why.map(w => `<li>${esc(w)}</li>`).join("")}</ul>
       <div class="maint"><span>Maintenance ${s.maintenance}%</span><div class="exp-bar"><span style="width:${s.maintenance}%"></span></div></div>
-      <p>Its cell must be cleaned every ${CLEAN_EVERY} days: a D-Class goes in while others keep their eyes on it. Next cleaning ${due > 0 ? `in ${plural(due, "day")}` : "<b>overdue</b>"}. If a breach starts, you have ${breachWindow(c)} days to answer.</p>
+      <p>Its cell must be cleaned every ${CLEAN_EVERY} days: a D-Class goes in while others keep their eyes on it. If a breach starts, you have ${breachWindow(c)} days to answer.</p>
+      <label class="armorpick"><input type="checkbox" id="cleanOrder" ${c.cleaningOrder ? "checked" : ""}> Standing order: site staff clean it on schedule (2% chance a D-Class dies each time)</label>
+      <p>${c.cleaningOrder ? `Next scheduled cleaning ${due > 0 ? `in ${plural(due, "day")}` : "today"}.` : `Next cleaning ${due > 0 ? `due in ${plural(due, "day")}` : "<b>overdue</b>"}. Do it yourself below.`} You can also clean now with chosen watchers.</p>
       ${watcherPicker()}
       <div class="row"><button class="act primary" id="cleanBtn" type="button" ${cw ? `disabled title="${esc(cw)}"` : ""}>Clean the cell · 1 D-Class</button>${cw ? `<span>${esc(cw)}</span>` : ""}</div>
     </div>`;
@@ -398,6 +416,13 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         </div>
         ${dWhy || eWhy ? `<p class="muted">${esc([dWhy, eWhy].filter(Boolean).join(" "))}</p>` : ""}
       </div>
+      <div class="card">
+        <div class="label">Prisoners · Intel ${c.intel}</div>
+        ${holdingCapacity(c) ? `<p>Holding cells: ${c.prisoners.length} of ${holdingCapacity(c)} occupied. Each prisoner yields 1 Intel every ${INTERROGATION_DAYS} days, ${INTEL_PER_PRISONER} in all.</p>
+          ${c.prisoners.length ? `<ul class="memorial">${c.prisoners.map(p => `<li><b>${esc(p.name)}</b> · held ${plural(p.days, "day")} · ${p.intel}/${INTEL_PER_PRISONER} Intel given</li>`).join("")}</ul>` : ""}`
+          : `<p class="muted">No holding cells. Build them on the Site-19 tab to interrogate captured Insurgents; until then prisoners are handed to another site for $${PRISONER_BOUNTY}k.</p>`}
+        <p class="muted">Spend Intel when planning a response to intercept Insurgents before the mission.</p>
+      </div>
       ${c.roster.some(o => !o.alive) ? `<div class="card">
         <div class="label">Memorial</div>
         <ul class="memorial">${c.roster.filter(o => !o.alive).map(o => `<li><b>${esc(o.call)} ${esc(o.name)}</b>, ${RANKS[o.rank]} · ${plural(o.missions, "mission")} · killed on day ${o.diedDay}, ${esc(o.diedAt || "")}</li>`).join("")}</ul>
@@ -434,6 +459,18 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       ${o.traits.length ? `<ul class="traits">${o.traits.map(t => `<li class="${TRAITS[t].bad ? "bad" : "good"}"><b>${TRAITS[t].name}</b>: ${esc(TRAITS[t].desc)} <span class="muted">${esc(TRAITS[t].how)}</span>
         ${TRAITS[t].bad && !o.busy ? `<button class="act" type="button" data-therapy="${t}" ${tw ? `disabled title="${esc(tw)}"` : ""}>Therapy · $30k · 7 days</button>` : ""}</li>`).join("")}</ul>
         ${bad.length && tw ? `<p class="muted">${esc(tw)}</p>` : ""}` : `<p class="muted">None yet. Traits come from what happens to them on missions.</p>`}
+      <div class="label" style="margin-top:10px">Weapon</div>
+      <div class="row">
+        ${weaponOptions(o).map(t => `<button type="button" class="act ${weaponOf(o) === t ? "on" : ""}" data-setweapon="${t}">${TYPES[t].name}: ${model(c.models[t]).name}</button>`).join("")}
+      </div>
+      <div class="specs">${esc(TYPES[weaponOf(o)].desc)} ${model(c.models[weaponOf(o)]).dmg.join("–")} damage, ${gunFor(c, o).mag} rounds.</div>
+      <div class="row">
+        <label for="att-${o.id}" class="specs">Attachment</label>
+        <select id="att-${o.id}" data-fit="${o.id}">
+          <option value="">None</option>
+          ${(Object.keys(ATTACHMENTS) as AttachmentId[]).filter(a => o.attachment === a || (c.attachments[a] ?? 0) > 0).map(a => `<option value="${a}" ${o.attachment === a ? "selected" : ""}>${ATTACHMENTS[a].name}: ${esc(ATTACHMENTS[a].desc)}</option>`).join("")}
+        </select>
+      </div>
       ${o.cls && !o.busy ? `<div class="row"><button class="act" type="button" id="retrainBtn" ${rw ? `disabled title="${esc(rw)}"` : ""}>Retrain · $50k · 5 days</button><span class="muted">${esc(rw || "Clears their class and perks; they choose again, keeping their rank.")}</span></div>` : ""}
     </div>`;
   }
@@ -494,6 +531,13 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     root.querySelectorAll<HTMLElement>("[data-perk]").forEach(b => b.onclick = () => change(() => choosePerk(c, opNow(), b.dataset.perk as PerkId)));
     root.querySelectorAll<HTMLElement>("[data-therapy]").forEach(b => b.onclick = () => change(() => startTherapy(c, opNow(), b.dataset.therapy as TraitId)));
     on("retrainBtn", () => change(() => startRetrain(c, opNow())));
+    root.querySelectorAll<HTMLElement>("[data-setweapon]").forEach(b => b.onclick = () => change(() => setWeapon(c, opNow(), b.dataset.setweapon as WeaponType)));
+    root.querySelectorAll<HTMLSelectElement>("[data-fit]").forEach(b => b.onchange = () => change(() => fitAttachment(c, opNow(), b.value as AttachmentId | "")));
+    root.querySelectorAll<HTMLSelectElement>("[data-weapon]").forEach(b => b.onchange = () => change(() => { const o = c.roster.find(x => x.id === b.dataset.weapon); if (o) setWeapon(c, o, b.value as WeaponType); }));
+    root.querySelectorAll<HTMLElement>("[data-refit]").forEach(b => b.onclick = () => change(() => orderRefit(c, b.dataset.refit!)));
+    root.querySelectorAll<HTMLElement>("[data-att]").forEach(b => b.onclick = () => change(() => orderAttachment(c, b.dataset.att as AttachmentId)));
+    on("intelBtn", () => { const inc = c.incidents.find(i => i.id === planning); if (inc) change(() => weaken(c, inc)); });
+    { const el = $("cleanOrder") as HTMLInputElement | null; if (el) el.onchange = () => change(() => { c.cleaningOrder = el.checked; }); }
     on("dBuyBtn", () => change(() => buyDClass(c)));
     on("engBtn", () => change(() => hireEngineer(c)));
     on("digBtn", () => change(() => excavate(c)));

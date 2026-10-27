@@ -6,7 +6,8 @@ import {
   type Base,
 } from "./base";
 import { CLEAN_EVERY, resolveScp, startingScps, tickContainment, type ScpRecord } from "./containment";
-import { ARMOR, ITEMS, has, newResearch, tickResearch, type ItemId, type Order, type ResearchState } from "./research";
+import { ITEMS, armorOf, has, newResearch, tickResearch, type ItemId, type Order, type ResearchState } from "./research";
+import { CLASS_WEAPONS, model, startingModels, type AttachmentId, type WeaponType } from "../data/weapons";
 
 export const RANKS = ["Operative", "Specialist", "Sergeant", "Lieutenant", "Captain"];
 export const RANK_XP = [0, 3, 7, 12, 18];
@@ -24,6 +25,9 @@ export interface Operative {
   breakdowns: number;
   /** Away from duty: in therapy or retraining. */
   busy?: { kind: "therapy" | "retrain"; daysLeft: number; trait?: TraitId };
+  /** Chosen weapon type (one of their class's two) and the attachment fitted to it. */
+  weapon?: WeaponType;
+  attachment?: AttachmentId;
   aftercareUntil?: number;
   name: string;
   call: string;
@@ -48,14 +52,26 @@ export interface Incident {
   appeared: number;
   expires: number;
   insurgents: number;
+  /** Insurgents removed from this incident by spending Intel. */
+  weakened?: number;
 }
+
+export interface Prisoner { name: string; days: number; intel: number; }
 
 export interface SiteLogEntry { day: number; text: string; kind: string; }
 
 export interface Loadout { opId: string; armor: boolean; items: ItemId[]; }
 
 export interface Campaign {
-  version: 4;
+  version: 5;
+  /** Weapon model currently issued for each type, and the vest tier. */
+  models: Record<WeaponType, string>;
+  armorTier: number;
+  attachments: Partial<Record<AttachmentId, number>>;
+  prisoners: Prisoner[];
+  intel: number;
+  /** Site staff clean containment cells on schedule. */
+  cleaningOrder: boolean;
   day: number;
   funds: number;
   exposure: number;
@@ -159,7 +175,8 @@ export function newCampaign(): Campaign {
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
-    version: 4, day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
+    version: 5, models: startingModels(), armorTier: 0, attachments: {}, prisoners: [], intel: 0, cleaningOrder: true,
+    day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
     inventory: {}, orders: [], knownNotes: [], nextD: 9101, nextOp: 1, nextIncident: 1,
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
   };
@@ -168,8 +185,15 @@ export function newCampaign(): Campaign {
   return c;
 }
 
-export const monthOf = (day: number) => Math.floor((day - 1) / MONTH) + 1;
-export const dayOfMonth = (day: number) => ((day - 1) % MONTH) + 1;
+// The campaign opens on 1 June 1951. Day 1 is that date.
+const START = Date.UTC(1951, 5, 1);
+export const dateOf = (day: number) => new Date(START + (day - 1) * 86400000);
+export const yearOf = (day: number) => dateOf(day).getUTCFullYear();
+export const dayOfMonth = (day: number) => dateOf(day).getUTCDate();
+export const monthOf = (day: number) => { const d = dateOf(day); return (d.getUTCFullYear() - 1951) * 12 + d.getUTCMonth() - 4; };
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+export const dateText = (day: number) => { const d = dateOf(day); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
+export const monthName = (day: number) => { const d = dateOf(day); return `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 export const monthlyFunding = (c: Campaign) => Math.max(50, 400 - c.exposure * 3);
 
 /** Advance one day. Returns true if something happened that needs the player's attention. */
@@ -199,11 +223,13 @@ export function advanceDay(c: Campaign) {
   tickContainment(c);
   for (const s of c.scps) if (s.status === "contained" && c.day - s.lastCleaned === CLEAN_EVERY)
     log(c, `${s.name}'s cell is due for cleaning. Skipping it lets debris build up and raises the breach risk.`, "key");
+  tickPrisoners(c);
   if (dayOfMonth(c.day) === 1) {
     const funds = monthlyFunding(c), upkeep = monthlyUpkeep(c);
     const room = Math.max(0, dclassCapacity(c) - c.dclass), d = Math.min(DCLASS_MONTHLY, room);
     c.funds += funds - upkeep; c.dclass += d;
-    log(c, `Month ${monthOf(c.day)}: the O5 Council releases $${funds}k (less at higher exposure); facility upkeep costs $${upkeep}k. ${d} D-Class transferred in${d < DCLASS_MONTHLY ? " (the barracks are full)" : ""}.`, "key");
+    c.exposure = Math.max(0, c.exposure - 3);   // the public slowly forgets
+    log(c, `${monthName(c.day)}: the O5 Council releases $${funds}k (less at higher exposure); facility upkeep costs $${upkeep}k. ${d} D-Class transferred in${d < DCLASS_MONTHLY ? " (the barracks are full)" : ""}. Exposure eases by 3.`, "key");
   }
   checkOver(c);
   return c.incidents.length > incidentsBefore || c.log.length !== logBefore || !!c.over;
@@ -211,7 +237,49 @@ export function advanceDay(c: Campaign) {
 
 /** Advance until something needs attention. */
 export function advanceToEvent(c: Campaign) {
-  for (let i = 0; i < 60 && !c.over; i++) if (advanceDay(c)) break;
+  for (let i = 0; i < 400 && !c.over; i++) if (advanceDay(c)) break;
+}
+
+// ---------- prisoners and Intel ----------
+export const holdingCapacity = (c: Campaign) => countOperational(c, "holding") * 4;
+export const INTERROGATION_DAYS = 10, INTEL_PER_PRISONER = 3, PRISONER_BOUNTY = 25;
+function tickPrisoners(c: Campaign) {
+  if (!countOperational(c, "holding")) return;
+  for (const p of [...c.prisoners]) {
+    if (++p.days % INTERROGATION_DAYS) continue;
+    p.intel++; c.intel++;
+    if (p.intel >= INTEL_PER_PRISONER) {
+      c.prisoners = c.prisoners.filter(x => x !== p);
+      log(c, `Interrogation of ${p.name} is finished (+1 Intel). They are transferred out of Site-19.`, "good");
+    } else log(c, `Interrogating ${p.name} yields +1 Intel.`, "good");
+  }
+}
+/** Spend Intel before a mission: one fewer Insurgent at that incident. */
+export function canWeaken(c: Campaign, inc: Incident) {
+  if (c.intel < 1) return "No Intel to spend.";
+  if (inc.insurgents - (inc.weakened ?? 0) <= 0) return "No Insurgents left to remove.";
+  return null;
+}
+export function weaken(c: Campaign, inc: Incident) {
+  if (canWeaken(c, inc)) return;
+  c.intel--; inc.weakened = (inc.weakened ?? 0) + 1;
+  log(c, `Intel used: Site security intercepts one of the Insurgents headed for ${inc.title.split(":")[0]}.`, "good");
+}
+
+// ---------- weapons ----------
+export const weaponOptions = (o: Operative): WeaponType[] => o.cls ? CLASS_WEAPONS[o.cls] : ["rifle"];
+export const weaponOf = (o: Operative): WeaponType => o.weapon && weaponOptions(o).includes(o.weapon) ? o.weapon : weaponOptions(o)[0];
+export function setWeapon(c: Campaign, o: Operative, t: WeaponType) { if (weaponOptions(o).includes(t)) o.weapon = t; }
+export function fitAttachment(c: Campaign, o: Operative, a: AttachmentId | "") {
+  if (a && !(c.attachments[a] ?? 0)) return;
+  if (o.attachment) c.attachments[o.attachment] = (c.attachments[o.attachment] ?? 0) + 1;
+  o.attachment = a || undefined;
+  if (a) c.attachments[a]!--;
+}
+export function gunFor(c: Campaign, o: Operative) {
+  const t = weaponOf(o), m = model(c.models[t]), a = o.attachment;
+  const mag = m.mag + (a === "extmag" ? 1 : 0);
+  return { name: m.name, type: t, dmg: [...m.dmg] as [number, number], mag, ammo: mag, aim: m.aim, attachment: a };
 }
 
 function checkOver(c: Campaign) {
@@ -251,16 +319,18 @@ export function hireEngineer(c: Campaign) {
 
 export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCount: number): MissionSetup {
   const take = (i: ItemId) => { c.inventory[i] = (c.inventory[i] || 0) - 1; };
+  const vest = armorOf(c);
   const squad = loadouts.map(l => {
     const o = c.roster.find(x => x.id === l.opId)!;
-    if (l.armor) take("armor");
+    const armored = l.armor && c.armorTier > 0;
+    if (armored) take("armor");
     l.items.forEach(take);
-    const bonus = l.armor ? ARMOR.hp : 0;
+    const bonus = armored ? vest.hp : 0;
     return {
       opId: o.id, name: o.name, call: o.call, hp: o.hp + bonus, maxHp: o.maxHp + bonus, san: Math.min(o.san, maxSanOf(o)),
       maxSan: maxSanOf(o), aim: aimOf(o) + (has(c, "marksmanship") ? 5 : 0), blinkFull: blinkFullOf(o),
-      armor: l.armor ? ARMOR.points : 0, hasArmor: l.armor, items: l.items.map(id => ({ id, uses: ITEMS[id].uses ?? 1 })),
-      cls: o.cls, perks: [...o.perks], traits: [...o.traits],
+      armor: armored ? vest.points : 0, hasArmor: armored, items: l.items.map(id => ({ id, uses: ITEMS[id].uses ?? 1 })),
+      cls: o.cls, perks: [...o.perks], traits: [...o.traits], gun: gunFor(c, o),
     };
   }).map(m => {
     // traits and the Marksman perk adjust the numbers they deploy with
@@ -276,9 +346,10 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
   c.dclass -= dCount;
   c.activeIncident = inc.id;
   return {
-    incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: inc.insurgents, squad, dclass,
+    incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: Math.max(0, inc.insurgents - (inc.weakened ?? 0)), squad, dclass,
+    year: yearOf(c.day),
     known: [...c.knownNotes],
-    insurgentArmor: monthOf(c.day) >= 3 ? 1 : 0,
+    insurgentArmor: yearOf(c.day) >= 1954 ? 1 : 0,
     mods: {
       blinkBonus: has(c, "blink_cadence") ? 0.02 : 0,
       recoverBonus: has(c, "trauma_counseling") ? 3 : 0,
@@ -307,7 +378,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
       continue;
     }
     // armor soaks wounds first; gear comes home with whoever survived
-    o.hp = Math.max(1, Math.min(o.maxHp, s.hp - (s.hasArmor ? ARMOR.hp : 0)));
+    o.hp = Math.max(1, Math.min(o.maxHp, s.hp - (s.hasArmor ? armorOf(c).hp : 0)));
     o.san = s.san; o.kills += s.kills;
     if (s.hasArmor) c.inventory.armor = (c.inventory.armor || 0) + 1;
     for (const it of s.items) if (it.uses > 0) c.inventory[it.id] = (c.inventory[it.id] || 0) + 1;
@@ -328,6 +399,11 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   }
 
   c.dclass += r.dReturned;
+  for (let i = 0; i < r.prisoners; i++) {
+    const name = `Insurgent prisoner ${c.nextIncident * 10 + i}`;
+    if (c.prisoners.length < holdingCapacity(c)) { c.prisoners.push({ name, days: 0, intel: 0 }); lines.push(`An Insurgent was taken alive and is held for interrogation.`); }
+    else { c.funds += PRISONER_BOUNTY; lines.push(`An Insurgent was taken alive. With no room in holding cells, they were handed to another site (+$${PRISONER_BOUNTY}k).`); }
+  }
   for (const n of r.known) if (!c.knownNotes.includes(n)) c.knownNotes.push(n);
   const recovery = inc?.kind === "recovery";
   if (r.win) {

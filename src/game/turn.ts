@@ -1,7 +1,8 @@
 // Player actions and the turn cycle: your move, SCP-173, the Insurgency, then loose D-Class.
-import { HALF, L, TS, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, setVault, tileAt, DIRS, type Pt } from "../core/grid";
+import { FLOOR, HALF, L, TS, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, setVault, tileAt, DIRS, type Pt } from "../core/grid";
 import { setSmoke, sightFrom } from "../core/sight";
-import { fire, kill, moveUnit } from "./combat";
+import { damage, fire, kill, moveUnit } from "./combat";
+import { TYPES } from "../data/weapons";
 import { abilityTargets, useAbility } from "./abilities";
 import { hasPerk, rangeOf, spend, usesLeft } from "./perks";
 import { recruitStrays, subjectPhase } from "./dclass";
@@ -20,7 +21,7 @@ const DRAG_SANITY = 5;
 // Staring units can move anywhere within range, provided every tile on the way keeps sight of SCP-173.
 export function reachFor(u: Unit | null) {
   if (!u || u.ap < 1) return null;
-  const move = prof(u).move;
+  const move = moveOf(u);
   setVault(hasPerk(u, "bulldozer"));
   let res;
   if (u.staring) {
@@ -32,7 +33,31 @@ export function reachFor(u: Unit | null) {
   for (let i = 0; i < res.dist.length; i++) if (res.dist[i] > 0 && tileAt(i % L.W, (i / L.W) | 0) === HALF) res.dist[i] = -res.dist[i] - 100;
   return res;
 }
-export const moveCost = (u: Unit, d: number) => d <= prof(u).move ? 1 : 2;
+export const moveOf = (u: Unit) => prof(u).move + (u.gun ? TYPES[u.gun.type].move : 0);
+export const moveCost = (u: Unit, d: number) => d <= moveOf(u) ? 1 : 2;
+
+/** Why this unit can't fire right now, or null. */
+export function fireCheck(u: Unit) {
+  if (!u.gun) return null;
+  if (u.gun.ammo < 1) return "Out of ammo. Reload first (R).";
+  if (u.gun.type === "marksman" && u.ap < 2) return "A marksman rifle takes both actions to fire.";
+  return null;
+}
+export function reloadCheck(u: Unit | null) {
+  if (!u || !u.gun) return "Select an operative.";
+  if (u.gun.ammo >= u.gun.mag) return "Magazine is full.";
+  if (u.ap < 1) return "No actions left this turn.";
+  return null;
+}
+export function doReload(flash: (t: string) => void) {
+  const u = S.selected;
+  if (!canAct() || !u) return;
+  const why = reloadCheck(u);
+  if (why) { flash(why); return; }
+  u.gun!.ammo = u.gun!.mag; u.ap--;
+  log(`${full(u)} reloads the ${u.gun!.name}.`);
+  afterAction();
+}
 const dragOf = (u: Unit) => (u.side === "mtf" ? S.setup.mods.mtfDrag : prof(u).drag) + (hasPerk(u, "handler") ? 1 : 0);
 
 // Drag: the dragger steps up to their drag distance and SCP-173 slides into the tile they
@@ -177,9 +202,12 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
   if (u && u.side === "raider" && seen(x, y)) {
     if (sel.side !== "mtf") { flash("D-Class are unarmed."); return; }
     if (!canSee(sel, x, y)) { flash(`${sel.call} has no line of sight to that target.`); return; }
+    const fw = fireCheck(sel);
+    if (fw) { flash(fw); return; }
     if (!confirm()) return;
     S.busy = true; S.pending = null;
-    if (hasPerk(sel, "double_tap") && sel.ap >= 2 && usesLeft(sel, "double_tap", 1) > 0) { spend(sel, "double_tap"); sel.ap = 1; log(`${full(sel)}: double tap.`, "key"); }
+    if (sel.gun?.type === "smg") sel.ap -= 1;
+    else if (hasPerk(sel, "double_tap") && sel.ap >= 2 && sel.gun?.type !== "marksman" && usesLeft(sel, "double_tap", 1) > 0) { spend(sel, "double_tap"); sel.ap = 1; log(`${full(sel)}: double tap.`, "key"); }
     else sel.ap = 0;
     await fire(sel, u, false);
     S.busy = false; afterAction(); return;
@@ -210,7 +238,7 @@ function afterAction() {
 
 export function doOverwatch() {
   const u = S.selected;
-  if (!canAct() || !u || u.side !== "mtf" || u.ap < 1) return;
+  if (!canAct() || !u || u.side !== "mtf" || u.ap < 1 || (u.gun && u.gun.ammo < 1)) return;
   u.overwatch = true; u.ap = 0; u.overwatchShots = hasPerk(u, "rapid_reaction") ? 2 : 1;
   log(`${full(u)} on overwatch.`);
   afterAction();
@@ -309,7 +337,7 @@ export const blastArea = (x: number, y: number): Pt[] => DIRS.concat([[0, 0]]).m
 export function throwCheck(u: Unit | null, idx: number) {
   if (!u || u.side !== "mtf") return "Select an operative.";
   const it = u.items?.[idx];
-  if (!it || (it.id !== "flashbang" && it.id !== "smoke")) return "Nothing to throw in that slot.";
+  if (!it || (it.id !== "flashbang" && it.id !== "smoke" && it.id !== "frag")) return "Nothing to throw in that slot.";
   if (it.uses < 1) return "Used up.";
   if (u.ap < 1) return "No actions left this turn.";
   return null;
@@ -329,7 +357,17 @@ function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y
   S.mode = null; S.throwing = null; S.pending = null;
   const area = blastArea(x, y);
   const inArea = (v: Unit) => area.some(([a, b]) => a === v.x && b === v.y);
-  if (item.id === "flashbang") {
+  if (item.id === "frag") {
+    fx({ type: "flash", x: x * TS + TS / 2, y: y * TS + TS / 2, dur: 500 });
+    log(`${full(u)} throws a frag grenade.`, "key");
+    for (const v of humans().filter(inArea)) {
+      const soak = Math.min(v.armor ?? 0, 3);
+      damage(v, 3 - soak, u);
+      if (v.armor && hasPerk(u, "shredder")) v.armor--;
+    }
+    for (const [a, b] of area.concat(DIRS.map(([dx, dy]) => [x + dx, y + dy] as Pt))) if (tileAt(a, b) === HALF) { L.grid[b][a] = FLOOR; }
+    if (!hasPerk(u, "quiet_steps")) S.mem.set("bang-" + u.id, { x, y, turn: S.turn });
+  } else if (item.id === "flashbang") {
     fx({ type: "flash", x: x * TS + TS / 2, y: y * TS + TS / 2, dur: 700 });
     const hit = humans().filter(inArea);
     for (const v of hit) { v.blindUntil = S.turn; if (isTeam(v)) v.staring = false; }
