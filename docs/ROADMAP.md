@@ -151,26 +151,44 @@ retaliation (done); (5) doors and sirens (done).
   Insurgency fight) and Perimeter alarms (after the first raid: guards start on overwatch, Epsilon-11 2 turns sooner).
 - (Done early) Guard posts: each guard is posted to a Security station and hired there.
 
-## Phase 3G: recruiting Epsilon-11 (XCOM style)
+## Phase 3 priority: interactive World Map / Geoscape
 
-- (Done, part A) The recruit pool in the Command facility: 4 to 6 candidates a month from 13 special forces units
-  (7 from 1951; US Army Special Forces 1952, New Zealand SAS 1955, Sayeret Matkal and the Australian SAS 1957, the
-  Danish Jægerkorps 1961, Navy SEALs 1962), men and women, each with a unit-fitting hometown and backstory and a unit
-  lean (+6 aim, +15 sanity, +1 HP or +1 move). Standard $100k, Veteran $140k (arrives as PFC), Elite $190k (PFC and
-  Steady). Still to come below: portraits and liaison research.
+The World Map should become the main strategic screen and the normal starting point for field missions, closer to XCOM's Geoscape. This is an expansion of the existing regional exposure, fronts, travel, manhunts, cover-ups, strikes and amnestics systems, not a replacement for them. Keep it 2D in Phase 3; the 3D globe remains Phase 4.
 
-- A recruit pool in the Command facility's panel: 4 to 6 candidates, refreshed monthly, men and women. Each has a name,
-  age, nationality, home unit, backstory, a stat lean and sometimes a starting trait. Better candidates cost more.
-- Recruited from special forces around the world, opening by year: from 1951 US Army Ranger companies, Navy Underwater
-  Demolition Teams, Royal Marines Commandos, the SAS (Malayan Scouts), French Foreign Legion paratroopers, Gurkha
-  regiments and the Special Boat Service; later US Army Special Forces (1952), New Zealand SAS (1955), Sayeret Matkal
-  and the Australian SASR (1957), the Danish Jægerkorps (1961) and Navy SEALs (1962). Each unit gives a small lean
-  (Gurkhas steadier, SAS better shots, UDT frogmen faster).
-- Individual designs: a generated portrait for every operative (face, skin tone, hair, facial hair, scars, headgear by
-  unit), editable as in XCOM. Flat drawn style for now, built from layered parts so the style can be replaced later;
-  the same design data carries into the 3D models in Phase 4.
-- Liaison research (and later O5 standing) opens more units and better candidates.
-- The memorial keeps each fallen operative's portrait and unit.
+- **Launch and manage missions from the map.** Select an active incident or location, inspect its briefing, choose a response team and loadout, then deploy directly from that location. After the mission, return to the map with the results and consequences applied.
+- **Make locations legible and interactive.** Show regions, known sites, towns, active incidents, anomaly outbreaks, Insurgency activity, manhunts, fronts and discovered leads with distinct icons and status indicators. Selecting a marker opens useful information and available actions.
+- **Show time and travel clearly.** Display the current date, time controls, travel routes and estimated arrival/duration where relevant. Missions and operations should have understandable deadlines; advancing time should visibly advance travel, research, incidents and threats.
+- **Add world interactions beyond launching combat.** Depending on what is known and unlocked, allow the player to investigate a lead, scan a region, gather intelligence, establish contact, conduct surveillance, send a covert team, cover up an incident, pursue a manhunt, or dispatch a team to recover a lead without necessarily starting a full tactical mission.
+- **Give the player meaningful strategic choices.** Some leads should be uncertain or incomplete; spending time or Intel to investigate can reveal threat level, likely opposition, rewards or risks before committing a squad. Acting late should let situations worsen rather than keeping every mission static.
+- **Support simultaneous world activity.** Multiple incidents and operations can be active at once, with different deadlines, travel times and consequences. The player should have to choose what to address, consistent with the O5 Council and Insurgency systems.
+- **Show regional state at a glance.** Exposure, Foundation presence/front status, active threats and recent activity should be readable without opening several unrelated panels. Provide filters or toggles when the map gets crowded.
+- **Preserve strategic continuity.** New sites and regions become available through contact, research, Council requests or discovered leads. World actions should feed into the existing economy, research, exposure, Council standing and faction-threat systems rather than feeling like isolated minigames.
+- **Acceptance check:** a player can begin at the World Map, identify what is happening, decide what deserves attention, select and prepare a response, launch it, and understand the consequences on returning, without needing to navigate to a separate mission menu.
+
+## Phase 3 priority: tactical map readability
+
+- Add distinct but restrained 2D terrain textures for interior floors, concrete, grass, dirt, asphalt and rubble as appropriate.
+- Clearly distinguish walkable tiles, low/full cover, walls, doors, windows, hazards and extraction points.
+- Improve tile boundaries, contrast, unit silhouettes and overlays for selection, movement, line of sight, flanking and available actions.
+- Give labs, corridors, offices, storage rooms and containment areas recognizable floor patterns and props.
+- Prioritize readability over realistic texture detail; retain map semantics for the Phase 4 3D conversion.
+- Acceptance check: players can identify cover, routes, threats and selected units at normal zoom without trial-and-error clicks.
+
+## Phase 3G: recruiting Epsilon-11 (XCOM style) (done)
+
+- (Done) A recruit pool in the Command facility's panel: 4 to 6 candidates a month, men and women, from 13 special
+  forces units opening by year (US Army Rangers, Navy UDT, Royal Marines Commandos, SAS, Special Boat Service from 1951;
+  US Army Special Forces 1952, New Zealand SAS 1955, Australian SAS 1957, Navy SEALs 1962). Each has a unit-fitting
+  hometown and backstory and a unit lean (+6 aim, +15 sanity, +1 HP or +1 move). Standard $100k, Veteran $140k
+  (arrives as PFC), Elite $190k (PFC and Steady).
+- (Done) Liaison research: Allied liaison office (after 3 wins) opens the French Foreign Legion and the Gurkhas (later
+  Sayeret Matkal and the Jægerkorps) and adds 2 candidates a month; Joint training exchange (after 6 wins) makes
+  Veteran and Elite candidates far more common. O5 standing can add to this in Phase 3H.
+- (Done) Individual designs: a flat, layered SVG portrait for every operative (skin tone, hair style and colour,
+  facial hair, scar, headgear by unit: SAS sand berets, green berets, the Legion's white kepi, Gurkha slouch hats).
+  Editable on the Personnel tab under Appearance. Built from plain data (src/data/looks.ts) and drawn in one file
+  (src/ui/portrait.ts) so the style can be replaced, and the data can dress the 3D models in Phase 4.
+- (Done) The memorial keeps each fallen operative's portrait, greyed out.
 
 ## Phase 3H: the O5 Council and strategic choices
 
@@ -197,7 +215,12 @@ retaliation (done); (5) doors and sirens (done).
 - The Global Occult Coalition: a rival that destroys anomalies; slow responses let them "resolve" incidents (no exposure,
   no capture, the Council displeased).
 - GRU Division "P": the Soviet anomalous unit as a Cold War rival in Europe and East Asia.
-- A campaign ending: what winning looks like, and the final mission.
+
+### Global Chaos Insurgency model
+
+- The Chaos Insurgency is **one global opponent with a coherent strategic agenda**, not independent regional factions. Its operations may occur in different regions, but pressure, planning and major objectives are coordinated globally.
+- Regional incidents, fronts and intelligence leads represent where the global organization is acting; success or failure should influence its overall threat level and future operations.
+- Keep the recurring commander and announced operations tied to this global adversary. Avoid creating separate regional doom clocks or autonomous faction economies unless deliberately added later.
 
 ## Phase 3J: more task forces, field work and other sites
 
@@ -210,6 +233,38 @@ retaliation (done); (5) doors and sirens (done).
 - Scanning leads on the world map for supplies, Intel or recruits.
 - Requests, transfers and calls for help from other sites; selling captured gear to them (black market).
 
+### Emergency responses to other Foundation facilities
+
+- Other Foundation facilities remain independent. The player commands Site-19 and can assist, coordinate, trade or transfer with other sites, but does not build or directly manage them.
+
+- Other Foundation sites can request help after a containment breach, communications blackout, sabotage, infrastructure failure or staff error. Not every breach should be caused by the Insurgency.
+- Surface these events as urgent, selectable Geoscape incidents with site name, partial situation report, deadline, travel time and known/unknown risks.
+- Launch deployments from the Geoscape into distressed facilities. Possible objectives: rescue staff, restore power or communications, recover records or samples, evacuate survivors, and recapture or contain escaped anomalies.
+- Use damaged or partially secured facility layouts, local security survivors, changing hazards and uncertain intelligence to distinguish these missions from routine field operations.
+- Outcomes affect O5 standing, inter-site relations, exposure, research opportunities and future calls for assistance. Ignored emergencies can escalate or be resolved at a cost by other Foundation teams or rival groups.
+- Keep these events relatively rare and narratively significant; use existing anomaly content and mission systems before adding bespoke SCPs for every breach.
+
+## Phase 3K: strategic and tactical cohesion, usability and balance (planned)
+
+- **Geoscape-first mission flow:** launch and prepare field missions from selectable map locations, return to the map after debrief, and keep incident deadlines and travel consistent across the interface. Avoid a disconnected mission list as the primary entry point.
+- **Operative fatigue and recovery:** repeated deployments cause fatigue; wounds have recovery periods and meaningful squad-rotation consequences. Integrate these with the existing personnel and medical systems rather than adding duplicate screens.
+- **Operative bonds:** relationships form through shared deployments and affect tactical performance or morale in restrained, readable ways. Preserve them in personnel records and memorials.
+- **Mission-objective variety:** build on existing breach, escort, recovery and retaliation missions with optional objectives, timed extractions, holdouts, intelligence recovery, disabling infrastructure and partial-success outcomes. Do not make every operation a kill-all mission.
+- **Combat and map feedback:** show why actions succeed or fail, including line of sight, cover, flanking, hit chance, armor, status effects, overwatch triggers and action costs. Add a clear combat event log. Existing mechanics should be surfaced, not reimplemented.
+- **Strategic intelligence and uncertainty:** reconnaissance can clarify incomplete mission briefings, reveal likely opposition or rewards, and affect the risk of deployment. Unanswered incidents continue to evolve.
+- **Save and onboarding quality:** multiple save slots, first-mission guidance, reliable campaign migration, and clear warnings before irreversible deployments or time advances.
+- **Difficulty and balancing:** difficulty presets and optional Ironman only after testing the full Phase 3 loop; test economy, travel, threat escalation, recruitment, casualty rates, SCP containment and long-campaign stability.
+- **Completion gate:** the player can run a coherent long-term campaign from Site-19 through the Geoscape, with distinct strategic decisions and readable tactical missions, without requiring the Phase 4 3D conversion or a campaign ending.
+
+## Phase 3L: containment depth, facility consequences and campaign records (planned)
+
+- **Anomaly-specific containment procedures:** each implemented SCP should have understandable containment requirements, failure conditions and emergency responses. Let players prepare appropriate personnel, equipment and protocols for field recovery and Site-19 breaches; avoid generic capture rules for every anomaly.
+- **Research driven by containment:** recovering and holding an anomaly should enable relevant experiments, discoveries, equipment and containment improvements. Make the chain from field recovery to research to practical strategic/tactical benefit visible, building on existing SCP tests and research rather than duplicating them.
+- **Persistent facility damage and repairs:** breaches, sabotage and raids can damage rooms, power, security and containment infrastructure. Show repair time, cost, staffing requirements and temporary consequences; restoring operations should be a strategic choice, not an instant reset after a mission.
+- **Intelligence reliability:** distinguish confirmed, estimated and unknown information in briefings. Reconnaissance improves reliability, but some intelligence can be incomplete, outdated or deliberately misleading; ensure the player can tell uncertainty apart from UI errors.
+- **Campaign event history:** a searchable chronological record of major breaches, deployments, casualties, anomaly recoveries/transfers, O5 decisions, Insurgency operations and regional incidents. Link entries to relevant personnel, locations and outcomes where feasible, reusing existing incident reports and service histories.
+- **Completion gate:** these systems must integrate with the existing Site-19, research, personnel and Geoscape layers; prioritize meaningful choices and clear feedback over new standalone menus.
+
 ## Phase 4: 3D, XCOM style
 
 Late in the plan: move both layers from 2D to 3D.
@@ -218,18 +273,17 @@ Late in the plan: move both layers from 2D to 3D.
 - Strategic: a 3D globe for the world map, and a cutaway "ant farm" view of Site-19 like the Avenger.
 - Likely built on three.js inside the same browser game, keeping the rules code as it is and replacing the drawing.
 
+## Beyond Phase 3: campaign endgame
+
+- Define campaign victory and the final mission after the Phase 3 tactical and strategic foundations are complete. Phase 3 does not end the campaign.
+
 ## Later
 
 - More anomalies beyond SCP-106 and SCP-610, starting with SCP-939, "With Many Voices": blind, hunts by sound, fakes
   your operatives' voices in the log to lure them, and is drawn by gunfire (the reverse of SCP-173).
-- Each held anomaly with its own tests that give research and unique items.
-- Containment gear as items: a catch-pole for leading SCP-049 from farther away, portable light rigs.
-- Soldier bonds, fatigue, renaming operatives and callsigns.
+- Additional specialized containment gear, such as a catch-pole for SCP-049 or portable light rigs, as appropriate to individual anomaly procedures.
 - Elevation and high ground, hacking objectives, loot from Insurgents.
 - Room upgrades and staffing facilities for bonuses; one-off experimental items.
-- Difficulty levels and an Ironman mode.
 - Art to replace the placeholder SCP-173 drawing, and sound.
 - (Done) Save export and import: download the campaign as a file and load it back (older saves are upgraded).
-- Multiple save slots.
-- A tutorial or first-mission walkthrough.
 - Mission layout on phones.

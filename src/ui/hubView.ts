@@ -4,6 +4,8 @@ import { parseCampaign } from "../campaign/save";
 import type { Report } from "../campaign/reports";
 import { MEDALS } from "../data/bios";
 import { LEANS, QUALITY, UNITS } from "../data/units";
+import { FACIAL, HAIR_COLORS, HAIR_STYLES, HEADGEAR, LOOK_PARTS, SKIN, rollLook } from "../data/looks";
+import { portraitSvg } from "./portrait";
 import { INSPECTION, inspectionChecks, inspectionSoon } from "../campaign/inspection";
 import {
   UPGRADE, canUpgrade, upgradeFacility, RECREATION, canAddRecreation, addRecreation, DEMOLISH, canDemolish, demolish, demolishDays, demolishLeavesShort, ENGINEER_COST, EXCAVATE, FACILITIES, nameInText, GRADE_NAMES, MAX_LEVELS, REPAIR, SLOTS, build, canBuild, canExcavate, canRepair,
@@ -12,7 +14,7 @@ import {
 } from "../campaign/base";
 import {
   DCLASS_COST, DCLASS_MONTHLY, RANKS, RANK_XP, TRAINER, retire, trainerWhy, RANK_BONUS, RECRUIT_COST, advanceDay, aimOf, blinkFullOf, buyDClass,
-  canBuyDClass, canHireEngineer, dayOfMonth, deployable, hireEngineer, maxSanOf, monthOf, monthlyFunding, canHire, candidateCost, hireCandidate,
+  canBuyDClass, canHireEngineer, dayOfMonth, deployable, hireEngineer, maxSanOf, monthOf, monthlyFunding, canHire, candidateCost, hireCandidate, lookOf,
   INTEL_PER_PRISONER, INTERROGATION_DAYS, interrogationDays, PRISONER_BOUNTY, holdingCapacity, canRetrain, canTherapy, canWeaken, dateText, fitAttachment, gunFor, loadAmmo, setWeapon, weaken, weaponOf, weaponOptions, chooseClass, choosePerk, perkChoices, promotionDue, startRetrain, startTherapy,
   pendingBreach, type Campaign, type Incident, type Loadout, type Operative,
 } from "../campaign/campaign";
@@ -72,6 +74,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   const gear = new Map<string, { armor: ItemId | ""; items: (ItemId | "")[] }>();
   let flashMsg = "";
   let opSel: string | null = null;
+  let lookOpen = false;   // keep the appearance editor open while clicking through parts
   let dCount = 2;
   let sel: { level: number; slot: number } | null = null;
   let resetArmed = 0;
@@ -612,7 +615,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         return box(`Recruitment · ${plural(pool.length, "candidate")} this month`, `
           <p class="muted">Epsilon-11 recruits from special forces around the world. A new pool arrives on the first of every month; each operative costs $10k a month once hired. Units open as they are formed (US Army Special Forces in 1952, Navy SEALs in 1962).</p>
           ${pool.length ? pool.map(k => { const u = UNITS[k.unit], q = QUALITY[k.quality], w = canHire(c, k);
-            return `<div class="proj"><div class="ptop"><b>${esc(k.name)}</b><span class="flag ${k.quality ? "stare" : ""}">${q.name}</span></div>
+            return `<div class="proj"><div class="ptop">${portraitSvg(rollLook(k.id, k.sex), k.unit, 44)}<b>${esc(k.name)}</b><span class="flag ${k.quality ? "stare" : ""}">${q.name}</span></div>
               <div class="specs">${esc(u.name)} · ${esc(u.country)} · age ${k.age}, from ${esc(k.home)} · aim ${k.aimBase}</div>
               <p class="muted">${esc(k.story)} <b>${LEANS[u.lean]}</b> (${esc(u.name)}).${q.desc ? ` ${esc(q.desc)}` : ""}</p>
               <div class="row"><button class="act" type="button" data-hire="${k.id}" ${w ? `disabled title="${esc(w)}"` : ""}>Hire · $${candidateCost(k)}k</button>${w ? `<span class="muted">${esc(w)}</span>` : ""}</div></div>`; }).join("") : `<p class="muted">Nobody left in this month's pool. More arrive on the first.</p>`}`);
@@ -688,7 +691,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       </div>` : ""}
       ${c.roster.some(o => !o.alive) ? `<div class="card">
         <div class="label">Memorial</div>
-        <ul class="memorial">${c.roster.filter(o => !o.alive).map(o => `<li><b>${esc(o.call)} ${esc(o.name)}</b>, ${RANKS[o.rank]} · ${plural(o.missions, "mission")} · killed on day ${o.diedDay}, ${esc(o.diedAt || "")}</li>`).join("")}</ul>
+        <ul class="memorial">${c.roster.filter(o => !o.alive).map(o => `<li>${portraitSvg(lookOf(o), o.unit, 36, true)} <b>${esc(o.call)} ${esc(o.name)}</b>, ${RANKS[o.rank]} · ${plural(o.missions, "mission")} · killed on day ${o.diedDay}, ${esc(o.diedAt || "")}</li>`).join("")}</ul>
       </div>` : ""}
     </section>
   </div>`;
@@ -701,7 +704,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     const bad = o.traits.filter(t => TRAITS[t].bad);
     return `<div class="card plan">
       <div class="label">${esc(o.call)} · ${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}</div>
-      <h3 class="fac">${esc(o.name)}</h3>
+      <div class="row" style="align-items:center">${portraitSvg(lookOf(o), o.unit, 88)}<h3 class="fac">${esc(o.name)}</h3></div>
       ${o.busy ? `<p class="warn">${o.busy.kind === "therapy" ? "In therapy" : o.busy.kind === "travel" ? "Flying home" : "Retraining"}: ${plural(o.busy.daysLeft, "day")} left. Can't deploy until then.</p>` : ""}
       ${o.unit ? `<div class="specs">Recruited from the ${esc(UNITS[o.unit].name)} (${esc(UNITS[o.unit].country)}) · ${LEANS[UNITS[o.unit].lean]}</div>` : ""}
       ${o.bio ? `<p class="muted">Age ${o.bio.age + Math.floor((c.day - 1) / 365)}, from ${esc(o.bio.home)}. ${esc(o.bio.story)}</p>` : ""}
@@ -710,6 +713,11 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       ${o.busy ? "" : (() => { const tw = trainerWhy(c, o); return `<details class="archived"><summary>Retire</summary>
         <p class="muted">${tw ? `${esc(tw)} They can still leave with an honourable discharge.` : "As a trainer at the range, new recruits arrive as Privates First Class while they're there."}</p>
         <div class="row"><button class="act" type="button" data-retire="${o.id}">${tw ? "Honourable discharge" : "Retire as a trainer"}</button></div></details>`; })()}
+      <details class="archived" ${lookOpen ? "open" : ""}><summary>Appearance</summary>
+        ${(() => { const l = lookOf(o), part = (key: string, label: string, value: string) => `<div class="row"><span class="specs" style="min-width:90px">${label}</span><button class="act" type="button" data-look="${key}" data-d="-1" aria-label="Previous ${label.toLowerCase()}">‹</button><span style="min-width:110px">${esc(value)}</span><button class="act" type="button" data-look="${key}" data-d="1" aria-label="Next ${label.toLowerCase()}">›</button></div>`;
+          return part("skin", "Skin tone", `${l.skin + 1} of ${SKIN.length}`) + part("hair", "Hair", HAIR_STYLES[l.hair]) + part("hairColor", "Hair colour", `${l.hairColor + 1} of ${HAIR_COLORS.length}`)
+            + part("facial", "Facial hair", FACIAL[l.facial]) + part("scar", "Scar", l.scar ? "Yes" : "No") + (o.unit && HEADGEAR[o.unit] ? part("headgear", "Headgear", l.headgear ? HEADGEAR[o.unit]![0] : "None") : ""); })()}
+      </details>
       <details class="archived"><summary>Rename</summary><div class="row">
         <label class="specs" for="renameName">Name</label><input id="renameName" maxlength="24" value="${esc(o.name)}">
         <label class="specs" for="renameCall">Callsign</label><input id="renameCall" maxlength="12" value="${esc(o.call)}">
@@ -766,7 +774,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       : deployable(o) ? `<span class="flag">Ready</span>` : `<span class="flag bad">Wounded · ${plural(days, "day")}</span>`;
     const ms = maxSanOf(o);
     return `<button type="button" class="oprow ${opSel === o.id ? "sel" : ""}" data-op="${o.id}">
-      <span class="tag">${esc(o.call)}</span>
+      <span class="tag">${portraitSvg(lookOf(o), o.unit, 40)}<br>${esc(o.call)}</span>
       <span class="nm">${esc(o.name)} <span class="muted">${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}</span></span>
       ${status}
       <span class="bars">
@@ -826,7 +834,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       flashMsg = ""; tab = "site"; speed = 0; render();
     });
     root.querySelectorAll<HTMLElement>("[data-hire]").forEach(b => b.onclick = () => { const k = c.recruits?.find(x => x.id === b.dataset.hire); if (k) change(() => hireCandidate(c, k)); });
-    root.querySelectorAll<HTMLElement>("[data-op]").forEach(b => b.onclick = () => { opSel = opSel === b.dataset.op ? null : b.dataset.op!; render(); });
+    root.querySelectorAll<HTMLElement>("[data-op]").forEach(b => b.onclick = () => { opSel = opSel === b.dataset.op ? null : b.dataset.op!; lookOpen = false; render(); });
     const opNow = () => c.roster.find(x => x.id === opSel)!;
     root.querySelectorAll<HTMLElement>("[data-class]").forEach(b => b.onclick = () => change(() => chooseClass(c, opNow(), b.dataset.class as ClassId)));
     root.querySelectorAll<HTMLElement>("[data-perk]").forEach(b => b.onclick = () => change(() => choosePerk(c, opNow(), b.dataset.perk as PerkId)));
@@ -852,6 +860,14 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     root.querySelectorAll<HTMLElement>("[data-clean]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.clean); if (s) change(() => cleanCell(c, s)); });
     root.querySelectorAll<HTMLElement>("[data-alert]").forEach(b => b.onclick = () => change(() => { c.alert = b.dataset.alert as Alert; }));
     root.querySelectorAll<HTMLElement>("[data-retire]").forEach(b => b.onclick = () => { const o = c.roster.find(x => x.id === b.dataset.retire); if (o) { opSel = null; change(() => retire(c, o)); } });
+    root.querySelectorAll<HTMLElement>("[data-look]").forEach(b => b.onclick = () => {
+      const o = c.roster.find(x => x.id === opSel); if (!o) return;
+      const l = { ...lookOf(o) }, k = b.dataset.look as keyof typeof l, d = Number(b.dataset.d);
+      lookOpen = true;
+      if (k === "scar" || k === "headgear") l[k] = !l[k];
+      else { const n = LOOK_PARTS[k]; l[k] = (l[k] + d + n) % n; }
+      change(() => { o.look = l; });
+    });
     on("renameBtn", () => {
       const o = c.roster.find(x => x.id === opSel), n = root.querySelector<HTMLInputElement>("#renameName")!.value.trim(), k = root.querySelector<HTMLInputElement>("#renameCall")!.value.trim();
       if (o && n && k) change(() => { o.name = n.slice(0, 24); o.call = k.slice(0, 12); });
