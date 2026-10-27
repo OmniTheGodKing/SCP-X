@@ -22,7 +22,7 @@ import {
 } from "../campaign/containment";
 import {
   ARMOR_KINDS, ARMOR_TIERS, armorStats, ATTACHMENT_COST, REFIT, canOrderAmmo, orderAmmo, unlockedAmmo, canOrderAttachment, canRefit, orderAttachment, orderRefit, pendingRefits, unlockedAttachments,
-  ITEMS, PROJECTS, TESTS, assign, canHireResearcher, canOrder, canTest, has, hireResearcher, order, projectLock,
+  ITEMS, PROJECTS, TESTS, assign, projectVisible, canHireResearcher, canOrder, canTest, has, hireResearcher, order, projectLock,
   researcherCapacity, projectCost, researchersFree, startTest, testKey, offered, projectDays, unlockedItems, type Branch, type ItemId, type TestId,
 } from "../campaign/research";
 import { HOME, LAND, REGIONS, REGION_IDS, SITE19, project, type RegionId } from "../data/regions";
@@ -386,7 +386,8 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       </div>
       ${bt.length ? `<div class="card plan"><div class="label">Breakthrough${offer && !c.research.paid.includes(offer.id) ? ` · on offer until ${dateText(offer.until)}` : ""}</div><div class="projects">${bt.map(projectRow).join("")}</div></div>` : ""}
       ${insp && !has(c, insp.id) ? `<p class="muted">Inspiration: <b>${esc(PROJECTS[insp.id].name)}</b> takes half the time${c.research.paid.includes(insp.id) ? "" : ` if started by ${dateText(insp.until)}`}.</p>` : ""}
-      ${branches.map(b => `<div class="card"><div class="label">${b}</div><div class="projects">${Object.keys(PROJECTS).filter(id => PROJECTS[id].branch === b).map(projectRow).join("")}</div></div>`).join("")}
+      ${branches.map(b => `<div class="card"><div class="label">${b}</div><div class="projects">${(() => { const ids = Object.keys(PROJECTS).filter(id => PROJECTS[id].branch === b && projectVisible(c, id)); return ids.length ? ids.map(projectRow).join("") : `<p class="muted">Nothing to research here yet.</p>`; })()}</div></div>`).join("")}
+      <p class="muted">More research opens up as Site-19 learns: finished projects lead to new ones, and so do won missions, new anomalies, things brought back from the field, and the years passing.</p>
     </section>
     <section class="col">
       <div class="file">

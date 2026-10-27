@@ -6,6 +6,7 @@ import {
   type Base,
 } from "./base";
 import { CLEAN_EVERY, firstSightings, resolveScp, scpName, startingScps, tickContainment, type ScpRecord } from "./containment";
+import { reachMilestone, type Milestone } from "./research";
 import { ITEMS, PROJECTS, armorStats, has, projectLock, monthlyResearch, newResearch, tickResearch, type MaterialId, type ItemId, type Order, type ResearchState } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, collapsedCount, COLLAPSE_LIMIT, newRegions, regionFunding, tickWorld, travelDays, type RegionState } from "./world";
@@ -176,6 +177,8 @@ export interface Campaign {
   /** Incident reports, newest first. */
   archive?: Report[];
   retired?: Retiree[];
+  /** Things that have happened at least once, which open up research. */
+  milestones?: Milestone[];
 }
 
 // Perks per rank: steadier aim, fewer blinks, more composure.
@@ -345,6 +348,7 @@ export function advanceDay(c: Campaign) {
   tickMorale(c);
   tickStaff(c);
   tickInspection(c);
+  if (c.guards.some(g => g.alive && g.breaches >= 3)) reachMilestone(c, "guard_veteran");
   tickContainment(c);
   tickWorld(c);
   for (const s of c.scps) if (s.status === "contained" && c.day - s.lastCleaned === CLEAN_EVERY)
@@ -735,6 +739,8 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   // the Insurgency punishes towns that helped the Foundation
   if (capture && Math.random() < 0.25) (c.retaliations ??= []).push({ region: inc!.region, day: c.day + rand(3, 10) });
   (c.archive ??= []).unshift(buildReport(c, inc, r));
+  if (r.insurgentsTotal) reachMilestone(c, "insurgents");
+  if (r.hadFire) reachMilestone(c, "fire");
   checkOver(c);
   return { lines, promotions };
 }

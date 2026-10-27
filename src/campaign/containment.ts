@@ -1,6 +1,6 @@
 // Anomalies held at Site-19: daily breach risk, cell cleaning, breaches, and escapes.
 import { FACILITIES, isContainment, nameInText, neighbors, operational, powerShort, stationsOnLevel, type Facility } from "./base";
-import { has } from "./research";
+import { has, reachMilestone } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, travelDays } from "./world";
 import { dateOf, dclassDied, log, type Campaign, type Incident } from "./campaign";
@@ -124,6 +124,7 @@ export const unpowered = (c: Campaign) => powerShort(c) && !has(c, "backup_gen")
 /** Something knocks a facility out. A containment wing that's hit may crack open (20%). */
 export function wreckFacility(c: Campaign, f: Facility, text: string) {
   f.disabled = true;
+  if (f.type === "generator") reachMilestone(c, "power_failure");
   log(c, `${text} The ${nameInText(f.type)} on level ${f.level + 1} is out of action until repaired.`, "bad", "site");
   const occ = occupantOf(c, f);
   if (occ?.status === "contained" && Math.random() < POWER.wreckBreach) startBreach(c, occ, "The damage cracked its cell open.");

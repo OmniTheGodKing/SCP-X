@@ -220,6 +220,7 @@ export interface MissionResult {
   coreBurned: boolean;
   /** Riots: rioters killed (lost from storage). */
   riotersKilled: number;
+  hadFire?: boolean;
   /** Anomalies photographed with the field camera, and whether a restraint kit came along. */
   photos: ScpId[];
   restraints: boolean;
@@ -289,6 +290,8 @@ export interface MissionState {
   stolen?: boolean;
   /** Fire on the map (tile index → last turn it burns), and SCP-610's flesh and its core. */
   fires: Map<number, number>;
+  /** Anything caught fire this mission (opens incendiary research). */
+  hadFire?: boolean;
   flesh: Set<number>;
   core: { x: number; y: number; hp: number; maxHp: number } | null;
   /** Flares burning on the ground at night. */

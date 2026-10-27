@@ -20,6 +20,7 @@ export function ignite(x: number, y: number, turns = FIRE_TURNS) {
   // the core is wet with blood: fire on it goes out after a turn
   const last = S.turn + (S.core && S.core.x === x && S.core.y === y ? 1 : turns);
   S.fires.set(idx(x, y), Math.max(S.fires.get(idx(x, y)) ?? -1, last));
+  S.hadFire = true;
   if (S.flesh.delete(idx(x, y)) && seen(x, y)) fx({ type: "flash", x: x * TS + TS / 2, y: y * TS + TS / 2, dur: 300 });
 }
 
