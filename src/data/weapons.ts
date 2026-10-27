@@ -5,11 +5,12 @@ import type { ClassId } from "./classes";
 export type WeaponType = "rifle" | "marksman" | "shotgun" | "mg" | "carbine" | "smg";
 export type AttachmentId = "scope" | "trigger" | "extmag" | "stock" | "suppressor" | "bayonet" | "sights";
 /** Special ammunition, one type per operative, built in the workshop (like XCOM's experimental ammo). */
-export type AmmoId = "ap" | "tracer" | "hollow" | "sedative";
+export type AmmoId = "ap" | "tracer" | "hollow" | "sedative" | "incendiary";
 export const AMMO: Record<AmmoId, { name: string; desc: string }> = {
   ap:       { name: "Armor-piercing rounds", desc: "Hits ignore 1 armor point." },
   tracer:   { name: "Tracer rounds", desc: "+10 aim on overwatch shots." },
   hollow:   { name: "Hollow-point rounds", desc: "Critical hits do 1 more damage." },
+  incendiary: { name: "Incendiary rounds", desc: "Hits set the target's tile alight for a turn." },
   sedative: { name: "Sedative rounds", desc: "Non-lethal: Insurgents, civilians and loose D-Class brought to 0 HP are knocked out, not killed." },
 };
 /** Weapon tiers, like XCOM's conventional, magnetic and beam weapons. */

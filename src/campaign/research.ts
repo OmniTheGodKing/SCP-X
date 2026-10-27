@@ -7,10 +7,10 @@ import { cellWork, type ScpRecord } from "./containment";
 
 export type Branch = "SCP-173" | "SCP-049" | "SCP-106" | "Insurgency" | "Personnel" | "Weapons" | "Equipment" | "Site" | "Breakthrough";
 /** Things brought back from missions that some studies need (like XCOM autopsies). */
-export type MaterialId = "ciWeapons" | "prisoners" | "intelTotal" | "tissue" | "survivors";
+export type MaterialId = "ciWeapons" | "prisoners" | "intelTotal" | "tissue" | "survivors" | "outbreaks";
 export const MATERIALS: Record<MaterialId, string> = {
   ciWeapons: "Insurgency weapons recovered", prisoners: "Insurgents taken prisoner", intelTotal: "Intel gathered",
-  tissue: "SCP-049-2 tissue samples", survivors: "people back from SCP-106's pocket dimension",
+  tissue: "SCP-049-2 tissue samples", survivors: "people back from SCP-106's pocket dimension", outbreaks: "SCP-610 outbreaks seen",
 };
 export type TestId = "endurance" | "material" | "movement";
 import type { ItemId } from "../game/types";
@@ -110,6 +110,10 @@ export const PROJECTS: Record<string, ProjectDef> = {
   m20:                { name: "M20 super bazooka", branch: "Weapons", days: 30, cost: 80, needs: ["heavy_armor"], unlocks: "bazooka", desc: "Heavy weapon for heavy armor: 5 damage in a blast, out to 10 tiles." },
   m72:                { name: "M72 LAW", branch: "Weapons", days: 30, cost: 100, from: 1961, needs: ["m20"], unlocks: "law", desc: "A light one-shot rocket: 4 damage in a blast, out to 8 tiles. Cheaper to build." },
   flares:             { name: "M127 signal flares", branch: "Equipment", days: 10, cost: 20, unlocks: "flare", desc: "Throwable flares that light a 2-tile radius for 3 turns on night missions. Throwing one gives the team away." },
+  incendiaries:       { name: "M14 incendiary grenades", branch: "Equipment", days: 20, cost: 50, unlocks: "incendiary", desc: "Thermite grenades that set an area alight." },
+  ammo_incendiary:    { name: "Incendiary rounds", branch: "Weapons", days: 25, cost: 60, ammo: "incendiary", desc: "Special ammunition: hits set the target's tile alight for a turn." },
+  m2_flamer:          { name: "M2 flamethrower", branch: "Weapons", days: 40, cost: 120, needs: ["heavy_armor"], unlocks: "flamer", desc: "Heavy weapon for heavy armor: a jet of burning fuel. The surest way to burn out SCP-610." },
+  containment_suit:   { name: "Containment suits", branch: "Equipment", days: 35, cost: 120, needsMaterial: ["outbreaks", 1], unlocks: "contsuit", desc: "Sealed suits for working on SCP-610's flesh. A blow from an instance can still tear one." },
   medkits:            { name: "Field medkits", branch: "Equipment", days: 15, cost: 30, unlocks: "medkit", desc: "A medkit anyone can use once: heal themselves or an adjacent ally." },
   cs_gas:             { name: "CS gas grenades", branch: "Equipment", days: 20, cost: 40, unlocks: "csgas", desc: "Tear gas: −30 aim for Insurgents and civilians caught in it." },
   field_camera:       { name: "Field cameras", branch: "Equipment", days: 20, cost: 40, unlocks: "camera", desc: "Photograph an anomaly mid-mission; the film speeds up research on it." },
@@ -146,16 +150,20 @@ export function armorStats(kind: ItemId, tier: number) {
     case "armor_heavy": return { hp: t.hp + 2, points: t.points + 1, move: -1 };
     case "hazmat": return { hp: 1, points: 0, move: 0 };
     case "leadsuit": return { hp: t.hp, points: t.points, move: -1 };
+    case "contsuit": return { hp: 1, points: 1, move: -1 };
     default: return { hp: t.hp, points: t.points, move: 0 };
   }
 }
-export const ARMOR_KINDS: ItemId[] = ["armor_light", "armor", "armor_heavy", "hazmat", "leadsuit"];
+export const ARMOR_KINDS: ItemId[] = ["armor_light", "armor", "armor_heavy", "hazmat", "leadsuit", "contsuit"];
 export const ITEMS: Record<ItemId, ItemDef> = {
   armor:     { name: "Flak vest", cost: 60, days: 4, uses: null, armor: true, desc: "Medium armor. Its protection depends on the vest model researched." },
   armor_light: { name: "Recon smock", cost: 50, days: 3, uses: null, armor: true, desc: "Light armor: 1 HP less and 1 armor point less than the vest, but +1 move." },
   armor_heavy: { name: "Heavy plate", cost: 90, days: 5, uses: null, armor: true, desc: "Heavy armor: +2 HP and +1 armor point over the vest, −1 move. The only armor that can carry a heavy weapon." },
   hazmat:    { name: "Hazmat suit", cost: 60, days: 4, uses: null, armor: true, desc: "+1 HP. SCP-106's rot does nothing to the wearer." },
   leadsuit:  { name: "Lead-lined suit", cost: 120, days: 6, uses: null, armor: true, desc: "Vest protection, −1 move. SCP-106 needs to hold the wearer for two turns to take them." },
+  contsuit:  { name: "Containment suit", cost: 100, days: 5, uses: null, armor: true, desc: "Sealed against SCP-610: safe to stand on its flesh. Every blow from an instance has a 60% chance to tear it, infecting the wearer. 1 armor, −1 move." },
+  incendiary: { name: "M14 incendiary grenade", cost: 20, days: 1, uses: 1, desc: "Sets everything within 1 tile of where it lands alight for 3 turns." },
+  flamer:    { name: "M2 flamethrower", cost: 60, days: 3, uses: 3, desc: "Heavy weapon (heavy armor only), 3 bursts: sets a line out to 4 tiles and the tiles around its end alight, 3 damage (6 to SCP-610)." },
   csgas:     { name: "CS gas grenade", cost: 15, days: 1, uses: 1, desc: "Insurgents and civilians within 1 tile of where it lands get −30 aim until the end of next turn." },
   bazooka:   { name: "M20 bazooka", cost: 40, days: 2, uses: 1, desc: "Heavy weapon (heavy armor only): 5 damage within 1 tile of where it hits, out to 10 tiles; destroys half cover." },
   law:       { name: "M72 LAW", cost: 30, days: 2, uses: 1, desc: "Heavy weapon (heavy armor only): 4 damage within 1 tile of where it hits, out to 8 tiles; destroys half cover." },

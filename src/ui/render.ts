@@ -1,5 +1,5 @@
 // Draws the tactical map, units, sightlines, previews and effects onto the mission canvas.
-import { CONT, EXIT, FULL, HALF, L, STEEL, TS, WALL, area, inContainer, passable, pathTo, tileAt, type Pt } from "../core/grid";
+import { CONT, DRUM, EXIT, FULL, HALF, L, STEEL, TS, WALL, area, inContainer, passable, pathTo, tileAt, type Pt } from "../core/grid";
 import { sightFrom } from "../core/sight";
 import { center, shotInfo } from "../game/combat";
 import { S, canAct, canSee, isPanicked, isTeam, seen, team, unitAt } from "../game/state";
@@ -53,6 +53,9 @@ export function createRenderer(cv: HTMLCanvasElement) {
         ctx.strokeStyle = C.pillarHatch; ctx.lineWidth = 2; ctx.beginPath();
         for (let k = -TS; k < TS; k += 7) { ctx.moveTo(px + 3 + Math.max(0, k), py + 3 + Math.max(0, -k)); ctx.lineTo(px + 3 + Math.min(TS - 6, k + TS - 6), py + 3 + Math.min(TS - 6, TS - 6 - k)); }
         ctx.stroke();
+      } else if (t === DRUM) {
+        ctx.fillStyle = "#7a3b1e"; ctx.beginPath(); ctx.ellipse(px + TS / 2, py + TS / 2, 9, 11, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "#d9a441"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(px + 8, py + 13); ctx.lineTo(px + TS - 8, py + 13); ctx.moveTo(px + 8, py + 20); ctx.lineTo(px + TS - 8, py + 20); ctx.stroke();
       } else if (t === EXIT) {
         ctx.fillStyle = C.exit; ctx.fillRect(px + 2, py + 2, TS - 4, TS - 4);
         ctx.fillStyle = "#cfe8d6"; ctx.font = "9px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -149,11 +152,11 @@ export function createRenderer(cv: HTMLCanvasElement) {
     if (u.side === "anomaly" && S.has106) { if (!S.submerged) drawOldMan(cx, cy); return; }
     if (u.side === "anomaly") { drawStatue(u.x, u.y, 1); return; }
     if (u.side === "zombie") {
-      ctx.fillStyle = "#6f7a5c";
+      ctx.fillStyle = u.flesh ? "#8c2c34" : "#6f7a5c";
       ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = "#0f1317"; ctx.lineWidth = 2; ctx.stroke();
       ctx.fillStyle = "#0f1317"; ctx.font = "600 9px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText("2", cx, cy + 1);
+      ctx.fillText(u.flesh ? "6" : "2", cx, cy + 1);
       const w = 20; ctx.fillStyle = "#0f1317"; ctx.fillRect(cx - w / 2 - 1, cy - 17, w + 2, 4);
       ctx.fillStyle = C.alert; ctx.fillRect(cx - w / 2, cy - 16, w * u.hp / u.maxHp, 2);
       return;
@@ -264,6 +267,20 @@ export function createRenderer(cv: HTMLCanvasElement) {
         for (let y = r.y - DETECT; y <= r.y + DETECT; y++) for (let x = r.x - DETECT; x <= r.x + DETECT; x++)
           if (x >= 0 && y >= 0 && x < L.W && y < L.H && passable(x, y) && sightFrom(r.x, r.y, x, y, DETECT)) ctx.fillRect(x * TS + 1, y * TS + 1, TS - 2, TS - 2);
       }
+    }
+    // SCP-610's flesh, its core, and fire
+    if (S.flesh.size) {
+      ctx.fillStyle = "rgba(120,24,32,0.55)";
+      for (const i of S.flesh) if (S.explored[i]) { const x = i % L.W, y = (i / L.W) | 0; ctx.beginPath(); ctx.ellipse(x * TS + TS / 2, y * TS + TS / 2, 15, 13, (i % 5) / 2, 0, Math.PI * 2); ctx.fill(); }
+    }
+    if (S.core && S.core.hp > 0 && S.explored[S.core.y * L.W + S.core.x]) {
+      const cx = S.core.x * TS + TS / 2, cy = S.core.y * TS + TS / 2, pulse = 0.5 + 0.5 * Math.sin(now / 300);
+      ctx.fillStyle = `rgba(170,30,40,${0.7 + pulse * 0.3})`; ctx.beginPath(); ctx.arc(cx, cy, 11 + pulse * 2, 0, Math.PI * 2); ctx.fill();
+      tag(`CORE ${S.core.hp}`, cx, cy - 20, C.alert);
+    }
+    for (const [i, until] of S.fires) if (until >= S.turn) {
+      const x = i % L.W, y = (i / L.W) | 0, f = 0.5 + 0.5 * Math.sin(now / 90 + i);
+      ctx.fillStyle = `rgba(255,${110 + f * 60},40,${0.35 + f * 0.25})`; ctx.fillRect(x * TS + 2, y * TS + 2, TS - 4, TS - 4);
     }
     // floor rotted by SCP-106
     if (S.has106) {

@@ -72,6 +72,7 @@ export function mountDebug(host: DebugHost) {
       group(`SCP-173 (${c.scps[0].status})`, btn("s-contained", "Contained") + btn("s-breach", "Breach now") + btn("s-loose", "Loose")),
       ...(["049", "106"] as const).map(id => group(`SCP-${id} (${c.scps.find(s => s.id === id)?.status ?? (c.sightings[id] ? `first sighting ${dateText(c.sightings[id]!)}` : "not held")})`,
         btn("see" + id, "First sighting now") + btn("get" + id, "Capture into a free wing") + btn("breach" + id, "Breach now"))),
+      group(`SCP-610 (${c.outbreak ? `severity ${c.outbreak.severity} in ${REGIONS[c.outbreak.region].name}` : c.outbreakDay ? `first outbreak ${dateText(c.outbreakDay)}` : "none"})`, btn("outbreak", "Start the outbreak now") + btn("worsen", "Severity +1")),
       group("Save", `<span class="muted">${c.debug ? "This campaign is marked as a debug save." : "Untouched by debug so far."}</span>`),
     ].join("");
   }
@@ -150,6 +151,8 @@ export function mountDebug(host: DebugHost) {
         s.status = "contained"; s.resurfaceDay = undefined; s.maintenance = 100;
         c.incidents = c.incidents.filter(i => i.scpId !== s.id || i.id === c.activeIncident);
         break;
+      case "outbreak": if (!c.outbreak) { c.outbreakDay = c.day; days(1); } else note = "An outbreak is already under way."; break;
+      case "worsen": if (c.outbreak) { c.outbreak.severity = Math.min(5, c.outbreak.severity + 1); } break;
       case "see049": case "see106": case "get049": case "get106": case "breach049": case "breach106": {
         const id = id_.slice(-3) as "049" | "106", known = c.scps.find(x => x.id === id);
         if (id_.startsWith("breach")) { if (known?.status === "contained") startBreach(c, known, "Debug:"); else note = `SCP-${id} has to be contained first.`; }

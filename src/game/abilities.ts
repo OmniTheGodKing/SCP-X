@@ -1,5 +1,5 @@
 // Class abilities used during a mission. Each has a target rule, a cost and an effect.
-import { DIRS, FULL, HALF, L, STEEL, WALL, cheb, passable, tileAt } from "../core/grid";
+import { DIRS, DRUM, FULL, HALF, L, STEEL, WALL, cheb, passable, tileAt } from "../core/grid";
 import { hasPerk, spend, usesLeft } from "./perks";
 import { maxSanOf } from "./profiles";
 import { S, alive, canAct, canSee, computeVis, full, hooks, isPanicked, log, loseSanity, seen, team } from "./state";
@@ -42,7 +42,7 @@ export const ABILITIES: AbilityDef[] = [
 
 const UNIVERSAL: AbilityId[] = ["secure", "dose", "lockdown", "doors", "siren", "calm", "restrain", "pickup", "drop", "exfil", "hunker"];
 const onExit = (u: Unit) => L.exitMap[u.y * L.W + u.x] === 0;
-const hasCover = (u: Unit) => DIRS.some(([dx, dy]) => { const t = tileAt(u.x + dx, u.y + dy); return t === WALL || t === FULL || t === HALF || t === STEEL; });
+const hasCover = (u: Unit) => DIRS.some(([dx, dy]) => { const t = tileAt(u.x + dx, u.y + dy); return t === WALL || t === FULL || t === HALF || t === STEEL || t === DRUM; });
 const knows = (u: Unit, p: AbilityId) => UNIVERSAL.includes(p)
   ? u.side === "mtf" && abilityTargets(u, p).length > 0 && (p !== "dose" || S.amnestics > 0)
   : hasPerk(u, p as PerkId);

@@ -3,7 +3,7 @@
 export const TS = 32;           // tile size in pixels
 export const R = 9;             // sight range in tiles
 
-export const WALL = 0, FLOOR = 1, HALF = 2, FULL = 3, EXIT = 4, CONT = 5, STEEL = 6;
+export const WALL = 0, FLOOR = 1, HALF = 2, FULL = 3, EXIT = 4, CONT = 5, STEEL = 6, DRUM = 7;
 export type Tile = number;
 export type Pt = [number, number];
 
@@ -34,7 +34,7 @@ export class Level {
   constructor(readonly def: MapDef) {
     this.W = def.rows[0].length;
     this.H = def.rows.length;
-    const codes: Record<string, Tile> = { "#": WALL, h: HALF, H: FULL, E: EXIT, C: CONT, S: STEEL };
+    const codes: Record<string, Tile> = { "#": WALL, h: HALF, H: FULL, E: EXIT, C: CONT, S: STEEL, D: DRUM };
     def.rows.forEach((row, y) => {
       this.grid[y] = [];
       [...row].forEach((c, x) => {

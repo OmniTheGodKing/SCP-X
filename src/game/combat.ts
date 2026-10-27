@@ -1,5 +1,5 @@
 // Gunfire, cover, damage and movement.
-import { DIRS, FULL, HALF, STEEL, TS, WALL, L, bfs, tileAt, type Pt } from "../core/grid";
+import { DIRS, DRUM, FULL, HALF, STEEL, TS, WALL, L, bfs, tileAt, type Pt } from "../core/grid";
 import { bestView, type View } from "../core/sight";
 import { hasPerk, rangeOf } from "./perks";
 import { TYPES, rangeMod } from "../data/weapons";
@@ -8,6 +8,7 @@ import { S, alive, breakConcealment, canSee, full, fx, hooks, isPanicked, team, 
 import type { Gun, Unit } from "./types";
 import { SIDEARM } from "../data/weapons";
 import { dropCarried } from "./abilities";
+import { ignite } from "./fire";
 import { shotAt106 } from "./scp106";
 
 export function coverAgainst(tx: number, ty: number, sx: number, sy: number) {
@@ -15,7 +16,7 @@ export function coverAgainst(tx: number, ty: number, sx: number, sy: number) {
   let best = 0;
   for (const [dx, dy] of DIRS) {
     const t = tileAt(tx + dx, ty + dy);
-    const c = (t === WALL || t === FULL || t === STEEL) ? 40 : t === HALF ? 20 : 0;
+    const c = (t === WALL || t === FULL || t === STEEL) ? 40 : t === HALF || t === DRUM ? 20 : 0;
     if (!c) continue;
     // straight-side cover protects within 60° of its face, corner cover only within ~23°
     const cos = (vx * dx + vy * dy) / (len * Math.hypot(dx, dy));
@@ -99,6 +100,7 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
     if (visibleShot) log(`${reaction ? "Overwatch: " : ""}${sidearm ? "Sidearm: " : ""}${full(sh)} hits ${full(tg)} for ${dmg}${crit ? ", critical" : ""}${soak ? `; armor absorbed ${soak}` : ""} (${info.chance}%).`, sh.side === "mtf" ? "good" : "bad");
     if (hasPerk(sh, "shredder") && (tg.armor ?? 0) > 0) { tg.armor!--; log("The hit shreds a point of armor.", "good"); }
     damage(tg, dmg, sh);
+    if (gun?.ammoType === "incendiary" && !sidearm) ignite(tg.x, tg.y, 1);
   } else {
     const graze = gun?.attachment === "stock" ? Math.max(0, 1 - (tg.armor ?? 0)) : 0;
     fx({ type: "text", x: x1, y: y1 - 14, text: graze ? "graze 1" : "miss", color: "#8b939b", dur: 800 });
@@ -164,7 +166,7 @@ export function kill(u: Unit, by173 = false) {
     S.stats.raidersDown++;
     if (!by173) log("Insurgent down.", "good");
   } else if (u.side === "zombie") {
-    log("SCP-049-2 goes down and stays down.", "good");
+    log(u.flesh ? "An SCP-610 instance collapses into a heap." : "SCP-049-2 goes down and stays down.", "good");
   } else {
     S.stats.dLost++;
     if (wasTeam) log(`${u.name} is dead.`, "bad");

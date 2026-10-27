@@ -18,12 +18,13 @@ const OBJECTIVES = {
   breach: "",
   manhunt: "SCP-173 is loose among civilians. Get it into the truck's open container, with nobody else inside, then have an operative seal it. Every civilian it kills adds exposure in the region.",
   coverup: "Reach every witness (marked W) and give them amnestics with Dose: 1 action, from the next tile. A witness who spots the team runs for the map edge; any who escape undosed add exposure. Dose at least half of them for the mission to count as a success. Other civilians can be ignored.",
+  outbreak: "Burn out SCP-610's core with fire (incendiaries, the flamethrower, fuel drums). Anyone who ends a turn on the flesh without a sealed containment suit is infected and turns 5 turns later. Nothing saves them.",
   escort: "Keep the Insurgents away from the truck. One who stays next to it for a turn gets it open and the anomaly is lost. Neutralise them all, or hold for 8 turns.",
   retaliation: "Neutralise every Insurgent. They shoot civilians too, and every civilian killed adds exposure in the region.",
   strike: "Neutralise every Insurgent in the warehouse. Use Secure on a wounded one to take them prisoner.",
 } as const;
 const ITEM_NAMES: Record<ItemId, string> = { armor: "Flak vest", armor_light: "Recon smock", armor_heavy: "Heavy plate", hazmat: "Hazmat suit", leadsuit: "Lead-lined suit",
-  flare: "Signal flare", eyedrops: "Eye drops", flashbang: "Stun grenade", smoke: "M18 smoke", tracker: "Seismic sensor", frag: "M26 frag", csgas: "CS gas", bazooka: "M20 bazooka", law: "M72 LAW",
+  contsuit: "Containment suit", incendiary: "Incendiary", flamer: "M2 flamethrower", flare: "Signal flare", eyedrops: "Eye drops", flashbang: "Stun grenade", smoke: "M18 smoke", tracker: "Seismic sensor", frag: "M26 frag", csgas: "CS gas", bazooka: "M20 bazooka", law: "M72 LAW",
   medkit: "Medkit", camera: "Field camera", restraints: "Restraint kit", darts: "Amnestic darts" };
 import type { MissionResult, Unit } from "../game/types";
 import { esc } from "./util";
@@ -127,7 +128,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   $("mEyebrow").textContent = `SCP Foundation · ${S.setup.title}`;
   const has173 = S.has173, kind = S.setup.kind;
   if (kind !== "breach") {
-    $("mTitle").innerHTML = { escort: "Convoy Ambush <small>Escort</small>", retaliation: "Retaliation <small>Insurgency attack</small>", manhunt: "SCP-173 Manhunt <small>Field recovery</small>", coverup: "Cover-up <small>Class-A amnestics</small>", strike: "Strike <small>Chaos Insurgency cell</small>", breach: "" }[kind];
+    $("mTitle").innerHTML = { outbreak: "SCP-610 Outbreak <small>“The Flesh that Hates” · Keter</small>", escort: "Convoy Ambush <small>Escort</small>", retaliation: "Retaliation <small>Insurgency attack</small>", manhunt: "SCP-173 Manhunt <small>Field recovery</small>", coverup: "Cover-up <small>Class-A amnestics</small>", strike: "Strike <small>Chaos Insurgency cell</small>", breach: "" }[kind];
     $("objRule").innerHTML = `<b>Objective.</b> ${esc(OBJECTIVES[kind])}`;
   }
   if (!has173) {
@@ -219,6 +220,9 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     if (m.alive && m.san <= ms * 0.3) flags.push(`<span class="flag bad">Shaken</span>`);
     if (!m.alive) flags.push(`<span class="flag bad">${m.taken ? "Taken by SCP-106" : m.side === "mtf" ? "KIA" : "Dead"}</span>`);
     if (m.alive && m.side === "subject") flags.push(`<span class="flag bad">Fled</span>`);
+    if (m.alive && m.infectedTurn !== undefined && !m.flesh) flags.push(`<span class="flag bad">Infected · turns in ${5 - (S.turn - m.infectedTurn)}</span>`);
+    if (m.armorKind === "contsuit") flags.push(`<span class="flag ${m.suitTorn ? "bad" : ""}">${m.suitTorn ? "Suit torn" : "Suit sealed"}</span>`);
+    if (m.flesh) flags.push(`<span class="flag bad">Turned</span>`);
     const cap = m.staring ? 1 : 2, d = m.side !== "mtf";
     const usable = m.alive && isTeam(m) && !m.downed;
     return `<button type="button" class="op ${d ? "d" : ""} ${S.selected === m ? "sel" : ""} ${usable ? "" : "dead"}" data-id="${m.id}" ${usable ? "" : "disabled"}>
@@ -245,7 +249,11 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("sirenPill").hidden = !S.siren;
 
     const sc = $("statusCard"), line = $("statusLine");
-    if (S.has106) {
+    if (kind === "outbreak") {
+      const inf = S.units.filter(u => u.alive && u.infectedTurn !== undefined && !u.flesh);
+      sc.className = "card status " + (S.core && S.core.hp <= 0 ? "done" : "danger");
+      line.innerHTML = `<b>Core: ${S.core ? `${Math.max(0, S.core.hp)} of ${S.core.maxHp}` : "?"}</b> · flesh covers ${S.flesh.size} tiles · instances: ${S.units.filter(u => u.flesh && u.alive).length}${inf.length ? `<br><span class="warn">Infected: ${inf.map(u => `${esc(u.name)} (turns in ${5 - (S.turn - u.infectedTurn!)})`).join(", ")}</span>` : ""}`;
+    } else if (S.has106) {
       const m = S.statue, b = bait();
       const state = S.sealed ? "<b>Sealed in the container.</b>" : isFeeding() ? "<b>Feeding in the container.</b> Seal the door now." : S.submerged ? `<b>Under the floor.</b> It rises again ${S.sunkUntil >= S.turn ? `after turn ${S.sunkUntil}` : "next turn"}.` : seen(m.x, m.y) ? `<b>In sight</b> in the ${area(m.x, m.y)}.` : "<b>Not in sight.</b> It could be behind any wall.";
       sc.className = "card status " + (S.sealed ? "done" : isFeeding() ? "held" : "danger");

@@ -6,6 +6,7 @@ import { rawSight } from "../core/sight";
 import { damage, kill } from "./combat";
 import { S, canSee, computeVis, full, fx, hooks, humans, isPanicked, log, loseSanity, occupied, rand, seen, sleep, team } from "./state";
 import type { Unit } from "./types";
+import { fleshBite, infect } from "./fire";
 
 export const PLAGUE_MOVE = 4, ZOMBIE_MOVE = 4, CALM_RANGE = 3, CALM_SANITY = 6, LEAD_STEPS = 3;
 
@@ -111,9 +112,10 @@ export async function zombiePhase() {
     const near = prey.filter(h => cheb(h.x, h.y, z.x, z.y) <= 1 && canStep(z.x, z.y, h.x - z.x, h.y - z.y));
     if (near.length) {
       const v = near[0], dmg = rand(2, 3), soak = Math.min(v.armor ?? 0, dmg);
-      if (seen(v.x, v.y) || v.side === "mtf" || v.side === "dclass") log(`SCP-049-2 claws at ${v.side === "mtf" ? full(v) : v.name} for ${dmg - soak}${soak ? ` (armor absorbed ${soak})` : ""}.`, "bad");
+      if (seen(v.x, v.y) || v.side === "mtf" || v.side === "dclass") log(`${z.flesh ? "An SCP-610 instance" : "SCP-049-2"} claws at ${v.side === "mtf" ? full(v) : v.name} for ${dmg - soak}${soak ? ` (armor absorbed ${soak})` : ""}.`, "bad");
       fx({ type: "text", x: v.x * TS + TS / 2, y: v.y * TS - 2, text: String(dmg - soak), color: "#d75b47", dur: 800 });
       damage(v, dmg - soak);
+      if (z.flesh && v.alive) { if (v.side === "mtf") fleshBite(v); else infect(v, "a wound from an instance"); }
     }
   }
   computeVis();
