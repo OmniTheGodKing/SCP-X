@@ -1,6 +1,7 @@
 // Phase 3J: Site-19's other task forces (Eta-10 "See No Evil", Nu-7 "Hammer Down"), field agents for covert work,
 // and the independent Foundation sites Site-19 works alongside: their standing with Site-19, what they can lend or
 // buy, the teams they lose, and the emergencies they call for help with. Site-19 never runs those sites.
+import { hirePerson } from "./people";
 import { REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { dateText, log, yearOf, type Campaign, type Incident, type Operative } from "./campaign";
 import type { MissionResult } from "../game/types";
@@ -141,7 +142,7 @@ export function borrow(c: Campaign, site: string, kind: "engineers" | "guards") 
   if (canBorrow(c, site, kind)) return;
   const o = COOP[kind];
   const loan: TfState["loans"][number] = { kind, n: o.n, until: c.day + o.days, site };
-  if (kind === "engineers") c.engineers += o.n;
+  if (kind === "engineers") for (let i = 0; i < o.n; i++) hirePerson(c, "engineer", site);
   else { loan.ids = []; for (let i = 0; i < o.n; i++) { const g = newGuard(c); g.name = `${g.name} (${site})`; c.guards.push(g); loan.ids.push(g.id); } }
   c.tf.loans.push(loan);
   addRel(c, site, -o.cost, `lent Site-19 ${kind}`);
@@ -150,7 +151,11 @@ export function borrow(c: Campaign, site: string, kind: "engineers" | "guards") 
 function endLoans(c: Campaign) {
   for (const l of c.tf.loans.filter(x => c.day >= x.until)) {
     c.tf.loans = c.tf.loans.filter(x => x !== l);
-    if (l.kind === "engineers") c.engineers = Math.max(0, c.engineers - l.n);
+    if (l.kind === "engineers") {
+      const gone = (c.people ?? []).filter(p => p.loan === l.site);
+      c.people = (c.people ?? []).filter(p => !gone.includes(p));
+      c.engineers = Math.max(0, c.engineers - gone.filter(p => !p.away).length);
+    }
     else c.guards = c.guards.filter(g => !l.ids?.includes(g.id) || !g.alive);
     log(c, `${site(l.site)}'s ${l.kind} go home.`, "key");
   }

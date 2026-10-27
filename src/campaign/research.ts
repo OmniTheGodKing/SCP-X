@@ -1,4 +1,5 @@
 // Research projects, SCP-173 tests and the equipment they unlock.
+import { announceHire, fieldBoost, hasTrade, hirePerson, TRADE_CHANCE } from "./people";
 import { countOperational, engineersFree } from "./base";
 import { dateOf, log, yearOf, type Campaign } from "./campaign";
 import { newsActive } from "./news";
@@ -351,8 +352,8 @@ export const canHireResearcher = (c: Campaign) =>
   c.funds < RESEARCHER_COST ? `Needs $${RESEARCHER_COST}k.` : c.researchers >= researcherCapacity(c) ? (researcherCapacity(c) ? "The labs are full. Build another research lab." : "Build a research lab first.") : null;
 export function hireResearcher(c: Campaign) {
   if (canHireResearcher(c)) return;
-  c.funds -= RESEARCHER_COST; c.researchers++;
-  log(c, "A researcher joins the site staff.");
+  c.funds -= RESEARCHER_COST;
+  announceHire(c, hirePerson(c, "researcher"));
 }
 
 /** One day of research and workshop production. */
@@ -366,7 +367,7 @@ export function tickResearch(c: Campaign) {
   }
   for (const [id, n] of Object.entries(r.assigned)) {
     if (!n) continue;
-    r.progress[id] = (r.progress[id] || 0) + n;
+    r.progress[id] = (r.progress[id] || 0) + n * (testOf(id) ? 1 : fieldBoost(c, PROJECTS[id].branch));
     if (testOf(id)) { if (r.progress[id] >= projectDays(c, id)) finishTest(c, testOf(id)!); continue; }
     if (r.progress[id] >= projectDays(c, id)) {
       r.done.push(id); delete r.assigned[id];
@@ -381,6 +382,7 @@ export function tickResearch(c: Campaign) {
   }
   const working = countOperational(c, "workshop") > 0;
   for (const o of [...c.orders]) {
+    if (o.daysLeft > 1 && hasTrade(c, "machinist") && Math.random() < TRADE_CHANCE) o.daysLeft--;
     if (!working) break;
     if (--o.daysLeft <= 0) {
       c.orders = c.orders.filter(x => x !== o);

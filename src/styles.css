@@ -397,3 +397,4 @@ details.archived summary { cursor: pointer; font-family: var(--font-mono); font-
 .geobar .agenda .mini span { position: absolute; inset: 0 auto 0 0; background: #8a5ab0; }
 .geobar .agenda b { color: #c49ae0; }
 .worldmap .rlabel .ciop { fill: #c49ae0; }
+.memorial.staff { padding-left: 0; list-style: none; } .memorial.staff li { display: flex; gap: 8px; align-items: flex-start; }

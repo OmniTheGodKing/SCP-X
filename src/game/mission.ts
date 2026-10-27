@@ -270,6 +270,6 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
     survivorsSaved: S.units.filter(u => u.researcher && u.alive && u.saved).length, survivorsTotal: (S.setup.researchers ?? 0) + (S.setup.survivors ?? 0),
     recordsRecovered: S.units.filter(u => u.record && u.saved).length, recordsTotal: S.setup.records ?? 0,
     powerRestored: !!S.powerOn, hazardDealt: hazardDealt(), scans: { ...(S.scans ?? {}) },
-    specialistsLost: S.units.filter(u => u.specialist && (!u.alive || (!u.saved && !win && u.downed))).map(u => u.specialist!),
+    specialistsLost: S.units.filter(u => u.specialist && (!u.alive || (!u.saved && !win && u.downed))).map(u => `${u.specialist}|${u.name}`),
   };
 }

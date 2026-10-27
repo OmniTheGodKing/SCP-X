@@ -1,4 +1,5 @@
 // Site-19's facilities: what can be built where, power, engineers, construction and repairs.
+import { TRADE_CHANCE, hasTrade } from "./people";
 import type { Campaign } from "./campaign";
 import { has } from "./research";
 import { ALERTS } from "./security";
@@ -252,6 +253,10 @@ export function excavate(c: Campaign) {
 export function tickConstruction(c: Campaign): string[] {
   const done: string[] = [];
   for (const f of c.base.facilities) {
+    // a mason on staff sometimes gets a day ahead on new building; an electrician on repairs and refits
+    if (f.daysLeft > 1 && hasTrade(c, "mason") && Math.random() < TRADE_CHANCE) f.daysLeft--;
+    if (f.repairDays > 1 && hasTrade(c, "electrician") && Math.random() < TRADE_CHANCE) f.repairDays--;
+    if ((f.upgradeDays ?? 0) > 1 && f.type === "generator" && hasTrade(c, "electrician") && Math.random() < TRADE_CHANCE) f.upgradeDays!--;
     if (f.daysLeft > 0 && --f.daysLeft === 0) done.push(`${FACILITIES[f.type].name} on level ${f.level + 1} is complete.`);
     if (f.repairDays > 0 && --f.repairDays === 0) { done.push(`${FACILITIES[f.type].name} on level ${f.level + 1} is ${f.wrecked ? "rebuilt" : "repaired"}.`); f.disabled = false; f.wrecked = undefined; }
   }
@@ -269,6 +274,7 @@ export function tickConstruction(c: Campaign): string[] {
     // anyone it housed has to go somewhere
     if (c.dclass > dclassCapacity(c)) { done.push(`${c.dclass - dclassCapacity(c)} D-Class were transferred out for lack of beds.`); c.dclass = dclassCapacity(c); }
   }
+  if (c.base.excavation > 1 && hasTrade(c, "rigger") && Math.random() < TRADE_CHANCE) c.base.excavation--;
   if (c.base.excavation > 0 && --c.base.excavation === 0) { c.base.levels++; done.push(`Level ${c.base.levels} has been excavated.`); }
   return done;
 }
