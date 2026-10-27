@@ -170,7 +170,7 @@ export function canClean(c: Campaign, s: ScpRecord): string | null {
 }
 function clean(c: Campaign, s: ScpRecord, what: string) {
   s.lastCleaned = c.day; s.maintenance = 100;
-  if (Math.random() < CLEAN_RISK) { c.dclass--; log(c, `${what} of ${s.name}'s cell went wrong: both watchers blinked at once and the D-Class cleaning was killed.`, "bad"); }
+  if (!has(c, "auto_cleaning") && Math.random() < CLEAN_RISK) { c.dclass--; log(c, `${what} of ${s.name}'s cell went wrong: both watchers blinked at once and the D-Class cleaning was killed.`, "bad"); }
 }
 
 /** D-Class work in the cell while operatives watch. `mult` scales the danger; `breach` is an extra

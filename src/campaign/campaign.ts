@@ -6,7 +6,7 @@ import {
   type Base,
 } from "./base";
 import { CLEAN_EVERY, firstSightings, resolveScp, scpName, startingScps, tickContainment, type ScpRecord } from "./containment";
-import { ITEMS, armorOf, has, newResearch, tickResearch, type ItemId, type Order, type ResearchState } from "./research";
+import { ITEMS, armorOf, has, monthlyResearch, newResearch, tickResearch, type MaterialId, type ItemId, type Order, type ResearchState } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, collapsedCount, COLLAPSE_LIMIT, newRegions, regionFunding, tickWorld, travelDays, type RegionState } from "./world";
 import { ALERTS, breachGuards, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
@@ -32,6 +32,8 @@ export interface Operative {
   weapon?: WeaponType;
   attachment?: AttachmentId;
   aftercareUntil?: number;
+  /** Extra max sanity from Psychological screening. */
+  sanBonus?: number;
   name: string;
   call: string;
   rank: number;
@@ -73,7 +75,11 @@ export interface SiteLogEntry { day: number; text: string; kind: string; }
 export interface Loadout { opId: string; armor: boolean; items: ItemId[]; }
 
 export interface Campaign {
-  version: 9;
+  version: 10;
+  /** Material brought back from missions, for studies (like XCOM autopsies). */
+  materials: Partial<Record<MaterialId, number>>;
+  /** One-off training range purchases (like XCOM's Guerrilla Tactics School). */
+  purchases: string[];
   /** When each anomaly not yet found will first be sighted. */
   sightings: Partial<Record<ScpId, number>>;
   /** Site Security, and how ready Epsilon-11 is kept for a breach. */
@@ -124,7 +130,7 @@ export interface Campaign {
 
 // Perks per rank: steadier aim, fewer blinks, more composure.
 export const aimOf = (o: Operative) => o.aimBase + o.rank * 4;
-export const maxSanOf = (o: Operative) => 100 + o.rank * 5;
+export const maxSanOf = (o: Operative) => 100 + o.rank * 5 + (o.sanBonus ?? 0);
 export const blinkFullOf = (o: Operative) => Math.max(0.05, 0.10 - o.rank * 0.01);
 export const deployable = (o: Operative) => o.alive && o.hp >= o.maxHp && !o.busy;
 /** An operative who has ranked up but not yet picked their class or perk. */
@@ -198,14 +204,15 @@ export function makeOperative(c: Campaign, given?: string): Operative {
   const used = new Set(c.roster.map(o => o.name));
   const name = given ?? NAMES.find(n => !used.has(n)) ?? `Recruit ${c.nextOp}`;
   const n = c.nextOp++;
-  return { id: "op" + n, name, call: `E11-${String(n).padStart(2, "0")}`, rank: 0, xp: 0, hp: 7, maxHp: 7, san: 100, aimBase: rand(64, 74), missions: 0, kills: 0, alive: true, perks: [], traits: [], breakdowns: 0 };
+  const steady = has(c, "psych_screening") && Math.random() < 0.25;
+  return { sanBonus: has(c, "psych_screening") ? 10 : 0, id: "op" + n, name, call: `E11-${String(n).padStart(2, "0")}`, rank: 0, xp: 0, hp: 7, maxHp: 7, san: 100, aimBase: rand(64, 74), missions: 0, kills: 0, alive: true, perks: [], traits: steady ? ["steady"] : [], breakdowns: 0 };
 }
 
 export function newCampaign(): Campaign {
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
-    version: 9, sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, prisoners: [], intel: 0, cleaningOrder: true,
+    version: 10, materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, prisoners: [], intel: 0, cleaningOrder: true,
     day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
     inventory: {}, orders: [], knownNotes: [], nextD: 9101, nextOp: 1, nextIncident: 1,
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
@@ -226,7 +233,7 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 export const dateText = (day: number) => { const d = dateOf(day); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 export const monthName = (day: number) => { const d = dateOf(day); return `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 /** Each front sends its own share of funding, less the more exposed it is. */
-export const monthlyFunding = (c: Campaign) => REGION_IDS.reduce((a, r) => a + regionFunding(c, r), 0);
+export const monthlyFunding = (c: Campaign) => Math.round(REGION_IDS.reduce((a, r) => a + regionFunding(c, r), 0) * (has(c, "front_accounting") ? 1.1 : 1));
 
 /** Advance one day. Returns true if something happened that needs the player's attention. */
 export function advanceDay(c: Campaign) {
@@ -237,7 +244,8 @@ export function advanceDay(c: Campaign) {
   c.day++;
   for (const line of tickConstruction(c)) log(c, line, "good", "site");
   tickResearch(c);
-  const heal = healPerDay(c), calm = sanityPerDay(c) * ALERTS[c.alert].sanity, drill = countOperational(c, "training") > 0 && c.day % 7 === 0;
+  const heal = healPerDay(c), calm = sanityPerDay(c) * ALERTS[c.alert].sanity;
+  const drill = countOperational(c, "training") > 0 && (c.day % 7 === 0 || (has(c, "bt_drills") && c.day % 7 === 3));
   for (const o of c.roster) if (o.alive) {
     o.hp = Math.min(o.maxHp, o.hp + heal);
     const rest = (o.traits.includes("hollow") ? calm / 2 : calm) + ((o.aftercareUntil ?? 0) >= c.day ? 10 : 0);
@@ -263,6 +271,8 @@ export function advanceDay(c: Campaign) {
     log(c, `${s.name}'s cell is due for cleaning. Skipping it lets debris build up and raises the breach risk.`, "key");
   tickPrisoners(c);
   if (dayOfMonth(c.day) === 1) {
+    monthlyResearch(c);
+    if (has(c, "sigint")) gainIntel(c, 1);
     const funds = monthlyFunding(c), upkeep = monthlyUpkeep(c);
     const room = Math.max(0, dclassCapacity(c) - c.dclass), d = Math.min(DCLASS_MONTHLY, room);
     c.funds += funds - upkeep; c.dclass += d;
@@ -283,11 +293,15 @@ export function advanceToEvent(c: Campaign) {
 // ---------- prisoners and Intel ----------
 export const holdingCapacity = (c: Campaign) => countOperational(c, "holding") * 4;
 export const INTERROGATION_DAYS = 10, INTEL_PER_PRISONER = 3, PRISONER_BOUNTY = 25;
+export const interrogationDays = (c: Campaign) => has(c, "interrogation") ? INTERROGATION_DAYS / 2 : INTERROGATION_DAYS;
+/** Intel coming in also counts toward the codebooks study. */
+export function gainIntel(c: Campaign, n: number) { c.intel += n; c.materials.intelTotal = (c.materials.intelTotal ?? 0) + n; }
+export const addMaterial = (c: Campaign, m: MaterialId, n: number) => { if (n > 0) c.materials[m] = (c.materials[m] ?? 0) + n; };
 function tickPrisoners(c: Campaign) {
   if (!countOperational(c, "holding")) return;
   for (const p of [...c.prisoners]) {
-    if (++p.days % INTERROGATION_DAYS) continue;
-    p.intel++; c.intel++;
+    if (++p.days % interrogationDays(c)) continue;
+    p.intel++; gainIntel(c, 1);
     if (p.intel >= INTEL_PER_PRISONER) {
       c.prisoners = c.prisoners.filter(x => x !== p);
       log(c, `Interrogation of ${p.name} is finished (+1 Intel). They are transferred out of Site-19.`, "good");
@@ -318,8 +332,8 @@ export function fitAttachment(c: Campaign, o: Operative, a: AttachmentId | "") {
 }
 export function gunFor(c: Campaign, o: Operative) {
   const t = weaponOf(o), m = model(c.models[t]), a = o.attachment;
-  const mag = m.mag + (a === "extmag" ? 1 : 0);
-  return { name: m.name, type: t, dmg: [...m.dmg] as [number, number], mag, ammo: mag, aim: m.aim, attachment: a };
+  const mag = m.mag + (a === "extmag" ? 1 : 0), extra = t === "rifle" && has(c, "bt_barrels") ? 1 : 0;
+  return { name: m.name, type: t, dmg: [m.dmg[0] + extra, m.dmg[1] + extra] as [number, number], mag, ammo: mag, aim: m.aim, attachment: a };
 }
 
 function checkOver(c: Campaign) {
@@ -402,6 +416,12 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
       lockdownTurns: has(c, "early_warning") ? 8 : 5,
       calmTurns: has(c, "pestilence_theory") ? 2 : 1,
       pocketReturn: has(c, "pocket_study") ? 0.5 : 0.25,
+      medkitHeal: has(c, "field_medicine") ? 4 : 3,
+      standUp: has(c, "field_medicine"),
+      reactionBonus: has(c, "field_radios") ? 5 : 0,
+      sightBonus: has(c, "night_optics") ? 2 : 0,
+      ciAnalysis: has(c, "weapon_analysis"),
+      strays: has(c, "cell_lock") ? 1 : 4,
     },
   };
 }
@@ -461,6 +481,10 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   }
 
   c.dclass += r.dReturned;
+  // material for studies, brought home from a won mission
+  if (r.win) { addMaterial(c, "ciWeapons", r.insurgentsDown); addMaterial(c, "tissue", r.zombiesKilled); }
+  addMaterial(c, "survivors", r.pocketReturned);
+  addMaterial(c, "prisoners", r.prisoners);
   for (let i = 0; i < r.prisoners; i++) {
     const name = `Insurgent prisoner ${c.nextIncident * 10 + i}`;
     if (c.prisoners.length < holdingCapacity(c)) { c.prisoners.push({ name, days: 0, intel: 0 }); lines.push(`An Insurgent was taken alive and is held for interrogation.`); }

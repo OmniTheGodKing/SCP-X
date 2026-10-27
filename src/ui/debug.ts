@@ -1,10 +1,10 @@
 // Debug menu for testing. Opens with the backtick key, or a button when the page URL has ?debug.
 // Anything it does to a campaign marks that save as a debug save.
-import { advanceDay, dateText, log, maxSanOf, pendingBreach, type Campaign } from "../campaign/campaign";
+import { advanceDay, dateText, gainIntel, log, maxSanOf, pendingBreach, type Campaign } from "../campaign/campaign";
 import { tickConstruction } from "../campaign/base";
 import { PROJECTS, tickResearch } from "../campaign/research";
 import { captureNow, firstSighting, resurface, startBreach } from "../campaign/containment";
-import { addExposure, locateCell, spawnCoverup, LOCATE_INTEL } from "../campaign/world";
+import { addExposure, locateCell, spawnCoverup, locateIntel } from "../campaign/world";
 import { newGuard, type Alert } from "../campaign/security";
 import { REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { S } from "../game/state";
@@ -64,7 +64,7 @@ export function mountDebug(host: DebugHost) {
         `<label class="dbg-field">Region <select data-dbg-region>${REGION_IDS.map(r => `<option value="${r}" ${r === region ? "selected" : ""}>${esc(REGIONS[r].name)}</option>`).join("")}</select></label>`
         + `<label class="dbg-field">Insurgents <input type="number" min="0" max="8" value="${insurgents}" data-dbg-ins></label>`
         + btn("breach", "Breach at Site-19") + btn("manhunt", "Manhunt") + btn("coverup", "Cover-up") + btn("strike", "Strike")),
-      group("Research and building", btn("research", "Finish current research") + btn("unlockall", "Unlock all research") + btn("build", "Finish construction and orders")),
+      group("Research and building", btn("materials", "+5 of every material") + btn("offer", "Offer a breakthrough") + btn("research", "Finish current research") + btn("unlockall", "Unlock all research") + btn("build", "Finish construction and orders")),
       group("Operatives and guards", btn("heal", "Heal everyone") + btn("sanity", "Restore sanity") + btn("unbusy", "Clear busy and training") + btn("rankup", "+1 rank to all operatives") + btn("guardvet", "Guards: 3 breaches survived")),
       group("Alert level", (["normal", "heightened", "full"] as Alert[]).map(a => btn("alert-" + a, a)).join("")),
       group(`World · ${esc(REGIONS[region].name)} (exposure ${c.regions[region].exposure}${c.regions[region].collapsed ? ", collapsed" : ""})`,
@@ -99,7 +99,7 @@ export function mountDebug(host: DebugHost) {
     };
     switch (id) {
       case "funds": c.funds += 500; break;
-      case "intel": c.intel += 5; break;
+      case "intel": gainIntel(c, 5); break;
       case "amnestics": c.amnestics += 5; break;
       case "dclass": c.dclass += 4; break;
       case "engineers": c.engineers += 2; break;
@@ -112,13 +112,20 @@ export function mountDebug(host: DebugHost) {
       case "breach": if (s.status === "contained") { startBreach(c, s, "Debug:"); setIns(c); } else note = "SCP-173 has to be contained to breach."; break;
       case "manhunt": if (s.status !== "breach") { s.status = "loose"; resurface(c, s, region); setIns(c); } else note = "Answer the current breach first."; break;
       case "coverup": spawnCoverup(c, region); setIns(c); break;
-      case "strike": c.intel += LOCATE_INTEL; locateCell(c, region); setIns(c); break;
+      case "strike": c.intel += locateIntel(c); locateCell(c, region); setIns(c); break;
       case "research": {
         for (const [p, n] of Object.entries(c.research.assigned)) if (n) c.research.progress[p] = Math.max(c.research.progress[p] || 0, PROJECTS[p].days - n);
         tickResearch(c); break;
       }
+      case "materials": for (const m of ["ciWeapons", "prisoners", "intelTotal", "tissue", "survivors"] as const) c.materials[m] = (c.materials[m] ?? 0) + 5; break;
+      case "offer": {
+        const pool = Object.keys(PROJECTS).filter(p => PROJECTS[p].breakthrough && !c.research.done.includes(p));
+        if (pool.length) c.research.offer = { id: pool[Math.floor(Math.random() * pool.length)], until: c.day + 30 }; else note = "Every breakthrough is done.";
+        break;
+      }
       case "unlockall":
-        for (const p of Object.keys(PROJECTS)) if (!c.research.done.includes(p)) c.research.done.push(p);
+        for (const p of Object.keys(PROJECTS)) if (!c.research.done.includes(p) && !PROJECTS[p].breakthrough) c.research.done.push(p);
+        for (const o of c.roster) o.sanBonus = 10;
         c.research.assigned = {}; c.armorTier = Math.max(c.armorTier, 1);
         log(c, "Debug: all research unlocked. Weapon and armor refits still go through the workshop.", "key");
         break;

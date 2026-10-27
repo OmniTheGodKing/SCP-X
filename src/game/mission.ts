@@ -83,7 +83,7 @@ export function createMission(setup: MissionSetup) {
       gun: { name: g.name, type: g.type, dmg: g.dmg, mag: g.mag, ammo: g.mag, aim: 0 } }));
   }
   const strayRooms = shuffle(def.strayRooms.filter(r => r !== ciRoom));
-  if (setup.kind === "breach") for (let i = 0; i < 4; i++) {
+  if (setup.kind === "breach") for (let i = 0; i < setup.mods.strays; i++) {
     const [x, y] = claim(floorTiles(strayRooms[i % strayRooms.length]));
     const name = "D-" + (4400 + Math.floor(Math.random() * 600));
     units.push(mk({ id: "t" + (i + 1), side: "subject", call: name, name, x, y, hp: 5, maxHp: 5, san: PROFILE.dclass.maxSan, blinkMod: setup.mods.blinkBonus }));
@@ -135,8 +135,10 @@ export const BRIEFINGS: Record<MissionKind, (s: MissionSetup) => string> = {
 const survives = (u: Unit, win: boolean) => u.alive && (!u.downed || win || !!u.stabilized);
 
 export function missionResult(win: boolean, evacuated: boolean): MissionResult {
+  let pocketReturned = 0;
   for (const u of S.units) if (u.taken && !u.alive && u.saved === false && u.side !== "raider") {
     if (Math.random() < S.setup.mods.pocketReturn) {
+      pocketReturned++;
       u.alive = true; u.taken = false; u.downed = false; u.hp = Math.max(1, u.hp); u.san = Math.max(0, u.san - 40);
       u.witnessed = (u.witnessed ?? 0) + 2;   // what they saw down there counts double for nightmares
       log(`${u.side === "mtf" ? `${u.call} ${u.name}` : u.name} crawls out of a black stain on the floor, alive and barely speaking.`, "key");
@@ -148,6 +150,8 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
     win, evacuated,
     turns: S.turn,
     escaped: S.escaped,
+    zombiesKilled: S.units.filter(u => u.side === "zombie" && !u.alive).length,
+    pocketReturned,
     squad: [...S.units.filter(u => u.opId).map(u => ({ opId: u.opId!, alive: survives(u, win), hp: Math.max(1, u.hp), san: u.san, kills: u.kills, sealed: !!u.sealed,
       hasArmor: !!u.hasArmor, items: (u.items || []).map(i => ({ ...i })),
       witnessed: u.witnessed ?? 0, panics: u.panics ?? 0, minHp: u.minHp ?? u.hp, bestStreak: u.bestStreak ?? 0 })),

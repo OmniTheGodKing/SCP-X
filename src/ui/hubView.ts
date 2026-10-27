@@ -19,20 +19,20 @@ import {
 import {
   ARMOR_TIERS, ATTACHMENT_COST, REFIT, canOrderAttachment, canRefit, orderAttachment, orderRefit, pendingRefits, unlockedAttachments,
   ITEMS, PROJECTS, TESTS, assign, canHireResearcher, canOrder, canTest, has, hireResearcher, order, projectLock,
-  researcherCapacity, researchersFree, runTest, unlockedItems, type Branch, type ItemId, type TestId,
+  researcherCapacity, researchersFree, runTest, offered, projectDays, unlockedItems, type Branch, type ItemId, type TestId,
 } from "../campaign/research";
 import { HOME, LAND, REGIONS, REGION_IDS, SITE19, project, type RegionId } from "../data/regions";
 import {
-  COLLAPSE_LIMIT, COVER_STORY, LOCATE_INTEL, amnesticsCapacity, canCoverStory, canLocate, collapsedCount, coverStory, locateCell,
+  COLLAPSE_LIMIT, COVER_STORY, coverDoses, locateIntel, amnesticsCapacity, canCoverStory, canLocate, collapsedCount, coverStory, locateCell,
   regionFunding, transportName, travelBlock, travelDays,
 } from "../campaign/world";
 import {
   ALERTS, GUARD, PROMOTE, canHireGuard, canPromote, guardCapacity, guardOdds, guardsAlive, guardsReady, hireGuard, letGuardsHandle, mtfArrival,
-  promoteGuard, breachGuards, type Alert, type Guard,
+  promoteGuard, breachGuards, TRAINING, canTrain, squadSize, train, type Alert, type Guard,
 } from "../campaign/security";
 import { esc } from "./util";
 
-const MAX_SQUAD = 4, MAX_DCLASS = 4, MAX_WATCHERS = 2;
+const MAX_DCLASS = 4, MAX_WATCHERS = 2;
 type Tab = "command" | "world" | "site" | "research" | "personnel";
 
 export interface HubActions {
@@ -188,7 +188,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     const where = i.kind === "breach" ? "Inside Site-19" : `${REGIONS[i.region].name} · ${t ? `${plural(t, "day")} away` : "a drive from Site-19"}`;
     return `<div class="incident ${planning === i.id ? "sel" : ""}">
       <div><b>${esc(i.title)}</b> <span class="flag">${KIND_NAMES[i.kind]}</span></div>
-      <div class="muted">${left <= 0 ? "Last day to respond" : `${plural(left, "day")} left to respond`} · ${where} · Insurgency activity: ${i.insurgents >= 4 ? "heavy" : i.insurgents >= 2 ? "reported" : i.insurgents ? "light" : "none reported"}${i.witnesses ? ` · ${i.witnesses} witnesses` : ""}</div>
+      <div class="muted">${left <= 0 ? "Last day to respond" : `${plural(left, "day")} left to respond`} · ${where} · Insurgency activity: ${has(c, "codebooks") ? `${i.insurgents - (i.weakened ?? 0)} Insurgents` : i.insurgents >= 4 ? "heavy" : i.insurgents >= 2 ? "reported" : i.insurgents ? "light" : "none reported"}${i.witnesses ? ` · ${i.witnesses} witnesses` : ""}</div>
       ${block ? `<div class="warn">${esc(block)}</div>` : ""}
       ${i.kind === "breach" ? `<p class="muted">Happening now. ${guardsReady(c).length} guard${guardsReady(c).length === 1 ? "" : "s"} can respond; Epsilon-11 would arrive on turn ${mtfArrival(c)} (${ALERTS[c.alert].name.toLowerCase()} alert).</p>` : ""}
       <div class="row"><button class="act ${planning === i.id ? "on" : ""}" type="button" data-plan="${i.id}" ${c.over || block ? "disabled" : ""}>${planning === i.id ? "Planning response" : i.kind === "breach" ? "Take command" : "Plan response"}</button>
@@ -206,9 +206,9 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       ${inc.kind === "coverup" ? `<p class="${c.amnestics < (inc.witnesses ?? 0) ? "warn" : "muted"}">The squad carries all ${c.amnestics} amnestic doses in storage, for ${plural(inc.witnesses ?? 0, "witness")}.</p>` : ""}
       ${inc.insurgents ? `<div class="row"><span>Insurgents expected: <b>${inc.insurgents - (inc.weakened ?? 0)}</b>${inc.weakened ? ` (${inc.weakened} intercepted)` : ""}</span>
         <button class="act" type="button" id="intelBtn" ${canWeaken(c, inc) ? `disabled title="${esc(canWeaken(c, inc)!)}"` : ""}>Spend 1 Intel: intercept one</button></div>` : ""}
-      <p class="muted">Pick up to ${MAX_SQUAD} operatives. Only fully healed operatives can deploy; sanity carries over, so watch it.${inc.kind === "breach" ? " You can also send nobody and play it with the guards alone." : ""}</p>
+      <p class="muted">Pick up to ${squadSize(c)} operatives. Only fully healed operatives can deploy; sanity carries over, so watch it.${inc.kind === "breach" ? " You can also send nobody and play it with the guards alone." : ""}</p>
       <div class="pick">${ops.length ? ops.map(o => `<label class="pickop ${chosen.has(o.id) ? "on" : ""}">
-        <input type="checkbox" id="pick-${o.id}" data-pick="${o.id}" ${chosen.has(o.id) ? "checked" : ""} ${!chosen.has(o.id) && chosen.size >= MAX_SQUAD ? "disabled" : ""}>
+        <input type="checkbox" id="pick-${o.id}" data-pick="${o.id}" ${chosen.has(o.id) ? "checked" : ""} ${!chosen.has(o.id) && chosen.size >= squadSize(c) ? "disabled" : ""}>
         <span><b>${esc(o.call)} ${esc(o.name)}</b> · ${RANKS[o.rank]} · SAN ${o.san}/${maxSanOf(o)}</span></label>`).join("") : `<p class="muted">Nobody is fit to deploy. Wait for the wounded to heal or recruit.</p>`}</div>
       ${chosen.size ? `<div class="loadouts"><div class="specs">Loadout: weapon, one armor slot and two item slots each. Unused items come back; gear on anyone killed is lost.</div>
         ${[...chosen].map(id => loadoutRow(c.roster.find(o => o.id === id)!)).join("")}</div>` : ""}
@@ -305,8 +305,8 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         <p class="muted">Funding: $${regionFunding(c, r)}k a month. ${t ? `${plural(t, "day")} away by ${transportName(c)}.` : "Site-19 is here; teams go by road."}</p>
         ${here.length ? `<p>Open here: ${here.map(i => esc(i.title)).join("; ")}</p>` : ""}
         ${st.collapsed ? `<p class="warn">The public knows too much here. This region sends nothing and can't be recovered.</p>` : `
-        <div class="row"><button class="act" type="button" id="coverBtn" ${cw ? `disabled title="${esc(cw)}"` : ""}>Cover story · $${COVER_STORY.cost}k · ${COVER_STORY.amnestics} amnestics</button><span class="muted">${esc(cw || `${d.front} plants a story: −${COVER_STORY.cut} exposure here. Once every ${COVER_STORY.cooldown} days.`)}</span></div>
-        <div class="row"><button class="act" type="button" id="locateBtn" ${lw ? `disabled title="${esc(lw)}"` : ""}>Locate an Insurgency cell · ${LOCATE_INTEL} Intel</button><span class="muted">${esc(lw || "Creates a strike mission here. Breaking the cell pays $80k and lowers exposure.")}</span></div>`}
+        <div class="row"><button class="act" type="button" id="coverBtn" ${cw ? `disabled title="${esc(cw)}"` : ""}>Cover story · $${COVER_STORY.cost}k · ${plural(coverDoses(c), "amnestic dose")}</button><span class="muted">${esc(cw || `${d.front} plants a story: −${COVER_STORY.cut} exposure here. Once every ${COVER_STORY.cooldown} days.`)}</span></div>
+        <div class="row"><button class="act" type="button" id="locateBtn" ${lw ? `disabled title="${esc(lw)}"` : ""}>Locate an Insurgency cell · ${locateIntel(c)} Intel</button><span class="muted">${esc(lw || "Creates a strike mission here. Breaking the cell pays $80k and lowers exposure.")}</span></div>`}
       </div>
     </section>
     <section class="col">
@@ -320,7 +320,10 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
 
   // ---------- Research ----------
   function researchTab() {
-    const branches: Branch[] = ["SCP-173", ...(["049", "106"] as const).filter(id => c.scps.some(s => s.id === id)).map(id => `SCP-${id}` as Branch), "Personnel", "Weapons", "Equipment", "Site"];
+    const branches: Branch[] = ["SCP-173", ...(["049", "106"] as const).filter(id => c.scps.some(s => s.id === id)).map(id => `SCP-${id}` as Branch),
+      ...((c.materials.prisoners ?? 0) > 0 ? ["Insurgency" as Branch] : []), "Personnel", "Weapons", "Equipment", "Site"];
+    const offer = c.research.offer, insp = c.research.inspired;
+    const bt = Object.keys(PROJECTS).filter(id => PROJECTS[id].breakthrough && !has(c, id) && offered(c, id));
     const rw = canHireResearcher(c);
     const s = scp173();
     return `<div class="hubgrid">
@@ -330,6 +333,8 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
         <p class="muted">Put researchers on any projects you like; each one adds a day of work per day. A project's cost is paid when work starts.</p>
         <div class="row"><button class="act" id="hireResBtn" type="button" ${rw ? `disabled title="${esc(rw)}"` : ""}>Hire researcher · $60k</button>${rw ? `<span class="muted">${esc(rw)}</span>` : ""}</div>
       </div>
+      ${bt.length ? `<div class="card plan"><div class="label">Breakthrough${offer && !c.research.paid.includes(offer.id) ? ` · on offer until ${dateText(offer.until)}` : ""}</div><div class="projects">${bt.map(projectRow).join("")}</div></div>` : ""}
+      ${insp && !has(c, insp.id) ? `<p class="muted">Inspiration: <b>${esc(PROJECTS[insp.id].name)}</b> takes half the time${c.research.paid.includes(insp.id) ? "" : ` if started by ${dateText(insp.until)}`}.</p>` : ""}
       ${branches.map(b => `<div class="card"><div class="label">${b}</div><div class="projects">${Object.keys(PROJECTS).filter(id => PROJECTS[id].branch === b).map(projectRow).join("")}</div></div>`).join("")}
     </section>
     <section class="col">
@@ -348,13 +353,14 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   function projectRow(id: string) {
     const p = PROJECTS[id], r = c.research, n = r.assigned[id] || 0, prog = r.progress[id] || 0;
     const done = has(c, id), lock = done ? null : projectLock(c, id);
-    const eta = n ? Math.ceil((p.days - prog) / n) : null;
+    const days = projectDays(c, id), inspired = c.research.inspired?.id === id;
+    const eta = n ? Math.ceil((days - prog) / n) : null;
     const status = done ? `<span class="flag">Done</span>` : lock ? `<span class="flag bad">Locked</span>`
       : n ? `<span class="flag stare">${plural(n, "researcher")} · ${plural(eta!, "day")} left</span>` : prog ? `<span class="flag">Paused</span>` : "";
     return `<div class="proj ${done ? "done" : ""} ${lock ? "locked" : ""}">
-      <div class="ptop"><b>${esc(p.name)}</b>${status}</div>
+      <div class="ptop"><b>${esc(p.name)}</b>${inspired && !done ? `<span class="flag stare">Inspired</span>` : ""}${status}</div>
       <div class="muted">${esc(p.desc)}</div>
-      ${done ? "" : `<div class="pbar"><div class="exp-bar"><span style="width:${Math.min(100, (prog / p.days) * 100)}%"></span></div><span class="specs">${prog}/${p.days} researcher-days${r.paid.includes(id) ? "" : ` · $${p.cost}k to start`}</span></div>`}
+      ${done ? "" : `<div class="pbar"><div class="exp-bar"><span style="width:${Math.min(100, (prog / days) * 100)}%"></span></div><span class="specs">${prog}/${days} researcher-days${r.paid.includes(id) ? "" : ` · $${p.cost}k to start`}</span></div>`}
       ${lock ? `<div class="why">${esc(lock)}</div>` : done ? "" : `<div class="row assign">
         <button class="act" type="button" data-unassign="${id}" ${n ? "" : "disabled"} aria-label="Remove a researcher">−</button>
         <b>${n}</b>
@@ -532,6 +538,13 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       ${opDetail()}
       ${securityCard()}
       <div class="card">
+        <div class="label">Training range · squad size ${squadSize(c)}</div>
+        <p class="muted">One-off courses paid at the training range, like XCOM's Guerrilla Tactics School.</p>
+        <div class="projects">${Object.entries(TRAINING).map(([id, t]) => { const w = canTrain(c, id), got = c.purchases.includes(id);
+          return `<div class="proj ${got ? "done" : ""}"><div class="ptop"><b>${esc(t.name)}</b>${got ? `<span class="flag">Done</span>` : ""}</div><div class="muted">${esc(t.desc)}</div>
+          ${got ? "" : `<div class="row"><button class="act" type="button" data-train="${id}" ${w ? `disabled title="${esc(w)}"` : ""}>Buy · $${t.cost}k</button>${w ? `<span class="muted">${esc(w)}</span>` : ""}</div>`}</div>`; }).join("")}</div>
+      </div>
+      <div class="card">
         <div class="label">Site staff</div>
         <p>D-Class in holding: <b>${c.dclass}</b> of ${dclassCapacity(c)} barracks spaces. Engineers: <b>${c.engineers}</b>, ${engineersFree(c)} free. Researchers: <b>${c.researchers}</b> (hire them on the Research tab).</p>
         <div class="row">
@@ -678,6 +691,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     root.querySelectorAll<HTMLElement>("[data-alert]").forEach(b => b.onclick = () => change(() => { c.alert = b.dataset.alert as Alert; }));
     root.querySelectorAll<HTMLElement>("[data-guards]").forEach(b => b.onclick = () => { const inc = c.incidents.find(i => i.id === b.dataset.guards); if (inc) change(() => letGuardsHandle(c, inc)); });
     on("hireGuardBtn", () => change(() => hireGuard(c)));
+    root.querySelectorAll<HTMLElement>("[data-train]").forEach(b => b.onclick = () => change(() => train(c, b.dataset.train!)));
     root.querySelectorAll<HTMLElement>("[data-promote]").forEach(b => b.onclick = () => { const g = c.guards.find(x => x.id === b.dataset.promote); if (g) change(() => promoteGuard(c, g)); });
     on("repairBtn", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) change(() => repair(c, f)); });
     on("moveBtn", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) change(() => moveScp(c, scp173(), f, chosenWatchers())); });
@@ -699,12 +713,12 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     root.querySelectorAll<HTMLElement>("[data-plan]").forEach(b => b.onclick = () => {
       planning = planning === b.dataset.plan ? null : b.dataset.plan!;
       if (planning) speed = 0;   // nothing expires while a plan is being made
-      if (planning && !chosen.size) for (const o of ready().slice(0, MAX_SQUAD)) chosen.add(o.id);
+      if (planning && !chosen.size) for (const o of ready().slice(0, squadSize(c))) chosen.add(o.id);
       render();
     });
     root.querySelectorAll<HTMLInputElement>("[data-pick]").forEach(b => b.onchange = () => {
       const id = b.dataset.pick!;
-      if (b.checked && chosen.size < MAX_SQUAD) chosen.add(id); else chosen.delete(id);
+      if (b.checked && chosen.size < squadSize(c)) chosen.add(id); else chosen.delete(id);
       render();
     });
     on("dMinus", () => { dCount--; render(); });
