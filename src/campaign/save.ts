@@ -6,6 +6,7 @@ import { newResearch } from "./research";
 import { HOME } from "../data/regions";
 import { newRegions } from "./world";
 import { newGuard } from "./security";
+import { firstSightings } from "./containment";
 import { startingModels } from "../data/weapons";
 
 const KEY = "site19-campaign-v2";
@@ -41,7 +42,14 @@ export function loadCampaign(): Campaign | null {
       // breaches used to wait for an answer; now they're dealt with on the spot, so give any open one a fresh day
       for (const i of old.incidents) if (i.kind === "breach") i.expires = old.day;
     }
-    return c.version === 7 ? (c as unknown as Campaign) : null;
+    if (c.version === 7) {
+      const old = c as unknown as Campaign;
+      const s = firstSightings();
+      // a campaign already past 1952 sees SCP-049 soon instead
+      if (s["049"]! <= old.day) s["049"] = old.day + 20 + Math.floor(Math.random() * 60);
+      Object.assign(c, { version: 8, sightings: s });
+    }
+    return c.version === 8 ? (c as unknown as Campaign) : null;
   } catch {
     return null;
   }

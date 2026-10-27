@@ -5,7 +5,7 @@ import type { Guard } from "./security";
 import { ATTACHMENTS, model, type AttachmentId } from "../data/weapons";
 import { cellWork, type ScpRecord } from "./containment";
 
-export type Branch = "SCP-173" | "Personnel" | "Weapons" | "Equipment" | "Site";
+export type Branch = "SCP-173" | "SCP-049" | "Personnel" | "Weapons" | "Equipment" | "Site";
 export type TestId = "endurance" | "material" | "movement";
 import type { ItemId } from "../game/types";
 export type { ItemId };
@@ -20,6 +20,8 @@ export interface ProjectDef {
   unlocks?: ItemId;
   /** Earliest year research can start (2 years before US service). */
   from?: number;
+  /** Needs this anomaly held at Site-19. */
+  needsScp?: string;
   /** A weapon model this project makes available for refitting. */
   model?: string;
   attachment?: AttachmentId;
@@ -58,6 +60,8 @@ export const PROJECTS: Record<string, ProjectDef> = {
   early_warning:      { name: "Early warning sensors", branch: "Site", days: 30, cost: 80, needs: ["movement_study"], desc: "A hatch lockdown holds for 8 turns instead of 5." },
   c119:               { name: "C-119 Flying Boxcar", branch: "Site", days: 40, cost: 120, desc: "A faster transport for Epsilon-11. Travel to other regions takes a quarter less time." },
   c130:               { name: "C-130 Hercules", branch: "Site", days: 60, cost: 180, from: 1954, needs: ["c119"], desc: "A long-range turboprop transport. Travel to other regions takes half the time a C-47 would." },
+  pestilence_theory:  { name: "Pestilence theory", branch: "SCP-049", days: 30, cost: 60, needsScp: "049", desc: "Interviews with SCP-049 about the \"Pestilence\" it claims to see. Calming it holds for two turns instead of one." },
+  necrotic_study:     { name: "Necrotic tissue study", branch: "SCP-049", days: 40, cost: 80, needsScp: "049", desc: "Autopsies on SCP-049-2 tissue lead to better wound care. Operatives and guards heal 1 HP a day faster." },
   efficient_gen:      { name: "Efficient generators", branch: "Site", days: 30, cost: 70, desc: "Each generator supplies 15 power instead of 10." },
 };
 
@@ -110,6 +114,7 @@ export const unlockedItems = (c: Campaign) => Object.entries(PROJECTS).filter(([
 export function projectLock(c: Campaign, id: string): string | null {
   const p = PROJECTS[id];
   if (p.from && yearOf(c.day) < p.from) return `Available from ${p.from}.`;
+  if (p.needsScp && !c.scps.some(s => s.id === p.needsScp)) return `Needs ${p.needsScp === "049" ? "SCP-049" : p.needsScp} held at Site-19.`;
   if (p.needsTest && !c.research.tests.includes(p.needsTest)) return `Needs the ${TESTS[p.needsTest].name.toLowerCase()}.`;
   const missing = (p.needs || []).filter(n => !has(c, n));
   if (missing.length) return `Needs ${missing.map(n => PROJECTS[n].name).join(", ")}.`;

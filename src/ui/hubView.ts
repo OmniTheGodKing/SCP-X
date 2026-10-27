@@ -73,7 +73,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
 
   const ready = () => c.roster.filter(deployable);
   const watchPool = () => guardsReady(c);
-  const scp173 = () => c.scps[0];
+  const scp173 = () => c.scps.find(s => s.id === "173")!;
 
   function render() {
     if (planning && !c.incidents.some(i => i.id === planning)) planning = null;
@@ -138,7 +138,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       ${c.roster.some(promotionDue) ? `<div class="card plan"><div class="label">Promotions</div>
         <p>${c.roster.filter(promotionDue).map(o => `<b>${esc(o.call)} ${esc(o.name)}</b>`).join(", ")} ${c.roster.filter(promotionDue).length > 1 ? "are" : "is"} waiting to choose ${c.roster.filter(promotionDue).some(o => !o.cls) ? "a class or perk" : "a perk"}.</p>
         <button class="act" type="button" data-goto="personnel">Open Personnel</button></div>` : ""}
-      ${scpSummary(scp173())}
+      ${c.scps.map(scpSummary).join("")}
       <div class="card">
         <div class="label">Active incidents</div>
         ${c.incidents.length ? c.incidents.map(incidentCard).join("") : `<p class="muted">No open incidents. Let time run to see what happens next.</p>`}
@@ -320,7 +320,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
 
   // ---------- Research ----------
   function researchTab() {
-    const branches: Branch[] = ["SCP-173", "Personnel", "Weapons", "Equipment", "Site"];
+    const branches: Branch[] = ["SCP-173", ...(c.scps.some(s => s.id === "049") ? ["SCP-049" as Branch] : []), "Personnel", "Weapons", "Equipment", "Site"];
     const rw = canHireResearcher(c);
     const s = scp173();
     return `<div class="hubgrid">
@@ -423,7 +423,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     </section>
     <section class="col">
       ${sel ? slotDetail(sel.level, sel.slot) : `<div class="card"><div class="label">Facility</div><p class="muted">Select a slot to build, repair or inspect it.</p></div>`}
-      ${containmentCard(scp173())}
+      ${c.scps.map(containmentCard).join("")}
     </section>
   </div>`;
   }
@@ -485,7 +485,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       <p>Its cell must be cleaned every ${CLEAN_EVERY} days. D-Class do it alone: ${CLEAN_CREW} go in, one cleans while two keep their eyes on it. If both watchers blink at once (${pctText(CLEAN_RISK)}), the one cleaning dies. A breach has to be answered the moment it starts.</p>
       <label class="armorpick"><input type="checkbox" id="cleanOrder" ${c.cleaningOrder ? "checked" : ""}> Standing order: D-Class clean it on schedule</label>
       <p>${c.cleaningOrder ? `Next scheduled cleaning ${due > 0 ? `in ${plural(due, "day")}` : "today"}.` : `Next cleaning ${due > 0 ? `due in ${plural(due, "day")}` : "<b>overdue</b>"}. Order it below.`}</p>
-      <div class="row"><button class="act primary" id="cleanBtn" type="button" ${cw ? `disabled title="${esc(cw)}"` : ""}>Clean the cell now · ${CLEAN_CREW} D-Class</button>${cw ? `<span>${esc(cw)}</span>` : ""}</div>
+      <div class="row"><button class="act primary" data-clean="${s.id}" type="button" ${cw ? `disabled title="${esc(cw)}"` : ""}>Clean the cell now · ${CLEAN_CREW} D-Class</button>${cw ? `<span>${esc(cw)}</span>` : ""}</div>
     </div>`;
   }
 
@@ -674,7 +674,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     on("dBuyBtn", () => change(() => buyDClass(c)));
     on("engBtn", () => change(() => hireEngineer(c)));
     on("digBtn", () => change(() => excavate(c)));
-    on("cleanBtn", () => change(() => cleanCell(c, scp173())));
+    root.querySelectorAll<HTMLElement>("[data-clean]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.clean); if (s) change(() => cleanCell(c, s)); });
     root.querySelectorAll<HTMLElement>("[data-alert]").forEach(b => b.onclick = () => change(() => { c.alert = b.dataset.alert as Alert; }));
     root.querySelectorAll<HTMLElement>("[data-guards]").forEach(b => b.onclick = () => { const inc = c.incidents.find(i => i.id === b.dataset.guards); if (inc) change(() => letGuardsHandle(c, inc)); });
     on("hireGuardBtn", () => change(() => hireGuard(c)));

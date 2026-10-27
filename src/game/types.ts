@@ -3,7 +3,7 @@
 import type { ClassId, PerkId, TraitId } from "../data/classes";
 export type { ClassId, PerkId, TraitId };
 /** Class abilities plus Secure, which every operative can do. */
-export type AbilityId = PerkId | "secure" | "dose" | "lockdown";
+export type AbilityId = PerkId | "secure" | "dose" | "lockdown" | "calm";
 
 import type { AttachmentId, WeaponType } from "../data/weapons";
 export type { AttachmentId, WeaponType };
@@ -14,7 +14,9 @@ export type ItemId = "armor" | "eyedrops" | "flashbang" | "smoke" | "tracker" | 
 export interface Gun { name: string; type: WeaponType; dmg: [number, number]; mag: number; ammo: number; aim: number; attachment?: AttachmentId; }
 export interface Carried { id: ItemId; uses: number; }
 
-export type Side = "mtf" | "dclass" | "subject" | "civilian" | "raider" | "anomaly";
+export type Side = "mtf" | "dclass" | "subject" | "civilian" | "raider" | "anomaly" | "zombie";
+/** Anomalies a mission can be about. */
+export type ScpId = "173" | "049";
 export type MissionKind = "breach" | "manhunt" | "coverup" | "strike";
 export type Phase = "player" | "anomaly" | "hand" | "subjects" | "over";
 
@@ -58,6 +60,10 @@ export interface Unit {
   blindUntil?: number;
   /** Research bonus: lower blink chance while staring. */
   blinkMod?: number;
+  /** SCP-049: staggered by gunfire through this turn's anomaly phase. */
+  staggeredUntil?: number;
+  /** A body SCP-049 has already raised. */
+  cured?: boolean;
   /** Site Security: guards are weaker than operatives and have no class. */
   guard?: boolean;
   /** Civilians who saw too much; dosed ones have had amnestics. */
@@ -106,10 +112,12 @@ export interface SquadMember {
 }
 
 /** Effects of finished research that apply during missions. */
-export interface MissionMods { blinkBonus: number; recoverBonus: number; mtfDrag: number; track173: boolean; lockdownTurns: number; }
+export interface MissionMods { blinkBonus: number; recoverBonus: number; mtfDrag: number; track173: boolean; lockdownTurns: number; calmTurns: number; }
 
 export interface MissionSetup {
   kind: MissionKind;
+  /** Which anomaly a breach or manhunt is about (SCP-173 if not set). */
+  scp?: ScpId;
   map: "wingC" | "town" | "farm" | "port";
   amnestics: number;
   witnesses: number;
@@ -163,13 +171,16 @@ export interface MissionState {
   setup: MissionSetup;
   /** Whether SCP-173 is in this mission at all. */
   has173: boolean;
+  /** SCP-049 instead: `statue` is SCP-049, and calmUntil is the last turn it stays calm. */
+  has049: boolean;
+  calmUntil: number;
   amnestics: number;
   turn: number;
   phase: Phase;
   busy: boolean;
   over: boolean;
   called: boolean;
-  mode: "drag" | "throw" | "ability" | null;
+  mode: "drag" | "throw" | "ability" | "lead" | null;
   ability: AbilityId | null;
   units: Unit[];
   statue: Unit;

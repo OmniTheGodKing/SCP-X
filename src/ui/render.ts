@@ -8,6 +8,7 @@ import { abilityTargets } from "../game/abilities";
 import type { Unit } from "../game/types";
 import { MAPS } from "../data/maps";
 import { escaping } from "../game/scp173";
+import { freshBodies, isCalm, isStaggered, leadOptions } from "../game/scp049";
 
 const C = {
   floor: "#222a32", floor2: "#252e37", wall: "#3a4551", wallTop: "#4b5866",
@@ -117,9 +118,32 @@ export function createRenderer(cv: HTMLCanvasElement) {
     ctx.fillStyle = "#0f1317"; ctx.fillRect(px * TS + TS / 2 - 1, py * TS + 11, 2, 6);
   }
 
+  // SCP-049: a dark robed figure with the pale beak of a plague mask
+  function drawDoctor(cx: number, cy: number) {
+    ctx.fillStyle = "#1d1a18";
+    ctx.beginPath(); ctx.moveTo(cx, cy - 13); ctx.lineTo(cx + 10, cy + 12); ctx.lineTo(cx - 10, cy + 12); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = isCalm() ? C.ok : isStaggered() ? C.manila : C.alert; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = "#e8dcc0";
+    ctx.beginPath(); ctx.moveTo(cx - 3, cy - 6); ctx.lineTo(cx + 9, cy - 2); ctx.lineTo(cx - 3, cy + 1); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#0f1317"; ctx.beginPath(); ctx.arc(cx - 2, cy - 5, 1.6, 0, Math.PI * 2); ctx.fill();
+    if (isCalm()) tag("CALM", cx, cy - 20, C.ok);
+    else if (isStaggered()) tag("STAGGERED", cx, cy - 20, C.manila);
+  }
+
   function drawUnit(u: Unit) {
     const [cx, cy] = center(u);
+    if (u.side === "anomaly" && S.has049) { drawDoctor(cx, cy); return; }
     if (u.side === "anomaly") { drawStatue(u.x, u.y, 1); return; }
+    if (u.side === "zombie") {
+      ctx.fillStyle = "#6f7a5c";
+      ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#0f1317"; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = "#0f1317"; ctx.font = "600 9px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("2", cx, cy + 1);
+      const w = 20; ctx.fillStyle = "#0f1317"; ctx.fillRect(cx - w / 2 - 1, cy - 17, w + 2, 4);
+      ctx.fillStyle = C.alert; ctx.fillRect(cx - w / 2, cy - 16, w * u.hp / u.maxHp, 2);
+      return;
+    }
     if (u.side === "mtf" && u.downed) {
       ctx.fillStyle = "#3a4450";
       ctx.beginPath(); ctx.arc(cx, cy, 11, 0, Math.PI * 2); ctx.fill();
@@ -205,9 +229,22 @@ export function createRenderer(cv: HTMLCanvasElement) {
       for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) if (passable(x, y) && area(x, y) === room) ctx.fillRect(x * TS, y * TS, TS, TS);
     }
 
+    // bodies SCP-049 could still raise
+    if (S.has049) for (const b of freshBodies()) {
+      if (!seen(b.x, b.y)) continue;
+      const [cx, cy] = center(b);
+      ctx.strokeStyle = "#7d6f5a"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(cx - 7, cy - 7); ctx.lineTo(cx + 7, cy + 7); ctx.moveTo(cx + 7, cy - 7); ctx.lineTo(cx - 7, cy + 7); ctx.stroke();
+    }
+    // leading a calmed SCP-049
+    if (playing && S.mode === "lead") {
+      ctx.fillStyle = "rgba(134,193,147,0.25)";
+      for (const i of leadOptions().keys()) ctx.fillRect((i % L.W) * TS + 1, ((i / L.W) | 0) * TS + 1, TS - 2, TS - 2);
+    }
+
     // reachable tiles (normal moves, drag destinations, or grenade targets)
     let res: ReturnType<typeof reachFor> = null, drags: Map<number, Pt[]> | null = null, throws: Set<number> | null = null;
-    if (playing && sel && sel.ap > 0) {
+    if (playing && sel && sel.ap > 0 && S.mode !== "lead") {
       if (S.mode === "throw") {
         throws = throwOptions(sel);
         ctx.fillStyle = "rgba(242,230,201,0.12)";

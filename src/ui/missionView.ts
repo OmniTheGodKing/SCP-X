@@ -24,6 +24,7 @@ import type { MissionResult, Unit } from "../game/types";
 import { esc } from "./util";
 import { createRenderer } from "./render";
 import { ESCAPE_AT, escaping } from "../game/scp173";
+import { freshBodies, isCalm, isStaggered } from "../game/scp049";
 import { MAPS } from "../data/maps";
 
 const TEMPLATE = `
@@ -50,6 +51,7 @@ const TEMPLATE = `
         <span class="sq" style="--c: #cfc6a8">Civilian · W = witness</span>
         <span class="sq" style="--c: var(--raider)">Chaos Insurgency</span>
         <span class="sq" style="--c: var(--concrete)">SCP-173</span>
+        <span style="--c: #6f7a5c">SCP-049-2</span>
         <span class="sq" style="--c: var(--steel)">Transport container</span>
         <span class="sq" style="--c: var(--exit)">Exit</span>
         <span class="sq" style="--c: #57503f">Desk · half cover</span>
@@ -119,13 +121,17 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("objRule").innerHTML = `<b>Objective.</b> ${esc(OBJECTIVES[kind])}`;
   }
   if (!has173) {
-    for (const id of ["stareBtn", "callBtn", "dragBtn", "sealBtn"]) $(id).hidden = true;
+    for (const id of ["stareBtn", "callBtn", "dragBtn", ...(S.has049 ? [] : ["sealBtn"])]) $(id).hidden = true;
     $("fileCard").hidden = true;
     root.querySelectorAll<HTMLElement>(".rules > div").forEach(d => { if (d.id !== "objRule" && /SCP-173|Do not blink|Dragging|Blinks\./.test(d.textContent || "")) d.hidden = true; });
-    $("statusLabel").textContent = "Objective";
+    $("statusLabel").textContent = S.has049 ? "SCP-049 status" : "Objective";
   }
-  if (kind === "breach") {
-    $("squadLabel").textContent = "Site Security and Epsilon-11";
+  if (S.has049) {
+    $("mTitle").innerHTML = kind === "breach" ? "SCP-049 Recontainment <small>“The Plague Doctor” · Euclid</small>" : `SCP-049 ${S.setup.title.startsWith("Anomalous") ? "Capture" : "Manhunt"} <small>“The Plague Doctor” · Euclid</small>`;
+    $("objRule").innerHTML = `<b>Objective.</b> Get SCP-049 into the ${kind === "breach" ? "transport container in the staging room" : "truck's open container"}, with nobody else inside, then have an operative seal it. Its touch kills anyone next to it, and it spends a turn beside any fresh body to raise it as SCP-049-2. Gunfire can't hurt it, but a hit staggers it so it loses its next move. <b>Calm</b> (1 action, 6 sanity, within 3 tiles and in sight) stops it acting on its next turn and lets you lead it up to 3 tiles. SCP-049-2 can be killed with gunfire.${kind === "breach" ? " Site Security starts on the scene; Epsilon-11 arrives later." : ""}`;
+  }
+  if (kind === "breach") $("squadLabel").textContent = "Site Security and Epsilon-11";
+  if (kind === "breach" && has173) {
     $("objRule").innerHTML = `<b>Objective.</b> Get SCP-173 into the transport container at the dock in the southwest staging room, with nobody else inside, then seal it. Site Security starts on the scene; Epsilon-11 arrives later. If SCP-173 roams unseen for ${ESCAPE_AT} turns without a kill it heads for the surface hatch in the east lab, and if it gets there it's out of Site-19. Anyone at the panel at the east end of the corridor can spend both actions to lock the hatch for ${S.setup.mods.lockdownTurns} turns.`;
   }
   const cv = $("cv") as HTMLCanvasElement;
@@ -187,7 +193,12 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("phasePill").className = "pill" + (S.phase === "anomaly" ? " hot" : "");
 
     const sc = $("statusCard"), line = $("statusLine");
-    if (!has173) {
+    if (S.has049) {
+      const d = S.statue, z = S.units.filter(u => u.side === "zombie" && u.alive).length, bodies = freshBodies().length;
+      const state = S.sealed ? "<b>Sealed in the container.</b>" : isCalm() ? "<b>Calm.</b> It won't act this turn." : isStaggered() ? "<b>Staggered.</b> It loses its next move." : seen(d.x, d.y) ? "<b>In sight.</b> Anyone next to it is in danger." : "<b>Not in sight.</b>";
+      sc.className = "card status " + (S.sealed ? "done" : isCalm() ? "held" : "danger");
+      line.innerHTML = `${state}${!S.sealed && seen(d.x, d.y) ? ` It is in the ${area(d.x, d.y)}${inContainer(d.x, d.y) ? ", inside the open container" : ""}.` : ""}<br>Bodies it could raise: ${bodies} · SCP-049-2 on the map: ${z}`;
+    } else if (!has173) {
       const civ = S.units.filter(u => u.side === "civilian");
       if (kind === "coverup") {
         const w = civ.filter(u => u.witness), dosed = w.filter(u => u.dosed).length, gone = w.filter(u => u.saved && !u.dosed).length;
@@ -264,7 +275,8 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     else if (!can) h = S.over ? "" : "Enemy activity…";
     else if (sel) {
       const hv = S.hover && unitAt(S.hover.x, S.hover.y);
-      if (S.mode === "ability" && S.ability) h = `<b>${esc(full(sel))}: ${abilityName(S.ability)}.</b>\n${esc(abilityDesc(S.ability))} Click a highlighted target.`;
+      if (S.mode === "lead") h = `<b>SCP-049 is listening.</b>\nClick a green tile to lead it there (up to 3 tiles), or press Escape to leave it where it stands.`;
+      else if (S.mode === "ability" && S.ability) h = `<b>${esc(full(sel))}: ${abilityName(S.ability)}.</b>\n${esc(abilityDesc(S.ability))} Click a highlighted target.`;
       else if (S.mode === "throw" && S.throwing) h = `<b>${esc(full(sel))}: choose where to throw the ${ITEM_NAMES[S.throwing.id].toLowerCase()}.</b>\nLit tiles are in range and in sight. It covers the target tile and every tile around it. Throwing ends their turn.`;
       else if (S.mode === "drag") h = `<b>${esc(sel.name)}: choose where to drag SCP-173.</b>\nOrange tiles keep it in someone else's sight the whole way. Dragging ends their turn.`;
       else if (hv && hv.side === "raider" && seen(hv.x, hv.y) && sel.side === "mtf" && sel.ap > 0 && canSee(sel, hv.x, hv.y)) {
