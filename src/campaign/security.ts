@@ -1,6 +1,7 @@
 // Site Security: the guards who are actually at Site-19 when a cell fails, the alert level that
 // decides how quickly Epsilon-11 can get there, and breaches left to the guards alone.
 import { TRAITS, type TraitId } from "../data/classes";
+import { familyOf, withGivenName } from "../data/names";
 import { model } from "../data/weapons";
 import type { SquadMember } from "../game/types";
 import { countOperational, neighbors, operational, nameInText, stationsOnLevel } from "./base";
@@ -12,7 +13,9 @@ import { DEPTH, goDark, wingLevel, wingOf, wreckFacility } from "./containment";
 
 export interface Guard {
   id: string;
+  /** Full name: given and family. */
   name: string;
+  sex?: "m" | "f";
   hp: number;
   maxHp: number;
   san: number;
@@ -56,9 +59,10 @@ export const guardsAlive = (c: Campaign) => c.guards.filter(g => g.alive);
 export const guardsReady = (c: Campaign) => guardsAlive(c).filter(g => g.training === undefined && g.hp >= 3);
 
 export function newGuard(c: Campaign): Guard {
-  const used = new Set(c.guards.map(g => g.name));
-  const name = NAMES.find(n => !used.has(n)) ?? `Guard ${c.nextGuard}`;
-  return { id: "gd" + c.nextGuard++, name, hp: GUARD.hp, maxHp: GUARD.hp, san: GUARD.maxSan, aim: rand(52, 60), alive: true, breaches: 0, kills: 0, traits: [] };
+  const used = new Set(c.guards.map(g => familyOf(g.name)));
+  const family = NAMES.find(n => !used.has(n)) ?? NAMES[c.nextGuard % NAMES.length];
+  const sex: "m" | "f" = Math.random() < 0.25 ? "f" : "m";
+  return { id: "gd" + c.nextGuard, name: withGivenName(family, sex, "gd" + c.nextGuard++), sex, hp: GUARD.hp, maxHp: GUARD.hp, san: GUARD.maxSan, aim: rand(52, 60), alive: true, breaches: 0, kills: 0, traits: [] };
 }
 
 export function canHireGuard(c: Campaign, stationId: string) {
@@ -103,6 +107,7 @@ export function tickGuards(c: Campaign, heal: number, calm: number) {
     if (g.training !== undefined && --g.training <= 0) {
       c.guards = c.guards.filter(x => x !== g);
       const o = makeOperative(c, g.name);
+      o.sex = g.sex;
       // guards come in as Privates; the selection cadre brings them in a step higher (recruiting trainers don't apply)
       const pfc = has(c, "selection_cadre");
       o.rank = pfc ? 1 : 0; o.xp = pfc ? RANK_XP[1] : 0;

@@ -13,9 +13,10 @@ import { addExposure, collapsedCount, COLLAPSE_LIMIT, newRegions, regionFunding,
 import { RAID, raidArrival, raidLoss, tickRaids, ALERTS, breachGuards, guardMember, guardsReady, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
 import { MEDALS, rollBio, type MedalId } from "../data/bios";
 import { QUALITY, UNITS, rollCandidate, type Candidate, type UnitId } from "../data/units";
-import { rollLook, type Look } from "../data/looks";
+import { fitLook, rollLook, type Look } from "../data/looks";
+import { cultureOfFamily, familyOf, fullName } from "../data/names";
 /** An operative's face: their saved look, or a fixed one drawn from their id. */
-export const lookOf = (o: { id: string; sex?: "m" | "f"; look?: Look }) => o.look ?? rollLook(o.id, o.sex);
+export const lookOf = (o: { id: string; sex?: "m" | "f"; look?: Look }) => fitLook(o.look ?? rollLook(o.id, o.sex), o.sex);
 import { monthlyStaff, tickStaff, type StaffEvent } from "./staff";
 import { tickInspection } from "./inspection";
 import { buildReport, type Report } from "./reports";
@@ -83,7 +84,9 @@ export interface Operative {
 }
 
 /** Someone who left Epsilon-11 alive: as a trainer at the training range, or with an honourable discharge. */
-export interface Retiree { name: string; call: string; rank: number; missions: number; day: number; trainer: boolean; }
+export interface Retiree { name: string; call: string; rank: number; missions: number; day: number; trainer: boolean;
+  /** Kept so the person stays recognisable after leaving: their face, unit and record. */
+  look?: Look; unit?: UnitId; sex?: "m" | "f"; kills?: number; medals?: MedalId[]; }
 
 export interface Incident {
   id: string;
@@ -114,7 +117,7 @@ export interface SiteLogEntry { day: number; text: string; kind: string; }
 export interface Loadout { opId: string; armor: ItemId | ""; items: ItemId[]; }
 
 export interface Campaign {
-  version: 16;
+  version: 17;
   /** The D-Class block's morale (0 to 100), and the standing order for the monthly termination. */
   morale: number;
   dPolicy: "terminate" | "retain" | "release";
@@ -289,14 +292,15 @@ export function retire(c: Campaign, o: Operative) {
   if (!o.alive || o.busy) return;
   const trainer = !trainerWhy(c, o);
   c.roster = c.roster.filter(x => x !== o);
-  (c.retired ??= []).push({ name: o.name, call: o.call, rank: o.rank, missions: o.missions, day: c.day, trainer });
+  (c.retired ??= []).push({ name: o.name, call: o.call, rank: o.rank, missions: o.missions, day: c.day, trainer,
+    look: lookOf(o), unit: o.unit, sex: o.sex, kills: o.kills, medals: [...(o.medals ?? [])] });
   log(c, trainer ? `${RANKS[o.rank]} ${o.name} retires from the field to train recruits at the range. New operatives arrive as Privates First Class.`
     : `${o.call} ${o.name} leaves Epsilon-11 with an honourable discharge after ${plural(o.missions, "mission")}.`, "key");
 }
 
 export function makeOperative(c: Campaign, given?: string): Operative {
-  const used = new Set([...c.roster.map(o => o.name), ...(c.retired ?? []).map(r => r.name)]);
-  const name = given ?? NAMES.find(n => !used.has(n)) ?? `Recruit ${c.nextOp}`;
+  const used = new Set([...c.roster.map(o => familyOf(o.name)), ...(c.retired ?? []).map(r => familyOf(r.name))]);
+  const name = given ?? fullName(cultureOfFamily(NAMES.find(n => !used.has(n)) ?? "Callahan"), "m", used);
   const n = c.nextOp++;
   const steady = has(c, "psych_screening") && Math.random() < 0.25;
   const trained = trainersActive(c) > 0;
@@ -307,7 +311,7 @@ export function newCampaign(): Campaign {
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
-    version: 16, morale: 60, dPolicy: "terminate", outbreakDay: rand(945, 1310), materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
+    version: 17, morale: 60, dPolicy: "terminate", outbreakDay: rand(945, 1310), materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
     day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
     inventory: {}, orders: [], knownNotes: [], nextD: 9101, nextOp: 1, nextIncident: 1,
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
@@ -505,7 +509,7 @@ function checkOver(c: Campaign) {
 // ---- the recruit pool: special forces candidates from around the world, refreshed every month ----
 export const POOL_SIZE = [4, 6];
 export function refreshRecruits(c: Campaign) {
-  const used = new Set([...c.roster.map(o => o.name), ...(c.retired ?? []).map(r => r.name)]);
+  const used = new Set([...c.roster.map(o => familyOf(o.name)), ...(c.retired ?? []).map(r => familyOf(r.name))]);
   const liaison = has(c, "liaison_office"), extra = liaison ? 2 : 0;
   c.recruits = Array.from({ length: rand(POOL_SIZE[0], POOL_SIZE[1]) + extra }, (_, i) => rollCandidate(`cand${c.day}-${i}`, yearOf(c.day), used, liaison, has(c, "joint_exchange")));
 }

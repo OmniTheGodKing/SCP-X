@@ -1,6 +1,7 @@
 // Campaign saves live in this browser only. Storage can be unavailable (private windows,
 // blocked site data), so every access is guarded and the game still runs without it.
-import { newBio, type Campaign } from "./campaign";
+import { lookOf, newBio, type Campaign } from "./campaign";
+import { withGivenName } from "../data/names";
 
 import { newResearch } from "./research";
 import { HOME } from "../data/regions";
@@ -85,7 +86,20 @@ export function parseCampaign(raw: string): Campaign | null {
       for (const o of (c as unknown as Campaign).roster) Object.assign(o, { bio: o.bio ?? newBio(), medals: o.medals ?? [], wounds: o.wounds ?? 0, seals: o.seals ?? 0, faced: o.faced ?? [] });
       Object.assign(c, { version: 16 });
     }
-    return c.version === 16 ? (c as unknown as Campaign) : null;
+    if (c.version === 16) {
+      // full names for everyone (given name added to surname-only records) and a saved face, so neither changes again
+      const old = c as unknown as Campaign;
+      for (const o of old.roster) {
+        if (!o.sex) o.sex = /ova$/.test(o.name) ? "f" : "m";
+        o.look = lookOf(o);   // the face they've been shown with, fitted to their sex and saved for good
+        o.name = withGivenName(o.name, o.sex ?? "m", o.id);
+      }
+      for (const g of old.guards) { g.sex ??= "m"; g.name = withGivenName(g.name, g.sex, g.id); }
+      for (const r of old.retired ?? []) r.name = withGivenName(r.name, r.sex ?? "m", r.call);
+      for (const k of old.recruits ?? []) k.name = withGivenName(k.name, k.sex, k.id);
+      Object.assign(c, { version: 17 });
+    }
+    return c.version === 17 ? (c as unknown as Campaign) : null;
   } catch {
     return null;
   }

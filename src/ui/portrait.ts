@@ -15,6 +15,7 @@ export function portraitSvg(look: Look, unit: UnitId | undefined, size = 56, fal
     `<path d="M21 23 Q22 15 32 15 Q42 15 43 23 Q38 19 32 19 Q26 19 21 23Z" fill="${hair}" opacity=".35"/>`,         // shaved
     `<path d="M19 28 Q18 12 32 12 Q46 12 45 28 Q43 17 32 17 Q21 17 19 28Z" fill="${hair}"/><circle cx="32" cy="11" r="5" fill="${hair}"/>`,   // bun
     `<path d="M18 36 Q16 12 32 12 Q48 12 46 36 L43 36 Q44 19 32 18 Q20 19 21 36Z" fill="${hair}"/>`,                // bob
+    `<path d="M19 30 Q18 15 32 15 Q46 15 45 30 Q43 20 32 19 Q21 20 19 30Z" fill="${hair}"/><ellipse cx="24" cy="14" rx="6" ry="4.5" fill="${hair}"/><ellipse cx="40" cy="14" rx="6" ry="4.5" fill="${hair}"/><path d="M19 30 Q17 38 21 40 L22 31Z M45 30 Q47 38 43 40 L42 31Z" fill="${hair}"/>`,   // victory rolls
   ][look.hair] ?? "";
   const facial = [
     "",
