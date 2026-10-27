@@ -1,4 +1,5 @@
 // Site-19 Command: incidents and time, the base and its containment, and Epsilon-11's roster.
+import { STAFF_EVENTS, answerStaff } from "../campaign/staff";
 import {
   UPGRADE, canUpgrade, upgradeFacility, RECREATION, canAddRecreation, addRecreation, DEMOLISH, canDemolish, demolish, demolishDays, demolishLeavesShort, ENGINEER_COST, EXCAVATE, FACILITIES, nameInText, GRADE_NAMES, MAX_LEVELS, REPAIR, SLOTS, build, canBuild, canExcavate, canRepair,
   dclassCapacity, engineersFree, excavate, facilityAt, healPerDay, isContainment, monthlyUpkeep, neighbors, operational,
@@ -138,6 +139,16 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   const tabBtn = (t: Tab, label: string) => `<button type="button" class="tab ${tab === t ? "on" : ""}" data-tab="${t}" aria-pressed="${tab === t}">${label}</button>`;
 
   // ---------- Command ----------
+  function staffCard() {
+    const e = c.staffEvent;
+    if (!e) return "";
+    const d = STAFF_EVENTS[e.id];
+    return `<div class="card plan"><div class="label">Staff · decide by ${dateText(e.until)}</div>
+      <h3>${esc(d.title)}</h3><p>${esc(d.text(c, e))}</p>
+      <div class="row">${d.choices.map((ch, i) => { const why = ch.why?.(c, e); return `<button class="act ${i ? "" : "primary"}" type="button" data-staff="${i}" ${why ? `disabled title="${esc(why)}"` : ""}>${esc(ch.label)}</button>${why ? `<span class="muted">${esc(why)}</span>` : ""}`; }).join("")}</div>
+      <p class="muted">Left unanswered, the second choice is taken.</p></div>`;
+  }
+
   function commandTab() {
     const inc = c.incidents.find(i => i.id === planning) || null;
     return `<div class="hubgrid">
@@ -145,6 +156,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
       ${c.roster.some(promotionDue) ? `<div class="card plan"><div class="label">Promotions</div>
         <p>${c.roster.filter(promotionDue).map(o => `<b>${esc(o.call)} ${esc(o.name)}</b>`).join(", ")} ${c.roster.filter(promotionDue).length > 1 ? "are" : "is"} waiting to choose ${c.roster.filter(promotionDue).some(o => !o.cls) ? "a class or perk" : "a perk"}.</p>
         <button class="act" type="button" data-goto="personnel">Open Personnel</button></div>` : ""}
+      ${staffCard()}
       ${c.scps.map(scpSummary).join("")}
       <div class="card">
         <div class="label">Active incidents</div>
@@ -748,6 +760,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
     on("digBtn", () => change(() => excavate(c)));
     root.querySelectorAll<HTMLElement>("[data-clean]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.clean); if (s) change(() => cleanCell(c, s)); });
     root.querySelectorAll<HTMLElement>("[data-alert]").forEach(b => b.onclick = () => change(() => { c.alert = b.dataset.alert as Alert; }));
+    root.querySelectorAll<HTMLElement>("[data-staff]").forEach(b => b.onclick = () => change(() => answerStaff(c, Number(b.dataset.staff) as 0 | 1)));
     root.querySelectorAll<HTMLElement>("[data-guards]").forEach(b => b.onclick = () => { const inc = c.incidents.find(i => i.id === b.dataset.guards); if (inc) change(() => inc.kind === "riot" ? letGuardsHandleRiot(c, inc) : letGuardsHandle(c, inc)); });
     root.querySelectorAll<HTMLElement>("[data-train]").forEach(b => b.onclick = () => change(() => train(c, b.dataset.train!)));
     root.querySelectorAll<HTMLElement>("[data-promote]").forEach(b => b.onclick = () => { const g = c.guards.find(x => x.id === b.dataset.promote); if (g) change(() => promoteGuard(c, g)); });

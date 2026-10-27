@@ -6,6 +6,7 @@ import { PROJECTS, tickResearch } from "../campaign/research";
 import { captureNow, firstSighting, resurface, startBreach } from "../campaign/containment";
 import { addExposure, locateCell, spawnCoverup, locateIntel } from "../campaign/world";
 import { newGuard, type Alert } from "../campaign/security";
+import { STAFF_EVENTS, monthlyStaff, type StaffEventId } from "../campaign/staff";
 import { REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { S } from "../game/state";
 import { debugAfter, debugArrive, debugFinish } from "../game/turn";
@@ -73,6 +74,7 @@ export function mountDebug(host: DebugHost) {
       ...(["049", "106"] as const).map(id => group(`SCP-${id} (${c.scps.find(s => s.id === id)?.status ?? (c.sightings[id] ? `first sighting ${dateText(c.sightings[id]!)}` : "not held")})`,
         btn("see" + id, "First sighting now") + btn("get" + id, "Capture into a free wing") + btn("breach" + id, "Breach now"))),
       group(`SCP-610 (${c.outbreak ? `severity ${c.outbreak.severity} in ${REGIONS[c.outbreak.region].name}` : c.outbreakDay ? `first outbreak ${dateText(c.outbreakDay)}` : "none"})`, btn("outbreak", "Start the outbreak now") + btn("worsen", "Severity +1")),
+      group(`Staff incidents${c.staffEvent ? ` (waiting: ${STAFF_EVENTS[c.staffEvent.id].title.toLowerCase()})` : ""}`, (Object.keys(STAFF_EVENTS) as StaffEventId[]).map(id => btn("staff-" + id, STAFF_EVENTS[id].title)).join("")),
       group("Save", `<span class="muted">${c.debug ? "This campaign is marked as a debug save." : "Untouched by debug so far."}</span>`),
     ].join("");
   }
@@ -141,6 +143,13 @@ export function mountDebug(host: DebugHost) {
       case "sanity": for (const o of c.roster) if (o.alive) o.san = maxSanOf(o); for (const g of c.guards) if (g.alive) g.san = 80; break;
       case "unbusy": for (const o of c.roster) o.busy = undefined; for (const g of c.guards) g.training = undefined; break;
       case "rankup": for (const o of c.roster) if (o.alive && o.rank < RANKS.length - 1) { o.rank++; o.xp = Math.max(o.xp, RANK_XP[o.rank]); } break;
+      case "staff-breakdown": case "staff-asleep": case "staff-engineer": case "staff-mole": case "staff-discovery": case "staff-letter": case "staff-shortfall": case "staff-visitor": {
+        const id = id_.slice(6) as StaffEventId;
+        if (c.staffEvent) note = "A staff incident is already waiting for a decision.";
+        else if (!STAFF_EVENTS[id].when(c)) note = "That incident can't happen right now.";
+        else monthlyStaff(c, id);
+        break;
+      }
       case "riot": if (!c.incidents.some(i => i.kind === "riot") && c.dclass >= 3) { c.morale = Math.min(c.morale, 20); startRiot(c); } else note = "A riot needs at least 3 D-Class and no riot already under way."; break;
       case "guardvet": for (const g of c.guards) if (g.alive) g.breaches = Math.max(g.breaches, 3); break;
       case "exp-10": addExposure(c, region, -10); break;

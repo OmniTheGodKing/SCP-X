@@ -10,6 +10,7 @@ import { ITEMS, PROJECTS, armorStats, has, projectLock, monthlyResearch, newRese
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, collapsedCount, COLLAPSE_LIMIT, newRegions, regionFunding, tickWorld, travelDays, type RegionState } from "./world";
 import { ALERTS, breachGuards, guardMember, guardsReady, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
+import { monthlyStaff, tickStaff, type StaffEvent } from "./staff";
 import { CLASS_WEAPONS, WEAPON_TIERS, model, startingModels, type AmmoId, type AttachmentId, type WeaponType } from "../data/weapons";
 
 export const RANKS = ["Operative", "Specialist", "Sergeant", "Lieutenant", "Captain", "Major", "Colonel"];
@@ -146,6 +147,11 @@ export interface Campaign {
   notices?: { text: string; tab: HubTab; kind: string }[];
   /** Set once the debug menu has changed this campaign. */
   debug?: boolean;
+  /** A staff incident waiting for a decision, staff away on leave, and lingering effects of past ones. */
+  staffEvent?: StaffEvent;
+  away?: { kind: "researcher" | "engineer"; back: number }[];
+  laxUntil?: number;
+  moleArmor?: boolean;
 }
 
 // Perks per rank: steadier aim, fewer blinks, more composure.
@@ -290,6 +296,7 @@ export function advanceDay(c: Campaign) {
   }
   tickGuards(c, heal, sanityPerDay(c));
   tickMorale(c);
+  tickStaff(c);
   tickContainment(c);
   tickWorld(c);
   for (const s of c.scps) if (s.status === "contained" && c.day - s.lastCleaned === CLEAN_EVERY)
@@ -298,6 +305,7 @@ export function advanceDay(c: Campaign) {
   if (dayOfMonth(c.day) === 1) {
     monthlyResearch(c);
     monthlyDClass(c);
+    monthlyStaff(c);
     if (has(c, "sigint")) gainIntel(c, 1);
     const funds = monthlyFunding(c), upkeep = monthlyUpkeep(c);
     const room = Math.max(0, dclassCapacity(c) - c.dclass), d = Math.min(DCLASS_MONTHLY, room);
@@ -441,6 +449,9 @@ export function hireEngineer(c: Campaign) {
 }
 
 export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCount: number): MissionSetup {
+  // the armoury mole's leak: the next Insurgents met know what our rounds can get through
+  const mole = !!c.moleArmor && inc.insurgents - (inc.weakened ?? 0) > 0;
+  if (mole) c.moleArmor = false;
   const take = (i: ItemId) => { c.inventory[i] = (c.inventory[i] || 0) - 1; };
   const squad = loadouts.map(l => {
     const o = c.roster.find(x => x.id === l.opId)!;
@@ -483,7 +494,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: Math.max(0, inc.insurgents - (inc.weakened ?? 0)), squad, dclass,
     year: yearOf(c.day),
     known: [...c.knownNotes],
-    insurgentArmor: yearOf(c.day) >= 1954 ? 1 : 0,
+    insurgentArmor: (yearOf(c.day) >= 1954 ? 1 : 0) + (mole ? 1 : 0),
     mods: {
       blinkBonus: has(c, "blink_cadence") ? 0.02 : 0,
       recoverBonus: has(c, "trauma_counseling") ? 3 : 0,

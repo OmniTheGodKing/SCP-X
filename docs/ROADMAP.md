@@ -108,7 +108,9 @@ retaliation (done); (5) doors and sirens (done).
   can be left to Site Security for a few D-Class dead.
 - (Done) Monthly D-Class order, set in the barracks panel: terminate (default, canon), keep them all ($2k each), or
   release them (costs amnestics).
-- Staff incidents with choices: a researcher's breakdown, a guard's mistake, an injured engineer.
+- (Done) Staff incidents: about once in two months in three, one of 8 events (a researcher's breakdown, a guard asleep
+  on post, an injured engineer, an armoury mole, a researcher's discovery, a letter from home, a short shipment, a
+  visiting researcher) comes up on the Command tab with two choices. Unanswered for 7 days, the second is taken.
 - Power failures (storms, generator faults) that spike breach risk until fixed; cascading breaches when a wing loses power.
 - Emergency evacuation: moving an anomaly out of a failing wing before it breaches.
 - O5 inspections that reward an orderly site.
