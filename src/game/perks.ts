@@ -23,5 +23,6 @@ export function adjustLoss(u: Unit, n: number, kind: LossKind, allies: Unit[]) {
   if (kind === "witness" && u.traits?.includes("hardened")) m *= 0.5;
   if (kind !== "other" && allies.some(a => a !== u && hasPerk(a, "calm_presence") && cheb(a.x, a.y, u.x, u.y) <= 4)) m *= 0.5;
   if (u.side === "dclass" && allies.some(a => hasPerk(a, "wrangler") && cheb(a.x, a.y, u.x, u.y) <= 3)) m *= 0.5;
+  if (kind === "sight" && u.goggles) m *= 0.5;   // seen through Eta-10's goggles, it's only a picture
   return Math.round(n * m);
 }

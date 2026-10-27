@@ -1,6 +1,7 @@
 // The O5 Council: Site-19's standing with it, its monthly orders, what it can be asked for, and the transfers of
 // anomalies it arranges between sites. Standing is separate from exposure: exposure is what the public knows,
 // standing is what the Council thinks of Site-19's command.
+import { addRel, siteOf } from "./taskforces";
 import { planActive } from "./chaos";
 import { chronicle } from "./history";
 import { REGIONS, REGION_IDS, HOME, type RegionId } from "../data/regions";
@@ -342,6 +343,8 @@ function arrive(c: Campaign, t: Transit) {
   const d = SCP_DEFS[t.scp];
   if (t.dir === "out") {
     c.scps = c.scps.filter(s => s.id !== t.scp);
+    siteOf(c, t.site).holds.push(t.scp);
+    addRel(c, t.site, 5, `took ${d.name} from Site-19`);
     c.funds += t.funds;
     addStanding(c, t.standing, `${d.name} handed to ${t.site}`);
     chronicle(c, "anomaly", `${d.name} was transferred to ${t.site} for good.`);
@@ -409,7 +412,11 @@ export function crisis(c: Campaign) {
 /** Epsilon-11 deployed to one incident in a group: the others are lost. */
 export function forfeitGroup(c: Campaign, chosen: Incident) {
   if (!chosen.group) return;
-  const rest = c.incidents.filter(i => i.group === chosen.group && i !== chosen && !i.dispatch);
+  // with Eta-10 formed, two of the group can be answered: the rest go only once both task forces are committed
+  chosen.answered = true;
+  const answered = c.incidents.filter(i => i.group === chosen.group && i.answered).length;
+  if (answered < (c.tf.eta10 ? 2 : 1)) { log(c, `${chosen.title.split(": ")[1]} is answered. One more of the incidents that came in with it can be: Site-19 has two task forces.`, "key"); return; }
+  const rest = c.incidents.filter(i => i.group === chosen.group && i !== chosen && !i.dispatch && !i.answered);
   for (const i of rest) i.expires = Math.min(i.expires, c.day - 1);
   for (const i of c.incidents.filter(x => x.group === chosen.group)) i.group = undefined;
   if (rest.length) log(c, `With Epsilon-11 committed to ${chosen.title.split(": ")[1]}, nobody can answer ${rest.map(i => i.title.split(": ")[1]).join(" or ")}.`, "bad");

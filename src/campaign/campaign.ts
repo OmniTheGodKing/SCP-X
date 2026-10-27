@@ -1,7 +1,9 @@
 // Site-19 between missions: the roster, time passing, funding, public exposure and incidents.
+import { GOGGLES, NU7, canBringAmnestics, canBringResearcher, canCallNu7, nu7Troopers, otherSiteOutcome, scanOutcome, SPECIALIST, tfOf } from "./taskforces";
+import { newTf, tickTf, type TaskForce, type TfState } from "./taskforces";
 import { pickNick, withNick } from "../data/nicknames";
 import { chronicle, type HistEntry } from "./history";
-import { HEAVY, type MissionResult, type MissionSetup, type ScpId } from "../game/types";
+import { HEAVY, type MissionResult, type MissionSetup, type ScpId, type SquadMember } from "../game/types";
 import { CLASSES, PERKS, TRAITS, type ClassId, type PerkId, type TraitId } from "../data/classes";
 import {
   ENGINEER_COST, countOperational, operational, engineerCapacity, dclassCapacity, healPerDay, monthlyUpkeep, sanityPerDay, startingBase, tickConstruction,
@@ -50,6 +52,8 @@ export interface Operative {
   traits: TraitId[];
   /** Times they have broken down (shut their eyes at zero sanity), across missions. */
   breakdowns: number;
+  /** Which task force they serve with (unset: Epsilon-11). */
+  tf?: TaskForce;
   /** Given on making Corporal; the player can change it. */
   nick?: string;
   /** Part-XP banked from drills. */
@@ -101,7 +105,14 @@ export interface Retiree { name: string; call: string; rank: number; missions: n
 
 export interface Incident {
   id: string;
-  kind: "breach" | "recovery" | "coverup" | "strike" | "escort" | "retaliation" | "outbreak" | "riot" | "raid";
+  kind: "breach" | "recovery" | "coverup" | "strike" | "escort" | "retaliation" | "outbreak" | "riot" | "raid" | "rescue" | "emergency";
+  /** Phase 3J: the independent site involved, the lost team's name, an emergency's hazard and stated cause, and how
+   *  many survivors (lost operatives or trapped researchers) are waiting. */
+  site?: string;
+  team?: string;
+  hazard?: "scp" | "insurgents" | "instances";
+  causeText?: string;
+  survivors?: number;
   /** Escorts: the survivors of the capture, who defend the convoy. */
   squad?: string[];
   scpId: string;
@@ -125,6 +136,8 @@ export interface Incident {
   /** An Insurgency operation this cell is running (breaking it stops the plan), and for breaches, what really caused it. */
   plan?: string;
   cause?: "accident" | "anomalous" | "sabotage";
+  /** Forced choices: a task force has been sent to this one. */
+  answered?: boolean;
   /** Recoveries in Europe or East Asia where GRU Division "P" is the opposition. */
   gru?: boolean;
   /** What the briefing said when Epsilon-11 was sent, kept for the history. */
@@ -148,7 +161,9 @@ export interface SiteLogEntry { day: number; text: string; kind: string; }
 export interface Loadout { opId: string; armor: ItemId | ""; items: ItemId[]; }
 
 export interface Campaign {
-  version: 22;
+  version: 23;
+  /** Eta-10 and Nu-7, field agents, and relations with the other Foundation sites. */
+  tf: TfState;
   /** The Chaos Insurgency's global agenda, operations, commander and moles. */
   chaos: ChaosState;
   /** Standing with the O5 Council, its orders, requests and transfers. */
@@ -367,7 +382,7 @@ export function newCampaign(): Campaign {
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
-    version: 22, chaos: newChaos(), council: newCouncil(1), morale: 60, dPolicy: "terminate", outbreakDay: rand(945, 1310), materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
+    version: 23, tf: newTf(1), chaos: newChaos(), council: newCouncil(1), morale: 60, dPolicy: "terminate", outbreakDay: rand(945, 1310), materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
     day: 1, funds: 400, exposure: 10, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
     inventory: {}, orders: [], knownNotes: [], nextD: 9101, nextOp: 1, nextIncident: 1,
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
@@ -451,6 +466,7 @@ export function advanceDay(c: Campaign) {
   tickPrisoners(c);
   tickCouncil(c);
   tickChaos(c);
+  tickTf(c);
   if (dayOfMonth(c.day) === 1) {
     monthlyResearch(c);
     monthlyDClass(c);
@@ -585,6 +601,12 @@ export function refreshRecruits(c: Campaign) {
   const used = new Set([...c.roster.map(o => familyOf(o.name)), ...(c.retired ?? []).map(r => familyOf(r.name))]);
   const liaison = has(c, "liaison_office"), extra = liaison ? 2 : 0;
   c.recruits = Array.from({ length: rand(POOL_SIZE[0], POOL_SIZE[1]) + extra }, (_, i) => rollCandidate(`cand${c.day}-${i}`, yearOf(c.day), used, liaison, has(c, "joint_exchange")));
+  // operatives Site-19 brought home from other sites' lost teams, asking to join
+  for (let i = 0; i < (c.tf?.transferIn ?? 0); i++) {
+    const k = rollCandidate(`xfer${c.day}-${i}`, yearOf(c.day), used, liaison, true);
+    c.recruits.unshift({ ...k, quality: Math.max(1, k.quality), story: `Pulled out alive by Epsilon-11 when their own task force was lost. ${k.story}` });
+  }
+  if (c.tf) c.tf.transferIn = 0;
 }
 export const candidateCost = (k: Candidate) => QUALITY[k.quality].cost;
 export function canHire(c: Campaign, k: Candidate): string | null {
@@ -632,12 +654,15 @@ export function hireEngineer(c: Campaign) {
   log(c, "An engineer joins the site staff.");
 }
 
-export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCount: number): MissionSetup {
+/** Extra people sent along: a field researcher, an amnestics specialist, Nu-7 on call. */
+const pickName = (xs: string[]) => xs[Math.floor(Math.random() * xs.length)];
+export interface Extras { researcher?: boolean; amnestics?: boolean; nu7?: boolean }
+export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCount: number, extras: Extras = {}): MissionSetup {
   // the armoury mole's leak: the next Insurgents met know what our rounds can get through
   const mole = !!c.moleArmor && inc.insurgents - (inc.weakened ?? 0) > 0;
   if (mole) c.moleArmor = false;
   const take = (i: ItemId) => { c.inventory[i] = (c.inventory[i] || 0) - 1; };
-  const squad = loadouts.map(l => {
+  const squad: SquadMember[] = loadouts.map(l => {
     const o = c.roster.find(x => x.id === l.opId)!;
     const kind = l.armor && (c.inventory[l.armor] ?? 0) > 0 ? l.armor : "";
     if (kind) take(kind);
@@ -650,9 +675,10 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
       opId: o.id, name: fieldName(o), call: o.call, hp: o.hp + bonus, maxHp: o.maxHp + bonus, san: Math.min(o.san, maxSanOf(o)),
       rankShort: RANK_SHORT[o.rank], maxSan: maxSanOf(o), aim: aimOf(o) + (has(c, "marksmanship") ? 5 : 0), blinkFull: blinkFullOf(o), medals: [...(o.medals ?? [])],
       armor: st.points + uni.points, hasArmor: !!kind || uni.points > 0, armorKind: kind || undefined, armorHp: st.hp + uni.hp, moveBonus: st.move + (o.fleet ? 1 : 0), items: items.map(id => ({ id, uses: ITEMS[id].uses ?? 1 })),
-      cls: o.cls, perks: [...o.perks], traits: [...o.traits], gun: gunFor(c, o),
+      cls: o.cls, perks: [...o.perks], traits: [...o.traits], gun: gunFor(c, o), goggles: tfOf(o) === "eta10",
     };
   }).map(m => {
+    if (m.goggles) m.aim += GOGGLES.aim;
     // traits and the Marksman perk adjust the numbers they deploy with
     if (m.perks.includes("marksman")) m.aim += 10;
     if (m.traits.includes("gunshy")) m.aim -= 10;
@@ -667,14 +693,29 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
   c.activeIncident = inc.id;
   const kind = inc.kind === "recovery" ? "manhunt" : inc.kind;
   const sec = kind === "breach" ? breachGuards(c, inc) : kind === "riot" || kind === "raid" ? { first: guardsReady(c).slice(0, 8).map(g => guardMember(c, g)), late: [] } : { first: [], late: [] };
-  const amnestics = kind === "coverup" ? c.amnestics : 0;
+  const amnestics = kind === "coverup" ? c.amnestics + (extras.amnestics ? SPECIALIST.doses : 0) : 0;
+  // support staff come along unarmed but for a pistol
+  const staff = (role: "researcher" | "amnestics", name: string) => ({ opId: `spec-${role}`, name, call: role === "researcher" ? "FR" : "AS", rankShort: "Staff", specialist: role,
+    hp: 5, maxHp: 5, san: 90, maxSan: 90, aim: 50, blinkFull: 0.1, armor: uniformOf(c).points, hasArmor: uniformOf(c).points > 0, items: role === "amnestics" ? [{ id: "darts" as ItemId, uses: 1 }] : [],
+    perks: [], traits: [], gun: { name: "M1911 pistol", type: "smg" as const, dmg: [2, 3] as [number, number], mag: 7, ammo: 7, aim: -5 }, armorHp: 0 });
+  if (extras.researcher && !canBringResearcher(c, inc)) squad.push(staff("researcher", "Dr. " + pickName(["Harrow", "Lindqvist", "Okafor", "Petrescu", "Ibarra", "Weiss"])));
+  if (extras.amnestics && !canBringAmnestics(c, inc)) squad.push(staff("amnestics", pickName(["Hale", "Moreno", "Szabo", "Fenwick", "Adeyemi", "Kerr"])));
+  const away = inc.kind === "emergency";
+  const callNu7 = !!extras.nu7 && !canCallNu7(c, inc);
+  if (callNu7) c.funds -= NU7.call;
+  const siteGuards = away ? Array.from({ length: 2 }, (_, i) => ({ opId: `local-${i}`, name: `${inc.site} guard`, call: "SEC", guard: true, rankShort: "Sec",
+    hp: 6, maxHp: 6, san: 70, maxSan: 70, aim: 55, blinkFull: 0.12, armor: 0, hasArmor: false, items: [], perks: [], traits: [],
+    gun: { name: "M1 Carbine", type: "carbine" as const, dmg: [2, 4] as [number, number], mag: 5, ammo: 5, aim: 0 }, armorHp: 0 })) : [];
   return {
     kind, scp: (inc.scpId || "173") as ScpId, map: inc.map, amnestics,
-    night: nightAt(c, inc), weather: missionWeather(c, inc),
+    night: away ? true : nightAt(c, inc), weather: missionWeather(c, inc),
+    site: inc.site, records: away ? 2 : undefined, survivors: inc.kind === "rescue" ? inc.survivors : undefined,
+    survivorName: inc.kind === "rescue" ? `${(inc.team ?? "Lost team").split(" ")[0]} operative` : undefined, hazard: inc.hazard,
+    nu7: callNu7 ? nu7Troopers() : undefined,
     severity: inc.kind === "outbreak" ? c.outbreak?.severity ?? 2 : undefined,
     rioters: inc.kind === "riot" ? riotSize(c) : undefined,
     // a breach at Site-19 catches researchers in the wing and opens the D-Class block
-    researchers: kind === "breach" ? Math.min(c.researchers, rand(1, 3)) : 0, strayPool: kind === "breach" ? c.dclass : 0, guards: sec.first, lateGuards: sec.late, mtfTurn: kind === "raid" ? raidArrival(c) : mtfArrival(c, inc), witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
+    researchers: kind === "breach" ? Math.min(c.researchers, rand(1, 3)) : away ? inc.survivors ?? 2 : 0, strayPool: kind === "breach" ? c.dclass : 0, guards: away ? siteGuards : sec.first, lateGuards: sec.late, mtfTurn: kind === "raid" ? raidArrival(c) : mtfArrival(c, inc), witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
     incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: Math.max(0, inc.insurgents - (inc.weakened ?? 0)) + (inc.insurgents && inc.kind !== "breach" ? threatExtra(c) : 0), squad, dclass,
     ciRoles: inc.kind === "breach" || inc.kind === "riot" || inc.kind === "outbreak" || inc.kind === "coverup" ? undefined : ciRoles(c),
     commander: commanderJoins(c, inc) ? `${c.chaos.commander!.rank} ${c.chaos.commander!.name}` : undefined,
@@ -704,7 +745,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
 }
 
 /** What the O5 Council pays for each kind of mission won ($k). The World Map briefing shows the same figures. */
-export const MISSION_BONUS: Partial<Record<Incident["kind"], number>> = { recovery: 100, strike: 80, breach: 50, retaliation: 40, outbreak: 120, raid: 60 };
+export const MISSION_BONUS: Partial<Record<Incident["kind"], number>> = { recovery: 100, strike: 80, breach: 50, retaliation: 40, outbreak: 120, raid: 60, rescue: 50 };
 
 export interface Debrief { lines: string[]; promotions: string[]; }
 
@@ -779,8 +820,10 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
 
   c.dclass += r.dReturned;
   // breach losses among the staff: researchers, and D-Class from the block
-  if (r.researchersLost) { c.researchers = Math.max(0, c.researchers - r.researchersLost); lines.push(`${plural(r.researchersLost, "researcher")} didn't make it out of the wing.`); }
-  if (r.researchersRescued) {
+  const other = inc?.kind === "rescue" || inc?.kind === "emergency";   // these people belong to another site
+  if (r.researchersLost && !other) { c.researchers = Math.max(0, c.researchers - r.researchersLost); lines.push(`${plural(r.researchersLost, "researcher")} didn't make it out of the wing.`); }
+  if (inc && other) lines.push(...otherSiteOutcome(c, inc, r));
+  if (r.researchersRescued && !other) {
     lines.push(`${plural(r.researchersRescued, "researcher")} brought out alive. The team takes heart (+${5 * r.researchersRescued} sanity).`);
     for (const s of r.squad) { const o = c.roster.find(x => x.id === s.opId); if (o && s.alive && !s.absent) o.san = Math.min(maxSanOf(o), o.san + 5 * r.researchersRescued); }
   }
@@ -808,17 +851,22 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     else { c.funds += PRISONER_BOUNTY; lines.push(`An Insurgent was taken alive. With no room in holding cells, they were handed to another site (+$${PRISONER_BOUNTY}k).`); }
   }
   for (const n of r.known) if (!c.knownNotes.includes(n)) c.knownNotes.push(n);
+  lines.push(...scanOutcome(c, r));
+  for (const sp of r.specialistsLost ?? []) {
+    if (sp === "researcher") { c.researchers = Math.max(0, c.researchers - 1); lines.push("The field researcher who went with the team didn't come back."); }
+    else lines.push("The amnestics specialist who went with the team didn't come back.");
+  }
   const region = inc?.region ?? HOME, where = REGIONS[region].name;
   const kind = inc?.kind ?? "breach";
   c.amnestics = Math.max(0, c.amnestics - r.amnesticsUsed);
   if (r.win) {
     c.stats.won++;
     const bonus = MISSION_BONUS[kind] ?? 0;
-    const cut = kind === "coverup" ? 10 : kind === "riot" || kind === "raid" ? 0 : 5;
+    const cut = kind === "coverup" ? 10 : kind === "riot" || kind === "raid" || kind === "emergency" ? 0 : 5;
     addExposure(c, region, -cut);
     c.funds += bonus;
     const anomaly = scpName(inc?.scpId || "173");
-    const what = kind === "coverup" ? "The witnesses remember nothing worth repeating." : kind === "strike" ? "The Insurgency cell is broken up."
+    const what = kind === "rescue" ? "The team is out of there." : kind === "emergency" ? `Epsilon-11 is out of ${inc?.site ?? "the site"}.` : kind === "coverup" ? "The witnesses remember nothing worth repeating." : kind === "strike" ? "The Insurgency cell is broken up."
       : kind === "riot" ? "The D-Class block is quiet again." : kind === "raid" ? "The Insurgency raid on Site-19 is beaten off." : kind === "outbreak" ? "The flesh here is burned out." : kind === "escort" ? `The convoy got ${anomaly} through.` : kind === "retaliation" ? "The Insurgency attack on the town is broken." : inc?.first ? `${anomaly} is in Foundation hands.` : `${anomaly} is back in its cell.`;
     lines.unshift(`${name} closed. ${what}${bonus ? ` The O5 Council approves a $${bonus}k bonus${cut ? ";" : "."}` : ""}${cut ? ` exposure in ${where} −${cut}.` : ""}`);
     if (kind !== "riot") c.council.tally.wins[region] = (c.council.tally.wins[region] ?? 0) + 1;
@@ -866,7 +914,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   }
   for (const l of [...lines, ...promotions]) log(c, l, r.win ? "good" : "bad");
   if (inc?.transfer) lines.push(transferFought(c, inc.transfer, r.win));
-  else if (inc?.scpId) {
+  else if (inc?.scpId && inc.kind !== "emergency") {   // another site's anomaly stays theirs
     resolveScp(c, inc, r.win);
     if (!r.win) lines.push(`${scpName(inc.scpId)} got away. It will turn up again somewhere, in its own time.`);
   }

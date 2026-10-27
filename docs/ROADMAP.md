@@ -417,7 +417,7 @@ retaliation (done); (5) doors and sirens (done).
 - Nicknames: given at Corporal, picked at random from a list of the usual stupid unit nicknames (nothing to do with class; veterans sent by the Council get one too), shown as
   First "Nick" Last on personnel files and in the field, and editable with the name and callsign.
 
-## Phase 3J: task forces, field operations and independent Foundation sites (planned)
+## Phase 3J: task forces, field operations and independent Foundation sites (done; verified in source and in-game)
 
 - **Eta-10 “See No Evil”:** second squad with blindfolds/video goggles, granted by the Council after holding two or more anomalies or meeting a standing threshold; enables responding to two incidents at once where travel and availability permit.
 - **Nu-7 “Hammer Down”:** heavy response unit for raids and Keter breaches.
@@ -437,6 +437,38 @@ retaliation (done); (5) doors and sirens (done).
 - **Partial outcomes:** success is not always all-or-nothing. Saving staff while losing an anomaly, containing the SCP but losing sensitive records, or evacuating only some survivors should produce distinct consequences.
 - **Strategic aftermath:** affect Council standing, exposure, inter-site relationships, research opportunities, anomaly custody and later calls for help. Ignored incidents can worsen or be handled by other Foundation teams/rivals at a cost.
 - **Implementation scope:** reuse existing anomaly mechanics and mission generation before building bespoke content for every emergency. Keep these sites independent throughout.
+
+### As built (src/campaign/taskforces.ts; tactical pieces in mission.ts, abilities.ts and turn.ts)
+
+- **Eta-10 "See No Evil":** formed for $150k from the O5 Council card once Site-19 holds 2 anomalies or standing reaches
+  65. Operatives are assigned on their personnel file; the deploy panel sends one task force or the other, so two
+  incidents can be answered at once (a forced choice lets two of its incidents be answered). Eta-10's video goggles:
+  staring, they blink half as often and lose half the sanity to sight, at −10 aim.
+- **Nu-7 "Hammer Down":** put on call for $200k once Site-19 holds a Keter-class anomaly or standing reaches 70. For
+  $30k a call, four heavy troopers with machine guns join a raid or Keter-class breach a turn after Epsilon-11. They are
+  not Site-19's to keep.
+- **Specialists:** a field researcher (any mission with an anomaly; costs a free researcher, lost if killed) with a
+  pistol and "Scan the anomaly" (up to 3 scans, 6 researcher-days each toward its research, or $10k each if there's
+  none); an amnestics specialist (cover-ups, needs an amnestics lab) with a dart pistol and 3 doses of their own.
+- **Field agents:** Site-19 starts with 2 (hire up to 6 at $50k in the Command facility). Every field operation takes
+  one until it's done. New operations: Procurement (supplies, amnestic precursors or cash; low risk) and Infiltration
+  (agenda −5, every Insurgency operation identified, +1 Intel; 20% hurt for two weeks, 5% killed). Scans and
+  surveillance carry a small risk too.
+- **Partner sites (Site-17, Site-23, Area-12):** relations 0 to 100 shown in each site's World Map panel, with what it
+  holds from Site-19. Sell captured Insurgency weapons ($15k each); borrow 2 engineers or 2 guards for 30 days (needs
+  relations 40, costs 8). Transfers, answered calls and rescued people raise relations; ignored calls lower them.
+- **Lost teams:** from 1952, every 150 to 250 days another site's MTF goes quiet in a region with a front. The mission
+  (town or farm, Insurgents about) has 2 or 3 survivors hiding (L); reached, they follow and leave with the team. It
+  ends once nobody is left to find. Each one saved earns relations and standing, and one may ask to transfer to Site-19
+  (a veteran in the next recruit pool).
+- **Emergencies at other sites:** from 1952, every 180 to 300 days a site calls for help. The first report gives a
+  cause (containment failure, staff error, power failure, blackout, the anomaly itself, or sabotage), not always the
+  Insurgency. The hazard is an anomaly Site-19 handed that site (played with its own mechanics), an Insurgency team
+  (sabotage), or escaped instances. The wing is dark until power is restored at the panel (both actions); researchers
+  (R) are hiding, 2 files of records (F) can be recovered, and the site's own 2 guards fight alongside. The team leaves
+  when it chooses: every part counts separately (researchers out, records as Intel, power, the hazard dealt with), and
+  an anomaly left loose costs exposure and leaves that site's custody. Ignoring a call costs 15 relations, 4 standing
+  and 6 exposure.
 
 ## Phase 3K: personnel, mission variety, usability and balance (planned)
 

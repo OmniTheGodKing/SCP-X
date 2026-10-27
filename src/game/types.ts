@@ -3,7 +3,7 @@
 import type { ClassId, PerkId, TraitId } from "../data/classes";
 export type { ClassId, PerkId, TraitId };
 /** Class abilities plus Secure, which every operative can do. */
-export type AbilityId = PerkId | "secure" | "dose" | "lockdown" | "doors" | "siren" | "calm" | "restrain" | "pickup" | "drop" | "exfil" | "hunker";
+export type AbilityId = PerkId | "secure" | "dose" | "lockdown" | "doors" | "siren" | "calm" | "restrain" | "pickup" | "drop" | "exfil" | "hunker" | "recover" | "restore" | "scan";
 
 import type { AmmoId, AttachmentId, WeaponType } from "../data/weapons";
 export type { AmmoId, AttachmentId, WeaponType };
@@ -25,7 +25,7 @@ export type Side = "mtf" | "dclass" | "subject" | "civilian" | "raider" | "anoma
 export type ScpId = "173" | "049" | "106" | "500" | "914" | "005";
 /** Raids: the Insurgency pulls back if the lift still holds at the end of this turn. */
 export const RAID_TURNS = 14;
-export type MissionKind = "breach" | "manhunt" | "coverup" | "strike" | "escort" | "retaliation" | "outbreak" | "riot" | "raid";
+export type MissionKind = "breach" | "manhunt" | "coverup" | "strike" | "escort" | "retaliation" | "outbreak" | "riot" | "raid" | "rescue" | "emergency";
 export type Phase = "player" | "anomaly" | "hand" | "subjects" | "over";
 
 export interface Unit {
@@ -50,6 +50,10 @@ export interface Unit {
   fled: boolean;
   kills: number;
   lostSanTurn?: number;
+  /** Phase 3J: goggles (Eta-10), a support specialist, a file of records to recover, a lost operative to bring out. */
+  goggles?: boolean;
+  specialist?: "researcher" | "amnestics";
+  record?: boolean;
   /** Phase 3I Insurgents: their specialist role, an anomalous charm (still working, or carried at all), breaching
    *  charges left, and a commander who got away. */
   role?: import("./ciTactics").CiRole;
@@ -160,6 +164,9 @@ export interface SquadMember {
   medals?: string[];
   /** Short rank shown on the squad cards (Pvt, PFC, Sgt...). */
   rankShort?: string;
+  /** Phase 3J: Eta-10's video goggles, and staff who come along in a support role. */
+  goggles?: boolean;
+  specialist?: "researcher" | "amnestics";
 }
 
 /** Effects of finished research that apply during missions. */
@@ -204,6 +211,14 @@ export interface MissionSetup {
   /** Phase 3I: which Insurgent specialists turn up, the named commander leading them, the turn reinforcements land
    *  (strikes and attacks only), and GRU Division "P" in place of the Insurgency. */
   ciRoles?: { sniper: boolean; demo: boolean; officer: boolean; charm: boolean };
+  /** Phase 3J: the independent site (emergencies), records to recover, survivors waiting, what got loose, and
+   *  Nu-7's troopers if called. */
+  site?: string;
+  records?: number;
+  survivors?: number;
+  survivorName?: string;
+  hazard?: "scp" | "insurgents" | "instances";
+  nu7?: SquadMember[];
   commander?: string;
   reinforce?: number;
   gru?: boolean;
@@ -242,6 +257,10 @@ export interface MissionResult {
   hadFire?: boolean;
   /** Phase 3I: what became of the Insurgency commander, charms recovered, and whether GRU-P was the opposition. */
   commander?: "killed" | "captured" | "escaped" | "absent";
+  /** Phase 3J: survivors and records brought out of the total, power restored, the hazard dealt with, anomalies
+   *  scanned, and support staff lost. */
+  survivorsSaved?: number; survivorsTotal?: number; recordsRecovered?: number; recordsTotal?: number;
+  powerRestored?: boolean; hazardDealt?: boolean; scans?: Record<string, number>; specialistsLost?: string[];
   charms?: number;
   gru?: boolean;
   /** Anomalies photographed with the field camera, and whether a restraint kit came along. */
@@ -306,6 +325,9 @@ export interface MissionState {
   effects: Effect[];
   /** Insurgent reinforcements: where they will land, and whether they have. */
   ciDrop?: [number, number];
+  /** Emergencies: power restored at the panel; anomalies scanned by a field researcher, per SCP. */
+  powerOn?: boolean;
+  scans?: Record<string, number>;
   ciLanded?: boolean;
   stats: { mtfLost: number; dLost: number; escaped: number; raidersDown: number };
   smoke: { x: number; y: number; until: number }[];

@@ -257,12 +257,12 @@ export function createRenderer(cv: HTMLCanvasElement) {
       if (u.overwatch && !u.downed) { ctx.strokeStyle = C.alert; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, 15, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke(); }
     } else if (u.side === "civilian") {
       // civilians are squares; witnesses carry a W until they are dosed
-      ctx.fillStyle = u.dosed ? "#8a9a86" : "#cfc6a8";
+      ctx.fillStyle = u.record ? "#d9c27a" : u.dosed ? "#8a9a86" : "#cfc6a8";
       ctx.fillRect(cx - 8, cy - 8, 16, 16);
       ctx.strokeStyle = u.witness && !u.dosed ? C.manila : "#0f1317"; ctx.lineWidth = 2;
       ctx.strokeRect(cx - 8, cy - 8, 16, 16);
       ctx.fillStyle = "#0f1317"; ctx.font = "600 9px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(u.dosed ? "✓" : u.witness ? "W" : u.researcher ? "R" : "C", cx, cy + 1);
+      ctx.fillText(u.record ? "F" : u.dosed ? "✓" : u.witness ? "W" : u.researcher ? (S.setup.kind === "rescue" ? "L" : "R") : "C", cx, cy + 1);
       if (u.researcher && u.followId) tag("FOLLOWING", cx, cy - 18, C.ok);
       if (u.spooked && !u.dosed) tag("!", cx + 10, cy - 10, C.alert);
       return;

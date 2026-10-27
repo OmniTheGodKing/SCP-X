@@ -19,7 +19,7 @@ export const isTeam = (u: Unit) => u.side === "mtf" || u.side === "dclass";
 // Downed operatives are alive but out of action: they don't act, see, stare or count as standing.
 export const alive = (side: Unit["side"]) => S.units.filter(u => u.side === side && u.alive && !u.saved && !u.downed);
 export const team = () => S.units.filter(u => isTeam(u) && u.alive && !u.saved && !u.downed);
-export const humans = () => S.units.filter(u => u.alive && !u.saved && !u.carriedBy && u.side !== "anomaly" && u.side !== "zombie");
+export const humans = () => S.units.filter(u => u.alive && !u.saved && !u.carriedBy && !u.record && u.side !== "anomaly" && u.side !== "zombie");
 export const isPanicked = (u: Unit) => (u.side === "mtf" || u.side === "raider") && u.panicUntil >= S.turn;
 export const isBlind = (u: Unit) => (u.blindUntil ?? -1) >= S.turn;
 export const unitAt = (x: number, y: number) => S.units.find(u => u.alive && !u.saved && !u.carriedBy && u.x === x && u.y === y);

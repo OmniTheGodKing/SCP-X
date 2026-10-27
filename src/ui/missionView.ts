@@ -16,6 +16,8 @@ import { usesLeft } from "../game/perks";
 import { CLASSES, PERKS } from "../data/classes";
 
 const OBJECTIVES = {
+  rescue: "Find the lost task force's survivors: reach one and they follow you. Bring them out through an exit (Exfiltrate). The mission ends once nobody is left to find.",
+  emergency: "Rescue the trapped researchers, recover the records (R, Recover records, adjacent), restore power at the panel, and contain or kill what got loose. Exfiltrate when you're done: every objective met counts.",
   breach: "",
   manhunt: "SCP-173 is loose among civilians. Get it into the truck's open container, with nobody else inside, then have an operative seal it. Every civilian it kills adds exposure in the region.",
   coverup: "Reach every witness (marked W) and give them amnestics with Dose: 1 action, from the next tile. A witness who spots the team runs for the map edge; any who escape undosed add exposure. Dose at least half of them for the mission to count as a success. Other civilians can be ignored.",
@@ -122,6 +124,11 @@ function legendHtml() {
   if (any(x => x.side === "mtf" && !!x.guard)) items.push(["sq", "#9fb3c4", "Site Security"]);
   if (u.some(x => (x.side === "dclass" || x.side === "subject") && !x.rioter)) items.push(["", "var(--subject)", "D-Class (dashed ring: loose)"]);
   if (u.some(x => x.rioter)) items.push(["ring", "var(--subject)", "Rioting D-Class"]);
+  if (u.some(x => x.record)) items.push(["sq", "#d9c27a", "F · classified records: Recover records when adjacent"]);
+  if (S.setup.kind === "rescue") items.push(["sq", "#cfc6a8", "L · lost operative: reach them and they follow you out"]);
+  if (u.some(x => x.goggles)) items.push(["", "var(--mtf)", "Eta-10 (goggles): blink half as often staring, half the sanity lost to sight, −10 aim"]);
+  if (u.some(x => x.specialist)) items.push(["", "var(--mtf)", "Support staff: field researcher (Scan) or amnestics specialist (darts, extra doses)"]);
+  if (S.setup.kind === "emergency" && !S.powerOn) items.push(["sq", "transparent", "Blackout: restore power at the panel (both actions) to light the wing"]);
   if (u.some(x => x.side === "civilian")) items.push(["sq", "#cfc6a8", `Civilian${u.some(x => x.witness) ? " · W witness" : ""}${u.some(x => x.researcher) ? " · R researcher" : ""}`]);
   if (u.some(x => x.side === "raider") || S.setup.insurgents) items.push(["dia", "var(--raider)", `${S.setup.gru ? "GRU Division \"P\"" : "Chaos Insurgency"} (paler: hasn't spotted you; red arc: on overwatch)`]);
   if (u.some(x => x.role === "sniper")) items.push(["dia", "var(--raider)", "S · sniper: long-range overwatch"]);
@@ -149,7 +156,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   const has173 = S.has173, kind = S.setup.kind;
   $("legend").innerHTML = legendHtml();
   if (kind !== "breach") {
-    $("mTitle").innerHTML = { raid: "Raid <small>Site-19 surface compound</small>", riot: "Riot <small>D-Class block</small>", outbreak: "SCP-610 Outbreak <small>“The Flesh that Hates” · Keter</small>", escort: "Convoy Ambush <small>Escort</small>", retaliation: "Retaliation <small>Insurgency attack</small>", manhunt: "SCP-173 Manhunt <small>Field recovery</small>", coverup: "Cover-up <small>Class-A amnestics</small>", strike: "Strike <small>Chaos Insurgency cell</small>", breach: "" }[kind];
+    $("mTitle").innerHTML = { rescue: `Lost Team <small>${esc(S.setup.title)}</small>`, emergency: `Site Emergency <small>${esc(S.setup.site ?? "Partner site")}</small>`, raid: "Raid <small>Site-19 surface compound</small>", riot: "Riot <small>D-Class block</small>", outbreak: "SCP-610 Outbreak <small>“The Flesh that Hates” · Keter</small>", escort: "Convoy Ambush <small>Escort</small>", retaliation: "Retaliation <small>Insurgency attack</small>", manhunt: "SCP-173 Manhunt <small>Field recovery</small>", coverup: "Cover-up <small>Class-A amnestics</small>", strike: "Strike <small>Chaos Insurgency cell</small>", breach: "" }[kind];
     $("objRule").innerHTML = `<b>Objective.</b> ${esc(OBJECTIVES[kind])}`;
   }
   if (!has173) {
@@ -158,11 +165,11 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     root.querySelectorAll<HTMLElement>(".rules > div").forEach(d => { if (d.id !== "objRule" && /SCP-173|Do not blink|Dragging|Blinks\./.test(d.textContent || "")) d.hidden = true; });
     $("statusLabel").textContent = S.has049 ? "SCP-049 status" : S.has106 ? "SCP-106 status" : "Objective";
   }
-  if (S.has106) {
+  if (S.has106 && kind !== "emergency") {
     $("mTitle").innerHTML = `SCP-106 ${kind === "breach" ? "Recontainment" : S.setup.title.startsWith("Anomalous") ? "Capture" : "Manhunt"} <small>“The Old Man” · Keter</small>`;
     $("objRule").innerHTML = `<b>Objective.</b> Seal SCP-106 in the ${kind === "breach" ? "transport container in the staging room" : "truck's open container"}. It walks through walls and drags anyone it reaches into its pocket dimension, then sinks into the floor for 2 turns and rises near someone nobody is watching. Shooting it drives it under for a turn but can't hurt it. Its black rot costs double to cross and deals 1 damage. <b>Bait:</b> walk a D-Class (or a secured Insurgent) into the container. SCP-106 goes straight for them and stays a turn to feed: seal the door during that turn. People it takes have a ${Math.round(S.setup.mods.pocketReturn * 100)}% chance of coming back when the mission ends.${kind === "breach" ? " Site Security starts on the scene; Epsilon-11 arrives later." : ""}`;
   }
-  if (S.has049) {
+  if (S.has049 && kind !== "emergency") {
     $("mTitle").innerHTML = kind === "breach" ? "SCP-049 Recontainment <small>“The Plague Doctor” · Euclid</small>" : `SCP-049 ${S.setup.title.startsWith("Anomalous") ? "Capture" : "Manhunt"} <small>“The Plague Doctor” · Euclid</small>`;
     $("objRule").innerHTML = `<b>Objective.</b> Get SCP-049 into the ${kind === "breach" ? "transport container in the staging room" : "truck's open container"}, with nobody else inside, then have an operative seal it. Its touch kills anyone next to it, and it spends a turn beside any fresh body to raise it as SCP-049-2. Gunfire can't hurt it, but a hit staggers it so it loses its next move. <b>Calm</b> (1 action, 6 sanity, within 3 tiles and in sight) stops it acting on its next turn and lets you lead it up to 3 tiles. SCP-049-2 can be killed with gunfire.${kind === "breach" ? " Site Security starts on the scene; Epsilon-11 arrives later." : ""}`;
   }

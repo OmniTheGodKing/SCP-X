@@ -9,7 +9,7 @@ import { S, alive, computeVis, hooks, log, occupied, seen, team } from "./state"
 // the map. Witnesses who get away will talk. Dosed witnesses stay put.
 async function civilianPhase() {
   for (const c of alive("civilian")) {
-    if (c.dosed || c.carriedBy) continue;
+    if (c.dosed || c.carriedBy || c.record) continue;
     if (c.researcher) { await researcherMove(c); continue; }
     if (!c.spooked && S.concealed) {
       // nobody has noticed the team yet: civilians go about their business
