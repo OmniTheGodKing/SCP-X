@@ -34,19 +34,19 @@ tissue, pocket dimension survivors) with a new Insurgency branch; breakthroughs 
 purchases like the Guerrilla Tactics School (squad size 5 and 6, guard training); situational mission actions only
 shown when usable, with a first-time hint.
 
-Part 2: weapons
+Part 2 (done): weapons
 - Tiers like XCOM's conventional, magnetic and beam: service (era models by year), Foundation special issue (+1 damage,
   +5 aim, after captured weapon analysis), experimental electromagnetic "coil" weapons (+2 damage, ignore 1 armor,
   after the SCP-106 electromagnet work).
 - Sidearms: an M1911 in a second slot for everyone, used when the main weapon is empty.
 - M79 grenade launcher (from 1961): grenadiers throw 4 tiles farther.
-- Heavy weapons (heavy armor only): M20 bazooka, M72 LAW (1963); the M2 flamethrower waits for SCP-610.
 - Ammunition built in the workshop, one type per operative: armor-piercing, tracer, hollow-point, sedative (downed
   Insurgents and D-Class are always captured). Incendiary waits for fire.
 - Attachments: suppressor (shots don't alert anything), bayonet (3 damage to an adjacent enemy, no roll), improved
   sights (+10 aim).
 
 Part 3: armor and kit
+- Heavy weapons (heavy armor only): M20 bazooka, M72 LAW (1963); the M2 flamethrower waits for SCP-610.
 - Each armor tier in light (+1 HP, +1 move), medium (the current vest) and heavy (+4 HP, 2 armor, −1 move, carries
   heavy weapons) versions; a hazmat suit (immune to SCP-106's rot) and a later lead-lined suit (SCP-106 needs two turns
   to take the wearer).
