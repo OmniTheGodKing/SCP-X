@@ -7,6 +7,18 @@ export function setSmoke(tiles: [number, number][]) { smoke = new Set(tiles.map(
 export const smoky = (x: number, y: number) => smoke.has(y * L.W + x);
 const solid = (x: number, y: number) => opaque(x, y) || (smoke.size > 0 && smoke.has(y * L.W + x));
 
+/** How far off square a sight line may cross a doorway it passes through (tan of about 30°). Someone standing
+ *  beside a doorway can't see along the inside of the wall; standing in it or in front of it sees normally. */
+export const DOOR_SLANT = 0.58;
+const doorBlocks = (x: number, y: number, dx: number, dy: number) => {
+  if (!L.doors.has(y * L.W + x)) return false;
+  const throughVertical = opaque(x - 1, y) && opaque(x + 1, y);     // walls left and right: people pass up or down
+  const throughHorizontal = opaque(x, y - 1) && opaque(x, y + 1);
+  if (throughVertical) return Math.abs(dx) > DOOR_SLANT * Math.abs(dy);
+  if (throughHorizontal) return Math.abs(dy) > DOOR_SLANT * Math.abs(dx);
+  return false;
+};
+
 // Exact grid walk between two points (tile units). A ray that passes exactly through a
 // corner is blocked if either tile beside that corner is solid, so nothing squeezes past.
 function rayClear(x0: number, y0: number, x1: number, y1: number) {
@@ -23,7 +35,7 @@ function rayClear(x0: number, y0: number, x1: number, y1: number) {
     } else if (tx < ty) { cx += sx; tx += tdx; }
     else { cy += sy; ty += tdy; }
     if (cx === ex && cy === ey) break;
-    if (solid(cx, cy)) return false;
+    if (solid(cx, cy) || doorBlocks(cx, cy, dx, dy)) return false;
   }
   return true;
 }

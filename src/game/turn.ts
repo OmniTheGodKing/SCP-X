@@ -27,11 +27,15 @@ export function reachFor(u: Unit | null) {
   const move = moveOf(u);
   setVault(hasPerk(u, "bulldozer"));
   setSlow(S.corroded);
+  // the team can walk through each other (a squadmate in a doorway doesn't seal it), but not through anyone else
+  const blocker = (x: number, y: number) => S.units.some(o => o !== u && o.alive && !o.saved && !o.carriedBy && o.x === x && o.y === y && !(isTeam(u) && isTeam(o)));
   let res;
   if (u.staring) {
     const st = S.statue;
-    res = bfs([[u.x, u.y]], move, (x, y) => occupied(x, y, u) || !sightFrom(x, y, st.x, st.y, rangeOf(u)));
-  } else res = bfs([[u.x, u.y]], u.ap * move, (x, y) => occupied(x, y, u));
+    res = bfs([[u.x, u.y]], move, (x, y) => blocker(x, y) || !sightFrom(x, y, st.x, st.y, rangeOf(u)));
+  } else res = bfs([[u.x, u.y]], u.ap * move, blocker);
+  // ...and nobody ends a move on someone else's tile
+  for (let i = 0; i < res.dist.length; i++) if (res.dist[i] > 0 && occupied(i % L.W, (i / L.W) | 0, u)) res.dist[i] = -res.dist[i] - 100;
   setVault(false); setSlow(new Set());
   // nobody ends a move standing on a desk
   for (let i = 0; i < res.dist.length; i++) if (res.dist[i] > 0 && tileAt(i % L.W, (i / L.W) | 0) === HALF) res.dist[i] = -res.dist[i] - 100;

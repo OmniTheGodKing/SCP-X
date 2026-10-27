@@ -10,6 +10,9 @@ import { createMission } from "./game/mission";
 import { S } from "./game/state";
 import type { MissionKind, MissionResult } from "./game/types";
 import { mountHub, openTab } from "./ui/hubView";
+import { L } from "./core/grid";
+import { sightFrom } from "./core/sight";
+import { reachFor } from "./game/turn";
 import { mountMission } from "./ui/missionView";
 import { esc } from "./ui/util";
 import { mountDebug } from "./ui/debug";
@@ -83,6 +86,9 @@ function showHub() {
 (window as unknown as { __site19: object }).__site19 = {
   get mission() { return S; },
   get campaign() { return campaign; },
+  get grid() { return L; },
+  sight: sightFrom,
+  reach: reachFor,
 };
 
 mountDebug({ campaign: () => campaign, screen: () => screen, refresh: () => { saveCampaign(campaign); if (screen === "hub") showHub(); } });
