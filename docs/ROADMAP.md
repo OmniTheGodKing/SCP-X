@@ -1296,15 +1296,18 @@ default); enemy turns have a Normal/Fast setting. Both settings sit in the Sound
   still can't see through the solid wall beside it. Corners, junctions and solid rock stay full blocks. Shots follow
   the same geometry. tests/window.e2e.cjs checks the reported case (viewer diagonal to a window, six tiles in the
   cone seen, three behind the wall not) and that the shot goes through and breaks the glass.
-- **Peeking past cover (after 4C, from a playtest report with drawings):** someone standing against a wall piece, crate
-  or pillar looks and shoots from the open tile just past either end of it, up to 2 tiles to the side
-  (`LEAN_REACH` in src/core/sight.ts), so a short piece of cover only hides a narrow wedge straight behind it that
-  tapers to a point. Before, the lean only reached one tile, so a unit in the middle of a three-tile crate row or at
-  the end of a two-tile one was blind across most of the map ahead. A long wall doesn't end within reach, and a
-  doorway or window more than a tile along isn't an end, so nobody peeks along a wall into the next room; a doorway
-  right beside them still counts. Enemies peek by the same rule. Sight in the dark and bad weather is longer: night 9
-  tiles (was 6), rain 18 (14), storm 12 (10), fog 8 (6), snow 16 (12). Checked with a probe grid (one, two and three
-  blocks in front of an operative on open floor) and the 4I, window, 4B and 4C suites.
+- **Peeking past cover (after 4C, from two playtest reports with drawings):** anyone can look and shoot from an open
+  tile beside them (`viewSpots` in src/core/sight.ts takes the target now), so a crate two tiles ahead no longer
+  hides most of a long corridor: in daylight, a viewer at one end of wing C's corridor sees all of it but the strip
+  straight behind the crate. Cover that faces the target limits this: against it, a side tile that still has that
+  cover in front doesn't count, and nor does stepping back from it. So in the middle of a row of three crates
+  everything behind the row is hidden, and a single crate in front hides a wedge three tiles deep. A lean view needs
+  8 of the 10 sight lines (`LEAN_SIGHT`; the own tile needs 3), which is what keeps that wedge. A shut door is never
+  a lean spot. Leaning shots take −15% as before; enemies lean by the same rule. Sight in the dark and bad weather is
+  longer: night 9 tiles (was 6), rain 18 (14), storm 12 (10), fog 8 (6), snow 16 (12); clear daylight still reaches
+  the whole map. Checked with a probe grid (one, two and three crates ahead of an operative on open floor), a corridor
+  probe, and the 4I, window, 4B, 4C and 4G suites. Two 4B test setups that failed on unlucky placements were fixed
+  (the SCP-939 footstep is now 2 tiles away; anyone else in SCP-035's reach is cleared first).
 - **Facing (src/game/noise.ts):** units face where they last moved, fired or glanced; the Face button (F) sets a
   resting direction for free. After any move a unit turns to the nearest enemy it can see (Insurgents to the
   nearest team member); with nobody in sight it keeps facing the way it walked. Facing is not a sight cone: anyone behind is still seen. A reaction shot at someone more
