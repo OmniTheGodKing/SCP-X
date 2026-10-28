@@ -585,13 +585,29 @@ retaliation (done); (5) doors and sirens (done).
 - Play a stable long-term campaign from Site-19 through the interactive Geoscape, deploy to readable 2D tactical missions, recover/contain/research SCPs, manage persistent operatives, respond to independent facilities, engage with O5 choices and a global Insurgency, and observe consistent world/facility consequences.
 - Confirm implemented/partial/missing status against source **and** in-game behavior before declaring an item done. Campaign victory/final mission and 3D presentation are deliberately deferred.
 
-## Phase 4: content, story and presentation in 2D (planned)
+## Phase 4: immersion, depth and gameplay fun (2D)
+
+**Purpose:** make the existing XCOM-style 2D game more fun, alive, immersive and rewarding. Phase 3 systems are
+foundations to deepen, not rebuild. Phase 5 remains the 3D conversion. Phase 4 addresses several problems, not just
+tactical presentation. This section separates agreed requirements from proposals still awaiting discussion. A roadmap
+completion label is not independent playtest verification.
 
 The original Phase 4 (moving to 3D) is now Phase 5: it's too early in the project for 3D. Phase 4 deepens the 2D game
 first. The Phase 3 implementation rules still apply (explicit specification, status is not proof, expand rather than
 recreate, shared consequences).
 
-### 4A: art and sound
+### Agreed design rules for Phase 4
+- Retain Site-19 as a fixed headquarters; do **not** copy XCOM 2's Avenger-based travel-and-scan timer or invent an
+  equivalent aircraft parking requirement.
+- Keep other Foundation sites independent; they can request help but are not player-managed secondary bases.
+- Extend existing regional fronts, intelligence, covert operations and task force systems; do not create redundant
+  intelligence departments or duplicate already implemented combat mechanics.
+- Dynamic World Map opportunities arise naturally as time advances; not every activity is combat, and the player should
+  not need to manually generate every opportunity.
+- Every agreed feature must be explicitly specified in this roadmap, including behaviour, consequences, boundaries and
+  completion checks. Do not silently treat brainstorming as approved scope.
+
+### 4A: art and sound (done)
 Decided: all art is drawn in code (canvas and SVG, like the portraits), and all sound is synthesized in the browser,
 so there are no asset files or licences to track. Both layers get art; nothing in the strategic layer is left as a
 bare text box where a picture would help.
@@ -669,7 +685,7 @@ transition sounds, (4) World Map art, (5) Site-19 and the other strategic tabs, 
 - **(6) Portraits (done):** a lit backdrop with measuring marks, shading on the face and neck, ears, eyes with whites,
   a nose, collar lapels and a rank bar, and a vignette, still built from the same look data.
 
-### 4B: more anomalies
+### 4B: more anomalies (existing proposal, details pending)
 - **5 to 8 new SCPs**, each with its own tactical behaviour, containment routine and procedure, research line and
   capture method, in the way SCP-173, 049, 106 and 610 differ (candidates: SCP-096, SCP-939, SCP-008, SCP-012,
   SCP-035, and SCP-682 as a long-term Keter threat that can't be killed, only held). Every one credited to its author
@@ -678,7 +694,7 @@ transition sounds, (4) World Map art, (5) Site-19 and the other strategic tabs, 
 - **Anomaly interactions:** some anomalies affect others or the site (for example a breach in one wing raising the
   risk next door in specific ways).
 
-### 4C: maps and mission variety
+### 4C: maps and mission variety (existing proposal, details pending)
 - **More maps:** new field and facility maps (rail yard, church, research lab, ship, Site-19 levels for base defence).
 - **Generated layouts:** maps assembled from room pieces so missions don't repeat, keeping cover, exits and objective
   placement fair.
@@ -687,7 +703,7 @@ transition sounds, (4) World Map art, (5) Site-19 and the other strategic tabs, 
 - **New mission types:** fighting GOC strike teams and GRU-P units tactically; Site-19 base defence across levels;
   escorting a transfer through a hostile town; investigating a site gone quiet.
 
-### 4D: campaign story and endgame
+### 4D: campaign story and endgame (existing proposal, details pending)
 - **A campaign arc:** the Chaos Insurgency's agenda, the O5 Council and the anomalies build toward a defined climax
   instead of running forever. Story beats unlock at milestones (years passed, anomalies held, the agenda's steps,
   commanders defeated), each with a briefing and a real choice.
@@ -698,11 +714,100 @@ transition sounds, (4) World Map art, (5) Site-19 and the other strategic tabs, 
 - **Epilogue and record:** a closing report drawn from the History tab: operatives who served, who fell, anomalies held
   and lost, the Council's verdict.
 
+### 4E: economy overhaul (agreed, priority)
+
+**Problem:** Too few ways to earn funding, and existing income is consumed too quickly by expenses; prolonged waits make the game less fun.
+
+- **Primary income: Foundation funding.** Provide reliable monthly baseline support, adjusted by O5 Council standing and campaign progression. Make the next payment date and expected amount visible. This is the principal source of income, not tactical mission grinding.
+- **Supplementary income:** (1) regional fronts and their recurring contributions; (2) optional paid Council contracts; (3) research milestone grants; (4) recoverable mission assets and salvage; (5) selective mission funding rewards; (6) sales of surplus equipment through existing trading channels; (7) emergency O5 funding requests with explicit political or future-budget consequences. Preserve meaningful noncash mission rewards such as personnel, gear, Intel, and research.
+- **Rebalance expenses:** review recruitment, standard loadouts, early research, facility upkeep, and damage repair against expected monthly income. Routine operation and occasional casualty replacement should be sustainable for a reasonably successful player; advanced projects and major losses should still require tradeoffs.
+- **Financial overview:** show current cash, recurring funding by source, upkeep by category, one-off costs, next Council payment, net monthly projection, and why income changed. Show costs and projected remaining cash before purchase.
+- **Pacing:** avoid dead periods where the only useful action is waiting for a paycheck. Ensure accessible lower-cost options and worthwhile opportunities during recovery periods, without giving unlimited money.
+- **Completion check:** playtest early and midgame campaigns: a reasonably successful player can maintain Site-19, replace occasional losses, and steadily progress without repetitive waiting, but cannot buy every upgrade immediately. Balance using actual costs and reward rates, not arbitrary across-the-board increases.
+
+### 4F: dynamic Geoscape activity (agreed, priority)
+
+- **Events appear with time:** time-limited supply and equipment recovery, Intel leads, Council assignments, covert opportunities, resource discoveries, and hostile preparations appear dynamically, influenced by campaign state and regional contacts.
+- **Interaction from the World Map:** each marker presents a location, deadline, known risks, potential rewards, available actions, and expected duration. Actions include dispatching an existing team, assigning covert personnel, investigating, accepting a Council task, or declining/ignoring the opportunity.
+- **No Avenger-style scan loop:** do not force the player to move Site-19 or idle an aircraft over a location for days to claim a reward. Aircraft transport field teams; intelligence work uses existing regional fronts, surveillance, SIGINT, and covert systems.
+- **Meaningful choices:** some opportunities compete for personnel, travel time, resources, or attention. Unanswered events expire or evolve with visible consequences. Not all events require a tactical mission; noncombat assignments have risks and outcomes.
+- **Keep the map alive:** show incident updates, faction activity, travel, new leads, and resolved operations without overwhelming the player with repetitive notifications.
+- **Completion check:** during a normal campaign month, players see varied optional activities and can make useful strategic choices while squads recover, without introducing a duplicate Intel economy or artificial scanning timer.
+
+### 4G: tactical combat life and presentation (agreed, priority)
+
+**Problem:** tactical combat currently feels underwhelming and lifeless despite existing rules such as overwatch, suppression, flanking, critical hits, and status effects. Improve their *presentation* rather than reimplementing them.
+
+- **Weapons and impact:** distinct muzzle flashes, shot/burst timing, tracers or projectile cues, recoil, ricochets, debris, hit reactions, critical-hit emphasis, explosion and impact effects, and clear audio differences by weapon type. Keep accuracy and damage readable; effects must not obscure tiles or targets.
+- **Operative animation:** readable movement transitions, facing, taking cover/crouching, weapon readiness, firing, reloading where applicable, reacting to near misses and hits, being wounded/downed, and visible equipment differences. Respect existing animation and sprite work from completed 4A; this is a refinement pass, not a restart.
+- **Living environments:** contextual alarms, flashing/failing lights, smoke, fire, weather, damaged cover, machinery, containment equipment, environmental sound, and localized effects tied to actual mission state. Distinguish facilities, towns, farms, ports, and containment spaces.
+- **Camera and pacing:** restrained camera framing, screen feedback, and short highlights for consequential actions such as critical hits, major SCP abilities, and mission turning points; routine turns remain fast and skippable. Do not force repetitive cinematics.
+- **SCP-specific presence:** anomalies should communicate unique behavior through movement, sounds, effects, and environmental reactions, not merely unique stat blocks. Preserve readability and existing SCP mechanics.
+- **Combat information:** make selection, movement, cover, line of sight, reaction fire, threat positions, action points, and reasons for hits/misses clear. Include an accessible combat log; animations must not conceal underlying outcomes.
+- **Completion check:** compare before/after tactical sessions for clarity, responsiveness, perceived impact, and time per turn; effects must improve atmosphere without slowing down normal play or reducing accessibility.
+
+### 4H: combat variety, mission pacing, and progression (agreed direction, specifics to design together)
+
+- **Encounter variety:** build on existing enemy roles and anomalies with different tactical situations, reinforcements, changing objectives, optional goals, and environmental complications. Do not merely add hit-point-heavy enemies.
+- **Mission variety:** diversify maps, objectives, and mid-mission developments; include recovery, rescue, containment, defense, disruption, and extraction variants using existing systems where possible.
+- **Progression that changes play:** new equipment, armor, abilities, research, and task force options should enable visibly different tactics, not just small numerical bonuses. Ensure useful rewards arrive regularly.
+- **Gameplay rhythm:** support a loop of mission → tangible reward → meaningful upgrade/decision → next opportunity. Keep downtime strategically useful rather than mandatory inactivity.
+- **Completion check:** repeated missions should require different decisions and grant meaningful progress; playtest for repetition and downtime.
+
+### 4I: tactical map geometry, visibility, facing, firing, and sound (agreed, priority)
+
+**Scope and map size:** Keep current tactical map dimensions for Phase 4. Increase environmental density and believable detail, not map area. Preserve existing tactical rules where sound; repair the geometry and perception foundation rather than layering cosmetic fixes over broken sight lines.
+
+#### Environment detail, openings, and destruction
+- Distinct, purpose-built rooms and regions: furnished Foundation laboratories, checkpoints, containment areas, offices, urban streets/interiors, outdoor terrain, and damaged breach sites. Place functional props coherently, respecting navigation, cover, objectives, and sight lines. Animate relevant lights, monitors, machinery, weather, smoke, and alarms without obscuring gameplay.
+- **Doors:** standard, security, reinforced containment, emergency, and damaged variants with meaningful open/closed/locked/breached/destroyed states. Doors must affect navigation, visibility, sound propagation, cover, and firing according to material and state. Open doors create actual geometric openings.
+- **Windows:** ordinary, reinforced observation, and broken variants. Transparent panes permit appropriate sight lines but may block projectiles or movement; glass can shatter and persist as broken. Windows must be placed logically in the layout.
+- **XCOM-style selective destruction:** appropriate cover, furniture, doors, windows, and designated walls/partitions can be damaged or destroyed by suitable weapons/explosives. Reinforced structural and containment walls resist ordinary attacks. Destruction persists, changes cover and routes, and is recognized by AI. Not every decorative object or structural surface must be destructible.
+- Separate logical terrain, structure, functional props, decoration, and presentation layers so visual detail never silently changes collision or cover; retain compatibility with the planned Phase 5 3D conversion.
+
+#### Geometrically correct vision and line of fire
+- Replace arbitrary short tile-radius sight cutoffs. In clear conditions, units can potentially see across the entire tactical map; detection/identification quality may vary with distance, lighting, weather, smoke, concealment, and equipment.
+- Calculate visibility against actual obstruction geometry, including corners, partial cover, windows, door openings, and destructible geometry. Do not let solid walls block valid diagonal sight through an opening, or permit sight through opaque surfaces.
+- **Side-of-entryway test:** a unit immediately beside an open doorway can see diagonally into the room when a physically unobstructed sight ray passes through the opening, including broad angles around 90 degrees or more when geometry permits. Do not impose an arbitrary 90/120-degree doorway cap or require standing directly in front of the door. Model plausible peeking/leaning where necessary, with corresponding exposure.
+- Separate **visibility**, **identification/awareness**, **current facing**, and **weapon line of fire**. A visible enemy is not necessarily shootable. Trace shots from a valid weapon/lean firing position, not a tile-center shortcut that lets bullets pass through solid walls. Account for cover, transparent-but-ballistic-resistant materials, partial exposure, and changed geometry. Return fire must respect any exposure created by peeking or shooting.
+- Player and ordinary human AI follow the same visibility and firing rules. SCP-specific perception exceptions must be explicit and anomaly-specific. Fog of war retains explored terrain and last-known positions without revealing currently unseen enemies.
+
+#### Automatic facing with manual override (confirmed)
+- Preserve **XCOM-like broad/360-degree environmental awareness**: a unit does not have to face directly toward an unobstructed enemy to notice them. Facing influences animation, attention, and applicable reaction behavior; it is **not** a rigid visibility cone that makes enemies behind a unit disappear.
+- Units automatically orient toward movement, aiming, interaction, and relevant threats. Players may freely set a preferred facing direction during their turn, without spending action points; that direction persists as the resting orientation until changed.
+- Transient reactions (such as glancing toward a sound) may temporarily override facing, then return to the stored preferred orientation if no threat is visually confirmed. Clearly display facing and allow players to set it without excessive micromanagement.
+
+#### Auditory detection and context-sensitive reactions (confirmed)
+- Model footsteps, running, doors, glass, gunfire, explosions, alarms, and relevant SCP sounds. Propagate audible events with approximate direction and confidence, accounting for distance, loudness, intervening walls/doors, and ambient noise.
+- Show **subtle, approximate directional sound indicators** and contextual voice/text callouts; hearing does not disclose exact unit coordinates or reveal enemies through walls.
+- **Footstep acceptance test:** on hearing nearby footsteps, an operative briefly turns toward the estimated source and checks for visible threats. If none is seen, the operative returns to the previous preferred facing. If a threat is visually confirmed, the operative keeps attention on it. Stronger or more dangerous sounds trigger proportionate alert reactions rather than the same animation for every sound.
+- Distinguish **visual contact**, **auditory contact**, and **last-known position** in UI and AI decision-making. Human opponents investigate sounds under the same underlying rules; anomalies can have explicitly defined exceptions.
+
+#### Acceptance and regression tests
+1. A clear, unobstructed long-distance sight line across the existing map reveals a detectable target; introducing an opaque wall blocks it.
+2. A unit positioned immediately left or right of a doorway can see diagonally through the opening, including at steep angles, but cannot see through the adjacent solid wall.
+3. A unit behind full cover cannot fire through an intact solid wall; firing around a corner requires a valid exposed firing point and permits appropriate return fire.
+4. Open/closed/broken doors and windows change sight, sound, movement, and projectile behavior according to their actual properties.
+5. Destroying eligible cover or a designated partition updates navigation, cover, visibility, firing, and enemy pathing without requiring a reload.
+6. A manually oriented unit hearing footsteps turns to investigate, receives a non-exact sound cue, and resumes preferred facing if no threat is found.
+7. A visible enemy behind the operative can still be detected under general XCOM-style awareness; facing does not impose an arbitrary blind sector.
+8. New map props and effects do not create misleading cover, block objectives, or degrade tactical readability; map dimensions remain unchanged.
+
+### Open planning questions (NOT approved feature specifications)
+
+- Which visual problem dominates tactical combat: stiff character motion, weak weapon impacts, lifeless environments, or insufficient enemy activity? Decide the order after looking at actual gameplay.
+- How much camera movement is desirable in a 2D tactical game, and should cinematic highlights have a toggle?
+- What exact funding amounts, upkeep targets, and event frequency produce healthy campaign pacing? Determine through campaign testing.
+- Which additional SCPs, mission types, and progression systems belong in the final Phase 4 scope beyond the existing 4B–4D proposals?
+
 ## Phase 4 order
 
-Priority by priority, in the order listed: 4A art and sound first, then 4B more anomalies, then 4C maps and mission
-variety, and 4D campaign story and endgame last (it can then be built on the finished art, anomalies and maps). Each
-part is finished and verified before the next starts.
+Priority by priority; each part is finished and verified before the next starts. 4A (art and sound) is done. The
+earlier order for the rest was 4B more anomalies, then 4C maps and mission variety, then 4D campaign story and endgame
+last (built on the finished art, anomalies and maps). 4E (economy), 4F (dynamic World Map activity), 4G (tactical
+combat life) and 4I (map geometry, visibility, facing, firing and sound) are marked agreed priorities; 4H is an agreed
+direction whose specifics are designed together. Where 4E to 4I sit relative to 4B to 4D is the user's call
+(see the open planning questions).
 
 ## Phase 5: 3D, XCOM style
 
