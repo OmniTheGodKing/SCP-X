@@ -7,11 +7,11 @@ import { L, opaque, doorShut, cheb } from "../core/grid";
 import { S, alive, canSee, isTeam, log, seen, team } from "./state";
 import type { Unit } from "./types";
 
-export type NoiseKind = "footsteps" | "door" | "glass" | "gunfire" | "explosion" | "scp";
+export type NoiseKind = "footsteps" | "door" | "glass" | "gunfire" | "explosion" | "scp" | "lure" | "voice";
 /** How far a noise carries across open ground, in tiles. */
-export const LOUD: Record<NoiseKind, number> = { footsteps: 7, door: 9, glass: 12, gunfire: 24, explosion: 32, scp: 9 };
+export const LOUD: Record<NoiseKind, number> = { footsteps: 7, door: 9, glass: 12, gunfire: 24, explosion: 32, scp: 9, lure: 18, voice: 14 };
 const WALL_LOSS = 5, DOOR_LOSS = 3;
-const NAMES: Record<NoiseKind, string> = { footsteps: "footsteps", door: "a door", glass: "breaking glass", gunfire: "gunfire", explosion: "an explosion", scp: "something moving" };
+const NAMES: Record<NoiseKind, string> = { footsteps: "footsteps", door: "a door", glass: "breaking glass", gunfire: "gunfire", explosion: "an explosion", scp: "something moving", lure: "a noisemaker", voice: "a voice calling" };
 const DIRS8 = ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"];
 
 /** The eighth of a turn closest to a direction (0 east, 2 south, 4 west, 6 north). */
@@ -68,6 +68,10 @@ export function emitNoise(x: number, y: number, kind: NoiseKind, src?: Unit) {
         log(`${m.call || m.name}${heardBy.length > 1 ? ` and ${heardBy.length - 1} other${heardBy.length > 2 ? "s" : ""}` : ""} ${heardBy.length > 1 ? "hear" : "hears"} ${NAMES[kind]} to the ${facingName(heardBy[0].glance!.dir)}.`);
       }
     }
+  }
+  // Phase 4B: SCP-939 hunts by sound alone, and remembers the latest noise it heard (not its own pack's)
+  if (!src?.voice) for (const v of S.units.filter(u => u.voice && u.alive)) {
+    if (heardAt(v.x, v.y, x, y, loud) > 0) S.mem.set("939-" + v.id, { x, y, turn: S.turn });
   }
   // the Insurgency: a rough idea of where, which they go to investigate
   if (fromTeam || !src || src.side !== "raider") {

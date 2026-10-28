@@ -32,7 +32,8 @@ const OBJECTIVES = {
 } as const;
 const ITEM_NAMES: Record<ItemId, string> = { armor: "Flak vest", armor_light: "Recon smock", armor_heavy: "Heavy plate", hazmat: "Hazmat suit", leadsuit: "Lead-lined suit",
   contsuit: "Containment suit", incendiary: "Incendiary", flamer: "M2 flamethrower", flare: "Signal flare", eyedrops: "Eye drops", flashbang: "Stun grenade", smoke: "M18 smoke", tracker: "Seismic sensor", frag: "M26 frag", csgas: "CS gas", bazooka: "M20 bazooka", law: "M72 LAW",
-  medkit: "Medkit", camera: "Field camera", restraints: "Restraint kit", darts: "Amnestic darts", ward: "Warding charm" };
+  medkit: "Medkit", camera: "Field camera", restraints: "Restraint kit", darts: "Amnestic darts", ward: "Warding charm",
+  hood: "Canvas hood", folder: "Lined folder", noisemaker: "Noisemaker", case: "Lead-lined case" };
 import type { MissionResult, Unit } from "../game/types";
 import { esc } from "./util";
 import { createRenderer } from "./render";
@@ -42,6 +43,16 @@ import { freshBodies, isCalm, isStaggered } from "../game/scp049";
 import { bait, isFeeding } from "../game/scp106";
 import { MAPS } from "../data/maps";
 import { ambience, playMusic, soundControl, transition, wireSound } from "./audio";
+import { eyesCheck, eyesMission, hidden939, inFace, isDown682, isNewScp, maskOnFloor, statusName, toggleEyes, voices } from "../game/scp4b";
+
+/** Phase 4B: how each new anomaly's mission is titled and what the objective says. */
+const NEW_INFO: Record<string, { name: string; title: string; cls: string; objective: (where: string) => string }> = {
+  "096": { name: "SCP-096", title: "The Shy Guy", cls: "Euclid", objective: w => `Never look at its face: anyone who sees it from inside the red wedge in front of it is marked, and after a turn of screaming it runs them down (14 tiles a turn, through doors) and kills them. Gunfire does nothing. If a marked person leaves the area it follows them and is lost. Look down (Eyes down, V: free, but you see only what's next to you and can't fire), walk up beside it, Hood it (the operative carrying the canvas hood, 1 action), lead it into the ${w} and seal it.` },
+  "012": { name: "SCP-012", title: "A Bad Composition", cls: "Euclid", objective: () => "Anyone who can see the score within 7 tiles may be compelled at the end of each enemy turn: they walk to it and write in their own blood (2 damage a turn). Shake them out of it from next to them (1 action, −10 sanity). Look down (Eyes down, V) and, with the lined folder, Secure the score from next to it (1 action)." },
+  "939": { name: "SCP-939", title: "With Many Voices", cls: "Keter", objective: w => `Three of them, blind: they hunt by sound and go to the last noise they heard. Standing still and quiet hides you; footsteps, doors and gunfire draw them. You only make them out within 5 tiles, or in a flare's light. They speak in the voices of people you know: a call for help you can't see may be one of them. Throw a noisemaker into the ${w} (it plays for 3 enemy turns) and seal it with one inside. Killing all three wins the fight but leaves nothing to hold.` },
+  "035": { name: "SCP-035", title: "Possessive Mask", cls: "Keter", objective: () => "The mask is worn by a host who rots under it (−1 HP a turn) while it talks your team down (−4 sanity a turn for anyone who can see it within 6 tiles). Put the host down and the mask falls; at the end of each enemy turn it may take anyone within 2 tiles (never someone in a hazmat, lead or containment suit). The operative with the lead-lined case, next to the mask, uses Case the mask (1 action; 20% it takes them instead without a suit)." },
+  "682": { name: "SCP-682", title: "Hard-to-Destroy Reptile", cls: "Keter", objective: w => `It can't be killed: it regenerates 4 HP a turn, tears through cover, and after 3 hits from the same kind of weapon that kind does half damage. Put it down (0 HP) and it collapses for 2 turns: drag it (G, one tile per action, from next to it) into the ${w} and seal it before it gets up.` },
+};
 
 const TEMPLATE = `
 <main class="wrap">
@@ -116,6 +127,7 @@ const TEMPLATE = `
       <button class="act" id="owBtn" type="button">Overwatch <kbd>O</kbd></button>
       <button class="act" id="reloadBtn" type="button">Reload <kbd>R</kbd></button>
       <button class="act" id="faceBtn" type="button" title="Set where they face when nothing needs their attention. Costs nothing.">Face <kbd>F</kbd></button>
+      <button class="act" id="eyesBtn" type="button" hidden title="Look at the floor: safe from SCP-096's face and SCP-012, but they see only what's next to them and can't fire. Free.">Eyes down <kbd>V</kbd></button>
       <span class="itembar" id="itemBar"></span>
       <button class="act" id="nextBtn" type="button">Next <kbd>Tab</kbd></button>
       <button class="act primary" id="endBtn" type="button">End turn <kbd>E</kbd></button>
@@ -148,6 +160,11 @@ function legendHtml() {
   if (S.has173) items.push(["fig", "var(--concrete)", "SCP-173 · the Sculpture"]);
   if (S.has049) items.push(["fig", "#1d1a18", "SCP-049 · the Plague Doctor (pale mask)"], ["", "#6f7a5c", "SCP-049-2 · its reanimated dead"]);
   if (S.has106) items.push(["fig", "#2a2118", "SCP-106 · the Old Man"], ["sq", "rgba(28,22,14,.9)", "Black rot · costs 2 to cross, 1 damage"]);
+  if (S.scp === "096") items.push(["fig", "#e2ddd2", "SCP-096 · the Shy Guy"], ["sq", "rgba(215,91,71,.35)", "Its face · never look from inside the red wedge"]);
+  if (S.scp === "012") items.push(["fig", "#e3d9b8", "SCP-012 · A Bad Composition"]);
+  if (S.scp === "939") items.push(["fig", "#7a1c1e", "SCP-939 · seen only within 5 tiles"]);
+  if (S.scp === "035") items.push(["fig", "#f0ece2", "SCP-035 · the mask, and its host"]);
+  if (S.scp === "682") items.push(["fig", "#455a34", "SCP-682 · can't be killed, only put down"]);
   if (S.setup.kind === "outbreak") items.push(["", "#8c2c34", "SCP-610 instance"], ["sq", "rgba(120,24,32,.85)", "SCP-610 flesh · infects without a sealed suit"], ["", "#aa1e28", "Flesh core · only fire hurts it"]);
   if (S.setup.kind === "outbreak" || tiles(DRUM)) items.push(["sq", "rgba(255,140,40,.8)", "Fire · 2 damage a turn"]);
   if (tiles(DRUM)) items.push(["", "#7a3b1e", "Fuel drum · explodes when hit by fire"]);
@@ -187,10 +204,15 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("objRule").innerHTML = `<b>Objective.</b> ${esc(OBJECTIVES[kind])}`;
   }
   if (!has173) {
-    for (const id of ["stareBtn", "callBtn", "dragBtn", ...(S.has049 || S.has106 ? [] : ["sealBtn"])]) $(id).hidden = true;
+    for (const id of ["stareBtn", "callBtn", ...(S.scp === "682" ? [] : ["dragBtn"]), ...(S.has049 || S.has106 || ["096", "939", "682"].includes(S.scp ?? "") ? [] : ["sealBtn"])]) $(id).hidden = true;
     $("fileCard").hidden = true;
     root.querySelectorAll<HTMLElement>(".rules > div").forEach(d => { if (d.id !== "objRule" && /SCP-173|Do not blink|Dragging|Blinks\./.test(d.textContent || "")) d.hidden = true; });
-    $("statusLabel").textContent = S.has049 ? "SCP-049 status" : S.has106 ? "SCP-106 status" : "Objective";
+    $("statusLabel").textContent = S.has049 ? "SCP-049 status" : S.has106 ? "SCP-106 status" : isNewScp(S.scp) ? `${statusName()} status` : "Objective";
+  }
+  if (isNewScp(S.scp) && kind !== "emergency") {
+    const n = NEW_INFO[S.scp!], where = kind === "breach" ? "transport container in the staging room" : "truck's open container";
+    $("mTitle").innerHTML = `${n.name} ${kind === "breach" ? "Recontainment" : S.setup.title.startsWith("Anomalous") ? "Capture" : "Manhunt"} <small>“${n.title}” · ${n.cls}</small>`;
+    $("objRule").innerHTML = `<b>Objective.</b> ${esc(n.objective(where))}${kind === "breach" ? " Site Security starts on the scene; Epsilon-11 arrives later with the capture kit." : ""}`;
   }
   if (S.has106 && kind !== "emergency") {
     $("mTitle").innerHTML = `SCP-106 ${kind === "breach" ? "Recontainment" : S.setup.title.startsWith("Anomalous") ? "Capture" : "Manhunt"} <small>“The Old Man” · Keter</small>`;
@@ -242,7 +264,8 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   };
   const seenActions: Set<string> = (() => { try { return new Set(JSON.parse(localStorage.getItem("site19-seen-actions") || "[]")); } catch { return new Set(); } })();
   function ctxBtn(id: string, why: string | null, text?: string) {
-    if (!(S.has173 || id === "sealBtn") || (id === "sealBtn" && !(S.has173 || S.has049 || S.has106))) { $(id).hidden = true; return; }
+    const sealable = S.has173 || S.has049 || S.has106 || ["096", "939", "682"].includes(S.scp ?? "");
+    if (!(S.has173 || id === "sealBtn" || (id === "dragBtn" && S.scp === "682")) || (id === "sealBtn" && !sealable)) { $(id).hidden = true; return; }
     setBtn(id, why, text);
     $(id).hidden = !!why;
     if (!why && !seenActions.has(id) && FIRST[id]) {
@@ -316,6 +339,17 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
       const inf = S.units.filter(u => u.alive && u.infectedTurn !== undefined && !u.flesh);
       sc.className = "card status " + (S.core && S.core.hp <= 0 ? "done" : "danger");
       line.innerHTML = `<b>Core: ${S.core ? `${Math.max(0, S.core.hp)} of ${S.core.maxHp}` : "?"}</b> · flesh covers ${S.flesh.size} tiles · instances: ${S.units.filter(u => u.flesh && u.alive).length}${inf.length ? `<br><span class="warn">Infected: ${inf.map(u => `${esc(u.name)} (turns in ${5 - (S.turn - u.infectedTurn!)})`).join(", ")}</span>` : ""}`;
+    } else if (isNewScp(S.scp)) {
+      const d = S.statue;
+      let state = "";
+      if (S.sealed) state = "<b>Contained.</b>";
+      else if (S.scp === "096") state = S.hooded ? "<b>Hooded.</b> Lead it into the container and seal it." : S.rage ? `<b>Enraged.</b> Marked: ${S.rage.targets.map(id => S.units.find(u => u.id === id)).filter(u => u && u.alive && !u.saved).map(u => esc(u!.call || u!.name)).join(", ") || "nobody left"}${S.turn <= S.rage.scream ? ". It's still screaming." : ". It's coming."}` : `<b>Quiet, weeping.</b>${seen(d.x, d.y) ? ` In the ${area(d.x, d.y)}.` : ""}${team().some(m => inFace(m.x, m.y) && !m.eyesDown) ? ` <span class="warn">Someone is inside its face's wedge.</span>` : ""}`;
+      else if (S.scp === "012") { const c = S.units.filter(u => u.compelled !== undefined && u.alive && !u.saved); state = `<b>On its stand${seen(d.x, d.y) ? ` in the ${area(d.x, d.y)}` : ""}.</b>${c.length ? ` <span class="warn">Compelled: ${c.map(u => esc(u.call || u.name)).join(", ")}</span>` : ""}`; }
+      else if (S.scp === "939") { const v = voices(); state = `<b>${v.length} instance${v.length === 1 ? "" : "s"} left</b>, ${v.filter(x => seen(x.x, x.y) && !hidden939(x)).length} in sight${v.some(x => inContainer(x.x, x.y)) ? ". <b>One is in the container: seal it.</b>" : ""}. Noisemakers playing: ${(S.lures ?? []).filter(l => l.until >= S.turn).length}.`; }
+      else if (S.scp === "035") { const h = S.units.find(u => u.id === S.maskHost); state = maskOnFloor() ? "<b>On the floor.</b> Case it before it reaches anyone." : h ? `<b>Worn by ${esc(h.call || h.name)}</b> (${Math.max(0, h.hp)} HP left).` : "<b>Unknown.</b>"; }
+      else if (S.scp === "682") state = isDown682() ? `<b>Down</b> until turn ${S.downUntil! + 1}. Drag it into the container and seal it.` : `<b>${d.hp} of ${d.maxHp} HP</b>${Object.entries(S.adapt ?? {}).filter(([, n]) => n >= 3).length ? `. Adapted to ${Object.entries(S.adapt ?? {}).filter(([, n]) => n >= 3).map(([k]) => k).join(", ")}.` : ""}`;
+      sc.className = "card status " + (S.sealed ? "done" : S.hooded || isDown682() || maskOnFloor() ? "held" : "danger");
+      line.innerHTML = state;
     } else if (S.has106) {
       const m = S.statue, b = bait();
       const state = S.sealed ? "<b>Sealed in the container.</b>" : isFeeding() ? "<b>Feeding in the container.</b> Seal the door now." : S.submerged ? `<b>Under the floor.</b> It rises again ${S.sunkUntil >= S.turn ? `after turn ${S.sunkUntil}` : "next turn"}.` : seen(m.x, m.y) ? `<b>In sight</b> in the ${area(m.x, m.y)}.` : "<b>Not in sight.</b> It could be behind any wall.";
@@ -392,6 +426,8 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     setBtn("nextBtn", off);
     setBtn("reloadBtn", off || reloadCheck(sel));
     setBtn("faceBtn", off || (!sel ? "Select someone." : null));
+    $("eyesBtn").hidden = !eyesMission();
+    if (eyesMission()) { setBtn("eyesBtn", off || eyesCheck(sel), sel?.eyesDown ? "Look up <kbd>V</kbd>" : "Eyes down <kbd>V</kbd>"); $("eyesBtn").classList.toggle("on", !!sel?.eyesDown); }
     $("faceBtn").classList.toggle("on", S.mode === "face");
     setBtn("endBtn", off);
     setBtn("evacBtn", off);
@@ -422,7 +458,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
       const hv = S.hover && unitAt(S.hover.x, S.hover.y);
       if (S.mode === "face") h = `<b>${esc(full(sel))}: face which way?</b>\nClick any tile: they turn to face it and keep facing that way when nothing needs their attention. Costs nothing. They still notice enemies behind them.`;
       else if (S.mode === "doors") h = `<b>Blast doors.</b>\nClick a doorway to seal it (up to ${MAX_SEALED}) or to open a sealed one. Escape to cancel.`;
-      else if (S.mode === "lead") h = `<b>SCP-049 is listening.</b>\nClick a green tile to lead it there (up to 3 tiles), or press Escape to leave it where it stands.`;
+      else if (S.mode === "lead") h = `<b>${S.scp === "096" ? "The hooded SCP-096 will follow." : "SCP-049 is listening."}</b>\nClick a green tile to lead it there (up to 3 tiles), or press Escape to leave it where it stands.`;
       else if (S.mode === "ability" && S.ability) h = `<b>${esc(full(sel))}: ${abilityName(S.ability)}.</b>\n${esc(abilityDesc(S.ability))} Click a highlighted target.`;
       else if (S.mode === "throw" && S.throwing) h = `<b>${esc(full(sel))}: choose where to throw the ${ITEM_NAMES[S.throwing.id].toLowerCase()}.</b>\nLit tiles are in range and in sight. It covers the target tile and every tile around it. Throwing ends their turn.`;
       else if (S.mode === "drag") h = `<b>${esc(sel.name)}: choose where to drag SCP-173.</b>\nOrange tiles keep it in someone else's sight the whole way. Dragging ends their turn.`;
@@ -471,6 +507,8 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   $("reloadBtn").onclick = () => doReload(flash);
   const toggleFace = () => { if (!S.selected || !canAct()) return; S.mode = S.mode === "face" ? null : "face"; update(); };
   $("faceBtn").onclick = toggleFace;
+  const eyes = () => { if (canAct() && S.selected && !eyesCheck(S.selected)) { toggleEyes(S.selected); update(); } };
+  $("eyesBtn").onclick = eyes;
   $("endBtn").onclick = endTurn;
   $("itemBar").addEventListener("click", e => {
     const b = (e.target as HTMLElement).closest<HTMLElement>("[data-item]");
@@ -505,6 +543,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     else if (k === "o") doOverwatch();
     else if (k === "r") doReload(flash);
     else if (k === "f") toggleFace();
+    else if (k === "v") eyes();
     else if (k === "b") toggleStare(flash);
     else if (k === "c") callBlink(flash);
     else if (k === "g") toggleDrag(flash);

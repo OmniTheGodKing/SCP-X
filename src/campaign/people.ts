@@ -20,9 +20,9 @@ export interface Person {
 export interface Lost { name: string; kind: StaffKind; day: number; how: string; field?: Field; trade?: Trade }
 
 export const FIELDS: Record<Field, { name: string; branches: Branch[] }> = {
-  biology: { name: "Anomalous biology", branches: ["SCP-049", "Objects"] },
+  biology: { name: "Anomalous biology", branches: ["SCP-049", "SCP-939", "SCP-682", "Objects"] },
   physics: { name: "Theoretical physics", branches: ["SCP-173", "SCP-106", "Breakthrough"] },
-  psychology: { name: "Psychology", branches: ["Personnel"] },
+  psychology: { name: "Psychology", branches: ["Personnel", "SCP-096", "SCP-012", "SCP-035"] },
   materials: { name: "Materials science", branches: ["Equipment", "Weapons", "Site"] },
   signals: { name: "Signals and cryptography", branches: ["Insurgency"] },
 };

@@ -14,6 +14,7 @@ import { SIDEARM } from "../data/weapons";
 import { dropCarried } from "./abilities";
 import { ignite } from "./fire";
 import { shotAt106 } from "./scp106";
+import { hit682, hostFalls } from "./scp4b";
 
 export function coverAgainst(tx: number, ty: number, sx: number, sy: number) {
   const vx = sx - tx, vy = sy - ty, len = Math.hypot(vx, vy) || 1;
@@ -164,6 +165,7 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
     if (hasPerk(sh, "shotgun_drills") && Math.hypot(tg.x - info.from.x, tg.y - info.from.y) <= 3) dmg += 2;
     const soak = Math.min(Math.max(0, (tg.armor ?? 0) - (gun?.pierce ?? 0)), dmg);   // each armor point cuts the hit by 1
     dmg -= soak;
+    S.hitKind = sidearm ? "pistol" : gun?.type ?? "pistol";
     fx({ type: "text", x: x1, y: y1 - 14, text: (crit ? `${dmg}!` : `${dmg}`) + (soak ? ` (−${soak})` : ""), color: crit ? "#f0c060" : "#ffffff", dur: 900 }, travel);
     if (crit && visibleShot) { fx({ type: "text", x: x1, y: y1 - 30, text: "CRITICAL", color: "#f0c060", dur: 1100, big: true }, travel); highlight(3, "#f0c060"); }
     if (visibleShot) log(`${reaction ? "Overwatch: " : ""}${sidearm ? "Sidearm: " : ""}${full(sh)} hits ${full(tg)} for ${dmg}${crit ? ", critical" : ""}${soak ? `; armor absorbed ${soak}` : ""} (${info.chance}%${why(info, gun?.name)}).`, sh.side === "mtf" ? "good" : "bad");
@@ -200,11 +202,14 @@ export function damage(u: Unit, dmg: number, by?: Unit) {
   if (S.enemyTurn && S.phase !== "player" && isTeam(u)) S.enemyTurn.hurt[u.call || u.name] = (S.enemyTurn.hurt[u.call || u.name] ?? 0) + dmg;
   // SCP-049 can't be hurt, only knocked back a step in its plans
   if (u.side === "anomaly") {
+    if (S.scp === "682") { hit682(dmg, S.hitKind ?? "other"); return; }
     if (S.has049) { u.staggeredUntil = S.turn; log("SCP-049 staggers under the hit but isn't hurt. It loses its next move.", "key"); }
     if (S.has106) shotAt106();
     return;
   }
   u.hp -= dmg;
+  // SCP-035's host: the mask comes off; a team member it had taken goes down instead of dying
+  if (u.hp <= 0 && u.host && hostFalls(u)) { u.hp = 1; damage(u, 1, by); return; }
   if (u.side === "mtf") u.minHp = Math.min(u.minHp ?? u.hp, Math.max(0, u.hp));
   if (u.hp <= 0 && u.side === "mtf" && !u.downed) { goDown(u); return; }
   // sedative rounds knock people out instead of killing them

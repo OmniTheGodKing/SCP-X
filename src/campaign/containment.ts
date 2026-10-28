@@ -5,11 +5,12 @@ import { losePeople } from "./people";
 import { openInquiry, rivalTakes } from "./chaos";
 import { chronicle } from "./history";
 import { FACILITIES, damageEffect, isContainment, nameInText, neighbors, operational, powerShort, stationsOnLevel, type Facility } from "./base";
+import { addStanding } from "./council";
 import { has, reachMilestone } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, travelDays } from "./world";
 import { dateOf, dclassDied, log, type Campaign, type Incident } from "./campaign";
-import type { ScpId } from "../game/types";
+import { NEW_SCPS, type NewScp, type ScpId } from "../game/types";
 import { GUARD, type Guard } from "./security";
 import { noteMissed } from "./council";
 import { PROCEDURES } from "../data/procedures";
@@ -73,6 +74,11 @@ export function breachRisk(c: Campaign, s: ScpRecord) {
   if (has(c, "containment_rev")) { p *= 0.75; why.push("Revised procedures: ×0.75"); }
   if (has(c, "reinforced_doors")) { p *= 0.8; why.push("Reinforced doors: ×0.8"); }
   if (s.id === "106" && has(c, "em_containment")) { p *= 0.7; why.push("Electromagnetic containment: ×0.7"); }
+  // Phase 4B: SCP-682 is twice the threat of any other Keter; research holds the new ones tighter
+  if (s.id === "682") { p *= 2; why.push("SCP-682: ×2"); }
+  if (s.id === "682" && has(c, "hcl_containment")) { p *= 0.7; why.push("Hydrochloric containment: ×0.7"); }
+  if (s.id === "096" && has(c, "image_screening")) { p *= 0.7; why.push("Facial-image screening: ×0.7"); }
+  for (const b of c.riskBoost ?? []) if (b.until >= c.day && b.wings.includes(wing.id)) { p *= b.mult; why.push(`${b.why}: ×${b.mult}`); }
   if (powerShort(c) && !has(c, "backup_gen")) { const k = s.id === "106" ? 3 : 2; p *= k; why.push(`Power shortage: ×${k}${s.id === "106" ? " (its cell depends on power)" : ""}`); }
   // the deeper a wing sits, the harder it is to get anywhere from it
   if (wing.level > 0) { p *= 1 - DEPTH.risk * wing.level; why.push(`Level ${wing.level + 1}, deep underground: ×${(1 - DEPTH.risk * wing.level).toFixed(1)}`); }
@@ -95,14 +101,42 @@ export function startBreach(c: Campaign, s: ScpRecord, cause: string) {
     insurgents: Math.min(3, rand(0, 1) + Math.floor((c.day - 1) / 120)),
     region: HOME, map: "wingC",
     // what really caused it is only known if someone looks into it afterwards
-    cause: c.chaos.pendingCause ?? (c.chaos.moles && Math.random() < 0.3 ? "sabotage" : s.id === "106" || s.id === "049" ? (Math.random() < 0.5 ? "anomalous" : "accident") : "accident"),
+    cause: c.chaos.pendingCause ?? (c.chaos.moles && Math.random() < 0.3 ? "sabotage" : ANOMALOUS_CAUSE.includes(s.id) ? (Math.random() < 0.5 ? "anomalous" : "accident") : "accident"),
   };
+  // SCP-035 held at Site-19 whispers to the staff: an "accident" elsewhere is anomalous half the time
+  if (inc.cause === "accident" && s.id !== "035" && c.scps.some(x => x.id === "035" && x.status === "contained") && Math.random() < 0.5) inc.cause = "anomalous";
   c.nextIncident++;
   c.incidents.push(inc);
   openInquiry(c, inc);
   chronicle(c, "breach", `${s.name} breached containment in the ${nameInText(wing.type)} on level ${wing.level + 1}. ${cause}`);
   log(c, `${cause} ${s.name} is out of its cell. Site Security is responding now: send Epsilon-11 in after them, or leave it to the guards.`, "bad", "command");
+  breachKnockOn(c, s, wing);
   return inc;
+}
+
+/** Anomalies whose breaches are often their own doing rather than an accident. */
+const ANOMALOUS_CAUSE: string[] = ["049", "106", "096", "939", "035", "682"];
+/** Phase 4B: what one anomaly's breach does to the rest of Site-19. */
+function breachKnockOn(c: Campaign, s: ScpRecord, wing: Facility) {
+  const sameLevel = c.scps.filter(o => o !== s && o.status === "contained" && wingOf(c, o)?.level === wing.level);
+  const boost = (wings: string[], why: string) => { if (wings.length) (c.riskBoost ??= []).push({ wings, until: c.day + 3, mult: 2, why }); };
+  if (s.id === "096") {
+    for (const o of sameLevel) o.maintenance = Math.max(0, o.maintenance - 20);
+    if (sameLevel.length) log(c, `SCP-096 tore through the walls on its way out: ${sameLevel.map(o => o.name).join(", ")} ${sameLevel.length > 1 ? "lose" : "loses"} 20 maintenance.`, "bad", "site");
+  } else if (s.id === "012") {
+    if (c.dclass > 0) { c.dclass--; dclassDied(c, 1); log(c, "Before Security reached SCP-012's room, a D-Class was found dead beside it, the score a little longer.", "bad", "site"); }
+  } else if (s.id === "939") {
+    boost(sameLevel.map(o => o.wingId), "Guards lured off their posts by SCP-939");
+    if (sameLevel.length) log(c, `SCP-939 is calling in the guards' voices: for 3 days every other cell on level ${wing.level + 1} is twice as likely to breach.`, "bad", "site");
+  } else if (s.id === "035") {
+    const next = neighbors(c, wing).map(f => f.id).filter(id => c.scps.some(o => o.wingId === id && o.status === "contained"));
+    boost(next, "SCP-035 talked to the staff next door");
+    if (next.length) log(c, "SCP-035 talked to the staff in the next wing on its way out: that cell is twice as likely to breach for 3 days.", "bad", "site");
+  } else if (s.id === "682") {
+    wreckFacility(c, wing, "SCP-682 tore its own cell apart getting out.", false);
+    const near = neighbors(c, wing).filter(f => !f.wrecked);
+    if (near.length && Math.random() < 0.5) wreckFacility(c, near[rand(0, near.length - 1)], "SCP-682 smashed through into the next facility.");
+  }
 }
 
 export function goDark(c: Campaign, s: ScpRecord, why: string, from = "Site-19") {
@@ -209,11 +243,18 @@ export function tickContainment(c: Campaign) {
       if (isInert(s)) continue;
       // SCP-049 left without its interviews wears its cell down twice as fast
       if (s.id === "049" && routineOverdue(c, s)) s.maintenance = Math.max(0, s.maintenance - decay(c));
+      // Phase 4B: SCP-682's acid has to be kept fresh; SCP-939 left unfed calls the guards by name
+      if (s.id === "682" && routineOverdue(c, s)) s.maintenance = Math.max(0, s.maintenance - 2 * decay(c));
+      if (s.id === "939" && routineOverdue(c, s) && (c.day - s.lastCleaned) % 7 === 0) {
+        for (const g of c.guards) g.san = Math.max(0, g.san - 5);
+        log(c, "SCP-939 hasn't been fed. It spends the night calling the guards by name over the intercom (−5 sanity for every guard).", "bad", "site");
+      }
       if (c.cleaningOrder && routineOverdue(c, s) && !canClean(c, s)) clean(c, s, `A routine ${routineOf(s)!.name.toLowerCase()}`);
       if (Math.random() < breachRisk(c, s).p) startBreach(c, s, "Containment alarm.");
     } else if (s.status === "away") {
       if (c.day >= (s.returnDay ?? 0)) comeBack(c, s);
     } else if (s.status === "loose") {
+      if (s.id === "682" && (c.day - (s.resurfaceDay ?? c.day)) % 30 === 0) addStanding(c, -2, "SCP-682 is still loose");
       if ((c.day - (s.resurfaceDay ?? 0)) % 4 === 0) addExposure(c, HOME, 1);
       if (s.resurfaceDay !== undefined && c.day >= s.resurfaceDay) resurface(c, s);
     }
@@ -283,7 +324,13 @@ function clean(c: Campaign, s: ScpRecord, what: string) {
   if (!r) return;
   spend(c, r.cost, "upkeep", `${r.name}: ${s.name}`);
   if (r.crew === "dclass" && !has(c, "auto_cleaning") && Math.random() < CLEAN_RISK) { c.dclass--; dclassDied(c, 1); log(c, `${what} of ${s.name}'s cell went wrong: both watchers blinked at once and the D-Class cleaning was killed.`, "bad"); }
-  if (r.crew === "researcher" && Math.random() < 0.03) { const [who] = losePeople(c, "researcher", 1, `"cured" by ${s.name} during an interview`); log(c, `During ${s.name}'s interview it decided ${who ?? "the researcher"} was ill, and cured them. They are dead. It apologised.`, "bad", "site"); }
+  if (s.id === "049" && Math.random() < 0.03) { const [who] = losePeople(c, "researcher", 1, `"cured" by ${s.name} during an interview`); log(c, `During ${s.name}'s interview it decided ${who ?? "the researcher"} was ill, and cured them. They are dead. It apologised.`, "bad", "site"); }
+  // Phase 4B: the folder check goes wrong now and then; SCP-035 sometimes talks its way out of the case
+  if (s.id === "012" && Math.random() < 0.03) log(c, `During the folder check on ${s.name}, the researcher slipped off the blindfold and started to write. They were pulled out with their hands cut open and won't work for a while.`, "bad", "site");
+  if (s.id === "035") {
+    log(c, `${s.name}'s interview left the researcher shaken: it knew things about them it shouldn't.`, "", "site");
+    if (Math.random() < 0.03) startBreach(c, s, "Someone opened the case. It had asked them very nicely.");
+  }
 }
 
 /** D-Class work in the cell while operatives watch. `mult` scales the danger; `breach` is an extra
@@ -337,11 +384,25 @@ export const SCP_DEFS: Record<ScpId, { name: string; title: string; cls: ScpClas
   "500": { name: "SCP-500", title: "Panacea", cls: "Safe", sighting: "", inert: true, use: "A pill cures an operative of every wound and every bad trait, from its cell on the Site-19 tab. There are only a few." },
   "914": { name: "SCP-914", title: "The Clockworks", cls: "Safe", sighting: "", inert: true, use: "Once a week it can refine a piece of equipment into something better, from its cell on the Site-19 tab. It doesn't always work." },
   "005": { name: "SCP-005", title: "The Skeleton Key", cls: "Safe", sighting: "", inert: true, use: "It opens Insurgency strongboxes: every Insurgency cell broken yields 1 more Intel." },
+  // Phase 4B
+  "096": { name: "SCP-096", title: "The Shy Guy", cls: "Euclid", sighting: "a pale, thin figure weeping in a barn, and a hiker who photographed it torn apart forty miles away" },
+  "012": { name: "SCP-012", title: "A Bad Composition", cls: "Euclid", sighting: "an unfinished piece of sheet music in a dead man's house, and the next two people to read it dead beside it" },
+  "939": { name: "SCP-939", title: "With Many Voices", cls: "Keter", sighting: "a child's voice calling for help from the woods at night, and the search party that went in after it" },
+  "035": { name: "SCP-035", title: "Possessive Mask", cls: "Keter", sighting: "a white theatre mask on a man who hasn't slept in a week and is rotting where he stands" },
+  "682": { name: "SCP-682", title: "Hard-to-Destroy Reptile", cls: "Keter", sighting: "something huge and reptilian that tore through a cattle ranch and shrugged off a sheriff's posse" },
 };
 export const isInert = (s: { id: string }) => !!SCP_DEFS[s.id as ScpId]?.inert;
 export const scpName = (id: string) => SCP_DEFS[id as ScpId]?.name ?? `SCP-${id}`;
 /** The first sighting of each anomaly not yet found: SCP-049 turns up some time in 1952. */
-export const firstSightings = (): Partial<Record<ScpId, number>> => ({ "049": rand(215, 580), "106": rand(580, 945) });
+export const firstSightings = (): Partial<Record<ScpId, number>> => ({ "049": rand(215, 580), "106": rand(580, 945), ...newSightings(0) });
+/** Phase 4B: when each new anomaly is first seen. An older save (`from` its current day) gets the same windows, and
+ *  anything whose window has passed turns up within the next year instead. */
+export const SIGHT_WINDOWS: Record<NewScp, [number, number]> = { "012": [400, 900], "096": [730, 1100], "939": [950, 1400], "035": [1100, 1500], "682": [1460, 1900] };
+export function newSightings(from: number): Partial<Record<ScpId, number>> {
+  const out: Partial<Record<ScpId, number>> = {};
+  for (const id of NEW_SCPS) { const d = rand(...SIGHT_WINDOWS[id]); out[id] = d > from ? d : from + rand(30, 365); }
+  return out;
+}
 /** Paid when a captured anomaly has to go to another site; Keter-class ones are worth more. */
 export const transferBonus = (cls: ScpClass) => cls === "Keter" ? 150 : 100;
 

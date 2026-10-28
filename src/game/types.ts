@@ -4,15 +4,18 @@ import type { ClassId, PerkId, TraitId } from "../data/classes";
 export type { ClassId, PerkId, TraitId };
 /** Class abilities plus Secure, which every operative can do. */
 export type OptionalId = "ledger" | "radio" | "civilians" | "nocas" | "allwitnesses" | "nolosses" | "staff";
-export type AbilityId = PerkId | "cutradio" | "secure" | "dose" | "lockdown" | "doors" | "siren" | "calm" | "restrain" | "pickup" | "drop" | "exfil" | "hunker" | "recover" | "restore" | "scan";
+export type AbilityId = PerkId | "cutradio" | "secure" | "dose" | "lockdown" | "doors" | "siren" | "calm" | "restrain" | "pickup" | "drop" | "exfil" | "hunker" | "recover" | "restore" | "scan"
+  | "hood" | "lead096" | "score" | "shake" | "casemask";
 
 import type { AmmoId, AttachmentId, WeaponType } from "../data/weapons";
 export type { AmmoId, AttachmentId, WeaponType };
 
 export type ItemId = "armor" | "armor_light" | "armor_heavy" | "hazmat" | "leadsuit"
-  | "contsuit" | "incendiary" | "flamer" | "flare" | "eyedrops" | "flashbang" | "smoke" | "tracker" | "frag" | "csgas" | "bazooka" | "law" | "medkit" | "camera" | "restraints" | "darts" | "ward";
+  | "contsuit" | "incendiary" | "flamer" | "flare" | "eyedrops" | "flashbang" | "smoke" | "tracker" | "frag" | "csgas" | "bazooka" | "law" | "medkit" | "camera" | "restraints" | "darts" | "ward"
+  // Phase 4B capture kit, issued for the mission's anomaly
+  | "hood" | "folder" | "noisemaker" | "case";
 /** Items thrown or fired at a tile, and the heavy weapons among them (heavy armor only). */
-export const THROWN: ItemId[] = ["frag", "flashbang", "smoke", "csgas", "bazooka", "law", "flare", "incendiary", "flamer"];
+export const THROWN: ItemId[] = ["frag", "flashbang", "smoke", "csgas", "bazooka", "law", "flare", "incendiary", "flamer", "noisemaker"];
 export const HEAVY: ItemId[] = ["bazooka", "law", "flamer"];
 
 /** The weapon a unit carries into a mission. */
@@ -23,7 +26,10 @@ export interface Carried { id: ItemId; uses: number; }
 
 export type Side = "mtf" | "dclass" | "subject" | "civilian" | "raider" | "anomaly" | "zombie";
 /** Anomalies a mission can be about. */
-export type ScpId = "173" | "049" | "106" | "500" | "914" | "005";
+export type ScpId = "173" | "049" | "106" | "500" | "914" | "005" | "096" | "012" | "939" | "035" | "682";
+/** Phase 4B: the anomalies that can be the one on a mission's map. */
+export const NEW_SCPS = ["096", "012", "939", "035", "682"] as const;
+export type NewScp = typeof NEW_SCPS[number];
 /** Raids: the Insurgency pulls back if the lift still holds at the end of this turn. */
 export const RAID_TURNS = 14;
 export type MissionKind = "breach" | "manhunt" | "coverup" | "strike" | "escort" | "retaliation" | "outbreak" | "riot" | "raid" | "rescue" | "emergency";
@@ -154,6 +160,14 @@ export interface Unit {
   medals?: string[];
   returned?: boolean;
   rankShort?: string;
+  /** Phase 4B: looking at the floor (sees only adjacent tiles; safe from SCP-096's face and SCP-012), compelled by
+   *  SCP-012 (and the turn it started), an SCP-939 instance, SCP-035's host (and the side they were on before it took
+   *  them). */
+  eyesDown?: boolean;
+  compelled?: number;
+  voice?: boolean;
+  host?: boolean;
+  wasSide?: Side;
 }
 
 export interface LogEntry { t: number; text: string; kind: string; }
@@ -195,7 +209,10 @@ export interface SquadMember {
 }
 
 /** Effects of finished research that apply during missions. */
-export interface MissionMods { blinkBonus: number; recoverBonus: number; mtfDrag: number; track173: boolean; lockdownTurns: number; calmTurns: number; pocketReturn: number;
+export interface MissionMods {
+  /** Phase 4B: research finished on the new anomalies (project ids), which changes how their missions play. */
+  r4b?: string[];
+  blinkBonus: number; recoverBonus: number; mtfDrag: number; track173: boolean; lockdownTurns: number; calmTurns: number; pocketReturn: number;
   /** Research expansion: medkit healing, stabilized operatives standing up, overwatch aim back, extra sight,
    *  Insurgent aim against armor, and how many D-Class get loose in a breach. */
   medkitHeal: number; standUp: boolean; m79: boolean; reactionBonus: number; sightBonus: number; ciAnalysis: boolean; strays: number;
@@ -259,6 +276,8 @@ export interface MissionSetup {
 
 export interface MissionResult {
   incidentId: string;
+  /** Phase 4B: won by killing every SCP-939 instance, so nothing was taken alive. */
+  noSpecimen?: boolean;
   win: boolean;
   evacuated: boolean;
   turns: number;
@@ -325,6 +344,20 @@ export interface MissionState {
   calmUntil: number;
   /** SCP-106 instead: under the floor through sunkUntil, feeding on bait on feedTurn, and the floor it has rotted. */
   has106: boolean;
+  /** Phase 4B: which anomaly is on the map (any of them), and the state of the new ones: SCP-096's targets and the turn
+   *  it screams, whether it is hooded; SCP-035's host; SCP-939 noisemakers; SCP-682's adaptations and collapse; a
+   *  mission won with no specimen (every SCP-939 instance killed). */
+  scp?: ScpId;
+  rage?: { targets: string[]; scream: number };
+  hooded?: boolean;
+  maskHost?: string;
+  lures?: { x: number; y: number; until: number }[];
+  adapt?: Record<string, number>;
+  downUntil?: number;
+  noSpecimen?: boolean;
+  told?: string[];
+  /** What the hit being dealt right now came from (a weapon type, "explosive" or "fire"), for SCP-682's adaptation. */
+  hitKind?: string;
   sunkUntil: number;
   submerged: boolean;
   feedTurn: number;

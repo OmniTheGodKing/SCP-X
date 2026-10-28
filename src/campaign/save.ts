@@ -9,7 +9,8 @@ import { newResearch } from "./research";
 import { HOME } from "../data/regions";
 import { newRegions } from "./world";
 import { newGuard } from "./security";
-import { firstSightings } from "./containment";
+import { firstSightings, newSightings } from "./containment";
+import type { ScpId } from "../game/types";
 import { issueDirectives, newCouncil } from "./council";
 import { startingModels } from "../data/weapons";
 
@@ -156,8 +157,15 @@ export function parseCampaign(raw: string): Campaign | null {
       Object.assign(c, { version: 23, tf: newTf(old.day) });
       for (const h of old.history ?? []) { const m = h.text.match(/^(SCP-\d+) was transferred to (.+) for good\.$/); if (m) old.tf.sites[m[2]]?.holds.push(m[1].slice(4) as never); }
     }
-    if (c.version === 23) fixEta10Calls((c as unknown as Campaign).roster);
-    return c.version === 23 ? (c as unknown as Campaign) : null;
+    if (c.version === 23) {
+      // Phase 4B: the five new anomalies get first sightings counted from where this campaign is now
+      const old = c as unknown as Campaign;
+      const known = new Set([...old.scps.map(s => s.id), ...(old.lostScps ?? [])]);
+      for (const [id, day] of Object.entries(newSightings(old.day))) if (!known.has(id) && old.sightings[id as ScpId] === undefined) old.sightings[id as ScpId] = day;
+      Object.assign(c, { version: 24 });
+    }
+    if (c.version === 24) fixEta10Calls((c as unknown as Campaign).roster);
+    return c.version === 24 ? (c as unknown as Campaign) : null;
   } catch {
     return null;
   }

@@ -65,7 +65,7 @@ export function demoBreach(r: Unit): boolean {
   if (seen(wx, wy)) highlight(4, "#ff9a50");
   emitNoise(wx, wy, "explosion", r);
   log(`${seen(r.x, r.y) || seen(wx, wy) ? "An Insurgent sapper" : "Something"} blows ${what === "door" ? "a door off its hinges" : "a hole through the wall"}${seen(wx, wy) ? "" : " nearby"}.`, "bad");
-  for (const u of S.units) if (u.alive && u !== r && cheb(u.x, u.y, wx, wy) <= 1) damage(u, 2);
+  for (const u of S.units) if (u.alive && u !== r && cheb(u.x, u.y, wx, wy) <= 1) { S.hitKind = "explosive"; damage(u, 2); }
   S.mem.set("bang-" + r.id, { x: wx, y: wy, turn: S.turn });
   computeVis();
   return true;

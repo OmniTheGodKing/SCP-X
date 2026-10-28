@@ -889,7 +889,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   }
 
   function researchTab() {
-    const branches: Branch[] = ["SCP-173", ...(["049", "106"] as const).filter(id => c.scps.some(s => s.id === id)).map(id => `SCP-${id}` as Branch),
+    const branches: Branch[] = ["SCP-173", ...(["049", "106", "096", "012", "939", "035", "682"] as const).filter(id => c.scps.some(s => s.id === id)).map(id => `SCP-${id}` as Branch),
       ...(c.scps.some(isInert) ? ["Objects" as Branch] : []),
       ...((c.materials.prisoners ?? 0) > 0 ? ["Insurgency" as Branch] : []), "Personnel", "Weapons", "Equipment", "Site"];
     const offer = c.research.offer, insp = c.research.inspired;
