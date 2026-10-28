@@ -2,7 +2,9 @@
 import { BOND_AIM } from "../campaign/condition";
 import { charmTurns, officerNear } from "./ciTactics";
 import { DIRS, DRUM, FULL, HALF, STEEL, TS, WALL, L, bfs, cheb, tileAt, type Pt } from "../core/grid";
-import { bestView, type View } from "../core/sight";
+import { MIN_SIGHT, fireLine, viewSpots, visFrac, type View } from "../core/sight";
+import { breakGlass, d2, openDoor } from "../core/grid";
+import { emitNoise, facingTo } from "./noise";
 import { hasPerk, rangeOf } from "./perks";
 import { TYPES, rangeMod } from "../data/weapons";
 import { prof } from "./profiles";
@@ -38,8 +40,29 @@ export function activeGun(u: Unit): Gun | undefined {
 }
 export const usingSidearm = (u: Unit) => u.side === "mtf" && !!u.gun && u.gun.ammo < 1;
 
+/** Phase 4I: where the target can be hit from. Visibility isn't enough: the shot needs a clear line of fire (no wall,
+ *  shut door or reinforced glass in the way) from the shooter's tile or a spot they can lean out to, to the target's
+ *  tile or to the spot the target leaned out to this turn. The best such view, or null. */
+export function lineOfFire(sh: Unit, tg: Unit): (View & { tx: number; ty: number }) | null {
+  const lit = !!S.setup.night && S.flares.some(f => f.until >= S.turn && Math.max(Math.abs(f.x - tg.x), Math.abs(f.y - tg.y)) <= 2);
+  const range = lit ? Math.max(rangeOf(sh), 30) : rangeOf(sh);
+  const aims: [number, number][] = [[tg.x, tg.y]];
+  if (tg.exposed && tg.exposed.turn >= S.turn - 1 && (tg.exposed.x !== tg.x || tg.exposed.y !== tg.y)) aims.push([tg.exposed.x, tg.exposed.y]);
+  let best: (View & { tx: number; ty: number }) | null = null;
+  for (const [sx, sy] of viewSpots(sh.x, sh.y)) for (const [tx, ty] of aims) {
+    if (d2(sx, sy, tx, ty) > range * range) continue;
+    const f = visFrac(sx, sy, tx, ty);
+    if (f < MIN_SIGHT || !fireLine(sx, sy, tx, ty)) continue;
+    const own = sx === sh.x && sy === sh.y;
+    if (!best || f > best.f || (f === best.f && own)) best = { f, x: sx, y: sy, tx, ty };
+  }
+  return best;
+}
+/** Can see the target and has a line of fire to it. */
+export const canShoot = (sh: Unit, tg: Unit) => !!lineOfFire(sh, tg);
+
 export function shotInfo(sh: Unit, tg: Unit, reaction = false): ShotInfo {
-  const v = bestView(sh.x, sh.y, tg.x, tg.y, rangeOf(sh)) || { f: 0, x: sh.x, y: sh.y };
+  const v = lineOfFire(sh, tg) || { f: 0, x: sh.x, y: sh.y, tx: tg.x, ty: tg.y };
   const dist = Math.hypot(tg.x - v.x, tg.y - v.y);
   const hunkered = (tg.hunkerUntil ?? -1) >= S.turn;
   const cover = coverAgainst(tg.x, tg.y, v.x, v.y) * (hunkered ? 2 : 1);
@@ -58,6 +81,8 @@ export function shotInfo(sh: Unit, tg: Unit, reaction = false): ShotInfo {
   else if (partial) mods.push(["Partly hidden", -15]);
   const rm = rangeMod(gun?.type ?? "rifle", dist);
   if (rm) mods.push(rm);
+  // facing: a reaction shot at someone behind them means turning first
+  if (reaction && sh.facing !== undefined) { const d = Math.abs(((facingTo(tg.x - sh.x, tg.y - sh.y) - sh.facing) % 8 + 12) % 8 - 4); if (d > 2) mods.push(["Turning to fire", -10]); }
   if (reaction && !hasPerk(sh, "covering_fire")) mods.push(["Reaction shot", (gun?.type === "mg" ? -5 : -15) + (sh.side === "mtf" ? Math.min(S.setup.mods.reactionBonus ?? 0, gun?.type === "mg" ? 5 : 15) : 0)]);
   if (sh.side === "raider" && tg.hasArmor && S.setup.mods.ciAnalysis) mods.push(["Known weapons", -5]);
   if (officerNear(sh)) mods.push(["Officer nearby", 10]);
@@ -101,6 +126,15 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
   if (sh.side === "mtf" && S.setup.weather !== "storm") breakConcealment("shots fired");
   if (sh.gun && !sidearm) sh.gun.ammo = Math.max(0, sh.gun.ammo - 1);
   const hit = Math.random() * 100 < info.chance;
+  // leaning out to fire leaves the shooter exposed at that spot through the enemy's reply
+  if (info.from.x !== sh.x || info.from.y !== sh.y) sh.exposed = { x: info.from.x, y: info.from.y, turn: S.turn };
+  // ordinary glass in the way shatters (and stays broken)
+  { const aim = info.from as View & { tx?: number; ty?: number }, panes = fireLine(info.from.x, info.from.y, aim.tx ?? tg.x, aim.ty ?? tg.y) ?? [];
+    let broke = 0; for (const [gx, gy] of panes) if (breakGlass(gx, gy)) broke++;
+    if (broke && (seen(panes[0][0], panes[0][1]) || isTeam(sh))) log(`Glass shatters.`);
+    if (broke) emitNoise(panes[0][0], panes[0][1], "glass", sh); }
+  sh.facing = facingTo(tg.x - sh.x, tg.y - sh.y);
+  if (gun?.attachment !== "suppressor") emitNoise(info.from.x, info.from.y, "gunfire", sh);
   const [x0, y0] = center(info.from), [x1, y1] = center(tg);
   const ox = hit ? 0 : (Math.random() - .5) * 26, oy = hit ? 0 : (Math.random() - .5) * 26;
   fx({ type: "line", x0, y0, x1: x1 + ox, y1: y1 + oy, color: sh.side === "mtf" ? "#9cc4e4" : "#d0a6e6", dur: 260 });
@@ -204,7 +238,11 @@ export function kill(u: Unit, by173 = false) {
 export async function moveUnit(u: Unit, path: Pt[]) {
   for (const [x, y] of path) {
     if (!u.alive) return;
+    // a shut door opens as someone walks through it, and stays open
+    if (openDoor(x, y)) { emitNoise(x, y, "door", u); if (isTeam(u)) computeVis(); }
+    if (u.x !== x || u.y !== y) u.facing = facingTo(x - u.x, y - u.y);
     u.x = x; u.y = y;
+    if (!hasPerk(u, "quiet_steps") && u.side !== "anomaly") emitNoise(x, y, "footsteps", u);
     if (u.carrying) { const c = S.units.find(v => v.id === u.carrying); if (c) { c.x = x; c.y = y; } }
     // SCP-106's rot eats at anyone who walks through it
     if (S.corroded.has(y * L.W + x) && u.side !== "anomaly" && u.armorKind !== "hazmat") { log(`${full(u)} steps in the black rot (1 damage).`, "bad"); damage(u, 1); }
@@ -212,12 +250,12 @@ export async function moveUnit(u: Unit, path: Pt[]) {
     // Insurgent snipers on overwatch take their shot at anyone of the team who moves where they can see
     if (isTeam(u)) for (const r of alive("raider")) {
       if (!u.alive || u.downed) break;
-      if (r.overwatch && !isPanicked(r) && canSee(r, u.x, u.y)) { r.overwatch = false; if (seen(r.x, r.y)) log(`${r.name} fires from overwatch.`, "bad"); await fire(r, u, true); }
+      if (r.overwatch && !isPanicked(r) && canShoot(r, u)) { r.overwatch = false; if (seen(r.x, r.y)) log(`${r.name} fires from overwatch.`, "bad"); await fire(r, u, true); }
     }
     if (u.side === "raider") {
       for (const m of alive("mtf")) {
         if (!u.alive) break;
-        if (m.overwatch && !isPanicked(m) && canSee(m, u.x, u.y)) {
+        if (m.overwatch && !isPanicked(m) && canShoot(m, u)) {
           m.overwatchShots = (m.overwatchShots ?? 1) - 1;
           if (m.overwatchShots <= 0) m.overwatch = false;
           await fire(m, u, true);

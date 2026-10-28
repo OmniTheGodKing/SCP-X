@@ -1,9 +1,10 @@
 // Player actions and the turn cycle: your move, SCP-173, the Insurgency, then loose D-Class.
+import { settleFacing, facingTo, facingName, emitNoise } from "./noise";
 import { hazardDealt } from "./mission";
 import { reinforcementsTick } from "./ciTactics";
-import { DRUM, FLOOR, HALF, L, STEEL, TS, area, area as area_, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, setSlow, setVault, tileAt, DIRS, type Pt } from "../core/grid";
+import { blastStructure, DRUM, FLOOR, HALF, L, STEEL, TS, area, area as area_, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, setSlow, setVault, tileAt, DIRS, type Pt } from "../core/grid";
 import { setSmoke, sightFrom } from "../core/sight";
-import { activeGun, damage, fire, kill, moveUnit } from "./combat";
+import { canShoot, activeGun, damage, fire, kill, moveUnit } from "./combat";
 import { TYPES } from "../data/weapons";
 import { abilityTargets, useAbility } from "./abilities";
 import { hasPerk, rangeOf, spend, usesLeft } from "./perks";
@@ -138,6 +139,7 @@ export function sealCheck(u: Unit | null) {
 
 export function startPlayerTurn(first: boolean) {
   S.phase = "player"; S.called = false; S.mode = null; S.throwing = null;
+  settleFacing();
   const smokeBefore = S.smoke.length;
   S.smoke = S.smoke.filter(s => s.until >= S.turn);
   setSmoke(S.smoke.map(s => [s.x, s.y]));
@@ -203,6 +205,8 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
     S.pending = { x, y }; S.hover = { x, y }; hooks.update(); return false;
   };
   if (S.mode === "doors") { toggleDoor(x, y, flash); return; }
+  // turning to face somewhere costs nothing; it's where they look when nothing else needs their attention
+  if (S.mode === "face" && sel) { if (x !== sel.x || y !== sel.y) { sel.prefFacing = sel.facing = facingTo(x - sel.x, y - sel.y); log(`${sel.call || sel.name} faces ${facingName(sel.facing)}.`); } S.mode = null; hooks.update(); return; }
   if (S.mode === "lead") {
     if (!leadOptions().has(y * L.W + x)) { flash("SCP-049 can be led up to 3 tiles along open floor."); return; }
     if (!confirm()) return;
@@ -237,6 +241,7 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
   }
   if (u && u.side === "anomaly" && (S.has049 || (S.has106 && !S.submerged)) && seen(x, y) && sel.side === "mtf" && sel.ap > 0) {
     if (!canSee(sel, x, y)) { flash(`${sel.call} has no line of sight to ${u.name}.`); return; }
+    if (!canShoot(sel, u)) { flash(`${sel.call} can see ${u.name} but has no line of fire.`); return; }
     const fw = fireCheck(sel);
     if (fw) { flash(fw); return; }
     if (!confirm()) return;
@@ -252,6 +257,7 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
   if (u && (u.side === "raider" || u.side === "zombie") && seen(x, y)) {
     if (sel.side !== "mtf") { flash("D-Class are unarmed."); return; }
     if (!canSee(sel, x, y)) { flash(`${sel.call} has no line of sight to that target.`); return; }
+    if (!canShoot(sel, u)) { flash(`${sel.call} can see the target but has no line of fire (a wall or reinforced glass is in the way).`); return; }
     const fw = fireCheck(sel);
     if (fw) { flash(fw); return; }
     if (!confirm()) return;
@@ -456,13 +462,17 @@ function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y
   if (item.id === "frag" || item.id === "bazooka" || item.id === "law") {
     const power = item.id === "bazooka" ? 5 : item.id === "law" ? 4 : 3;
     fx({ type: "flash", x: x * TS + TS / 2, y: y * TS + TS / 2, dur: 500 });
+    emitNoise(x, y, "explosion", u);
     log(item.id === "frag" ? `${full(u)} throws a frag grenade.` : `${full(u)} fires the ${item.id === "bazooka" ? "bazooka" : "LAW"}.`, "key");
     for (const v of S.units.filter(v => v.alive && !v.saved && v.side !== "anomaly").filter(inArea)) {
       const soak = Math.min(v.armor ?? 0, power);
       damage(v, power - soak, u);
       if (v.armor && hasPerk(u, "shredder")) v.armor--;
     }
-    for (const [a, b] of area.concat(DIRS.map(([dx, dy]) => [x + dx, y + dy] as Pt))) if (tileAt(a, b) === HALF) { L.grid[b][a] = FLOOR; }
+    // the blast takes cover, doors, partitions and glass; a rocket also opens an ordinary interior wall
+    { const broke = new Set<string>();
+      for (const [a, b] of area.concat(DIRS.map(([dx, dy]) => [x + dx, y + dy] as Pt))) { const r = blastStructure(a, b, item.id === "frag" ? 1 : 2); if (r) broke.add(r); }
+      if (broke.size) { log(`The blast tears out ${[...broke].map(k => ({ cover: "cover", door: "a door", partition: "a partition", window: "glass", wall: "a wall" }[k])).join(", ")}.`); computeVis(); } }
     // blasts set off fuel drums and scorch flesh
     for (const [a, b] of area) if (tileAt(a, b) === DRUM || S.flesh.has(b * L.W + a)) ignite(a, b, 1);
     if (!hasPerk(u, "quiet_steps")) S.mem.set("bang-" + u.id, { x, y, turn: S.turn });

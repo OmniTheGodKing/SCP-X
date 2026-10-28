@@ -2,7 +2,7 @@
 import { MISSION_STEPS } from "./tutorial";
 import { optionalMet } from "../game/mission";
 import { DRUM, EXIT, L, area, inContainer } from "../core/grid";
-import { activeGun, shotInfo } from "../game/combat";
+import { canShoot, activeGun, shotInfo } from "../game/combat";
 import { AMMO } from "../data/weapons";
 import { WEATHER } from "../data/weather";
 import { NOTES_173 } from "../game/notes";
@@ -54,7 +54,7 @@ const TEMPLATE = `
       <span class="pill" id="turnPill">Turn 1</span>
       <span class="pill" id="phasePill">Your move</span>
       <span class="pill hot" id="sirenPill" hidden title="The breach siren: nobody recovers sanity on quiet turns, but SCP-173 can't hear where shots come from. Silence it at the panel.">Siren</span>
-      <span class="pill" id="nightPill" hidden title="Night: everyone sees 4 tiles less, except inside a flare's light.">Night</span>
+      <span class="pill" id="nightPill" hidden title="Night: nobody sees farther than 6 tiles, except inside a flare's light.">Night</span>
       <span class="pill" id="weatherPill" hidden></span>
       <span class="pill" id="concealPill" hidden title="Insurgents haven't noticed the team. They only spot you within 4 tiles. Firing or throwing anything gives you away.">Concealed</span>
       <span id="sndSlot"></span>
@@ -115,6 +115,7 @@ const TEMPLATE = `
       <button class="act" id="sealBtn" type="button">Seal <kbd>S</kbd></button>
       <button class="act" id="owBtn" type="button">Overwatch <kbd>O</kbd></button>
       <button class="act" id="reloadBtn" type="button">Reload <kbd>R</kbd></button>
+      <button class="act" id="faceBtn" type="button" title="Set where they face when nothing needs their attention. Costs nothing.">Face <kbd>F</kbd></button>
       <span class="itembar" id="itemBar"></span>
       <button class="act" id="nextBtn" type="button">Next <kbd>Tab</kbd></button>
       <button class="act primary" id="endBtn" type="button">End turn <kbd>E</kbd></button>
@@ -389,6 +390,8 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     setBtn("owBtn", off || (!sel ? "Select someone." : sel.side !== "mtf" ? "D-Class are unarmed." : sel.ap < 1 ? "No actions left this turn." : null));
     setBtn("nextBtn", off);
     setBtn("reloadBtn", off || reloadCheck(sel));
+    setBtn("faceBtn", off || (!sel ? "Select someone." : null));
+    $("faceBtn").classList.toggle("on", S.mode === "face");
     setBtn("endBtn", off);
     setBtn("evacBtn", off);
     const bar = $("itemBar");
@@ -416,12 +419,13 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     else if (!can) h = S.over ? "" : "Enemy activity…";
     else if (sel) {
       const hv = S.hover && unitAt(S.hover.x, S.hover.y);
-      if (S.mode === "doors") h = `<b>Blast doors.</b>\nClick a doorway to seal it (up to ${MAX_SEALED}) or to open a sealed one. Escape to cancel.`;
+      if (S.mode === "face") h = `<b>${esc(full(sel))}: face which way?</b>\nClick any tile: they turn to face it and keep facing that way when nothing needs their attention. Costs nothing. They still notice enemies behind them.`;
+      else if (S.mode === "doors") h = `<b>Blast doors.</b>\nClick a doorway to seal it (up to ${MAX_SEALED}) or to open a sealed one. Escape to cancel.`;
       else if (S.mode === "lead") h = `<b>SCP-049 is listening.</b>\nClick a green tile to lead it there (up to 3 tiles), or press Escape to leave it where it stands.`;
       else if (S.mode === "ability" && S.ability) h = `<b>${esc(full(sel))}: ${abilityName(S.ability)}.</b>\n${esc(abilityDesc(S.ability))} Click a highlighted target.`;
       else if (S.mode === "throw" && S.throwing) h = `<b>${esc(full(sel))}: choose where to throw the ${ITEM_NAMES[S.throwing.id].toLowerCase()}.</b>\nLit tiles are in range and in sight. It covers the target tile and every tile around it. Throwing ends their turn.`;
       else if (S.mode === "drag") h = `<b>${esc(sel.name)}: choose where to drag SCP-173.</b>\nOrange tiles keep it in someone else's sight the whole way. Dragging ends their turn.`;
-      else if (hv && hv.side === "raider" && seen(hv.x, hv.y) && sel.side === "mtf" && sel.ap > 0 && canSee(sel, hv.x, hv.y)) {
+      else if (hv && hv.side === "raider" && seen(hv.x, hv.y) && sel.side === "mtf" && sel.ap > 0 && canShoot(sel, hv)) {
         const s = shotInfo(sel, hv);
         const fw = fireCheck(sel);
         h = `<b>${sel.call} → Insurgent: ${s.chance}% to hit</b>${s.crit ? `, ${s.crit}% crit` : ""}${activeGun(sel) ? ` · ${activeGun(sel)!.name}, ${activeGun(sel)!.dmg[0]}–${activeGun(sel)!.dmg[1]} damage` : ""}${sel.gun?.attachment === "bayonet" && Math.max(Math.abs(sel.x - hv.x), Math.abs(sel.y - hv.y)) <= 1 ? " · bayonet: a sure 3" : ""}${fw ? `\n<b>${esc(fw)}</b>` : ""}\n` + s.mods.map(m => `${m[0]} ${m[1] >= 0 ? "+" : ""}${m[1]}`).join(" · ");
@@ -463,6 +467,8 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   $("owBtn").onclick = doOverwatch;
   $("nextBtn").onclick = selectNext;
   $("reloadBtn").onclick = () => doReload(flash);
+  const toggleFace = () => { if (!S.selected || !canAct()) return; S.mode = S.mode === "face" ? null : "face"; update(); };
+  $("faceBtn").onclick = toggleFace;
   $("endBtn").onclick = endTurn;
   $("itemBar").addEventListener("click", e => {
     const b = (e.target as HTMLElement).closest<HTMLElement>("[data-item]");
@@ -496,6 +502,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     else if (k === "e") endTurn();
     else if (k === "o") doOverwatch();
     else if (k === "r") doReload(flash);
+    else if (k === "f") toggleFace();
     else if (k === "b") toggleStare(flash);
     else if (k === "c") callBlink(flash);
     else if (k === "g") toggleDrag(flash);

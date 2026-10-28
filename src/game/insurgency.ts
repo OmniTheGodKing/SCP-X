@@ -3,7 +3,7 @@
 import { commanderFlees, demoBreach } from "./ciTactics";
 import { L, area, bfs, cheb, nearContainer, pathTo } from "../core/grid";
 import { sightFrom } from "../core/sight";
-import { coverAgainst, fire, moveUnit, shotInfo } from "./combat";
+import { canShoot, coverAgainst, fire, moveUnit, shotInfo } from "./combat";
 import { prof } from "./profiles";
 import { S, alive, breakConcealment, canSee, isBlind, isPanicked, log, occupied, reveal, seen, team } from "./state";
 import type { Unit } from "./types";
@@ -26,6 +26,19 @@ export const DETECT = 4;
 /** How close the team can get to unalerted Insurgents (fog lets them get 2 tiles closer). */
 export const detectRange = () => DETECT - (S.setup.weather === "fog" ? 2 : 0);
 const podOf = (r: Unit) => r.pod ?? 0;
+type Spot = { x: number; y: number };
+/** Phase 4I: where the Insurgency thinks the team is. Members any Insurgent can see right now; where members were
+ *  last seen (for two turns); and where they were heard (roughly). The AI plays by the same rules as the player. */
+function knownTargets(): Spot[] {
+  const out: Spot[] = [], rs = alive("raider");
+  for (const m of team()) {
+    if (rs.some(r => !isBlind(r) && canSee(r, m.x, m.y))) { S.mem.set("seen-" + m.id, { x: m.x, y: m.y, turn: S.turn }); out.push(m); continue; }
+    const k = S.mem.get("seen-" + m.id);
+    if (k && S.turn - k.turn <= 2) out.push({ x: k.x, y: k.y });
+  }
+  for (const [key, m] of S.mem) if (key.startsWith("heard-") && S.turn - m.turn <= 1) out.push({ x: m.x, y: m.y });
+  return out;
+}
 export const podActive = (r: Unit) => S.activePods.includes(podOf(r));
 
 /** Why this pod wakes up this turn, if it does. */
@@ -48,8 +61,9 @@ export async function activatePod(pod: number, why: string) {
   if (why === "spotted" && S.concealed) breakConcealment("an Insurgent spotted the team");
   if (S.setup.kind === "breach") { reveal("ci"); log("Chaos Insurgency strike team moving in.", "bad"); }
   else if (members.some(r => seen(r.x, r.y))) log(`An Insurgency fire team is alerted${why === "heard" ? " by the noise" : why === "hit" ? " by the attack" : ""} and scrambles for cover.`, "bad");
+  const known = knownTargets();
   for (const r of members) {
-    const spot = bestSpot(r, team());
+    const spot = bestSpot(r, known.length ? known : team());
     if (spot) await moveUnit(r, spot);
   }
 }
@@ -70,7 +84,17 @@ export async function raiderPhase(checkEnd: () => boolean) {
     const members = rs.filter(r => podOf(r) === pod);
     const why = alarm(S.units.filter(u => u.side === "raider" && podOf(u) === pod));
     if (why) { await activatePod(pod, why); if (checkEnd()) return; continue; }
-    for (const r of members) if (Math.random() < 0.4) {
+    // a pod that heard something goes to look; otherwise it patrols its room
+    const heard = members.map(r => S.mem.get("heard-" + r.id)).find(m => m && S.turn - m.turn <= 1);
+    if (heard) {
+      for (const r of members) {
+        const res = bfs([[r.x, r.y]], 3, (x, y) => occupied(x, y, r)), toward = bfs([[heard.x, heard.y]], 99).dist;
+        let best = -1;
+        for (let i = 0; i < L.W * L.H; i++) if (res.dist[i] > 0 && toward[i] >= 0 && (best < 0 || toward[i] < toward[best])) best = i;
+        if (best >= 0 && toward[best] < toward[r.y * L.W + r.x]) await moveUnit(r, pathTo(res, best % L.W, (best / L.W) | 0) || []);
+      }
+      if (seen(heard.x, heard.y) || members.some(r => seen(r.x, r.y))) log("Insurgents move to check on a noise.", "bad");
+    } else for (const r of members) if (Math.random() < 0.4) {
       const res = bfs([[r.x, r.y]], 2, (x, y) => occupied(x, y, r));
       const opts: number[] = [];
       for (let i = 0; i < L.W * L.H; i++) if (res.dist[i] > 0 && area(i % L.W, (i / L.W) | 0) === area(r.x, r.y)) opts.push(i);
@@ -100,7 +124,7 @@ function workTruck(r: Unit) {
 }
 
 /** The best place within reach to fight from: in cover, flanking if possible, at a middling distance. */
-function bestSpot(r: Unit, t: Unit[]) {
+function bestSpot(r: Unit, t: Spot[]) {
   const res = bfs([[r.x, r.y]], 5, (x, y) => occupied(x, y, r));
   if (!t.length) return null;
   const md = bfs(t.map(m => [m.x, m.y] as [number, number]), 999).dist;
@@ -135,7 +159,7 @@ async function raiderAct(r: Unit) {
     let best: { m: Unit; s: ReturnType<typeof shotInfo>; score: number } | null = null;
     // in a retaliation, the locals are targets too
     const targets = S.setup.kind === "retaliation" ? [...t, ...alive("civilian")] : t;
-    for (const m of targets) if (canSee(r, m.x, m.y)) {
+    for (const m of targets) if (canShoot(r, m)) {
       const s = shotInfo(r, m);
       const score = s.chance + (m.side === "mtf" ? 10 : 0) - (m.side === "civilian" ? 15 : 0);
       if (!best || score > best.score) best = { m, s, score };
@@ -144,7 +168,9 @@ async function raiderAct(r: Unit) {
     // a sniper with no good shot settles in and watches; a sapper with nothing to shoot opens a wall
     if (r.role === "sniper" && (best || r.ap === 1)) { r.ap = 0; r.overwatch = true; if (seen(r.x, r.y)) log(`${r.name} settles in on overwatch.`, "bad"); return; }
     if (!best && demoBreach(r)) return;
-    const path = bestSpot(r, t);
+    const known = knownTargets();
+    // on a raid or an ambush they know where they're going even before they've seen anyone
+    const path = known.length ? bestSpot(r, known) : S.setup.kind === "raid" || S.setup.kind === "escort" || S.setup.kind === "retaliation" ? bestSpot(r, team()) : null;
     if (!path) {
       if (best && best.s.chance >= 20) { r.ap = 0; await fire(r, best.m, false); }
       return;

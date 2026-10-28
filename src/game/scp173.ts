@@ -1,7 +1,8 @@
 // SCP-173's AI. It moves one tile at a time, up to 8 tiles per turn, and freezes the moment
 // it steps into the sight of anyone whose eyes are open. It kills anyone it reaches unseen and
 // keeps going. It only knows what it can see from where it stands, plus gunfire it hears.
-import { DIRS, L, area, bfs, canStep, cheb, inContainer, passable, pathTo, type Pt } from "../core/grid";
+import { emitNoise } from "./noise";
+import { openDoor, DIRS, L, area, bfs, canStep, cheb, inContainer, passable, pathTo, type Pt } from "../core/grid";
 import { rawSight, sightFrom } from "../core/sight";
 import { kill } from "./combat";
 import { STRAY_BLINK, blinkChance, prof } from "./profiles";
@@ -81,7 +82,9 @@ function step173(path: Pt[], blinked: Set<Unit>) {
   const st = S.statue;
   let steps = 0;
   for (const [x, y] of path) {
+    openDoor(x, y);
     st.x = x; st.y = y; steps++;
+    if (steps === 1) emitNoise(x, y, "scp", st);
     if (watchedAt(x, y, blinked)) return { steps, frozen: true };
   }
   return { steps, frozen: false };

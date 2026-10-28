@@ -1,5 +1,9 @@
-// Line of sight: strict at corners, partial visibility, and leaning past cover.
-import { L, R, d2, opaque, passable } from "./grid";
+// Line of sight and line of fire (Phase 4I): rays against the real geometry (walls, shut doors, partitions, smoke;
+// windows are transparent), no fixed sight radius, partial visibility, and leaning past cover.
+import { L, WINDOW, d2, opaque, passable, stopsShot, tileAt } from "./grid";
+
+/** As far as anyone can see in clear daylight: the whole map. Night, fog and weather shorten it (see rangeOf). */
+export const SIGHT_MAX = 60;
 
 // Smoke blocks sight like a wall while it lasts. With smoke on the map, sight isn't cached.
 let smoke = new Set<number>();
@@ -7,37 +11,36 @@ export function setSmoke(tiles: [number, number][]) { smoke = new Set(tiles.map(
 export const smoky = (x: number, y: number) => smoke.has(y * L.W + x);
 const solid = (x: number, y: number) => opaque(x, y) || (smoke.size > 0 && smoke.has(y * L.W + x));
 
-/** How far off square a sight line may cross a doorway it passes through (tan of about 30°). Someone standing
- *  beside a doorway can't see along the inside of the wall; standing in it or in front of it sees normally. */
-export const DOOR_SLANT = 0.58;
-const doorBlocks = (x: number, y: number, dx: number, dy: number) => {
-  if (!L.doors.has(y * L.W + x)) return false;
-  const throughVertical = opaque(x - 1, y) && opaque(x + 1, y);     // walls left and right: people pass up or down
-  const throughHorizontal = opaque(x, y - 1) && opaque(x, y + 1);
-  if (throughVertical) return Math.abs(dx) > DOOR_SLANT * Math.abs(dy);
-  if (throughHorizontal) return Math.abs(dy) > DOOR_SLANT * Math.abs(dx);
-  return false;
-};
-
-// Exact grid walk between two points (tile units). A ray that passes exactly through a
-// corner is blocked if either tile beside that corner is solid, so nothing squeezes past.
-function rayClear(x0: number, y0: number, x1: number, y1: number) {
+// Exact grid walk between two points (tile units). A ray that passes exactly through a corner is blocked only when
+// both tiles beside that corner are solid (it can't squeeze between two walls touching at a corner); grazing the
+// corner of a single wall is fine, as it would be in reality. There is no limit on the angle through a doorway.
+function walk(x0: number, y0: number, x1: number, y1: number, blocks: (x: number, y: number) => boolean, onTile?: (x: number, y: number) => void) {
   let cx = Math.floor(x0), cy = Math.floor(y0);
   const ex = Math.floor(x1), ey = Math.floor(y1), dx = x1 - x0, dy = y1 - y0;
   const sx = Math.sign(dx), sy = Math.sign(dy);
   const tdx = sx ? Math.abs(1 / dx) : Infinity, tdy = sy ? Math.abs(1 / dy) : Infinity;
   let tx = sx > 0 ? (cx + 1 - x0) / dx : sx < 0 ? (x0 - cx) / -dx : Infinity;
   let ty = sy > 0 ? (cy + 1 - y0) / dy : sy < 0 ? (y0 - cy) / -dy : Infinity;
-  for (let guard = 0; guard < 80 && !(cx === ex && cy === ey); guard++) {
+  for (let guard = 0; guard < 160 && !(cx === ex && cy === ey); guard++) {
     if (Math.abs(tx - ty) < 1e-9) {
-      if (solid(cx + sx, cy) || solid(cx, cy + sy)) return false;
+      if (blocks(cx + sx, cy) && blocks(cx, cy + sy)) return false;
       cx += sx; cy += sy; tx += tdx; ty += tdy;
     } else if (tx < ty) { cx += sx; tx += tdx; }
     else { cy += sy; ty += tdy; }
     if (cx === ex && cy === ey) break;
-    if (solid(cx, cy) || doorBlocks(cx, cy, dx, dy)) return false;
+    if (blocks(cx, cy)) return false;
+    onTile?.(cx, cy);
   }
   return true;
+}
+const rayClear = (x0: number, y0: number, x1: number, y1: number) => walk(x0, y0, x1, y1, solid);
+
+/** Line of fire from one tile's centre to another's: walls, shut doors, partitions and reinforced glass stop it,
+ *  smoke doesn't. Returns null if blocked, or the panes of ordinary glass the shot passes through (they shatter). */
+export function fireLine(ax: number, ay: number, bx: number, by: number): [number, number][] | null {
+  const glass: [number, number][] = [];
+  const ok = walk(ax + .5, ay + .5, bx + .5, by + .5, stopsShot, (x, y) => { if (tileAt(x, y) === WINDOW) glass.push([x, y]); });
+  return ok ? glass : null;
 }
 
 // At least 3 of 10 sight lines must be clear to see a tile; fewer is just a sliver.
@@ -45,12 +48,12 @@ export const MIN_SIGHT = 0.3;
 const SAMPLES: [number, number][] = [[.5, .5], [.15, .15], [.85, .15], [.15, .85], [.85, .85]];
 
 // The map never changes during a mission, so results are cached per level.
-let cacheFor: unknown = null;
+let cacheFor: unknown = null, cacheVer = -1;
 let visCache = new Int8Array(0);
 const leanCache = new Map<number, [number, number][]>();
 function ensureCache() {
-  if (cacheFor === L) return;
-  cacheFor = L;
+  if (cacheFor === L && cacheVer === L.version) return;
+  cacheFor = L; cacheVer = L.version;
   visCache = new Int8Array(L.W * L.H * L.W * L.H).fill(-1);
   leanCache.clear();
 }
@@ -100,7 +103,7 @@ export function viewSpots(x: number, y: number) {
 
 export interface View { f: number; x: number; y: number; }
 /** Best view a person at (x, y) gets of a tile, leaning if that helps. Null means no sight. */
-export function bestView(x: number, y: number, tx: number, ty: number, range = R): View | null {
+export function bestView(x: number, y: number, tx: number, ty: number, range = SIGHT_MAX): View | null {
   let best: View | null = null;
   for (const [sx, sy] of viewSpots(x, y)) {
     if (d2(sx, sy, tx, ty) > range * range) continue;
@@ -109,6 +112,6 @@ export function bestView(x: number, y: number, tx: number, ty: number, range = R
   }
   return best;
 }
-export const sightFrom = (x: number, y: number, tx: number, ty: number, range = R) => !!bestView(x, y, tx, ty, range);
+export const sightFrom = (x: number, y: number, tx: number, ty: number, range = SIGHT_MAX) => !!bestView(x, y, tx, ty, range);
 /** Sight without leaning, for things that don't lean (SCP-173). */
-export const rawSight = (x: number, y: number, tx: number, ty: number) => d2(x, y, tx, ty) <= R * R && visFrac(x, y, tx, ty) >= MIN_SIGHT;
+export const rawSight = (x: number, y: number, tx: number, ty: number, range = SIGHT_MAX) => d2(x, y, tx, ty) <= range * range && visFrac(x, y, tx, ty) >= MIN_SIGHT;

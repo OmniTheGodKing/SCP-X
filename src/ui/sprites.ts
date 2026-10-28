@@ -33,6 +33,8 @@ export function placeOf(u: Unit, now: number): { x: number; y: number; ang: numb
     a.tx = tx; a.ty = ty;
   }
   let moving = false;
+  // Phase 4I: at rest, a unit faces the way it's facing in the rules (where it last moved, shot, glanced or was told to)
+  if (!a.dur && u.facing !== undefined && now - a.fired > 450) a.ang = u.facing * Math.PI / 4;
   if (a.dur) {
     const k = Math.min(1, (now - a.t0) / a.dur);
     a.x = a.fromX + (a.toX - a.fromX) * k; a.y = a.fromY + (a.toY - a.fromY) * k;

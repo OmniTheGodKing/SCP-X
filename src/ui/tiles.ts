@@ -1,7 +1,7 @@
 // The tactical map's static art: walls, floors, cover, doors, props and lighting, drawn once per level into an
 // offscreen canvas and redrawn only when the grid changes (a desk blown apart). Everything here is drawn in code.
 // Kept dark and low in contrast so units, overlays and tags stay readable on top.
-import { CONT, DRUM, EXIT, FULL, HALF, L, STEEL, TS, WALL, area, passable, tileAt, type Level } from "../core/grid";
+import { CONT, DRUM, EXIT, FULL, HALF, L, PART, STEEL, TS, WALL, WINDOW, area, passable, tileAt, type Level } from "../core/grid";
 import { S } from "../game/state";
 
 type MapId = "wingC" | "town" | "farm" | "port" | "dblock" | "gate";
@@ -44,7 +44,7 @@ let cache: { level: Level; sig: string; cv: HTMLCanvasElement } | null = null;
 let rubble = new Set<number>();
 let lastGrid: number[] | null = null;
 
-const gridSig = () => { let s = ""; for (const row of L.grid) s += row.join(""); return s; };
+const gridSig = () => { let s = String(L.version) + ":"; for (const row of L.grid) s += row.join(""); return s; };
 
 /** The static map layer for the current level, rebuilt only when something on it changed. */
 export function mapLayer(dpr: number): HTMLCanvasElement {
@@ -83,7 +83,7 @@ function paint(ctx: CanvasRenderingContext2D) {
   // 1. floors everywhere (under walls too, so fences and hedges stand on something)
   for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) {
     const t = tileAt(x, y);
-    if (t === WALL) { const n = neighbourOpen(x, y); floor(ctx, x, y, ground(n), map); continue; }
+    if (t === WALL || t === WINDOW || t === PART) { const n = neighbourOpen(x, y); floor(ctx, x, y, ground(n), map); continue; }
     floor(ctx, x, y, surf[at(x, y)], map);
   }
   // 2. painted markings and lighting, before anything stands on the floor
@@ -124,6 +124,7 @@ function paint(ctx: CanvasRenderingContext2D) {
     else if (passable(x, y)) decal(ctx, x, y, a, sf, map);
   }
   for (const i of L.doors) door(ctx, i % L.W, (i / L.W) | 0, map, th.mat);
+  for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) { if (tileAt(x, y) === WINDOW) windowTile(ctx, x, y, th.mat); else if (tileAt(x, y) === PART) partition(ctx, x, y); }
 
   // 5. room names stencilled faintly on the floor, and the tile grid so moves can be counted
   roomLabels(ctx, areas);
@@ -588,34 +589,83 @@ function containerTile(ctx: CanvasRenderingContext2D, x: number, y: number, side
 }
 
 function door(ctx: CanvasRenderingContext2D, x: number, y: number, map: MapId, mat: Material) {
-  const px = x * TS, py = y * TS;
-  const vertical = tileAt(x - 1, y) === WALL && tileAt(x + 1, y) === WALL;   // walls left and right: you pass north–south
-  const f = FACE[mat];
-  if (map === "wingC" || map === "dblock") {
-    // a sliding blast door, open, with its hazard-striped threshold and frame
-    if (vertical) {
-      ctx.fillStyle = f.face; ctx.fillRect(px, py + 2, 4, TS - 4); ctx.fillRect(px + TS - 4, py + 2, 4, TS - 4);
-      hazard(ctx, px + 4, py + TS / 2 - 3, TS - 8, 6, 0.45);
-      ctx.fillStyle = "#6b7884"; ctx.fillRect(px - 2, py + 4, 4, TS - 8);    // the door slid into the wall
-    } else {
-      ctx.fillStyle = f.face; ctx.fillRect(px + 2, py, TS - 4, 4); ctx.fillRect(px + 2, py + TS - 4, TS - 4, 4);
-      ctx.save(); ctx.translate(px + TS / 2, py + TS / 2); ctx.rotate(Math.PI / 2); hazard(ctx, -TS / 2 + 4, -3, TS - 8, 6, 0.45); ctx.restore();
-      ctx.fillStyle = "#6b7884"; ctx.fillRect(px + 4, py - 2, TS - 8, 4);
-    }
+  const px = x * TS, py = y * TS, d = L.door.get(y * L.W + x);
+  const wallish = (t: number) => t === WALL || t === WINDOW || t === PART || t === STEEL;
+  const ns = wallish(tileAt(x - 1, y)) && wallish(tileAt(x + 1, y));   // walls left and right: you pass north–south
+  const f = FACE[mat], site = map === "wingC" || map === "dblock";
+  const state = d?.state ?? "open", kind = d?.kind ?? "standard";
+  // the frame, always there unless the door was blown out
+  const frame = () => { ctx.fillStyle = f.face; if (ns) { ctx.fillRect(px, py + 2, 4, TS - 4); ctx.fillRect(px + TS - 4, py + 2, 4, TS - 4); } else { ctx.fillRect(px + 2, py, TS - 4, 4); ctx.fillRect(px + 2, py + TS - 4, TS - 4, 4); } };
+  // the leaf across the opening (closed or locked), in its kind's material
+  const leaf = () => {
+    const col = kind === "containment" ? "#5d6a74" : kind === "security" ? "#6b7884" : kind === "emergency" ? "#8a3a2c" : mat === "metal" ? "#6b7884" : "#7a5b38";
+    ctx.save(); ctx.translate(px + TS / 2, py + TS / 2); if (!ns) ctx.rotate(Math.PI / 2);
+    ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.fillRect(-TS / 2 + 3, -2, TS - 6, 9);
+    ctx.fillStyle = col; ctx.fillRect(-TS / 2 + 3, -4, TS - 6, kind === "containment" ? 9 : 7);
+    if (kind === "containment") hazard(ctx, -TS / 2 + 3, 3, TS - 6, 2, 0.6);
+    else if (kind === "security") { ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.fillRect(-1, -4, 2, 7); }
+    else { ctx.fillStyle = "#c9a35a"; ctx.fillRect(TS / 2 - 9, -1, 2, 2); }
+    ctx.restore();
+  };
+  if (state === "destroyed" || state === "breached") {
+    // blown out: a scorched gap and the door in pieces
+    ctx.fillStyle = "rgba(10,10,10,0.45)"; ctx.beginPath(); ctx.ellipse(px + TS / 2, py + TS / 2, 13, 10, 0, 0, Math.PI * 2); ctx.fill();
+    for (let k = 0; k < 5; k++) { ctx.fillStyle = k % 2 ? "#6b7884" : "#5a4630"; ctx.save(); ctx.translate(px + 6 + noise(x, y, k) * 20, py + 6 + noise(x, y, k + 5) * 20); ctx.rotate(noise(x, y, k + 9) * 3); ctx.fillRect(-4, -1.5, 8, 3); ctx.restore(); }
+    if (state === "breached") frame();
+    return;
+  }
+  frame();
+  if (state === "closed" || state === "locked") {
+    leaf();
+    if (state === "locked") { ctx.fillStyle = "#d75b47"; ctx.beginPath(); ctx.arc(px + (ns ? TS - 6 : TS / 2), py + (ns ? TS / 2 - 7 : TS - 6), 2, 0, Math.PI * 2); ctx.fill(); }
+    else if (site) { ctx.fillStyle = "#86c193"; ctx.beginPath(); ctx.arc(px + (ns ? TS - 6 : TS / 2), py + (ns ? TS / 2 - 7 : TS - 6), 1.6, 0, Math.PI * 2); ctx.fill(); }
+    return;
+  }
+  // open
+  if (site) {
+    // a sliding door, open: the hazard-striped threshold, the door slid into the wall
+    if (ns) { hazard(ctx, px + 4, py + TS / 2 - 3, TS - 8, 6, 0.45); ctx.fillStyle = "#6b7884"; ctx.fillRect(px - 2, py + 4, 4, TS - 8); }
+    else { ctx.save(); ctx.translate(px + TS / 2, py + TS / 2); ctx.rotate(Math.PI / 2); hazard(ctx, -TS / 2 + 4, -3, TS - 8, 6, 0.45); ctx.restore(); ctx.fillStyle = "#6b7884"; ctx.fillRect(px + 4, py - 2, TS - 8, 4); }
     return;
   }
   // a hinged door standing open, with its swing drawn on the floor
   ctx.strokeStyle = "rgba(216,191,134,0.18)"; ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
   ctx.fillStyle = mat === "metal" ? "#6b7884" : "#7a5b38";
-  if (vertical) {
-    ctx.beginPath(); ctx.arc(px + 2, py + 2, TS - 6, 0, Math.PI / 2); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillRect(px + 1, py + 2, 3, TS - 6);
+  ctx.beginPath(); ctx.arc(px + 2, py + 2, TS - 6, 0, Math.PI / 2); ctx.stroke(); ctx.setLineDash([]);
+  if (ns) ctx.fillRect(px + 1, py + 2, 3, TS - 6); else ctx.fillRect(px + 2, py + 1, TS - 6, 3);
+  ctx.fillStyle = f.hi; ctx.fillRect(px, py, ns ? 2 : TS, ns ? TS : 2);
+}
+
+/** A window set in a wall: the frame, the glass (wired if reinforced), or the shards once it's broken. */
+function windowTile(ctx: CanvasRenderingContext2D, x: number, y: number, mat: Material) {
+  const px = x * TS, py = y * TS, g = L.glass.get(y * L.W + x), f = FACE[mat];
+  const ns = tileAt(x - 1, y) !== WINDOW && (tileAt(x - 1, y) === WALL || tileAt(x + 1, y) === WALL || tileAt(x - 1, y) === WINDOW || tileAt(x + 1, y) === WINDOW);
+  ctx.save(); ctx.translate(px + TS / 2, py + TS / 2); if (!ns) ctx.rotate(Math.PI / 2);
+  // sill and frame
+  ctx.fillStyle = f.top; ctx.fillRect(-TS / 2, -6, TS, 12);
+  ctx.fillStyle = f.face; ctx.fillRect(-TS / 2, 4, TS, 3);
+  if (g?.broken) {
+    ctx.fillStyle = "rgba(15,19,23,0.85)"; ctx.fillRect(-TS / 2 + 2, -3, TS - 4, 6);
+    ctx.fillStyle = "rgba(190,215,230,0.7)";
+    for (let k = 0; k < 6; k++) { const sx = -TS / 2 + 3 + noise(x, y, k) * (TS - 6); ctx.beginPath(); ctx.moveTo(sx, -3); ctx.lineTo(sx + 2, -3); ctx.lineTo(sx + 1, -3 + 2 + noise(x, y, k + 3) * 3); ctx.closePath(); ctx.fill(); }
   } else {
-    ctx.beginPath(); ctx.arc(px + 2, py + 2, TS - 6, 0, Math.PI / 2); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillRect(px + 2, py + 1, TS - 6, 3);
+    ctx.fillStyle = g?.kind === "reinforced" ? "rgba(150,190,210,0.55)" : "rgba(170,205,225,0.45)"; ctx.fillRect(-TS / 2 + 2, -3, TS - 4, 6);
+    ctx.fillStyle = "rgba(255,255,255,0.35)"; ctx.fillRect(-TS / 2 + 4, -2, 8, 1);
+    if (g?.kind === "reinforced") { ctx.strokeStyle = "rgba(30,40,50,0.6)"; ctx.lineWidth = 0.6; ctx.beginPath(); for (let k = -TS / 2 + 4; k < TS / 2 - 2; k += 4) { ctx.moveTo(k, -3); ctx.lineTo(k, 3); } ctx.stroke(); ctx.fillStyle = f.hi; ctx.fillRect(-TS / 2, -6, TS, 1.5); ctx.fillRect(-TS / 2, 4.5, TS, 1.5); }
   }
-  ctx.setLineDash([]);
-  ctx.fillStyle = f.hi; ctx.fillRect(px, py, vertical ? 2 : TS, vertical ? TS : 2);
+  ctx.restore();
+}
+
+/** A partition: a thin stud wall that explosives can open. */
+function partition(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  const px = x * TS, py = y * TS;
+  const ns = tileAt(x, y - 1) === WALL || tileAt(x, y + 1) === WALL || tileAt(x, y - 1) === PART || tileAt(x, y + 1) === PART;   // runs north–south
+  ctx.save(); ctx.translate(px + TS / 2, py + TS / 2); if (ns) ctx.rotate(Math.PI / 2);
+  ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.fillRect(-TS / 2, -3, TS, 9);
+  ctx.fillStyle = "#8a8578"; ctx.fillRect(-TS / 2, -5, TS, 9);
+  ctx.strokeStyle = "rgba(60,55,45,0.6)"; ctx.lineWidth = 1; ctx.beginPath(); for (let k = -TS / 2 + 4; k < TS / 2; k += 8) { ctx.moveTo(k, -5); ctx.lineTo(k, 4); } ctx.stroke();
+  ctx.fillStyle = "#a39e90"; ctx.fillRect(-TS / 2, -5, TS, 2);
+  ctx.restore();
 }
 
 /** Small things on the floor that belong to the place: stains in the cell, papers in offices, oil in the motor pool. */

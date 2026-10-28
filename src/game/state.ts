@@ -1,4 +1,5 @@
 // The running mission and the helpers everything else uses to read it.
+import { noteContacts } from "./noise";
 import { L, R } from "../core/grid";
 import { sightFrom } from "../core/sight";
 import { adjustLoss, rangeOf, type LossKind } from "./perks";
@@ -27,7 +28,7 @@ export const occupied = (x: number, y: number, except?: Unit) =>
   S.units.some(u => u !== except && u.alive && !u.saved && !u.carriedBy && u.x === x && u.y === y);
 /** At night anything inside a flare's light can be seen from as far as in daylight. */
 export const lit = (x: number, y: number) => S.flares.some(f => f.until >= S.turn && Math.max(Math.abs(f.x - x), Math.abs(f.y - y)) <= 2);
-export const canSee = (u: Unit, x: number, y: number) => sightFrom(u.x, u.y, x, y, rangeOf(u)) || (!!S.setup.night && lit(x, y) && sightFrom(u.x, u.y, x, y, R));
+export const canSee = (u: Unit, x: number, y: number) => sightFrom(u.x, u.y, x, y, rangeOf(u)) || (!!S.setup.night && lit(x, y) && sightFrom(u.x, u.y, x, y, 30));
 export const seen = (x: number, y: number) => S.vis[y * L.W + x] === 1;
 export const starers = () => team().filter(m => m.staring);
 export const label = (u: Unit) => u.call || u.name;
@@ -75,6 +76,7 @@ export function computeVis() {
   const st = S.statue;
   if (S.has173 && !S.sealed && seen(st.x, st.y)) S.lastSeen = { x: st.x, y: st.y, turn: S.turn };
   updateStares();
+  noteContacts();
 }
 
 // "Do not blink" switches on automatically the moment someone on the team gains sight of

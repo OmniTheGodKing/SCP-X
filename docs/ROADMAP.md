@@ -926,6 +926,51 @@ agents; 60 days of play produced 8 leads of four kinds.
 7. A visible enemy behind the operative can still be detected under general XCOM-style awareness; facing does not impose an arbitrary blind sector.
 8. New map props and effects do not create misleading cover, block objectives, or degrade tactical readability; map dimensions remain unchanged.
 
+#### 4I as built (done; verified in source and in-game)
+- **Structure layer (src/core/grid.ts):** doors have a kind (standard; security inside Site-19; containment into a cell)
+  and a state (open, closed, locked, breached, destroyed), all starting closed. New tiles: windows (`w` ordinary, `W`
+  reinforced observation glass, intact or broken) and partitions (`p`). Opaque = walls, full cover, steel, partitions
+  and shut doors; windows are transparent. Passable = floor, exits, container, open/closed/breached/destroyed doors
+  (not locked doors, windows or partitions). A separate "stops a shot" test adds intact reinforced glass. A version
+  number goes up on every structural change and clears the sight caches and the map's art.
+- **Vision (src/core/sight.ts):** no fixed radius. Clear daylight sees the whole map; rain caps sight at 14 tiles,
+  snow 12, storm 10, fog 6, night 6 (4 at night in bad weather), Keen eyes and research add to a cap; flares still let
+  the lit area be seen from 30. Rays run against the real geometry; the 30° doorway limit is gone, and a ray grazing
+  a single wall corner passes while two walls touching at a corner still block. Leaning out past a wall edge stays.
+- **Line of fire (src/game/combat.ts):** lineOfFire picks a spot the shooter can fire from (own tile or a lean spot)
+  with a clear ballistic line to the target (or to where the target leaned out this turn). Seeing isn't shooting:
+  through reinforced glass you can watch but not fire. Leaning out to fire leaves the shooter exposed at that spot
+  for the reply. Ordinary glass the shot passes through shatters and stays broken. All player, overwatch and AI
+  shooting use it; the target tooltip and percentages show only shootable enemies.
+- **Doors and destruction:** walking through a shut door opens it (and makes a noise). Grenades take half cover,
+  doors, partitions and glass; rockets and breaching charges also take ordinary interior walls, but never Site-19's
+  reinforced walls or the map edge. The sapper's charge now opens partitions, shut doors or ordinary walls only.
+  Everything changed updates pathing, cover, sight and fire immediately.
+- **Maps:** reinforced observation windows from wing C's corridor into SCP-173's cell; partitions between the records
+  room and the canteen; the D-Class block's guard room overlooks the cell corridor through reinforced glass; shop and
+  house windows on Main Street; farmhouse, port office, gatehouse, office and barracks windows; a storeroom partition at
+  the port. Wing C and the D-Class block are marked reinforced. Map sizes are unchanged.
+- **Facing (src/game/noise.ts):** units face where they last moved, fired or glanced; the Face button (F) sets a
+  resting direction for free. Facing is not a sight cone: anyone behind is still seen. A reaction shot at someone more
+  than 90° off the shooter's facing takes −10 ("Turning to fire").
+- **Hearing:** footsteps 7 tiles, doors 9, SCP-173's scrape 9, breaking glass 12, gunfire 24, explosions 32; −1 per
+  tile, −5 per wall or partition, −3 per shut door, less in a storm, rain or under the siren. The team hears only what
+  it can't already see: each listener gets a direction, rougher the fainter it was, drawn as an arc and arrow by them,
+  a one-line callout ("E11-03 hears footsteps to the north"), and a glance; at the start of the next turn they turn
+  back to their resting direction unless an enemy is in sight, in which case they face the nearest. Insurgents hear by
+  the same rules, remember a rough spot, and send the pod to look. Suppressed weapons make no gunfire noise; Quiet
+  steps makes no footstep noise.
+- **The AI plays fair:** Insurgents move on where they can see team members, where they last saw them (two turns), and
+  what they heard, not on the team's true positions (except on raids, ambushes and attacks, where they know their goal).
+  Enemies that drop out of sight leave a "last seen T#" ghost marker until seen again.
+- **Tests (tests/accept4i.e2e.cjs, on wing C in a live mission), all 8 passing:** (1) a 25-tile corridor sight line,
+  blocked by a wall; (2) from beside a doorway, sight into the room at steep angles through the opening and not
+  through the wall beside it; (3) no shot through a wall, and a corner shot only from the lean spot; (4) closed, open,
+  locked and destroyed doors and intact/broken reinforced glass each change sight, movement and fire correctly;
+  (5) a partition blown open changes sight and movement at once, while a rocket against a reinforced wall does nothing;
+  (6) footsteps behind a shut door are heard with a rough direction, the listener glances north and turns back to east;
+  (7) an enemy straight behind is still seen; (8) map size unchanged and every window sits in a wall line.
+
 ### Open planning questions (NOT approved feature specifications)
 
 - Which visual problem dominates tactical combat: stiff character motion, weak weapon impacts, lifeless environments, or insufficient enemy activity? Decide the order after looking at actual gameplay.
