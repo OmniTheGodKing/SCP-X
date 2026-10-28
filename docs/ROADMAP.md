@@ -911,6 +911,44 @@ then the new mission types.
 shows the right floor), generates 50 towns and checks each against the rules, starts each new map, and drives each
 new mission type to a win and a loss.
 
+#### 4C as built (done; verified in source and in-game)
+- **Floors (src/core/grid.ts, src/ui/render.ts, src/ui/missionView.ts):** MapDef gained floors (rows each covers, and
+  whether it's underground) and links (stairs, lifts, ladders as tile pairs, optionally "closed": only the team can work
+  them until something opens them). Both pathfinders (bfs, and the anomalies' own routes) treat a link as one step.
+  The canvas shows one floor (view.floor), clicks map onto that floor's rows, selecting someone (or their changing
+  floor) switches the view, and a bar over the map names each floor with how many of the team are there and whether
+  hostiles are seen on it. Underground floors have no weather or night, in sight and on screen. Mirroring a map now
+  mirrors its road and station spawns, links and control room too (the raid's road spawns were missed before).
+- **Maps (src/data/maps.ts):** Rail yard (boxcars drawn as long cars on rails, signal box, goods shed, platform,
+  station office, freight lot with the truck); Village church (pews in the nave, bell tower, rectory, parish hall,
+  headstones in the graveyard); Research site (labs above, containment basement below, stair and lift, the power
+  panel in containment control); Freighter (deck with container stacks drawn as shipping containers, the bridge, hold,
+  crew quarters and engine room below, two ladders); and level 1 of Site-19 under the surface compound, joined by the
+  lift. fieldMap() picks the map per mission kind: recoveries, rescues and escorts on the town, farm, rail yard or
+  church (all have the truck); cover-ups and retaliations the same; outbreaks town, farm or church; strikes the port
+  (twice as likely), freighter, rail yard or church; partner-site emergencies the research site.
+- **Generated towns (src/data/towngen.ts):** half of town missions (all convoys) use a generated town as specified.
+  Checks, as built: everything reachable from the west end of the street, cover on 8 to 15% of the street, at least two
+  rooms 10 or more steps and 8 tiles from the entry, and the truck lot's container with a free tile in front of it;
+  20 tries, then Main Street. 50 of 50 generated in testing, no fallbacks.
+- **Base defence:** as specified. The squad on station comes out by the level-1 lift (the lift group); off duty, by the
+  surface gate. Once the lift is forced its link opens to everyone, and the Insurgents spend both actions making for
+  containment control, shooting only when there or blocked; one inside at the end of two enemy turns running wins it.
+- **GOC, GRU-P, convoy, quiet site (src/game/rivals.ts):** as specified, with these details: GOC operatives carry M1
+  Garands (3 to 5 damage, 8 rounds), aim 70, 5 HP, +1 armor; GOC and GRU-P teams are active from the start (they're
+  there for it); the GOC skips SCP-939 sightings; GRU-P carry SCP-173, SCP-012, the mask on the floor, or a hooded
+  SCP-096; an anomaly lost to either is removed from Site-19's records and sightings, joins the lost list and costs 5
+  standing. Convoys are half of ambushed transfers; the truck follows the street toward the east exits round anything
+  in the road, 3 tiles after each enemy turn. Quiet sites come about once a year from 1952 (the first within a year of
+  1952 starting), on the research site map; the World Map card says nobody knows what happened, and the mission's
+  status card says "Unknown" until the team sees the cause, when the log and a banner name it.
+- **Tests:** tests/floors.e2e.cjs (6 checks: two floors and a closed lift, the squad on level 1, the floor bar, the
+  team riding the lift, a forced lift opening the way down, an Insurgent going down and holding control to win) and
+  tests/accept4c.e2e.cjs (19 checks: 50 generated towns; GOC destroying an anomaly and the campaign losing it, and
+  being stopped; GRU-P picking it up, dropping it when a carrier is hit, and carrying it off when left alone; a convoy
+  getting through and being taken; a quiet site staying unknown until seen; each new map starting and playing a turn).
+  tests/spawns.e2e.cjs now covers the new maps too (30 starts, none with an enemy in sight or within 8 tiles).
+
 ### 4D: campaign story and endgame (existing proposal, details pending)
 - **A campaign arc:** the Chaos Insurgency's agenda, the O5 Council and the anomalies build toward a defined climax
   instead of running forever. Story beats unlock at milestones (years passed, anomalies held, the agenda's steps,
@@ -1296,7 +1334,7 @@ of 4I and 4G after 4E):
 3. 4F dynamic World Map activity (done).
 4. 4I tactical map geometry, visibility, facing, firing and sound (done; the foundation 4G builds on).
 5. 4G tactical combat life and presentation (done).
-6. 4B more anomalies (done); next 4C maps and mission variety, then 4H combat variety and progression.
+6. 4B more anomalies (done), 4C maps and mission variety (done); next 4H combat variety and progression.
 7. 4D campaign story and endgame last.
 
 ## Phase 5: 3D, XCOM style

@@ -23,6 +23,10 @@ function mirror(def: MapDef): MapDef {
     strayRooms: def.strayRooms.map(mr),
     hatch: def.hatch && mx(def.hatch),
     panel: def.panel && mx(def.panel),
+    roadSpawns: def.roadSpawns?.map(mx),
+    stationSpawns: def.stationSpawns?.map(mx),
+    links: def.links?.map(l => ({ ...l, a: mx(l.a), b: mx(l.b) })),
+    control: def.control && mr(def.control),
   };
 }
 

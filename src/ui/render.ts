@@ -1,5 +1,5 @@
 // Draws the tactical map, units, sightlines, previews and effects onto the mission canvas.
-import { CONT, DRUM, EXIT, FULL, HALF, L, STEEL, TS, WALL, area, inContainer, passable, pathTo, tileAt, type Pt } from "../core/grid";
+import { CONT, DRUM, EXIT, FULL, HALF, L, STEEL, TS, WALL, area, floorOf, inContainer, passable, pathTo, tileAt, type Pt } from "../core/grid";
 import { sightFrom } from "../core/sight";
 import { canShoot, activeGun, center, coverAgainst, shotInfo } from "../game/combat";
 import { S, canAct, canSee, isPanicked, isTeam, seen, team, unitAt } from "../game/state";
@@ -26,10 +26,18 @@ const C = {
   manila: "#d8bf86", alert: "#d75b47", ok: "#86c193",
 };
 
+/** Which floor is on screen, on maps with floors. */
+export const view = { floor: 0 };
+/** The rows the screen shows: the floor on view, or the whole map. */
+export function viewRows() { const f = L.def.floors?.[view.floor]; return f ? { y0: f.y0, h: f.y1 - f.y0 + 1 } : { y0: 0, h: L.H }; }
+
 export function createRenderer(cv: HTMLCanvasElement) {
   const ctx = cv.getContext("2d")!;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
-  cv.width = L.W * TS * dpr; cv.height = L.H * TS * dpr;
+  // Phase 4C: a map with floors shows one floor at a time (view.floor), drawn from its own rows
+  const floorH = L.def.floors ? L.def.floors[0].y1 - L.def.floors[0].y0 + 1 : L.H;
+  cv.width = L.W * TS * dpr; cv.height = floorH * TS * dpr;
+  view.floor = L.def.floors && S.units.some(u => u.side === "mtf") ? floorOf(S.units.find(u => u.side === "mtf")!.y) : 0;
   resetAnims();
   const fxr = createFx(), living = createLiving();
 
@@ -208,6 +216,18 @@ export function createRenderer(cv: HTMLCanvasElement) {
     }
     ctx.restore();
   }
+  /** The convoy's truck, seen from above, facing east. */
+  function drawLorry(cx: number, cy: number, _ang: number) {
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.45)"; ctx.fillRect(cx - 17, cy - 8, 38, 20);
+    ctx.fillStyle = "#4a5238"; ctx.fillRect(cx - 19, cy - 11, 26, 22);           // the covered cargo bed
+    ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1; for (let k = -15; k < 7; k += 5) { ctx.beginPath(); ctx.moveTo(cx + k + 0.5, cy - 11); ctx.lineTo(cx + k + 0.5, cy + 11); ctx.stroke(); }
+    ctx.fillStyle = "#5c6646"; ctx.fillRect(cx + 8, cy - 9, 10, 18);             // cab
+    ctx.fillStyle = "rgba(170,200,210,0.6)"; ctx.fillRect(cx + 15, cy - 7, 3, 14); // windscreen
+    ctx.fillStyle = "#d8bf86"; ctx.fillRect(cx - 4, cy - 2, 7, 4);
+    ctx.restore();
+    tag("TRANSFER", cx, cy - 19, C.manila);
+  }
   function draw939(cx: number, cy: number, ang: number, now: number, hurt: number) {
     ctx.save();
     ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.beginPath(); ctx.ellipse(cx + 2, cy + 3, 13, 8, ang, 0, Math.PI * 2); ctx.fill();
@@ -303,6 +323,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
     } else if (u.side === "civilian") {
       const col = u.record ? "#d9c27a" : u.dosed ? "#8a9a86" : "#cfc6a8";
       drawBase(ctx, cx, cy, "square", u.witness && !u.dosed ? C.manila : col);
+      if (u.vehicle) { drawLorry(cx, cy, p.ang); return; }
       if (u.radio) drawRadio(ctx, cx, cy);
       else if (u.record) drawRecords(ctx, cx, cy);
       else drawPerson(ctx, cx, cy, p.ang, look, { hurt, bob });
@@ -370,7 +391,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
   // Weather over the whole map: falling streaks or flakes from a fixed scatter, scrolled by time, and a haze for fog.
   function drawWeather(now: number) {
     const w = S.setup.weather;
-    if (!w || w === "clear") return;
+    if (!w || w === "clear" || L.def.floors?.[view.floor]?.under) return;
     const Wp = L.W * TS, Hp = L.H * TS;
     if (w === "fog") {
       const drift = now / 9000;
@@ -441,14 +462,15 @@ export function createRenderer(cv: HTMLCanvasElement) {
     const [ox, oy] = fxr.offset(now, hl);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = "#0b0e11"; ctx.fillRect(0, 0, L.W * TS, L.H * TS);
-    ctx.setTransform(dpr, 0, 0, dpr, ox * dpr, oy * dpr);
+    const top = L.def.floors ? L.def.floors[Math.min(view.floor, L.def.floors.length - 1)].y0 * TS : 0;
+    ctx.setTransform(dpr, 0, 0, dpr, ox * dpr, (oy - top) * dpr);
     stateSounds();
     drawTiles();
     fxr.under(ctx);
     living.floor(ctx, now);
     drawFog();
     // night: the map is dark except where flares burn
-    if (S.setup.night) {
+    if (S.setup.night && !L.def.floors?.[view.floor]?.under) {
       ctx.fillStyle = "rgba(4,8,20,0.38)"; ctx.fillRect(0, 0, L.W * TS, L.H * TS);
       for (const f of S.flares.filter(f => f.until >= S.turn)) {
         const g = ctx.createRadialGradient(f.x * TS + TS / 2, f.y * TS + TS / 2, 4, f.x * TS + TS / 2, f.y * TS + TS / 2, TS * 2.6);
@@ -716,6 +738,6 @@ export function createRenderer(cv: HTMLCanvasElement) {
     drawWeather(now);
 
     S.effects = S.effects.filter(e => now - e.t0 < e.dur);
-    fxr.over(ctx, now, S.effects, L.W * TS, L.H * TS, hl, drawStatue);
+    fxr.over(ctx, now, S.effects, L.W * TS, floorH * TS, hl, drawStatue, top);
   };
 }

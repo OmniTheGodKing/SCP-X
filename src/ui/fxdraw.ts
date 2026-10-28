@@ -77,14 +77,17 @@ export function createFx() {
   }
 
   function edge(ctx: CanvasRenderingContext2D, W: number, H: number, color: string, a: number) {
-    const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.72);
+    const g = ctx.createRadialGradient(W / 2, top + H / 2, Math.min(W, H) * 0.35, W / 2, top + H / 2, Math.max(W, H) * 0.72);
     g.addColorStop(0, hexA(color, 0)); g.addColorStop(1, hexA(color, a));
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = g; ctx.fillRect(0, top, W, H);
   }
 
   /** Over everything: shots, impacts, blasts, cues, floating text, banners and edge flashes. `drawStatue` draws
    *  SCP-173's ghost where it stood. */
-  function over(ctx: CanvasRenderingContext2D, now: number, effects: Effect[], W: number, H: number, on: boolean, drawStatue: (x: number, y: number, a: number) => void) {
+  /** The top of the floor on screen (Phase 4C: maps with two floors show one at a time). */
+  let top = 0;
+  function over(ctx: CanvasRenderingContext2D, now: number, effects: Effect[], W: number, H: number, on: boolean, drawStatue: (x: number, y: number, a: number) => void, viewTop = 0) {
+    top = viewTop;
     // lingering smoke from explosions, drifting and thinning over about six seconds
     for (let i = smoke.length - 1; i >= 0; i--) {
       const s = smoke[i], k = (now - s.t0) / 6000;
@@ -179,7 +182,7 @@ export function createFx() {
           break;
         }
         case "banner": {
-          const a = Math.min(1, k * 7, (1 - k) * 4), y = H * 0.42, slide = (1 - Math.min(1, k * 6)) * 30;
+          const a = Math.min(1, k * 7, (1 - k) * 4), y = top + H * 0.42, slide = (1 - Math.min(1, k * 6)) * 30;
           ctx.globalAlpha = a;
           ctx.fillStyle = "rgba(10,12,14,0.78)"; ctx.fillRect(0, y - 22, W, 44);
           ctx.fillStyle = e.color; ctx.fillRect(0, y - 22, W, 2); ctx.fillRect(0, y + 20, W, 2);

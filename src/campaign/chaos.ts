@@ -1,3 +1,4 @@
+import { fieldMap } from "../data/maps";
 // The Chaos Insurgency as one organization: a single worldwide agenda that advances while its cells and operations go
 // unchecked (like XCOM 2's Avatar Project), monthly operations Site-19 can find and disrupt (like dark events), a named
 // field commander who keeps coming back, and the moles behind some "accidents". The other groups, the Global Occult
@@ -161,7 +162,7 @@ function newPlans(c: Campaign) {
   const group = "ops" + k.nextPlan, open0 = Math.min(...made.map(p => p.win![0]));
   for (const p of made) {
     const at = isContacted(c, p.region) ? p.region : HOME, inc = locateCellFor(c, at);
-    inc.plan = p.id; inc.ciOp = true; inc.group = group; inc.map = pick(["port", "town", "farm"] as const);
+    inc.plan = p.id; inc.ciOp = true; inc.group = group; inc.map = fieldMap("strike");
     inc.expires = Math.max(open0, c.day + travelDays(c, at) + 3);
     inc.title = `${inc.title} (${PLANS[p.kind].name})`;
     p.cell = inc.id;

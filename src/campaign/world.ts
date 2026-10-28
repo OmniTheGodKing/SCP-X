@@ -1,3 +1,4 @@
+import { fieldMap } from "../data/maps";
 // The world outside Site-19: regional exposure and Foundation fronts, travel, cover-ups,
 // Insurgency cells and amnestics.
 import { earn, spend } from "./ledger";
@@ -131,7 +132,7 @@ export function spawnCoverup(c: Campaign, at?: RegionId, quiet = false): Inciden
   if (!r) return;
   const town = pick(REGIONS[r].towns);
   const inc = newIncident(c, {
-    kind: "coverup", region: r, map: Math.random() < 0.5 ? "town" : "farm", scpId: "",
+    kind: "coverup", region: r, map: fieldMap("coverup"), scpId: "",
     what: `${(st => st[0].toUpperCase() + st.slice(1))(pick(STORIES))}, ${town}`,
     expires: c.day + travelDays(c, r) + 4, insurgents: Math.random() < 0.5 ? 0 : rand(1, 2), witnesses: rand(3, 5), civilians: rand(1, 3),
   });
@@ -159,7 +160,7 @@ export function locateCell(c: Campaign, r: RegionId, found = false) {
 export function locateCellFor(c: Campaign, r: RegionId): Incident {
   const town = pick(REGIONS[r].towns);
   return newIncident(c, {
-    kind: "strike", region: r, map: "port", scpId: "", what: `Insurgency cell, ${town}`,
+    kind: "strike", region: r, map: fieldMap("strike"), scpId: "", what: `Insurgency cell, ${town}`,
     expires: c.day + travelDays(c, r) + 7, insurgents: Math.min(7, 4 + Math.floor((yearOf(c.day) - 1951) / 3)), witnesses: 0, civilians: 0,
   });
 }
@@ -167,7 +168,7 @@ export function locateCellFor(c: Campaign, r: RegionId): Incident {
 export function newRetaliation(c: Campaign, r: RegionId): Incident {
   const town = pick(REGIONS[r].towns);
   return newIncident(c, {
-    kind: "retaliation", region: r, map: Math.random() < 0.5 ? "town" : "farm", scpId: "",
+    kind: "retaliation", region: r, map: fieldMap("retaliation"), scpId: "",
     what: `Insurgency attack on ${town}`, expires: c.day + travelDays(c, r) + 3,
     insurgents: Math.min(7, 4 + Math.floor((yearOf(c.day) - 1951) / 3)), witnesses: 0, civilians: 6,
   });
@@ -206,7 +207,7 @@ export function tickWorld(c: Campaign) {
     const r = pick(open.length ? open : REGION_IDS);
     c.outbreak = { region: r, severity: 2, lastMission: c.day };
     c.materials.outbreaks = (c.materials.outbreaks ?? 0) + 1;
-    const inc = newIncident(c, { kind: "outbreak", region: r, map: Math.random() < 0.5 ? "town" : "farm", scpId: "", what: `SCP-610 outbreak, severity 2`, expires: c.day + 99999, insurgents: 0, witnesses: 0, civilians: 4 });
+    const inc = newIncident(c, { kind: "outbreak", region: r, map: fieldMap("outbreak"), scpId: "", what: `SCP-610 outbreak, severity 2`, expires: c.day + 99999, insurgents: 0, witnesses: 0, civilians: 4 });
     log(c, `${inc.title.split(":")[0]}: in ${pick(REGIONS[r].towns)}, people are fusing with something that grows out of the walls. SCP-610, "The Flesh that Hates". It can't be contained, only burned. It will spread every week it's left. Containment suit research is open.`, "bad", "command");
   }
   if (c.outbreak && c.day % 7 === 0) {

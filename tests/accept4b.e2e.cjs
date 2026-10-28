@@ -20,7 +20,7 @@ async function start(b, id) {
   await p.click(`[data-plan="${inc}"]`);
   await p.click('#launchBtn'); await p.waitForTimeout(300);
   if (await p.evaluate(() => !!window.__site19.campaign.outbound)) { await dbg(p, 'land'); await p.waitForTimeout(400); }
-  await p.evaluate(() => { const S = window.__site19.mission; for (const u of S.units) if (u.side === 'raider' || (u.side === 'civilian' && !u.host)) u.alive = false; window.__site19.computeVis(); });
+  await p.evaluate(() => { const S = window.__site19.mission; for (const u of S.units) if (u.side === 'raider' || u.side === 'dclass' || (u.side === 'civilian' && !u.host)) u.alive = false; window.__site19.computeVis(); });
   return { p, errs, E: (f, a) => p.evaluate(f, a) };
 }
 /** Free floor tiles near (x, y), nearest first. */
@@ -48,8 +48,14 @@ const FREE = `(x, y, n) => { const A = window.__site19, S = A.mission, G = A.gri
       // a second operative looks at it from the front, 3 tiles out, eyes up: marked
       // a floor tile in its face's wedge, 2 to 5 tiles out, with a clear sight line to it
       const n = ops[1]; let far = null;
-      for (let r = 2; r <= 5 && !far; r++) for (let y = d.y - r; y <= d.y + r && !far; y++) for (let x = d.x - r; x <= d.x + r && !far; x++)
-        if (Math.max(Math.abs(x - d.x), Math.abs(y - d.y)) === r && A.passable(x, y) && X.inFace(x, y) && A.sight(x, y, d.x, d.y) && !S.units.some(u => u.alive && u.x === x && u.y === y)) far = [x, y];
+      // turn it until its face looks over somewhere a person could stand 2 to 5 tiles away
+      for (let turn = 0; turn < 8 && !far; turn++) {
+        if (turn) d.facing = ((d.facing ?? 0) + 1) % 8;
+        for (let r = 2; r <= 5 && !far; r++) for (let y = d.y - r; y <= d.y + r && !far; y++) for (let x = d.x - r; x <= d.x + r && !far; x++)
+          if (Math.max(Math.abs(x - d.x), Math.abs(y - d.y)) === r && A.passable(x, y) && X.inFace(x, y) && A.sight(x, y, d.x, d.y) && !S.units.some(u => u.alive && u.x === x && u.y === y)) far = [x, y];
+      }
+      // and the operative looking down stands right in front of it
+      { const fr = [[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]][d.facing ?? 0]; m.x = d.x + fr[0]; m.y = d.y + fr[1]; A.computeVis(); }
       n.x = far[0]; n.y = far[1]; n.eyesDown = false; A.computeVis();
       out.n2Sees = A.canSee(n, d.x, d.y) && X.inFace(n.x, n.y);
       X.check096();
@@ -84,10 +90,12 @@ const FREE = `(x, y, n) => { const A = window.__site19, S = A.mission, G = A.gri
       A.computeVis();
       const rnd = Math.random; Math.random = () => 0.01; X.endOfEnemyPhase(); Math.random = rnd;
       const out = { compelled: n.compelled !== undefined, eyesDownSafe: m.compelled === undefined };
+      const mAt = [m.x, m.y]; m.x = 1; m.y = 1;   // out of the way while they walk to it
       const hp0 = n.hp; await X.newAnomalyPhase(); out.walked = Math.max(Math.abs(n.x - d.x), Math.abs(n.y - d.y)) <= 1; out.bled = n.hp < hp0;
       // shake them out (from next to them), then secure the score with eyes down
       const sp = free(n.x, n.y, 1)[0]; const k = ops[2] ?? ops[0]; if (k !== m) { k.x = sp[0]; k.y = sp[1]; k.eyesDown = false; }
       out.canShake = X.shakeTargets(k).includes(n); if (out.canShake) X.shakeOut(k, n); out.released = n.compelled === undefined;
+      { const sp2 = free(d.x, d.y, 8).find(([x, y]) => Math.max(Math.abs(x - d.x), Math.abs(y - d.y)) === 1); m.x = sp2[0]; m.y = sp2[1]; }
       out.canSecure = X.scoreTargets(m).length === 1;
       m.eyesDown = false; out.needsEyesDown = X.scoreTargets(m).length === 0; m.eyesDown = true;
       if (out.canSecure) { X.secureScore(m); A.computeVis(); }
@@ -113,8 +121,8 @@ const FREE = `(x, y, n) => { const A = window.__site19, S = A.mission, G = A.gri
       const f = free(v[0].x, v[0].y, 6)[5]; A.emitNoise(f[0], f[1], 'footsteps', ops[0]);
       out.heard = !!S.mem.get('939-' + v[0].id);
       out.memAt = S.mem.get('939-' + v[0].id);
-      // hidden beyond 5 tiles of the team
-      for (const o of ops) { o.x = 1; o.y = 1; }
+      // hidden beyond 5 tiles of the team: put the team in the corner farthest from it
+      for (const o of ops) { o.x = v[0].x > 13 ? 1 : 26; o.y = v[0].y > 8 ? 1 : 16; }
       out.hiddenFar = X.hidden939(v[0]);
       // a voice: force the mimic roll
       const before = S.log.length; const rnd = Math.random; Math.random = () => 0.01; await X.newAnomalyPhase(); Math.random = rnd;
@@ -168,6 +176,8 @@ const FREE = `(x, y, n) => { const A = window.__site19, S = A.mission, G = A.gri
       out.onFloor = X.maskOnFloor();
       // an operative without a suit next to it: forced roll, it takes them
       const m = ops[2] ?? ops[1]; m.x = sp[0][0]; m.y = sp[0][1]; m.armorKind = undefined; m.san = 80;
+      // everyone else well away from the mask, so the one beside it is the one it reaches for
+      for (const o of ops) if (o !== m && o !== t) { o.x = h.x > 13 ? 1 : 26; o.y = h.y > 8 ? 1 : 16; }
       // the shooter steps back out of its reach, so the one next to it is the nearest
       const back = free(h.x, h.y, 60).find(([x, y]) => Math.max(Math.abs(x - h.x), Math.abs(y - h.y)) >= 3); t.x = back[0]; t.y = back[1];
       if (!out.onFloor) { X.dropMask(h); out.onFloor = X.maskOnFloor(); }
@@ -177,8 +187,7 @@ const FREE = `(x, y, n) => { const A = window.__site19, S = A.mission, G = A.gri
       m.hp = 1; X; window.__site19.mission.hitKind = 'rifle';
       const comb = window.__site19;
       // use damage through fire() from the other operative
-      t.ap = 2; await A.fire(t, m, false).catch(() => {});
-      if (m.host) { m.hp = 1; await A.fire(t, m, false).catch(() => {}); }
+      for (let k = 0; k < 12 && m.host; k++) { t.ap = 2; m.hp = 1; await A.fire(t, m, false).catch(() => {}); }
       out.freed = !m.host && m.side === 'mtf' && m.alive;
       out.downed = !!m.downed;
       // the case: an operative in a hazmat suit beside the mask

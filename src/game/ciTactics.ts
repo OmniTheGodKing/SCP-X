@@ -16,6 +16,12 @@ export function assignRoles(units: Unit[], setup: MissionSetup) {
   if (!rs.length) return;
   const gru = !!setup.gru;
   for (const r of rs) { r.role = "rifleman"; r.aim += setup.enemyAim ?? 0; if (gru) r.name = "GRU-P operative"; }
+  // Phase 4C: a Global Occult Coalition strike team: better trained and armored, and no use for anyone else's roles
+  if (setup.goc) {
+    for (const r of rs) Object.assign(r, { name: "GOC operative", aim: 70 + (setup.enemyAim ?? 0), hp: 5, maxHp: 5, armor: (r.armor ?? 0) + 1,
+      gun: { name: "M1 Garand", type: "rifle", dmg: [3, 5], mag: 8, ammo: 8, aim: 5 } });
+    return;
+  }
   const roles = setup.ciRoles;
   const free = () => rs.find(r => r.role === "rifleman");
   if (setup.commander && !gru) { const r = free()!; Object.assign(r, { role: "commander", name: setup.commander, hp: 8, maxHp: 8, aim: 72, armor: (r.armor ?? 0) + 1 }); }

@@ -199,8 +199,36 @@ export const GATE: MapDef = {
     "#h....#....D..#.h..h....h.##",
     "#.....#.......#...........##",
     "#########...################",
+    // level 1 of Site-19, under the compound: rock between, the lift between
+    "############################",
+    "############################",
+    "############################",
+    "#........#.......#.........#",
+    "#..h..h..#..H.H..#...hh....#",
+    "#........+.......+.........#",
+    "#..h..h..#.......#...hh....#",
+    "####+######+#####W###+######",
+    "#.................#........#",
+    "#..H.........H....#.....SS.#",
+    "#.................+.....C..#",
+    "#.................+.....C..#",
+    "#..H.........H....#.....SS.#",
+    "#.................#........#",
+    "####+#######+######+########",
+    "#.......#........#.........#",
+    "#..h....#...hh...#...h.h...#",
+    "#.......+........+.........#",
+    "#..h....#........#...h.h...#",
+    "############################",
   ],
   area(x, y) {
+    if (y >= 20) {
+      const r = y - 20;
+      if (r <= 4) return x <= 8 ? "barracks" : x <= 16 ? "armoury" : "containment control";
+      if (r <= 11) return x >= 19 ? "lift lobby" : "level 1 corridor";
+      return x <= 7 ? "mess" : x <= 17 ? "records vault" : "generator room";
+    }
+    if (y >= 18) return "rock";
     if (x <= 5) return "approach road";
     if (x >= 7 && x <= 10 && y >= 2 && y <= 5) return "gatehouse";
     if (x >= 14 && y <= 5) return x <= 19 ? "west office" : "records office";
@@ -211,11 +239,229 @@ export const GATE: MapDef = {
   squadSpawns: [[22, 8], [22, 9], [23, 8], [23, 9]],
   // off-duty Epsilon-11 drives in from town through the motor pool's vehicle gate
   roadSpawns: [[9, 17], [10, 17], [11, 17], [10, 16]],
+  // Phase 4C: two floors joined by the lift, which only Site-19's people can work until the Insurgency forces it
+  floors: [{ name: "Surface", y0: 0, y1: 17 }, { name: "Level 1", y0: 20, y1: 37, under: true }],
+  links: [{ a: [25, 8], b: [24, 28], kind: "lift", closed: true }],
+  stationSpawns: [[22, 27], [22, 28], [22, 29], [22, 30]],
+  control: [18, 21, 26, 24],
   scpRooms: [],
   insurgentRooms: [[1, 1, 5, 5], [1, 6, 5, 11], [1, 12, 5, 16]],
   strayRooms: [],
   fixedFurniture: true,
 };
 
-export const MAPS = { wingC: WING_C, town: TOWN, farm: FARM, port: PORT, dblock: DBLOCK, gate: GATE };
+
+// Phase 4C: new field maps and two-floor maps.
+// A rail yard: lines of boxcars across the tracks, a signal box and a goods shed to the north, the platform and
+// station office to the south, and a lot with a truck for anything recovered.
+export const RAIL: MapDef = {
+  name: "Rail yard",
+  rows: [
+    "############################",
+    "#....#w##w#........#######.#",
+    "#....#....+..h.....#.....#.#",
+    "#....#....#.....h..+..H..#.#",
+    "#....######........#.....#.#",
+    "#..........................#",
+    "E..HHHH..HHHHHH...HHHH.HH..E",
+    "E..........................E",
+    "E..........................E",
+    "E...HHHHHH...HHHH..HHHHH...E",
+    "E..........................E",
+    "#..........................#",
+    "#.hh....hh.....hh......hh..#",
+    "#..........................#",
+    "##w##+##w##.........SCCCS..#",
+    "#.........#.........SCCCS..#",
+    "#..h...h..+.........SSSSS..#",
+    "############################",
+  ],
+  area(x, y) {
+    if (y <= 4) { if (x >= 6 && x <= 9 && y >= 2 && y <= 3) return "signal box"; if (x >= 20 && x <= 24) return "goods shed"; return "goods yard"; }
+    if (y <= 11) return "rail tracks";
+    if (y <= 13) return "platform";
+    return x <= 10 ? "station office" : "freight lot";
+  },
+  squadSpawns: [[1, 7], [1, 8], [2, 7], [2, 8]],
+  scpRooms: [[20, 2, 24, 4], [6, 2, 9, 3], [11, 14, 19, 16]],
+  insurgentRooms: [[20, 2, 24, 4], [11, 1, 18, 4], [11, 14, 19, 16], [1, 15, 9, 16]],
+  strayRooms: [[1, 12, 26, 13], [1, 1, 4, 4], [1, 15, 9, 16], [6, 2, 9, 3]],
+  fixedFurniture: true,
+};
+
+// A village church: the nave with its pews, the bell tower, the rectory, the parish hall, and the graveyard between.
+export const CHURCH: MapDef = {
+  name: "Village church",
+  rows: [
+    "############################",
+    "#.....#w#w#w#w#w#w#...h....#",
+    "#.....#..........#.#.......#",
+    "#..h..#.hhh.hhh..#.+...H...#",
+    "#.....+.hhh.hhh..+.#.......#",
+    "#.....#.hhh.hhh..#.#....h..#",
+    "#..H..#..........#.#########",
+    "#.....#w#w#+#w#w##.........E",
+    "#.......................h..E",
+    "E..........................E",
+    "E..h.h.h..h.h.h......H.....E",
+    "E..........................E",
+    "#..h.h.h..h.h.h....SCCCS...#",
+    "#..................SCCCS...#",
+    "#####w####+####....SSSSS...#",
+    "#.........#................#",
+    "#..hh..H..+......h.....h...#",
+    "############################",
+  ],
+  area(x, y) {
+    if (y <= 6 && x >= 7 && x <= 16) return "nave";
+    if (y <= 6 && x <= 5) return "rectory";
+    if (y <= 5 && x >= 19) return "bell tower";
+    if (y >= 15 && x <= 9) return "parish hall";
+    return "graveyard";
+  },
+  squadSpawns: [[1, 9], [1, 10], [1, 11], [2, 10]],
+  scpRooms: [[7, 1, 16, 6], [20, 1, 26, 5], [19, 8, 26, 13]],
+  insurgentRooms: [[20, 1, 26, 5], [7, 1, 16, 6], [19, 8, 26, 11], [1, 15, 9, 16]],
+  strayRooms: [[1, 1, 5, 6], [7, 1, 16, 6], [1, 15, 9, 16], [3, 8, 16, 13]],
+  fixedFurniture: true,
+};
+
+// Another Foundation site: the labs above, a containment basement below, joined by a stair and a lift. Containment
+// control in the basement has the panel that brings the power back.
+export const LAB: MapDef = {
+  name: "Research site",
+  rows: [
+    "############################",
+    "#......#......#......#.....#",
+    "#..hh..#..hh..#..H...#..h..#",
+    "#......+......+......+.....#",
+    "#..hh..#..hh..#......#..h..#",
+    "###+######+#######+###+#####",
+    "E..........................#",
+    "E....h........h............#",
+    "E..........................#",
+    "###+#####W######+####+######",
+    "#......#.........#.........#",
+    "#..H...#..hh.hh..#...hh....#",
+    "#......+.........+.........#",
+    "#..h...#..hh.hh..#.........#",
+    "#......#.........#.........#",
+    "#......#.........#....h....#",
+    "#......#.........#.........#",
+    "############################",
+    "############################",
+    "############################",
+    "############################",
+    "#......#......#......#.....#",
+    "#..H...#......#..h...#.....#",
+    "#......+......+......+.....#",
+    "#......#......#......#.....#",
+    "####+#####+#######+#####+###",
+    "#..........................#",
+    "#..........................#",
+    "#..........................#",
+    "###+##W##+######+######+####",
+    "#.......#.......#..........#",
+    "#..hh...#...H...#...hh.....#",
+    "#.......+.......+..........#",
+    "#..hh...#.......#..........#",
+    "#.......#.......#..........#",
+    "#.......#.......#..........#",
+    "#.......#.......#..........#",
+    "############################",
+  ],
+  area(x, y) {
+    if (y >= 20) {
+      const r = y - 20;
+      if (r <= 4) return "containment cell";
+      if (r <= 8) return "maintenance corridor";
+      return x <= 7 ? "generator room" : x <= 15 ? "records room" : "containment control";
+    }
+    if (y >= 18) return "rock";
+    if (y <= 4) return x <= 6 ? "biology lab" : x <= 13 ? "chemistry lab" : x <= 20 ? "materials lab" : "radiology lab";
+    if (y <= 8) return "main hall";
+    return x <= 6 ? "offices" : x <= 16 ? "lecture room" : "lift lobby";
+  },
+  squadSpawns: [[1, 6], [1, 7], [1, 8], [2, 7]],
+  floors: [{ name: "Labs", y0: 0, y1: 17, under: true }, { name: "Basement", y0: 20, y1: 37, under: true }],
+  links: [{ a: [22, 7], b: [22, 27], kind: "stairs" }, { a: [22, 13], b: [22, 33], kind: "lift" }],
+  panel: [25, 30],
+  scpRooms: [[1, 21, 6, 24], [8, 21, 13, 24], [15, 21, 20, 24], [22, 21, 26, 24]],
+  insurgentRooms: [[1, 1, 6, 4], [8, 1, 13, 4], [17, 30, 26, 36], [8, 10, 16, 16]],
+  strayRooms: [[1, 10, 6, 16], [8, 10, 16, 16], [1, 1, 6, 4], [8, 1, 13, 4], [9, 30, 15, 36], [1, 30, 7, 36]],
+  reinforced: true,
+  fixedFurniture: true,
+};
+
+// A freighter at the quay: container stacks and the bridge on deck, the cargo hold, crew quarters and engine room
+// below, two ladders between. The team comes up the gangway on the quay side.
+export const SHIP: MapDef = {
+  name: "Freighter",
+  rows: [
+    "############################",
+    "############################",
+    "###........................#",
+    "##..HH..HHH...HH...#w#w#w###",
+    "#E..HH..HHH...HH...#.....###",
+    "#E.................+..h..###",
+    "#E.....h......h....#.....###",
+    "##..HH..HHH...HH...#..h..###",
+    "###.HH..HHH...HH...###+#####",
+    "###........................#",
+    "###..h.......h.............#",
+    "###.HH..HHH..HHH....HH.....#",
+    "###.HH..HHH..HHH....HH.....#",
+    "###........................#",
+    "###......h.........h.......#",
+    "############################",
+    "############################",
+    "############################",
+    "############################",
+    "############################",
+    "############################",
+    "############################",
+    "###........#...............#",
+    "###..hh....#..HH..HH..HH...#",
+    "###........+...............#",
+    "###..hh....#..HH..HH..HH...#",
+    "###........#...............#",
+    "######+#####...............#",
+    "###........#..HH..HH..HH...#",
+    "###........+...............#",
+    "###..H.....#..HH..HH..HH...#",
+    "###........#...............#",
+    "###........#...............#",
+    "###.....h..#.......h.......#",
+    "############################",
+    "############################",
+    "############################",
+    "############################",
+  ],
+  area(x, y) {
+    if (y >= 20) return x <= 10 ? (y - 20 <= 6 ? "crew quarters" : "engine room") : "cargo hold";
+    if (y >= 18 || y <= 1 || y >= 15) return "sea";
+    if (x >= 19 && x <= 24 && y >= 3 && y <= 7) return "bridge";
+    return "deck";
+  },
+  squadSpawns: [[2, 4], [2, 5], [2, 6], [3, 5]],
+  floors: [{ name: "Deck", y0: 0, y1: 17 }, { name: "Hold", y0: 20, y1: 37, under: true }],
+  links: [{ a: [7, 9], b: [7, 29], kind: "ladder" }, { a: [17, 13], b: [17, 33], kind: "ladder" }],
+  scpRooms: [[12, 22, 26, 33], [3, 22, 10, 26]],
+  insurgentRooms: [[20, 4, 24, 7], [12, 22, 26, 33], [3, 28, 10, 33], [20, 9, 26, 14]],
+  strayRooms: [[3, 22, 10, 26], [20, 4, 24, 7], [3, 9, 18, 14]],
+  fixedFurniture: true,
+};
+
+export const MAPS = { wingC: WING_C, town: TOWN, farm: FARM, port: PORT, dblock: DBLOCK, gate: GATE, rail: RAIL, church: CHURCH, lab: LAB, ship: SHIP };
 export type MapId = keyof typeof MAPS;
+
+/** Phase 4C: the map a field mission is played on. Anything that may need the truck's container (a recovery, an
+ *  escort, an outbreak, a rescue) goes to a map that has one; strikes go wherever a cell can hole up. */
+type FieldKind = "recovery" | "escort" | "rescue" | "outbreak" | "coverup" | "retaliation" | "strike";
+const FIELD_MAPS: Record<FieldKind, (keyof typeof MAPS)[]> = {
+  recovery: ["town", "farm", "rail", "church"], escort: ["town", "farm", "rail"], rescue: ["town", "farm", "rail", "church"],
+  outbreak: ["town", "farm", "church"], coverup: ["town", "farm", "church", "rail"], retaliation: ["town", "farm", "church", "rail"],
+  strike: ["port", "port", "ship", "rail", "church"],
+};
+export const fieldMap = (kind: FieldKind) => { const m = FIELD_MAPS[kind]; return m[Math.floor(Math.random() * m.length)] as "town"; };
+

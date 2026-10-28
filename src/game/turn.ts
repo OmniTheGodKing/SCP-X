@@ -2,7 +2,7 @@
 import { settleFacing, facingTo, facingName, emitNoise } from "./noise";
 import { hazardDealt } from "./mission";
 import { reinforcementsTick } from "./ciTactics";
-import { blastStructure, DRUM, FLOOR, HALF, L, STEEL, TS, area, area as area_, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, setSlow, setVault, tileAt, DIRS, type Pt } from "../core/grid";
+import { blastStructure, setLinkAccess, DRUM, FLOOR, HALF, L, STEEL, TS, area, area as area_, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, setSlow, setVault, tileAt, DIRS, type Pt } from "../core/grid";
 import { setSmoke, sightFrom } from "../core/sight";
 import { canShoot, activeGun, damage, fire, kill, moveUnit } from "./combat";
 import { TYPES } from "../data/weapons";
@@ -21,6 +21,7 @@ import {
   occupied, reveal, seen, sleep, starers, team, unitAt,
 } from "./state";
 import { RAID_TURNS, THROWN, type ScpId, type Unit } from "./types";
+import { carryPhase, checkQuiet, convoyPhase, rivalPhase } from "./rivals";
 import { check096, endOfEnemyPhase, eyesMoveCap, hidden939, isDown682, isNewScp, newAnomalyPhase, placeLure, sealBlock, sealTarget, syncMask, voices } from "./scp4b";
 
 const DRAG_SANITY = 5;
@@ -30,6 +31,7 @@ export function reachFor(u: Unit | null) {
   if (!u || u.ap < 1) return null;
   const move = moveOf(u);
   setVault(hasPerk(u, "bulldozer"));
+  setLinkAccess(isTeam(u));
   setSlow(S.corroded);
   // the team can walk through each other (a squadmate in a doorway doesn't seal it), but not through anyone else
   const blocker = (x: number, y: number) => S.units.some(o => o !== u && o.alive && !o.saved && !o.carriedBy && o.x === x && o.y === y && !(isTeam(u) && isTeam(o)));
@@ -40,7 +42,7 @@ export function reachFor(u: Unit | null) {
   } else res = bfs([[u.x, u.y]], u.ap * move, blocker);
   // ...and nobody ends a move on someone else's tile
   for (let i = 0; i < res.dist.length; i++) if (res.dist[i] > 0 && occupied(i % L.W, (i / L.W) | 0, u)) res.dist[i] = -res.dist[i] - 100;
-  setVault(false); setSlow(new Set());
+  setVault(false); setLinkAccess(false); setSlow(new Set());
   // nobody ends a move standing on a desk
   for (let i = 0; i < res.dist.length; i++) if (res.dist[i] > 0 && tileAt(i % L.W, (i / L.W) | 0) === HALF) res.dist[i] = -res.dist[i] - 100;
   return res;
@@ -188,16 +190,17 @@ function arrivals(first: boolean) {
   if (first) return;
   for (const r of S.reinforce.filter(r => r.turn <= S.turn)) {
     S.reinforce = S.reinforce.filter(x => x !== r);
-    const free = entryTiles(r.road).filter(([x, y]) => !S.units.some(u => u.alive && !u.saved && u.x === x && u.y === y));
+    const free = entryTiles(r.road ? "road" : r.station ? "station" : undefined).filter(([x, y]) => !S.units.some(u => u.alive && !u.saved && u.x === x && u.y === y));
     const came: string[] = [];
     for (const m of r.members) {
       const t = free.shift();
-      if (!t) { S.reinforce.push({ turn: S.turn + 1, members: [m], road: r.road }); continue; }
+      if (!t) { S.reinforce.push({ turn: S.turn + 1, members: [m], road: r.road, station: r.station }); continue; }
       S.units.push(spawnMember(m, t[0], t[1], S.setup.mods));
       came.push(m.name);
     }
     if (came.length) banner(r.members[0].guard ? "SITE SECURITY ARRIVES" : "EPSILON-11 ON SCENE", "#86c193");
     if (came.length && r.road && S.setup.kind === "raid") log(`Off-duty Epsilon-11 drives in through the motor pool gate: ${came.join(", ")}.`, "good");
+    else if (came.length && r.station) log(`Epsilon-11 comes out of the level-1 barracks to the lift: ${came.join(", ")}.`, "good");
     else if (came.length) log(r.members[0].guard ? `More Site Security arrives: ${came.join(", ")}.` : `Epsilon-11 is on the scene: ${came.join(", ")}.`, "good");
   }
 }
@@ -321,7 +324,7 @@ function afterAction() {
   gatherResearchers();
   syncMask();
   computeVis();
-  check096();
+  check096(); checkQuiet();
   if (checkEnd()) return;
   if (S.selected && (!S.selected.alive || !isTeam(S.selected) || S.selected.ap === 0)) selectNext();
   hooks.update();
@@ -587,6 +590,8 @@ export async function endTurn() {
   if (checkEnd()) { S.busy = false; return; }
   S.phase = "hand"; hooks.update();
   await raiderPhase(checkEnd);
+  carryPhase(); rivalPhase(); computeVis(); checkQuiet();
+  if (S.setup.convoy) convoyPhase();
   if (checkEnd()) { S.busy = false; return; }
   S.phase = "subjects"; hooks.update();
   await subjectPhase();
@@ -653,6 +658,14 @@ export function checkEnd() {
   if (S.over) return true;
   const k = S.setup.kind;
   if ((k === "breach" || k === "manhunt") && S.sealed) { finish(true, false); return true; }
+  // Phase 4C: destroyed by the GOC or carried off by GRU-P; a convoy that got through
+  if (S.lostTo) { finish(false, false); return true; }
+  if (k === "escort" && S.setup.convoy) {
+    if (S.stolen) { finish(false, false); return true; }
+    if (S.convoyOut || !alive("raider").length) { finish(true, false); return true; }
+    if (!alive("mtf").length && !S.reinforce.length) { finish(false, false); return true; }
+    return false;
+  }
   // every SCP-939 instance dead: the team wins, but there's no specimen to hold
   if ((k === "breach" || k === "manhunt") && S.scp === "939" && !voices().length) { S.noSpecimen = true; log("The last SCP-939 instance is dead. There's nothing left to take back.", "key"); finish(true, false); return true; }
   if (k === "coverup" && !looseWitnesses().length) {
@@ -730,7 +743,7 @@ function finish(win: boolean, evacuated: boolean) {
   S.result = missionResult(win, evacuated);
   // anyone SCP-035 still wears when it ends is lost with it
   for (const u of S.units) if (u.host && u.alive && u.wasSide === "mtf") { u.alive = false; log(`${full(u)} is still wearing the mask. They are lost.`, "bad"); }
-  log(win ? "Incident closed." : evacuated ? "The team has evacuated." : S.escaped ? `${S.has173 ? "SCP-173 is outside Site-19" : `${S.statue.name} is gone`}.` : "Incident open. Nobody is left to respond.", win ? "good" : "bad");
+  log(win ? "Incident closed." : S.lostTo ? `${S.statue.name} is lost for good.` : S.stolen ? "They got what they came for." : evacuated ? "The team has evacuated." : S.escaped ? `${S.has173 ? "SCP-173 is outside Site-19" : `${S.statue.name} is gone`}.` : "Incident open. Nobody is left to respond.", win ? "good" : "bad");
   hooks.update();
   hooks.finished(S.result);
 }

@@ -92,7 +92,7 @@ export function abilityTargets(u: Unit, p: AbilityId): Unit[] {
     case "downed": return S.units.filter(a => a.alive && a.downed && !a.stabilized && adjacent(u, a));
     case "panicked": return alive("mtf").filter(a => a !== u && isPanicked(a) && adjacent(u, a));
     case "enemy": return alive("raider").filter(r => seen(r.x, r.y) && canSee(u, r.x, r.y));
-    case "record": return S.units.filter(a => a.record && !a.radio && !a.saved && adjacent(u, a));
+    case "record": return S.units.filter(a => a.record && !a.radio && !a.vehicle && !a.saved && adjacent(u, a));
     case "radio": return S.units.filter(a => a.radio && !a.saved && adjacent(u, a));
     case "scp4b": return p === "hood" ? hoodTargets(u) : p === "lead096" ? leadTargets096(u) : p === "score" ? scoreTargets(u) : p === "shake" ? shakeTargets(u) : caseTargets(u);
     case "specimen": {

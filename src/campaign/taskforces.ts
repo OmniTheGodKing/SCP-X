@@ -1,3 +1,4 @@
+import { fieldMap } from "../data/maps";
 // Phase 3J: Site-19's other task forces (Eta-10 "See No Evil", Nu-7 "Hammer Down"), field agents for covert work,
 // and the independent Foundation sites Site-19 works alongside: their standing with Site-19, what they can lend or
 // buy, the teams they lose, and the emergencies they call for help with. Site-19 never runs those sites.
@@ -52,6 +53,8 @@ export interface TfState {
   loans: { kind: "engineers" | "guards"; n: number; until: number; site: string; ids?: string[] }[];
   nextLost: number;
   nextEmergency: number;
+  /** Phase 4C: when another site next goes quiet. */
+  nextQuiet?: number;
   /** Rescued operatives from other sites who asked to join: they turn up in the next recruit pool. */
   transferIn?: number;
 }
@@ -202,21 +205,28 @@ export function lostTeam(c: Campaign) {
   if (!open.length) return;
   const r = pick(open), f = FACILITIES_WORLD.find(x => x.region === r) ?? pick(FACILITIES_WORLD), town = pick(REGIONS[r].towns);
   const team = pick(["Beta-7 \"Maz Hatters\"", "Gamma-5 \"Red Herrings\"", "Lambda-2 \"Lab Rats\"", "Zeta-9 \"Mole Rats\""]);
-  const inc = newSiteIncident(c, { kind: "rescue", region: r, map: Math.random() < 0.5 ? "town" : "farm", scpId: "", expires: c.day + travelDays(c, r) + 4,
+  const inc = newSiteIncident(c, { kind: "rescue", region: r, map: fieldMap("rescue"), scpId: "", expires: c.day + travelDays(c, r) + 4,
     insurgents: Math.min(6, 3 + Math.floor((yearOf(c.day) - 1951) / 3)), witnesses: 0, civilians: 0, survivors: rand(2, 3), site: f.name, team }, `${team.split(" ")[0]} lost near ${town}`);
   log(c, `${f.name}'s MTF ${team} stopped reporting near ${town}. The O5 Council sends Site-19 to find them and bring back whoever is left, within ${inc.expires - c.day} days.`, "bad", "command");
   chronicle(c, "council", `${f.name}'s MTF ${team} went missing near ${town}; the Council sent Site-19.`);
 }
 /** An independent site has a breach it can't handle and calls for help. */
-export function siteEmergency(c: Campaign) {
+export function siteEmergency(c: Campaign, quiet = false) {
   const f = pick(FACILITIES_WORLD), s = siteOf(c, f.name), cause = pick(CAUSES);
   const held = s.holds.filter(id => id === "173" || id === "049" || id === "106");
   const hazard: Incident["hazard"] = held.length && Math.random() < 0.7 ? "scp" : cause.insurgency ? "insurgents" : "instances";
   const scp = hazard === "scp" ? pick(held) : "";
-  const inc = newSiteIncident(c, { kind: "emergency", region: f.region, map: "wingC", scpId: scp, expires: c.day + travelDays(c, f.region) + 2,
+  const inc = newSiteIncident(c, { kind: "emergency", region: f.region, map: "lab", scpId: scp, expires: c.day + travelDays(c, f.region) + 2,
     insurgents: hazard === "insurgents" ? rand(3, 5) : 0, witnesses: 0, civilians: 0, site: f.name, hazard, cause: cause.insurgency ? "sabotage" : undefined, report: undefined,
     survivors: rand(2, 4) }, `Emergency at ${f.name}`);
   inc.causeText = cause.cause;
+  if (quiet) {
+    // Phase 4C: a site gone quiet: nobody knows what happened until the team sees it
+    inc.quiet = true; inc.title = inc.title.replace(`Emergency at ${f.name}`, `${f.name} has gone quiet`); inc.report = undefined;
+    log(c, `${f.name} has stopped answering: no radio, no telephone, no courier for two days. Send a team to find out why within ${inc.expires - c.day} days.`, "bad", "command");
+    chronicle(c, "council", `${f.name} went quiet and the Council sent Site-19 to find out why.`);
+    return;
+  }
   log(c, `${f.name} is calling for help: ${cause.cause.charAt(0).toLowerCase() + cause.cause.slice(1)}. Researchers are trapped and records are at risk. Respond within ${inc.expires - c.day} days.`, "bad", "command");
   chronicle(c, "council", `${f.name} called Site-19 for help: ${cause.cause.toLowerCase()}.`);
 }
@@ -277,6 +287,7 @@ export function tickTf(c: Campaign) {
   endLoans(c);
   if (yearOf(c.day) >= 1952 && c.day >= t.nextLost) { lostTeam(c); t.nextLost = c.day + rand(150, 250); }
   if (yearOf(c.day) >= 1952 && c.day >= t.nextEmergency) { siteEmergency(c); t.nextEmergency = c.day + rand(180, 300); }
+  if (yearOf(c.day) >= 1952 && c.day >= (t.nextQuiet ??= c.day + rand(120, 365))) { siteEmergency(c, true); t.nextQuiet = c.day + rand(300, 430); }
   for (const inc of [...c.incidents]) {
     if ((inc.kind !== "rescue" && inc.kind !== "emergency") || inc.id === c.activeIncident || c.day <= inc.expires) continue;
     c.incidents = c.incidents.filter(i => i !== inc);

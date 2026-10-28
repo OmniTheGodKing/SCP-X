@@ -1,7 +1,7 @@
 // The mission screen: map, SCP-173 status, squad, actions, containment file and incident log.
 import { MISSION_STEPS } from "./tutorial";
 import { optionalMet } from "../game/mission";
-import { DRUM, EXIT, L, area, inContainer } from "../core/grid";
+import { DRUM, EXIT, L, area, floorOf, inContainer } from "../core/grid";
 import { canShoot, activeGun, shotInfo } from "../game/combat";
 import { AMMO } from "../data/weapons";
 import { WEATHER } from "../data/weather";
@@ -36,7 +36,7 @@ const ITEM_NAMES: Record<ItemId, string> = { armor: "Flak vest", armor_light: "R
   hood: "Canvas hood", folder: "Lined folder", noisemaker: "Noisemaker", case: "Lead-lined case" };
 import type { MissionResult, Unit } from "../game/types";
 import { esc } from "./util";
-import { createRenderer } from "./render";
+import { createRenderer, view, viewRows } from "./render";
 import { ESCAPE_AT, escaping } from "../game/scp173";
 import { ESCORT_TURNS, MAX_SEALED } from "../game/turn";
 import { freshBodies, isCalm, isStaggered } from "../game/scp049";
@@ -76,6 +76,7 @@ const TEMPLATE = `
   <div class="card coach" id="coachBox" hidden></div>
   <div class="layout">
     <section class="board" aria-label="Tactical map">
+      <div class="floorbar" id="floorBar" hidden></div>
       <canvas id="cv"></canvas>
       <div class="legend" id="legend"></div>
       <details class="rules" open>
@@ -243,6 +244,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   }
   const cv = $("cv") as HTMLCanvasElement;
   const draw = createRenderer(cv);
+  let lastSel = "", lastSelFloor = -1;
 
   let hintTimer = 0, hintFlash = "";
   const flash = (t: string) => {
@@ -331,7 +333,10 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("optList").innerHTML = S.optional.length ? `<div class="label">Optional</div>${S.optional.map(o => `<div class="${optionalMet(o.id) ? "ok" : ""}">${optionalMet(o.id) ? "✓" : "·"} ${esc(o.text)}</div>`).join("")}` : "";
 
     const sc = $("statusCard"), line = $("statusLine");
-    if (kind === "riot") {
+    if (S.setup.quiet && S.revealed === undefined) {
+      sc.className = "card status danger";
+      line.innerHTML = `<b>Unknown.</b> Nobody has seen what happened here yet.${S.powerOn ? " Power is back on." : " The power is out: the panel is in containment control, in the basement."}`;
+    } else if (kind === "riot") {
       const left = S.units.filter(u => u.rioter && u.alive && !u.downed && u.side === "zombie").length;
       sc.className = "card status " + (left ? "danger" : "done");
       line.innerHTML = `<b>Rioters still loose: ${left}.</b> Restrained: ${S.units.filter(u => u.rioter && u.restrained).length} · killed: ${S.units.filter(u => u.rioter && !u.alive).length}`;
@@ -413,6 +418,16 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("squad").innerHTML = ops.map(card).join("") + (ds.length ? `<h3>D-Class work detail</h3>` + ds.map(card).join("") : "");
 
     const sel = S.selected, can = canAct();
+    // Phase 4C: floors. Selecting someone shows their floor; the bar shows who and what is on each floor.
+    if (L.def.floors) {
+      if (sel && (sel.id !== lastSel || floorOf(sel.y) !== lastSelFloor)) { lastSel = sel.id; lastSelFloor = floorOf(sel.y); view.floor = lastSelFloor; }
+      const fb = $("floorBar"); fb.hidden = false;
+      fb.innerHTML = L.def.floors.map((f, i) => {
+        const ours = team().filter(u => floorOf(u.y) === i).length, threat = S.units.some(u => u.alive && !u.saved && (u.side === "raider" || u.side === "zombie" || u.side === "anomaly") && floorOf(u.y) === i && seen(u.x, u.y));
+        return `<button type="button" class="act ${view.floor === i ? "on" : ""}" data-floor="${i}">${esc(f.name)}${ours ? ` · ${ours} ours` : ""}${threat ? ` <span class="warn">· hostiles</span>` : ""}</button>`;
+      }).join("");
+      fb.querySelectorAll<HTMLButtonElement>("[data-floor]").forEach(b => b.onclick = () => { view.floor = Number(b.dataset.floor); update(); });
+    }
     const off = can ? null : "Wait for your turn.";
     // situational actions only show when they can be used, to keep the bar clear
     ctxBtn("stareBtn", off || (sel && sel.staring ? null : stareCheck(sel)), sel && sel.staring ? "Stop staring <kbd>B</kbd>" : "Do not blink <kbd>B</kbd>");
@@ -553,9 +568,9 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
 
   let lastPointer = "mouse";
   const tileFromEvent = (e: MouseEvent) => {
-    const r = cv.getBoundingClientRect();
-    const x = Math.floor((e.clientX - r.left) / r.width * L.W), y = Math.floor((e.clientY - r.top) / r.height * L.H);
-    return (x >= 0 && y >= 0 && x < L.W && y < L.H) ? { x, y } : null;
+    const r = cv.getBoundingClientRect(), vr = viewRows();
+    const x = Math.floor((e.clientX - r.left) / r.width * L.W), y = vr.y0 + Math.floor((e.clientY - r.top) / r.height * vr.h);
+    return (x >= 0 && y >= vr.y0 && x < L.W && y < vr.y0 + vr.h) ? { x, y } : null;
   };
   cv.addEventListener("pointerdown", e => { lastPointer = e.pointerType; });
   cv.addEventListener("pointermove", e => {

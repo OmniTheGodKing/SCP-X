@@ -1,3 +1,4 @@
+import { fieldMap } from "../data/maps";
 // The O5 Council: Site-19's standing with it, its monthly orders, what it can be asked for, and the transfers of
 // anomalies it arranges between sites. Standing is separate from exposure: exposure is what the public knows,
 // standing is what the Council thinks of Site-19's command.
@@ -370,10 +371,12 @@ function arrive(c: Campaign, t: Transit) {
   // the Insurgency watches the roads into Site-19 once it's active
   if ((yearOf(c.day) >= 1952 || planActive(c, "hijack")) && Math.random() < (planActive(c, "hijack") ? 1 : d.cls === "Safe" ? 0.15 : 0.3)) {
     const inc: Incident = {
-      id: "inc" + c.nextIncident, kind: "escort", scpId: t.scp, region: HOME, map: Math.random() < 0.5 ? "town" : "farm",
+      id: "inc" + c.nextIncident, kind: "escort", scpId: t.scp, region: HOME, map: fieldMap("escort"),
       title: `Incident ${String(c.nextIncident).padStart(3, "0")}: Transfer convoy ambushed carrying ${d.name}`,
       appeared: c.day, expires: c.day, insurgents: Math.min(6, 3 + Math.floor((yearOf(c.day) - 1951) / 3)), transfer: t,
     };
+    // Phase 4C: half the time it's a convoy that has to drive through a town the Insurgency is waiting in
+    if (Math.random() < 0.5) { inc.convoy = true; inc.map = "town"; inc.title = `Incident ${String(c.nextIncident).padStart(3, "0")}: Convoy carrying ${d.name} through a hostile town`; }
     c.nextIncident++;
     c.incidents.push(inc);
     log(c, `The convoy bringing ${d.name} from ${t.site} is ambushed an hour from Site-19. Epsilon-11 has to hold the truck.`, "bad", "command");
