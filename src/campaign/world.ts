@@ -1,5 +1,6 @@
 // The world outside Site-19: regional exposure and Foundation fronts, travel, cover-ups,
 // Insurgency cells and amnestics.
+import { earn, spend } from "./ledger";
 import { addThreat, planActive } from "./chaos";
 import { chronicle } from "./history";
 import { countOperational } from "./base";
@@ -52,7 +53,7 @@ export function canContact(c: Campaign, r: RegionId): string | null {
 export function makeContact(c: Campaign, r: RegionId) {
   if (canContact(c, r)) return;
   const k = contactCost(c);
-  c.funds -= k.funds; c.intel -= k.intel;
+  spend(c, k.funds, "operations", `Contact in ${REGIONS[r].name}`); c.intel -= k.intel;
   c.regions[r].contactDue = c.day + CONTACT.days;
   log(c, `Foundation agents go into ${REGIONS[r].name} to set up ${REGIONS[r].front} as a front. Contact in ${CONTACT.days} days.`, "key");
 }
@@ -90,8 +91,10 @@ export function addExposure(c: Campaign, r: RegionId, n: number) {
 }
 
 export const collapsedCount = (c: Campaign) => REGION_IDS.filter(r => c.regions[r].collapsed).length;
+/** What an established front sends Site-19 each month, less as exposure rises. */
+export const FRONT_PAY = { base: 45, perExposure: 0.3, min: 5 };
 export const regionFunding = (c: Campaign, r: RegionId) =>
-  c.regions[r].collapsed || !isContacted(c, r) ? 0 : (planActive(c, "infiltrate", r) ? 0.5 : 1) * Math.round(Math.max(3, Math.round(200 / REGION_IDS.length - c.regions[r].exposure * 0.25)) * (r === "east_asia" && newsActive(dateOf(c.day), "armistice") ? 1.1 : 1));
+  c.regions[r].collapsed || !isContacted(c, r) ? 0 : Math.round((planActive(c, "infiltrate", r) ? 0.5 : 1) * Math.round(Math.max(FRONT_PAY.min, Math.round(FRONT_PAY.base - c.regions[r].exposure * FRONT_PAY.perExposure)) * (r === "east_asia" && newsActive(dateOf(c.day), "armistice") ? 1.1 : 1)));
 
 export const transportName = (c: Campaign) => has(c, "c130") ? "C-130 Hercules" : has(c, "c119") ? "C-119 Flying Boxcar" : "C-47 Skytrain";
 export function travelDays(c: Campaign, r: RegionId) {
@@ -182,7 +185,7 @@ export function canCoverStory(c: Campaign, r: RegionId) {
 /** Plant a cover story: money and amnestics to bring a region's exposure down. */
 export function coverStory(c: Campaign, r: RegionId) {
   if (canCoverStory(c, r)) return;
-  c.funds -= COVER_STORY.cost; c.amnestics -= coverDoses(c);
+  spend(c, COVER_STORY.cost, "operations", `Cover story in ${REGIONS[r].name}`); c.amnestics -= coverDoses(c);
   c.regions[r].lastCoverStory = c.day;
   addExposure(c, r, -COVER_STORY.cut);
   log(c, `${REGIONS[r].front} plants a cover story in ${REGIONS[r].name} (−${COVER_STORY.cut} exposure there).`, "good");

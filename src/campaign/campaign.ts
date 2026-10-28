@@ -1,4 +1,6 @@
 // Site-19 between missions: the roster, time passing, funding, public exposure and incidents.
+import { earn, spend, type Ledger } from "./ledger";
+import { tickContracts, type ContractState } from "./contracts";
 import { DIFFICULTIES, diffOf, type Difficulty, type NewCampaignOptions } from "./difficulty";
 import { FATIGUE, afterMission, bondsOf, restDay, tiredness } from "./condition";
 import { announceHire, hirePerson, losePeople, someone, syncStaff, type Lost, type Person } from "./people";
@@ -11,9 +13,10 @@ import { CLASSES, PERKS, TRAITS, type ClassId, type PerkId, type TraitId } from 
 import {
   ENGINEER_COST, countOperational, operational, engineerCapacity, dclassCapacity, healPerDay, monthlyUpkeep, sanityPerDay, startingBase, tickConstruction,
   type Base,
+  upkeepParts,
 } from "./base";
 import { addThreat, ciRoles, commanderFate, commanderJoins, disrupt, planActive, monthlyChaos, newChaos, threatExtra, tickChaos, type ChaosState } from "./chaos";
-import { addStanding, councilGrant, issueDirectives, monthlyCouncil, newCouncil, rewardText, grantReward, tickCouncil, transferFought, type CouncilState, type Reward, type Transit } from "./council";
+import { addStanding, councilGrant, grantParts, issueDirectives, monthlyCouncil, newCouncil, rewardText, grantReward, tickCouncil, transferFought, type CouncilState, type Reward, type Transit } from "./council";
 import { isInert, routineEvery, routineOf, firstSightings, resolveScp, scpName, startingScps, tickContainment, type ScpRecord } from "./containment";
 import { reachMilestone, type Milestone } from "./research";
 import { ITEMS, PROJECTS, armorStats, uniformOf, has, projectLock, monthlyResearch, newResearch, tickResearch, type MaterialId, type ItemId, type Order, type ResearchState } from "./research";
@@ -70,7 +73,7 @@ export interface Operative {
   /** Part-XP banked from drills. */
   drill?: number;
   /** Away from duty: in therapy or retraining. */
-  busy?: { kind: "therapy" | "retrain" | "travel"; daysLeft: number; trait?: TraitId; from?: RegionId; total?: number; out?: boolean };
+  busy?: { kind: "therapy" | "retrain" | "travel" | "contract"; daysLeft: number; trait?: TraitId; from?: RegionId; total?: number; out?: boolean };
   /** Chosen weapon type (one of their class's two) and the attachment fitted to it. */
   weapon?: WeaponType;
   attachment?: AttachmentId;
@@ -223,6 +226,11 @@ export interface Campaign {
   cleaningOrder: boolean;
   day: number;
   funds: number;
+  /** Phase 4E: the books, and the Council contracts on offer or under way. */
+  ledger?: Ledger;
+  contracts?: ContractState;
+  /** The last monthly grant's parts, to explain how the next one differs. */
+  lastGrant?: ReturnType<typeof grantParts> & { standingNow: number };
   exposure: number;
   dclass: number;
   engineers: number;
@@ -338,7 +346,7 @@ export function canTherapy(c: Campaign, o: Operative): string | null {
 }
 export function startTherapy(c: Campaign, o: Operative, t: TraitId) {
   if (canTherapy(c, o) || !o.traits.includes(t) || !TRAITS[t].bad) return;
-  c.funds -= THERAPY.cost;
+  spend(c, THERAPY.cost, "staff", `Therapy for ${o.name}`);
   o.busy = { kind: "therapy", daysLeft: THERAPY.days, trait: t };
   log(c, `${o.call} ${o.name} begins therapy for ${TRAITS[t].name.toLowerCase()}.`);
 }
@@ -351,7 +359,7 @@ export function canRetrain(c: Campaign, o: Operative): string | null {
 }
 export function startRetrain(c: Campaign, o: Operative) {
   if (canRetrain(c, o)) return;
-  c.funds -= RETRAIN.cost;
+  spend(c, RETRAIN.cost, "staff", `Retraining ${o.name}`);
   o.busy = { kind: "retrain", daysLeft: RETRAIN.days };
   log(c, `${o.call} ${o.name} starts retraining. They'll choose a class and perks again in ${RETRAIN.days} days.`);
 }
@@ -462,6 +470,8 @@ export function advanceDay(c: Campaign) {
         log(c, `${o.call} ${o.name} finished therapy. ${TRAITS[o.busy.trait].name} is gone.`, "good", "personnel");
       } else if (o.busy.kind === "travel") {
         log(c, `${o.call} ${o.name} is back at Site-19.`);
+      } else if (o.busy.kind === "contract") {
+        // the contract itself says they're back, and pays
       } else {
         o.cls = undefined; o.perks = [];
         log(c, `${o.call} ${o.name} finished retraining. Choose their new class on the Personnel tab.`, "good", "personnel");
@@ -483,6 +493,7 @@ export function advanceDay(c: Campaign) {
   if (c.guards.some(g => g.alive && g.breaches >= 3)) reachMilestone(c, "guard_veteran");
   tickContainment(c);
   tickWorld(c);
+  tickContracts(c);
   tickGeo(c);
   for (const s of c.scps) if (s.status === "contained" && !isInert(s) && c.day - s.lastCleaned === routineEvery(s)) {
     c.council.tally.overdue++;
@@ -499,9 +510,15 @@ export function advanceDay(c: Campaign) {
     monthlyStaff(c);
     refreshRecruits(c);
     if (has(c, "sigint")) gainIntel(c, 1);
-    const grant = councilGrant(c), fronts = frontsFunding(c), funds = grant + fronts, upkeep = monthlyUpkeep(c);
+    const gp = grantParts(c), grant = gp.total, fronts = frontsFunding(c), up = upkeepParts(c), upkeep = monthlyUpkeep(c);
     const room = Math.max(0, dclassCapacity(c) - c.dclass), d = Math.min(DCLASS_MONTHLY, room);
-    c.funds += funds - upkeep; c.dclass += d;
+    earn(c, grant, "council", `${monthName(c.day)} grant`);
+    for (const r of REGION_IDS) earn(c, regionFunding(c, r), "fronts", REGIONS[r].front);
+    spend(c, up.facilities, "upkeep", "Facility upkeep"); spend(c, up.operatives + up.guards, "salaries", "Operatives' and guards' pay"); spend(c, up.alert, "alert", `${ALERTS[c.alert].name} alert`);
+    if (has(c, "front_accounting")) earn(c, fronts - REGION_IDS.reduce((a, r) => a + regionFunding(c, r), 0), "fronts", "Front accounting");
+    c.lastGrant = { ...gp, standingNow: c.council.standing };
+    if (c.council.repay) { c.council.repay.left--; if (c.council.repay.left <= 0) c.council.repay = undefined; }
+    c.dclass += d;
     for (const r of REGION_IDS) if (isContacted(c, r)) addExposure(c, r, -3);   // the public slowly forgets, where a front works at it
     { const last = dateOf(c.day - 1);
       for (const n of newsFor(last.getUTCFullYear(), last.getUTCMonth() + 1)) log(c, `In the news: ${n.text}${n.note ? ` ${n.note}` : ""}`, n.effect ? "key" : ""); }
@@ -558,7 +575,7 @@ function monthlyDClass(c: Campaign) {
     c.amnestics -= Math.ceil(n / 5); c.dclass -= n;
     log(c, `${n} D-Class were dosed with amnestics and released (${Math.ceil(n / 5)} doses).${n < extra ? " There weren't enough doses for the rest." : ""}`, "key");
   } else if (c.dPolicy === "retain" && c.dclass) {
-    c.funds -= c.dclass * MORALE.retainCost;
+    spend(c, c.dclass * MORALE.retainCost, "staff", "D-Class block privileges");
     log(c, `Keeping all ${c.dclass} D-Class costs $${c.dclass * MORALE.retainCost}k this month.`);
   }
 }
@@ -656,7 +673,7 @@ export function canHire(c: Campaign, k: Candidate): string | null {
 }
 export function hireCandidate(c: Campaign, k: Candidate) {
   if (canHire(c, k)) return;
-  c.funds -= candidateCost(k);
+  spend(c, candidateCost(k), "hiring", `Recruit: ${k.name}`);
   c.recruits = (c.recruits ?? []).filter(x => x !== k);
   const o = operativeFrom(c, k);
   c.roster.push(o);
@@ -682,7 +699,7 @@ export const canBuyDClass = (c: Campaign) =>
   c.funds < DCLASS_COST * 2 ? `Needs $${DCLASS_COST * 2}k.` : c.dclass + 2 > dclassCapacity(c) ? "The barracks are full." : null;
 export function buyDClass(c: Campaign) {
   if (canBuyDClass(c)) return;
-  c.funds -= DCLASS_COST * 2; c.dclass += 2;
+  spend(c, DCLASS_COST * 2, "hiring", "Two D-Class"); c.dclass += 2;
   log(c, "Two more D-Class transferred to Site-19.");
 }
 
@@ -690,7 +707,7 @@ export const canHireEngineer = (c: Campaign) =>
   c.funds < ENGINEER_COST ? `Needs $${ENGINEER_COST}k.` : c.engineers >= engineerCapacity(c) ? `Site-19 can house ${engineerCapacity(c)} engineers. A workshop adds room for 4 more.` : null;
 export function hireEngineer(c: Campaign) {
   if (canHireEngineer(c)) return;
-  c.funds -= ENGINEER_COST;
+  spend(c, ENGINEER_COST, "hiring", "Engineer hired");
   announceHire(c, hirePerson(c, "engineer"));
 }
 
@@ -745,7 +762,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
   if (extras.amnestics && !canBringAmnestics(c, inc)) squad.push(staff("amnestics", pickName(["Hale", "Moreno", "Szabo", "Fenwick", "Adeyemi", "Kerr"])));
   const away = inc.kind === "emergency";
   const callNu7 = !!extras.nu7 && !canCallNu7(c, inc);
-  if (callNu7) c.funds -= NU7.call;
+  if (callNu7) spend(c, NU7.call, "operations", "Nu-7 called in");
   const siteGuards = away ? Array.from({ length: 2 }, (_, i) => ({ opId: `local-${i}`, name: `${inc.site} guard`, call: "SEC", guard: true, rankShort: "Sec",
     hp: 6, maxHp: 6, san: 70, maxSan: 70, aim: 55, blinkFull: 0.12, armor: 0, hasArmor: false, items: [], perks: [], traits: [],
     gun: { name: "M1 Carbine", type: "carbine" as const, dmg: [2, 4] as [number, number], mag: 5, ammo: 5, aim: 0 }, armorHp: 0 })) : [];
@@ -790,6 +807,8 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
 }
 
 /** What the O5 Council pays for each kind of mission won ($k). The World Map briefing shows the same figures. */
+/** Phase 4E salvage after a tactical mission. */
+export const SALVAGE = { perInsurgent: 5, cell: 20 };
 export const MISSION_BONUS: Partial<Record<Incident["kind"], number>> = { recovery: 100, strike: 80, breach: 50, retaliation: 40, outbreak: 120, raid: 60, rescue: 50 };
 
 export interface Debrief { lines: string[]; promotions: string[]; }
@@ -893,7 +912,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     const name = `Insurgent prisoner ${c.nextIncident * 10 + i}`;
     if (r.restraints) { gainIntel(c, 1); lines.push("The restraint kit kept a prisoner talking on the way back (+1 Intel)."); }
     if (c.prisoners.length < holdingCapacity(c)) { c.prisoners.push({ name, days: 0, intel: 0 }); lines.push(`An Insurgent was taken alive and is held for interrogation.`); }
-    else { c.funds += PRISONER_BOUNTY; lines.push(`An Insurgent was taken alive. With no room in holding cells, they were handed to another site (+$${PRISONER_BOUNTY}k).`); }
+    else { earn(c, PRISONER_BOUNTY, "missions", "Prisoner handed to another site"); lines.push(`An Insurgent was taken alive. With no room in holding cells, they were handed to another site (+$${PRISONER_BOUNTY}k).`); }
   }
   for (const n of r.known) if (!c.knownNotes.includes(n)) c.knownNotes.push(n);
   lines.push(...scanOutcome(c, r));
@@ -910,7 +929,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     const bonus = MISSION_BONUS[kind] ?? 0;
     const cut = kind === "coverup" ? 10 : kind === "riot" || kind === "raid" || kind === "emergency" ? 0 : 5;
     addExposure(c, region, -cut);
-    c.funds += bonus;
+    earn(c, bonus, "missions", `${name} closed`);
     const anomaly = scpName(inc?.scpId || "173");
     const what = kind === "rescue" ? "The team is out of there." : kind === "emergency" ? `Epsilon-11 is out of ${inc?.site ?? "the site"}.` : kind === "coverup" ? "The witnesses remember nothing worth repeating." : kind === "strike" ? "The Insurgency cell is broken up."
       : kind === "riot" ? "The D-Class block is quiet again." : kind === "raid" ? "The Insurgency raid on Site-19 is beaten off." : kind === "outbreak" ? "The flesh here is burned out." : kind === "escort" ? `The convoy got ${anomaly} through.` : kind === "retaliation" ? "The Insurgency attack on the town is broken." : inc?.first ? `${anomaly} is in Foundation hands.` : `${anomaly} is back in its cell.`;
@@ -932,6 +951,9 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   if (r.amnesticsUsed) lines.push(`Amnestics used: ${r.amnesticsUsed}.`);
   if (r.dSent || r.dRecruited) lines.push(`D-Class: ${r.dSent} sent, ${r.dLost} lost, ${r.dReturned} back in holding${r.dRecruited ? ` (including ${r.dRecruited} picked up on site)` : ""}.`);
   if (r.insurgentsTotal) lines.push(`Insurgents neutralised: ${r.insurgentsDown} of ${r.insurgentsTotal}.`);
+  // salvage: weapons and kit taken off the Insurgents, and a broken cell's stores
+  { const sv = SALVAGE.perInsurgent * r.insurgentsDown + (r.win && kind === "strike" ? SALVAGE.cell : 0);
+    if (sv) { earn(c, sv, "salvage", `Salvage from ${name}`); lines.push(`Salvage: $${sv}k in weapons, kit${r.win && kind === "strike" ? " and the cell's stores" : ""}.`); } }
   if (kind === "riot") {
     c.dclass = Math.max(0, c.dclass - r.riotersKilled - (r.win ? 0 : 3));
     c.morale = 40;

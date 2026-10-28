@@ -1,4 +1,5 @@
 // Site-19's facilities: what can be built where, power, engineers, construction and repairs.
+import { earn, spend } from "./ledger";
 import { TRADE_CHANCE, hasTrade } from "./people";
 import type { Campaign } from "./campaign";
 import { has } from "./research";
@@ -24,16 +25,16 @@ export const FACILITIES: Record<FacilityType, FacilityDef> = {
   command:     { name: "Command", cost: 0, days: 0, engineers: 0, power: 0, upkeep: 0, buildable: false, desc: "Site-19's operations center. Runs on its own backup supply." },
   generator:   { name: "Generator", cost: 100, days: 6, engineers: 2, power: -10, upkeep: 5, buildable: true, desc: "Supplies 10 power, more once refitted with researched designs." },
   barracks:    { name: "D-Class barracks", cost: 80, days: 5, engineers: 2, power: 1, upkeep: 5, buildable: true, desc: "Holds 10 D-Class." },
-  security:    { name: "Security station", cost: 150, days: 7, engineers: 3, power: 2, upkeep: 15, buildable: true, desc: "Houses 4 Site Security guards. Each station cuts the breach risk of every containment wing on its level by 30%, and its guards are on the scene the moment a wing on that level breaches." },
+  security:    { name: "Security station", cost: 150, days: 7, engineers: 3, power: 2, upkeep: 10, buildable: true, desc: "Houses 4 Site Security guards. Each station cuts the breach risk of every containment wing on its level by 30%, and its guards are on the scene the moment a wing on that level breaches." },
   medical:     { name: "Medical bay", cost: 180, days: 10, engineers: 3, power: 3, upkeep: 15, buildable: true, desc: "Operatives heal 2 HP a day instead of 1." },
-  lab:         { name: "Research lab", cost: 200, days: 10, engineers: 3, power: 3, upkeep: 20, buildable: true, desc: "Room for 4 researchers. Needed for research and for tests on SCP-173." },
+  lab:         { name: "Research lab", cost: 200, days: 10, engineers: 3, power: 3, upkeep: 15, buildable: true, desc: "Room for 4 researchers. Needed for research and for tests on SCP-173." },
   workshop:    { name: "Workshop", cost: 180, days: 9, engineers: 3, power: 3, upkeep: 15, buildable: true, desc: "Builds equipment, and houses 4 more engineers." },
   psych:       { name: "Psychological services", cost: 160, days: 10, engineers: 3, power: 2, upkeep: 15, buildable: true, desc: "Operatives recover 20 sanity a day instead of 10, and one at a time can be treated for a bad trait." },
   holding:     { name: "Holding cells", cost: 120, days: 6, engineers: 2, power: 2, upkeep: 10, buildable: true, desc: "Holds 4 captured Insurgents for interrogation. Each yields 1 Intel every 10 days, up to 3." },
   amnestics:   { name: "Amnestics lab", cost: 140, days: 8, engineers: 2, power: 2, upkeep: 15, buildable: true, desc: "Brews Class-A amnestics: 1 dose every 5 days per lab, and room to store 10 per lab. Doses are used on cover-ups and cover stories." },
   training:    { name: "Training range", cost: 150, days: 8, engineers: 2, power: 2, upkeep: 10, buildable: true, desc: "Weekly drills: operatives at Site-19 gain 1 XP a month this way, up to Private First Class at most (missions are where they really learn). Operatives can retrain into a new class here." },
   cont_safe:   { name: "Safe-grade containment wing", cost: 120, days: 8, engineers: 3, power: 2, upkeep: 10, buildable: true, grade: 0, desc: "Basic cells. Anything above Safe breaches three times as often here." },
-  cont_euclid: { name: "Euclid-grade containment wing", cost: 250, days: 12, engineers: 4, power: 4, upkeep: 20, buildable: true, grade: 1, desc: "Reinforced cells for Euclid-class anomalies: things that are dangerous and not fully understood, but can be reliably held." },
+  cont_euclid: { name: "Euclid-grade containment wing", cost: 250, days: 12, engineers: 4, power: 4, upkeep: 15, buildable: true, grade: 1, desc: "Reinforced cells for Euclid-class anomalies: things that are dangerous and not fully understood, but can be reliably held." },
   cont_keter:  { name: "Keter-grade containment wing", cost: 450, days: 18, engineers: 5, power: 6, upkeep: 35, buildable: true, grade: 2, desc: "The strongest cells Site-19 can build. Anomalies held a grade below the wing's breach half as often." },
 };
 
@@ -134,7 +135,7 @@ export function canRefitGen(c: Campaign, f: Facility): string | null {
 export function refitGenerator(c: Campaign, f: Facility) {
   if (canRefitGen(c, f)) return;
   const next = GEN_TIERS[(f.genTier ?? 0) + 1];
-  c.funds -= next.cost; f.upgradeDays = next.days;
+  spend(c, next.cost, "construction", `Generator refit: ${next.name}`); f.upgradeDays = next.days;
 }
 export const powerUse = (c: Campaign) =>
   c.base.facilities.filter(f => FACILITIES[f.type].power > 0 && f.daysLeft === 0).reduce((a, f) => a + FACILITIES[f.type].power, 0);
@@ -169,16 +170,21 @@ export function canAddRecreation(c: Campaign, f: Facility): string | null {
 }
 export function addRecreation(c: Campaign, f: Facility) {
   if (canAddRecreation(c, f)) return;
-  c.funds -= RECREATION.cost; f.recreation = true;
+  spend(c, RECREATION.cost, "construction", "Recreation room"); f.recreation = true;
 }
 export function upgradeFacility(c: Campaign, f: Facility) {
   if (canUpgrade(c, f)) return;
-  c.funds -= UPGRADE.cost; f.upgradeDays = UPGRADE.days;
+  spend(c, UPGRADE.cost, "construction", `Expansion: ${FACILITIES[f.type].name}`); f.upgradeDays = UPGRADE.days;
 }
 export const SALARY = { operative: 10, guard: 5 };
 export const salaries = (c: Campaign) => c.roster.filter(o => o.alive).length * SALARY.operative + c.guards.filter(g => g.alive).length * SALARY.guard;
 /** Facility upkeep, the alert level's cost, and staff salaries, per month. */
-export const monthlyUpkeep = (c: Campaign) => c.base.facilities.reduce((a, f) => a + (f.type === "security" && has(c, "bt_security") ? 0 : FACILITIES[f.type].upkeep) + (f.type === "generator" ? genTierOf(f).upkeep : 0), 0) + ALERTS[c.alert].upkeep + salaries(c);
+export function upkeepParts(c: Campaign) {
+  const facilities = c.base.facilities.reduce((a, f) => a + (f.type === "security" && has(c, "bt_security") ? 0 : FACILITIES[f.type].upkeep) + (f.type === "generator" ? genTierOf(f).upkeep : 0), 0);
+  const operatives = c.roster.filter(o => o.alive).length * SALARY.operative, guards = c.guards.filter(g => g.alive).length * SALARY.guard;
+  return { facilities, operatives, guards, alert: ALERTS[c.alert].upkeep };
+}
+export const monthlyUpkeep = (c: Campaign) => { const u = upkeepParts(c); return u.facilities + u.operatives + u.guards + u.alert; };
 export const healPerDay = (c: Campaign) => (countOperational(c, "medical") && !powerShort(c) ? 2 : 1) + (has(c, "necrotic_study") ? 1 : 0) + (has(c, "bt_triage") ? 1 : 0);
 export const sanityPerDay = (c: Campaign) => countOperational(c, "psych") && !powerShort(c) ? 20 : 10;
 
@@ -197,7 +203,7 @@ export function canBuild(c: Campaign, type: FacilityType, level: number, slot: n
 export function build(c: Campaign, type: FacilityType, level: number, slot: number) {
   if (canBuild(c, type, level, slot)) return null;
   const d = FACILITIES[type];
-  c.funds -= d.cost;
+  spend(c, d.cost, "construction", `Construction: ${d.name}`);
   const f: Facility = { id: "f" + c.base.nextId++, type, level, slot, daysLeft: d.days, disabled: false, repairDays: 0 };
   c.base.facilities.push(f);
   return f;
@@ -232,7 +238,7 @@ export function canRepair(c: Campaign, f: Facility): string | null {
 export function repair(c: Campaign, f: Facility) {
   if (canRepair(c, f)) return;
   const r = repairOf(f);
-  c.funds -= r.cost;
+  spend(c, r.cost, "construction", `Repairs: ${FACILITIES[f.type].name}`);
   f.repairDays = r.days;
 }
 
@@ -245,7 +251,7 @@ export function canExcavate(c: Campaign): string | null {
 }
 export function excavate(c: Campaign) {
   if (canExcavate(c)) return;
-  c.funds -= EXCAVATE.cost;
+  spend(c, EXCAVATE.cost, "construction", `Excavation of level ${c.base.levels + 1}`);
   c.base.excavation = EXCAVATE.days;
 }
 
@@ -267,7 +273,7 @@ export function tickConstruction(c: Campaign): string[] {
   for (const f of [...c.base.facilities]) if (f.demolishDays && --f.demolishDays === 0) {
     c.base.facilities = c.base.facilities.filter(x => x !== f);
     const back = Math.round(FACILITIES[f.type].cost * DEMOLISH.refund);
-    c.funds += back;
+    earn(c, back, "sales", `Salvage from the ${FACILITIES[f.type].name.toLowerCase()} torn down`);
     done.push(`The ${nameInText(f.type)} on level ${f.level + 1} has been torn down (+$${back}k in salvage).`);
     const moved = c.guards.filter(g => g.alive && g.stationId === f.id);
     if (moved.length) { for (const g of moved) g.stationId = undefined; done.push(`${moved.length} guard${moved.length > 1 ? "s are" : " is"} without a post. Post them at another Security station.`); }

@@ -9,13 +9,15 @@ import { FIELDS, FIELD_BONUS, TRADES, syncStaff, type StaffKind } from "../campa
 import { AGENT, COOP, ETA10, NU7, SPECIALIST, TF_NAMES, agentsFree, attachNu7, borrow, canAttachNu7, canBorrow, canBringAmnestics, canBringResearcher, canCallNu7, canFormEta10, canHireAgent, canSellWeapons, formEta10, hireAgent, sellWeapons, siteOf, tfOf, type TaskForce } from "../campaign/taskforces";
 import { councilSeal, dossierPhoto, gearArt, iconBody, icon, incidentScene, insurgencyMark, siteSeal } from "./icons";
 import { ART_DEFS, roomSvg, surfaceSvg } from "./art";
+import { CAT_NAMES, INCOME_CATS, SPEND_CATS, monthIndex } from "../campaign/ledger";
+import { CONTRACTS, acceptContract, canAcceptContract, contractOperative, whoText } from "../campaign/contracts";
 import { playMusic, soundControl, transition, ui, wireSound } from "./audio";
 import { DISRUPT_INTEL, INQUIRY, PLANS, goalText, whenText, REVEAL_INTEL, THREAT_STEPS, canDisrupt, canInvestigateBreach, canReveal, disrupt, investigateBreach, reveal } from "../campaign/chaos";
 import { parseCampaign } from "../campaign/save";
 import type { Report } from "../campaign/reports";
 import { WEATHER, type Weather } from "../data/weather";
 import { MIN_RANGE } from "../game/perks";
-import { AUDIT_BELOW, PARTNERS, PAY_FOR, REQUESTS, answerOffer, canAcceptOffer, canRequest, canSendAway, councilGrant, directiveProgress, directiveText, makeRequest, rewardText, sendAway, tierOf, type RequestId } from "../campaign/council";
+import { AUDIT_BELOW, PARTNERS, PAY_FOR, REQUESTS, answerOffer, canAcceptOffer, canRequest, canSendAway, councilGrant, grantParts, directiveProgress, directiveText, makeRequest, rewardText, sendAway, tierOf, type RequestId } from "../campaign/council";
 import { REFINE_EVERY, canGivePill, canRefine, givePill, pillsLeft, refine, refineRecipes } from "../campaign/objects";
 import { PROCEDURES, PROCEDURE_610 } from "../data/procedures";
 import { reportOf, TERRITORY, localHour, missionWeather, weatherAt, weatherLine, nightAt, nightPolygon, AMNESTIC_TEAM, BURY, FACILITIES_WORLD, FIELD_OPS, INVESTIGATE, buryCost, buryStory, canBury, canSendTeam, incidentName, sendAmnesticsTeam, briefing, canFieldOp, canInvestigate, groupOf, incidentPlace, incidentState, investigate, startFieldOp, type FieldOpKind, type MarkerGroup } from "../campaign/geo";
@@ -26,7 +28,7 @@ import { portraitSvg } from "./portrait";
 import { INSPECTION, inspectionChecks, inspectionSoon } from "../campaign/inspection";
 import {
   UPGRADE, countOperational, damageEffect, engineersBusy, repairOf, GEN_TIERS, canRefitGen, genTierOf, generatorOutput, refitGenerator, canUpgrade, upgradeFacility, RECREATION, canAddRecreation, addRecreation, DEMOLISH, canDemolish, demolish, demolishDays, demolishLeavesShort, ENGINEER_COST, EXCAVATE, FACILITIES, nameInText, GRADE_NAMES, MAX_LEVELS, REPAIR, SLOTS, build, canBuild, canExcavate, canRepair,
-  dclassCapacity, engineersFree, excavate, facilityAt, healPerDay, isContainment, monthlyUpkeep, neighbors, operational,
+  dclassCapacity, engineersFree, excavate, facilityAt, healPerDay, isContainment, monthlyUpkeep, upkeepParts, neighbors, operational,
   powerShort, powerSupply, powerUse, repair, sanityPerDay, type Facility, type FacilityType,
 } from "../campaign/base";
 import {
@@ -45,6 +47,7 @@ import {
   ARMOR_KINDS, ARMOR_TIERS, armorStats, ATTACHMENT_COST, REFIT, canOrderAmmo, orderAmmo, unlockedAmmo, canOrderAttachment, canRefit, orderAttachment, orderRefit, pendingRefits, unlockedAttachments,
   ITEMS, PROJECTS, TESTS, uniformOf, anomalyProgress, assign, projectVisible, canHireResearcher, canOrder, canTest, has, hireResearcher, order, projectLock,
   researcherCapacity, projectCost, researchersFree, startTest, testKey, offered, projectDays, unlockedItems, type Branch, type ItemId, type TestId,
+  canSellStore, sellPrice, sellStore, type StoreKind,
 } from "../campaign/research";
 import { HOME, LAND, REGIONS, REGION_IDS, SITE19, project, type RegionId } from "../data/regions";
 import {
@@ -121,6 +124,8 @@ function researchCat(id: string): ResearchCat {
 }
 
 const clickSounds = new WeakSet<HTMLElement>();
+/** The funds of the campaign on screen, for the cost preview. */
+let fundsNow = () => 0;
 /** The World Map's coastline path, built once. */
 let landD: string | null = null;
 /** Facility names short enough for a slot in the cross-section. */
@@ -197,6 +202,22 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     else if (n > heard.notices) ui.notice();
     heard = { notices: n, month: m, alarm: b?.id ?? "" };
     playMusic(b ? "tense" : tab === "site" ? "site" : "world");
+  }
+  fundsNow = () => c.funds;
+  if (!clickSounds.has(root)) {
+    // Phase 4E cost preview: a button that spends money shows what would be left
+    const tip = document.createElement("div"); tip.className = "costtip"; tip.hidden = true; document.body.appendChild(tip);
+    const show = (e: Event) => {
+      const b = (e.target as HTMLElement).closest?.("button.act, label.act") as HTMLButtonElement | null;
+      const m = b && !b.disabled ? /(?:^|[^+])\$(\d+)k/.exec(b.textContent ?? "") : null;
+      if (!b || !m) { tip.hidden = true; return; }
+      const left = fundsNow() - Number(m[1]), r = b.getBoundingClientRect();
+      tip.textContent = `Leaves $${left}k`; tip.classList.toggle("neg", left < 0); tip.hidden = false;
+      tip.style.left = `${Math.round(r.left + window.scrollX)}px`; tip.style.top = `${Math.round(r.bottom + window.scrollY + 4)}px`;
+    };
+    root.addEventListener("mouseover", show); root.addEventListener("focusin", show);
+    root.addEventListener("mouseout", () => { tip.hidden = true; }); root.addEventListener("focusout", () => { tip.hidden = true; });
+    root.addEventListener("click", () => { tip.hidden = true; }, true);
   }
   if (!clickSounds.has(root)) { clickSounds.add(root); root.addEventListener("click", e => { const t = (e.target as HTMLElement).closest?.("button,summary,label.act"); if (!t) return; if (t.matches(".tab")) ui.tab(); else if ((t as HTMLButtonElement).disabled) ui.deny(); else ui.click(); }); }
 
@@ -375,7 +396,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     return `<div class="card council"><div class="emblemwrap">${councilSeal(56)}</div>
       <div class="label">O5 Council · standing ${k.standing} · ${esc(t.name)}${k.audit ? ` · <span class="warn">audit ${dateText(c.inspectionDay!)}</span>` : ""}</div>
       <div class="exposure"><div class="exp-bar standing"><span style="width:${k.standing}%"></span></div><b>${k.standing} / 100</b></div>
-      <p class="muted">${esc(t.desc)} The Council grants $${councilGrant(c)}k a month (60 + standing${k.grantBonus ? ` + ${k.grantBonus}` : ""}); the fronts add $${frontsFunding(c)}k. Below ${AUDIT_BELOW} it sends an auditor.</p>
+      <p class="muted">${esc(t.desc)} The Council grants $${councilGrant(c)}k a month: more with standing, with each anomaly held and with each year of service (the Finances card has the breakdown). The fronts add $${frontsFunding(c)}k. Below ${AUDIT_BELOW} it sends an auditor.</p>
       ${k.history.length ? `<details class="archived"><summary>Why it moved</summary><ul class="why">${k.history.slice(0, 12).map(h => `<li class="${h.n < 0 ? "warn" : ""}">${h.n > 0 ? "+" : ""}${h.n} · ${esc(h.why)} <span class="muted">(${dateText(h.day)})</span></li>`).join("")}</ul></details>` : ""}
       <div class="label" style="margin-top:10px">Orders</div>
       ${open.length ? `<ul class="orders">${open.map(d => `<li><b>${esc(directiveText(c, d))}</b> by ${dateText(d.due)} <span class="muted">· ${esc(directiveProgress(c, d))} · reward ${esc(rewardText(d.reward))}, +${d.standing} standing; failing costs 6</span></li>`).join("")}</ul>` : `<p class="muted">No orders open. New ones arrive on the first of the month.</p>`}
@@ -422,6 +443,57 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     </div>`;
   }
 
+  /** Phase 4E: where the money comes from and goes, and when the next Council payment lands. */
+  function financesCard() {
+    const gp = grantParts(c), up = upkeepParts(c), fronts = frontsFunding(c), upkeep = monthlyUpkeep(c), net = gp.total + fronts - upkeep;
+    const next = dateOf(c.day); next.setUTCMonth(next.getUTCMonth() + 1, 1);
+    const days = Math.round((next.getTime() - dateOf(c.day).getTime()) / 86400000);
+    const l = c.ledger, m = monthIndex(c.day), prev = !l ? {} : l.month === m ? l.prev : l.month === m - 1 ? l.cur : {};
+    const row = (label: string, n: number, cls = "") => n ? `<li class="${cls}"><span>${esc(label)}</span><b>${n > 0 ? "+" : "−"}$${Math.abs(n)}k</b></li>` : "";
+    const why: string[] = [];
+    if (c.lastGrant) {
+      const g0 = c.lastGrant;
+      if (gp.standing !== g0.standing) why.push(`standing ${g0.standingNow} → ${c.council.standing} (${gp.standing > g0.standing ? "+" : "−"}$${Math.abs(gp.standing - g0.standing)}k)`);
+      if (gp.anomalies !== g0.anomalies) why.push(`anomalies held ${g0.held} → ${gp.held} (${gp.anomalies > g0.anomalies ? "+" : "−"}$${Math.abs(gp.anomalies - g0.anomalies)}k)`);
+      if (gp.years !== g0.years) why.push(`a year of service (+$${gp.years - g0.years}k)`);
+      if (gp.repay !== g0.repay) why.push(gp.repay ? `emergency repayment (−$${-gp.repay}k)` : `repayment finished (+$${-g0.repay}k)`);
+      if (gp.raised !== g0.raised) why.push(`grant raised (+$${gp.raised - g0.raised}k)`);
+    }
+    const spentTotal = SPEND_CATS.reduce((a, k) => a + (prev[k] ?? 0), 0), inTotal = INCOME_CATS.reduce((a, k) => a + (prev[k] ?? 0), 0);
+    return `<div class="card finances">
+      <div class="label">${icon("funds", 13)}Finances · $${c.funds}k in hand</div>
+      <p>Next O5 Council payment: <b>${dateText(c.day + days)}</b> (${plural(days, "day")}), expected <b>$${gp.total}k</b>, with <b>$${fronts}k</b> from the fronts and <b>$${upkeep}k</b> of upkeep and pay going out: <b class="${net >= 0 ? "ok" : "warn"}">${net >= 0 ? "+" : "−"}$${Math.abs(net)}k</b> a month before anything else.</p>
+      <div class="fincols">
+        <div><div class="label">Each month in</div><ul class="fin">
+          ${row(`Council grant: base`, gp.base)}${row(`Standing ${c.council.standing}`, gp.standing)}${row(`${gp.held} ${gp.held === 1 ? "anomaly" : "anomalies"} held`, gp.anomalies)}${row(`${plural(gp.yearsRun, "year")} of service`, gp.years)}${row("Raised grant", gp.raised)}${row(`${DIFFICULTIES[c.difficulty ?? "agent"].name} difficulty`, gp.difficulty)}${row("Emergency repayment", gp.repay, "warn")}
+          ${REGION_IDS.filter(r => regionFunding(c, r)).map(r => row(REGIONS[r].front, regionFunding(c, r))).join("")}</ul></div>
+        <div><div class="label">Each month out</div><ul class="fin">
+          ${row("Facility upkeep", -up.facilities)}${row(`Operatives' pay (${c.roster.filter(o => o.alive).length})`, -up.operatives)}${row(`Guards' pay (${c.guards.filter(g => g.alive).length})`, -up.guards)}${row(`${ALERTS[c.alert].name} alert`, -up.alert)}</ul></div>
+      </div>
+      ${why.length ? `<p class="muted">The grant has changed since last month: ${esc(why.join("; "))}.</p>` : ""}
+      ${c.council.repay ? `<p class="warn">Emergency appropriation: $${c.council.repay.n}k comes off each of the next ${plural(c.council.repay.left, "grant")}.</p>` : ""}
+      ${inTotal || spentTotal ? `<details class="archived"><summary>Last month: +$${inTotal}k in, −$${-spentTotal}k out</summary>
+        <div class="fincols"><ul class="fin">${INCOME_CATS.map(k => row(CAT_NAMES[k], prev[k] ?? 0)).join("") || "<li class='muted'>Nothing yet.</li>"}</ul>
+        <ul class="fin">${SPEND_CATS.map(k => row(CAT_NAMES[k], prev[k] ?? 0)).join("") || "<li class='muted'>Nothing yet.</li>"}</ul></div></details>` : ""}
+      ${l?.items.length ? `<details class="archived"><summary>Latest entries</summary><ul class="fin entries">${l.items.slice(0, 15).map(i => `<li><span><span class="hday">${dateText(i.day)}</span>${esc(i.what)}</span><b class="${i.n > 0 ? "ok" : ""}">${i.n > 0 ? "+" : "−"}$${Math.abs(i.n)}k</b></li>`).join("")}</ul></details>` : ""}
+    </div>`;
+  }
+
+  /** Phase 4E: paid noncombat work for other parts of the Foundation. */
+  function contractsCard() {
+    const k = c.contracts;
+    if (!k || (!k.offers.length && !k.active.length)) return "";
+    const op = contractOperative(c);
+    return `<div class="card">
+      <div class="label">${icon("council", 13)}Council contracts · paid work while the squad recovers</div>
+      ${k.active.map(x => `<p class="ok">${esc(CONTRACTS[x.kind].name)} for ${esc(x.client)}: ${esc(whoText(c, x))} back ${dateText(x.due!)}, $${x.pay}k on return.</p>`).join("")}
+      ${k.offers.map(x => { const d = CONTRACTS[x.kind], w = canAcceptContract(c, x), sends = (x.kind === "cadre" || x.kind === "courier") && op ? ` Sends ${op.call} ${op.name}.` : "";
+        return `<div class="facpanel"><div class="ptop"><b>${esc(d.name)}</b> <span class="muted">for ${esc(x.client)} · offer open until ${dateText(x.until)}</span></div>
+          <p class="muted">${esc(d.desc)} Needs ${esc(d.need)} for ${plural(d.days, "day")}.${esc(sends)}</p>
+          <div class="row"><button class="act" type="button" data-contract="${x.id}" ${w ? `disabled title="${esc(w)}"` : ""}>Accept · +$${x.pay}k on return</button>${w ? `<span class="muted">${esc(w)}</span>` : ""}</div></div>`; }).join("")}
+    </div>`;
+  }
+
   function commandTab() {
     const inc = c.incidents.find(i => i.id === planning) || null;
     return `<div class="hubgrid">
@@ -431,6 +503,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         <button class="act" type="button" data-goto="personnel">Open Personnel</button></div>` : ""}
       ${staffCard()}
       ${councilCard()}
+      ${contractsCard()}
       ${chaosCard()}
       ${inspectionSoon(c) ? `<div class="card plan"><div class="label">O5 inspection · ${dateText(c.inspectionDay!)}</div>
         <p>If the inspector came today: $${INSPECTION.perCheck}k for each check passed${inspectionChecks(c).filter(k => !k.ok).length >= INSPECTION.failAt ? `, and <span class="warn">$${INSPECTION.penalty}k docked</span> for failing ${INSPECTION.failAt} or more` : ""}.</p>
@@ -448,6 +521,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       </div>
     </section>
     <section class="col">
+      ${financesCard()}
       <div class="card">
         <div class="label">${icon("time", 13)}Time · ${speed ? `running at ${speed}×` : "paused"}</div>
         <p class="muted">Time only passes while the World tab is open. Leaving it pauses the clock.</p>
@@ -875,7 +949,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         const d = ITEMS[i], why = canOrder(c, i), queued = c.orders.filter(o => o.item === i).length;
         return `<div class="proj"><div class="ptop"><b>${esc(d.name)}</b><span class="flag">${c.inventory[i] || 0} in storage${queued ? ` · ${queued} being built` : ""}</span></div>
           <div class="muted">${esc(d.desc)}</div>
-          <div class="row"><button class="act" type="button" data-order="${i}" ${why ? `disabled title="${esc(why)}"` : ""}>Build · $${d.cost}k · ${plural(d.days, "day")} · 1 engineer</button>${why ? `<span class="muted">${esc(why)}</span>` : ""}</div></div>`;
+          <div class="row"><button class="act" type="button" data-order="${i}" ${why ? `disabled title="${esc(why)}"` : ""}>Build · $${d.cost}k · ${plural(d.days, "day")} · 1 engineer</button>${(() => { const sw = canSellStore(c, "item", i); return sw ? "" : `<button class="act" type="button" data-sellstore="item:${i}">Sell one · +$${sellPrice(c, "item", i)}k</button>`; })()}${why ? `<span class="muted">${esc(why)}</span>` : ""}</div></div>`;
       }).join("")}</div>` : `<p class="muted">Nothing to build yet. Equipment research unlocks items here.</p>`}
       ${refits.length ? `<div class="label" style="margin-top:10px">Refits</div><div class="projects">${refits.map(r => `<div class="proj"><div class="ptop"><b>Issue the ${esc(r.name)}</b></div>
         <div class="muted">Replaces the current model for everyone at once.</div>
@@ -884,13 +958,13 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         const why = canOrderAttachment(c, a), fitted = c.roster.filter(o => o.alive && o.attachment === a).length;
         return `<div class="proj"><div class="ptop"><b>${ATTACHMENTS[a].name}</b><span class="flag">${c.attachments[a] ?? 0} spare · ${fitted} fitted</span></div>
           <div class="muted">${esc(ATTACHMENTS[a].desc)} Fit one per operative on the Personnel tab.</div>
-          <div class="row"><button class="act" type="button" data-att="${a}" ${why ? `disabled title="${esc(why)}"` : ""}>Build · $${ATTACHMENT_COST.cost}k · ${plural(ATTACHMENT_COST.days, "day")}</button>${why ? `<span class="muted">${esc(why)}</span>` : ""}</div></div>`;
+          <div class="row"><button class="act" type="button" data-att="${a}" ${why ? `disabled title="${esc(why)}"` : ""}>Build · $${ATTACHMENT_COST.cost}k · ${plural(ATTACHMENT_COST.days, "day")}</button>${(() => { const sw = canSellStore(c, "att", a); return sw ? "" : `<button class="act" type="button" data-sellstore="att:${a}">Sell one · +$${sellPrice(c, "att", a)}k</button>`; })()}${why ? `<span class="muted">${esc(why)}</span>` : ""}</div></div>`;
       }).join("")}</div>` : ""}
       ${unlockedAmmo(c).length ? `<div class="label" style="margin-top:10px">Special ammunition</div><div class="projects">${unlockedAmmo(c).map(a => {
         const why = canOrderAmmo(c, a), loaded = c.roster.filter(o => o.alive && o.ammoType === a).length;
         return `<div class="proj"><div class="ptop"><b>${AMMO[a].name}</b><span class="flag">${c.ammo[a] ?? 0} spare · ${loaded} loaded</span></div>
           <div class="muted">${esc(AMMO[a].desc)} Load one per operative on the Personnel tab.</div>
-          <div class="row"><button class="act" type="button" data-ammoorder="${a}" ${why ? `disabled title="${esc(why)}"` : ""}>Build · $${ATTACHMENT_COST.cost}k · ${plural(ATTACHMENT_COST.days, "day")}</button>${why ? `<span class="muted">${esc(why)}</span>` : ""}</div></div>`;
+          <div class="row"><button class="act" type="button" data-ammoorder="${a}" ${why ? `disabled title="${esc(why)}"` : ""}>Build · $${ATTACHMENT_COST.cost}k · ${plural(ATTACHMENT_COST.days, "day")}</button>${(() => { const sw = canSellStore(c, "ammo", a); return sw ? "" : `<button class="act" type="button" data-sellstore="ammo:${a}">Sell one · +$${sellPrice(c, "ammo", a)}k</button>`; })()}${why ? `<span class="muted">${esc(why)}</span>` : ""}</div></div>`;
       }).join("")}</div>` : ""}
       ${c.orders.length ? `<div class="specs">In production: ${c.orders.map(o => `${o.item ? ITEMS[o.item].name : o.attachment ? ATTACHMENTS[o.attachment].name : o.ammo ? AMMO[o.ammo].name : o.refit!.startsWith("tier:") ? "Weapon refit" : o.refit!.startsWith("armor:") ? `${ARMOR_TIERS[Number(o.refit!.slice(6))].name} refit` : `${model(o.refit!).name} refit`} (${plural(o.daysLeft, "day")})`).join(", ")}</div>` : ""}
     </div>`;
@@ -1362,6 +1436,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     root.querySelectorAll<HTMLElement>("[data-unassign]").forEach(b => b.onclick = () => tryDo(() => assign(c, b.dataset.unassign!, -1)));
     root.querySelectorAll<HTMLElement>("[data-test]").forEach(b => b.onclick = () => change(() => startTest(c, scp173(), b.dataset.test as TestId, chosenWatchers())));
     root.querySelectorAll<HTMLElement>("[data-order]").forEach(b => b.onclick = () => change(() => order(c, b.dataset.order as ItemId)));
+    root.querySelectorAll<HTMLElement>("[data-sellstore]").forEach(b => b.onclick = () => { const [k, id] = b.dataset.sellstore!.split(":"); change(() => sellStore(c, k as StoreKind, id)); });
+    root.querySelectorAll<HTMLElement>("[data-contract]").forEach(b => b.onclick = () => change(() => acceptContract(c, b.dataset.contract!)));
     root.querySelectorAll<HTMLSelectElement>("[data-armor]").forEach(b => b.onchange = () => {
       const g = gearOf(b.dataset.armor!); g.armor = b.value as ItemId | "";
       if (g.armor !== "armor_heavy") g.items = g.items.map(i => (i && HEAVY.includes(i) ? "" : i));

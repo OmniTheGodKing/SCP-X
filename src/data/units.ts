@@ -67,9 +67,9 @@ export const UNITS: Record<UnitId, UnitDef> = {
 
 
 export const QUALITY = [
-  { name: "Standard", cost: 100, desc: "" },
-  { name: "Veteran", cost: 140, desc: "Arrives as a Private First Class." },
-  { name: "Elite", cost: 190, desc: "Arrives as a Private First Class." },
+  { name: "Standard", cost: 70, desc: "" },
+  { name: "Veteran", cost: 110, desc: "Arrives as a Private First Class." },
+  { name: "Elite", cost: 160, desc: "Arrives as a Private First Class." },
 ];
 
 /** Countries by the last part of a hometown ("Butte, Montana" is in the United States). */

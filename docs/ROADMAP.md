@@ -725,6 +725,69 @@ transition sounds, (4) World Map art, (5) Site-19 and the other strategic tabs, 
 - **Pacing:** avoid dead periods where the only useful action is waiting for a paycheck. Ensure accessible lower-cost options and worthwhile opportunities during recovery periods, without giving unlimited money.
 - **Completion check:** playtest early and midgame campaigns: a reasonably successful player can maintain Site-19, replace occasional losses, and steadily progress without repetitive waiting, but cannot buy every upgrade immediately. Balance using actual costs and reward rates, not arbitrary across-the-board increases.
 
+#### 4E as specified (before building; numbers are for Agent difficulty)
+Measured before the change: a campaign that only lets time run loses about $40k a month. The Council grant ($110k at
+standing 50) barely covers facility upkeep and salaries (about $145k at the start), and the starting $400k is
+effectively the only spending money until missions pay out.
+- **Ledger:** every change to funds goes through one function with a category and a reason. The campaign keeps this
+  month's and last month's totals by category and the last 40 entries. Income categories: Council grant, fronts,
+  contracts, research grants, mission rewards, salvage, sales, emergency funding, other. Spending categories: facility
+  upkeep, salaries, alert level, construction and repairs, research, workshop, recruitment and hiring, field
+  operations, staff care and training, losses, other.
+- **Council grant (primary income):** 100 + 1.5 × standing + 15 for each anomaly Site-19 holds that can breach (up to
+  4) + 10 for each full year of the campaign (up to 5) + any granted increase + the difficulty's adjustment, minus
+  any emergency-funding repayment due; never below 40. At standing 50 with SCP-173 held this is $190k (was $110k).
+- **Fronts:** each established front sends max(5, 45 − 0.3 × its region's exposure) a month (was max(3, 33 −
+  0.25 × exposure)), halved while an Insurgency infiltration runs there, as before.
+- **Council contracts (new, noncombat):** two paid contracts are on offer at a time, each open for 10 days, with a
+  new one arriving as one is taken or lapses. Accepting one sends people away for its length; they come back paid.
+  Kinds: engineering secondment (2 engineers, 10 days, $50k); research consultancy (1 researcher, 12 days, $45k);
+  training cadre (1 fit operative, 14 days, $60k, +1 XP); security detail (2 guards, 10 days, $40k); courier escort
+  (1 fit operative, 6 days, $50k, 15% chance they come back wounded). Pay rises 10% per campaign year. People away
+  can't be used, as with any absence.
+- **Research grants:** finishing an anomaly, object or Insurgency project earns a $25k Council research grant;
+  finishing a breakthrough earns $40k.
+- **Salvage:** after a tactical mission, $5k for each Insurgent put down or captured (weapons and kit recovered
+  beyond what research keeps); a broken Insurgency cell's stores add $20k.
+- **Mission rewards:** the existing per-kind bonuses stay; they are shown in the ledger as mission rewards.
+- **Sales:** surplus stores (armor, items, attachments, special ammunition) can be sold back from the workshop for
+  half their cost. Captured weapons still sell to partner sites as before.
+- **Emergency appropriation:** available from standing 15 (was 35): $120k at once and −10 standing, and the next two
+  Council grants are each $30k smaller. Shown on the request and in the finances card while repayment runs.
+- **Expense rebalance:** recruits $70k / $110k / $160k (was 100 / 140 / 190); researchers $50k (was 60); upkeep of
+  the research lab and the Euclid wing $15k (was 20), Security station $10k (was 15). Construction, research and
+  workshop prices stay, so a player still has to choose.
+- **Finances card (Command tab):** cash; the next Council payment's date and expected amount with its parts; income by
+  source and upkeep by category per month; net monthly projection; last month's actual totals by category; why the
+  grant changed since last month (standing, anomalies held, years, repayment); the latest entries.
+- **Cost preview:** hovering or focusing any button that spends money shows the cash left afterwards.
+- **Pacing:** contracts, sales and salvage give useful things to do while squads recover, and none is unlimited.
+- **Completion check:** a scripted year of play (missions won at a steady rate, a facility or research project bought
+  whenever affordable, losses replaced) ends with Site-19 maintained and growing but not everything bought; a passive
+  year no longer bleeds money to zero, yet doesn't pile up cash either. Results recorded under "As built".
+
+#### 4E as built (done; verified in source and in-game)
+Everything in the specification above is in, with the grant base set to 100 rather than 120 after the first test
+showed a passive player gaining about $100k a month. Files: src/campaign/ledger.ts (the books), contracts.ts
+(Council contracts), grantParts in council.ts, upkeepParts in base.ts, the research grant and store sales in
+research.ts, salvage in campaign.ts; the Finances and Council contracts cards and the cost preview in hubView.ts.
+All 56 places that changed funds now go through the ledger.
+
+Measured:
+- **Start of a campaign (standing 50, SCP-173 held, one front):** the next payment shows $190k from the Council and
+  $42k from the front, against $120k of upkeep and pay: +$112k a month before anything is bought (was about −$10k).
+- **Passive play** (time runs, nothing answered): standing sinks to the 20s and the grant falls with it; funds creep
+  up by roughly $60k a month while the inspector's audits and the Council's displeasure build.
+- **Scripted active year** (answers incidents through the real deploy and debug-win flow, keeps researchers busy,
+  builds when over $450k, replaces losses): in the months it kept up, it bought research steadily ($110k to $260k a
+  month) and a facility, and stayed roughly level, with income $250k to $340k a month. The script only managed 15
+  missions in the year (squads tired or flying home), so incidents went unanswered, standing hit 0 by month 7 and the
+  O5 inspector's fines ($100k to $200k a month) drove funds below zero. That is the standing system working as
+  designed against a player who ignores incidents, not the economy failing a successful one; a better scripted player
+  is needed to confirm the late game.
+- Contracts tested end to end: two on offer, accepting sends the named people away, they return on the due day and
+  the pay lands in the ledger. Emergency funding: $120k at standing 20, repaid $30k from each of the next two grants.
+
 ### 4F: dynamic Geoscape activity (agreed, priority)
 
 - **Events appear with time:** time-limited supply and equipment recovery, Intel leads, Council assignments, covert opportunities, resource discoveries, and hostile preparations appear dynamically, influenced by campaign state and regional contacts.
@@ -802,12 +865,14 @@ transition sounds, (4) World Map art, (5) Site-19 and the other strategic tabs, 
 
 ## Phase 4 order
 
-Priority by priority; each part is finished and verified before the next starts. 4A (art and sound) is done. The
-earlier order for the rest was 4B more anomalies, then 4C maps and mission variety, then 4D campaign story and endgame
-last (built on the finished art, anomalies and maps). 4E (economy), 4F (dynamic World Map activity), 4G (tactical
-combat life) and 4I (map geometry, visibility, facing, firing and sound) are marked agreed priorities; 4H is an agreed
-direction whose specifics are designed together. Where 4E to 4I sit relative to 4B to 4D is the user's call
-(see the open planning questions).
+Priority by priority; each part is finished and verified before the next starts. Decided by the user:
+1. 4A art and sound (done).
+2. 4E economy overhaul.
+3. 4I tactical map geometry, visibility, facing, firing and sound (the foundation 4G builds on).
+4. 4G tactical combat life and presentation.
+5. 4F dynamic World Map activity.
+6. 4B more anomalies, 4C maps and mission variety, 4H combat variety and progression.
+7. 4D campaign story and endgame last.
 
 ## Phase 5: 3D, XCOM style
 

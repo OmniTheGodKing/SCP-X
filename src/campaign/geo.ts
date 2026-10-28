@@ -1,6 +1,7 @@
 // The Geoscape: where everything on the World Map sits, what state it's in, and what the player knows about it.
 // Incidents are placed at the town they happened in (or at Site-19 for anything inside the site); independent
 // Foundation facilities are shown too, but Site-19 is the only one the player runs.
+import { earn, spend } from "./ledger";
 import { bringBack, sendAway } from "./people";
 import { agentRisk, agentsFree } from "./taskforces";
 import { addThreat, reveal, scanReveals } from "./chaos";
@@ -135,7 +136,7 @@ export function investigate(c: Campaign, inc: Incident, withIntel: boolean) {
   if (canInvestigate(c, inc)) return;
   if (withIntel) { if (c.intel < INVESTIGATE.intel) return; c.intel -= INVESTIGATE.intel; revealed(c, inc, false); return; }
   if (c.funds < INVESTIGATE.cost) return;
-  c.funds -= INVESTIGATE.cost; inc.reconDue = c.day + INVESTIGATE.days;
+  spend(c, INVESTIGATE.cost, "operations", "Field agent investigation"); inc.reconDue = c.day + INVESTIGATE.days;
   log(c, `A field agent is on the way to ${incidentPlace(inc).name}. Report due ${dateText(inc.reconDue)}.`);
 }
 function revealed(c: Campaign, inc: Incident, agent: boolean) {
@@ -172,7 +173,7 @@ export function canFieldOp(c: Campaign, r: RegionId, k: FieldOpKind): string | n
 }
 export function startFieldOp(c: Campaign, r: RegionId, k: FieldOpKind) {
   if (canFieldOp(c, r, k)) return;
-  c.funds -= FIELD_OPS[k].cost;
+  spend(c, FIELD_OPS[k].cost, "operations", `${FIELD_OPS[k].name} in ${REGIONS[r].name}`);
   (c.ops ??= []).push({ kind: k, region: r, done: c.day + FIELD_OPS[k].days });
   log(c, `${FIELD_OPS[k].name} begins in ${REGIONS[r].name}. Results ${dateText(c.day + FIELD_OPS[k].days)}.`);
 }
@@ -185,7 +186,7 @@ function finishOp(c: Campaign, op: FieldOp) {
   if (op.kind === "procure") {
     if (roll < 0.4) { const items = ["frag", "medkit", "smoke", "flashbang", "eyedrops"] as const; const it = items[Math.floor(Math.random() * items.length)]; c.inventory[it] = (c.inventory[it] ?? 0) + 3; log(c, `Procurement in ${where} brought in 3 × ${it === "eyedrops" ? "eye drops" : it}.`, "good", "world"); }
     else if (roll < 0.7) { c.amnestics += 2; log(c, `Procurement in ${where} brought in amnestic precursors (+2 doses).`, "good", "world"); }
-    else { const k = 30 + Math.floor(Math.random() * 3) * 10; c.funds += k; log(c, `Procurement in ${where} closed a profitable deal (+$${k}k).`, "good", "world"); }
+    else { const k = 30 + Math.floor(Math.random() * 3) * 10; earn(c, k, "income", `Procurement in ${where}`); log(c, `Procurement in ${where} closed a profitable deal (+$${k}k).`, "good", "world"); }
     return;
   }
   if (op.kind === "infiltrate") {
@@ -200,7 +201,7 @@ function finishOp(c: Campaign, op: FieldOp) {
     gainIntel(c, 2); log(c, `Surveillance in ${where} found no cell, but picked up their radio traffic (+2 Intel).`, "key", "world"); return;
   }
   if (roll < 0.35) { gainIntel(c, 1 + Math.floor(Math.random() * 2)); log(c, `The scan in ${where} turned up a source inside the Insurgency (+Intel).`, "key", "world"); }
-  else if (roll < 0.65) { const k = 20 + Math.floor(Math.random() * 3) * 10; c.funds += k; log(c, `The scan in ${where} found a cache of misappropriated funds (+$${k}k).`, "good", "world"); }
+  else if (roll < 0.65) { const k = 20 + Math.floor(Math.random() * 3) * 10; earn(c, k, "income", `Funds found in ${where}`); log(c, `The scan in ${where} found a cache of misappropriated funds (+$${k}k).`, "good", "world"); }
   else if (roll < 0.85) {
     const used = new Set<string>(), cand = rollCandidate(`lead${c.day}`, yearOf(c.day), used, false, true);
     cand.quality = Math.max(1, cand.quality); (c.recruits ??= []).push(cand);
@@ -269,7 +270,7 @@ export function canSendTeam(c: Campaign, inc: Incident): string | null {
 export function sendAmnesticsTeam(c: Campaign, inc: Incident) {
   if (canSendTeam(c, inc)) return;
   const t = travelDays(c, inc.region), doses = inc.witnesses ?? 0;
-  c.funds -= AMNESTIC_TEAM.cost; c.amnestics -= doses; sendAway(c, "researcher");
+  spend(c, AMNESTIC_TEAM.cost, "operations", "Amnestics team"); c.amnestics -= doses; sendAway(c, "researcher");
   (c.away ??= []).push({ kind: "researcher", back: c.day + Math.max(1, t) * 2 });
   inc.dispatch = { how: "team", done: c.day + Math.max(1, t), doses };
   log(c, `An amnestics team (a researcher and ${doses} doses) is on its way to ${incidentPlace(inc).name}. They dose the witnesses ${dateText(inc.dispatch.done)}.`);
@@ -281,7 +282,7 @@ export function canBury(c: Campaign, inc: Incident): string | null {
 }
 export function buryStory(c: Campaign, inc: Incident) {
   if (canBury(c, inc)) return;
-  c.funds -= buryCost(inc);
+  spend(c, buryCost(inc), "operations", "Burying a story");
   inc.dispatch = { how: "bury", done: c.day + BURY.days, doses: 0 };
   log(c, `${REGIONS[inc.region].front} is paying to bury the story near ${incidentPlace(inc).name}. Word ${dateText(inc.dispatch.done)}.`);
 }

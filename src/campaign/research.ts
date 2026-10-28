@@ -1,4 +1,5 @@
 // Research projects, SCP-173 tests and the equipment they unlock.
+import { earn, spend } from "./ledger";
 import { announceHire, fieldBoost, hasTrade, hirePerson, TRADE_CHANCE } from "./people";
 import { countOperational, engineersFree } from "./base";
 import { dateOf, log, yearOf, type Campaign } from "./campaign";
@@ -249,7 +250,10 @@ export const REFIT = { cost: 100, days: 7 };
 
 export const newResearch = (): ResearchState => ({ done: [], paid: [], progress: {}, assigned: {}, tests: [] });
 export const has = (c: Campaign, id: string) => c.research.done.includes(id);
-export const RESEARCHER_COST = 60;
+export const RESEARCHER_COST = 50;
+/** Council research grants (Phase 4E) for finishing anomaly, object and Insurgency work, and breakthroughs. */
+export const RESEARCH_GRANT = { anomaly: 25, breakthrough: 40 };
+export const researchGrant = (id: string) => { const p = PROJECTS[id]; return p.breakthrough ? RESEARCH_GRANT.breakthrough : /^SCP-|Objects|Insurgency/.test(p.branch) ? RESEARCH_GRANT.anomaly : 0; };
 export const researcherCapacity = (c: Campaign) => countOperational(c, "lab") * 4;
 export const researchersAssigned = (c: Campaign) => Object.values(c.research.assigned).reduce((a, n) => a + n, 0);
 export const researchersFree = (c: Campaign) => c.researchers - researchersAssigned(c);
@@ -340,7 +344,7 @@ export function assign(c: Campaign, id: string, delta: 1 | -1): string | null {
   if (researchersFree(c) < 1) return countOperational(c, "lab") ? "No free researchers. Hire more or move one off another project." : "Build a research lab and hire researchers first.";
   if (!r.paid.includes(id)) {
     if (c.funds < projectCost(c, id)) return `Needs $${projectCost(c, id)}k to start.`;
-    c.funds -= projectCost(c, id);
+    spend(c, projectCost(c, id), "research", PROJECTS[id].name);
     r.paid.push(id);
     log(c, `Research started: ${PROJECTS[id].name}.`);
   }
@@ -352,7 +356,7 @@ export const canHireResearcher = (c: Campaign) =>
   c.funds < RESEARCHER_COST ? `Needs $${RESEARCHER_COST}k.` : c.researchers >= researcherCapacity(c) ? (researcherCapacity(c) ? "The labs are full. Build another research lab." : "Build a research lab first.") : null;
 export function hireResearcher(c: Campaign) {
   if (canHireResearcher(c)) return;
-  c.funds -= RESEARCHER_COST;
+  spend(c, RESEARCHER_COST, "hiring", "Researcher hired");
   announceHire(c, hirePerson(c, "researcher"));
 }
 
@@ -375,6 +379,9 @@ export function tickResearch(c: Campaign) {
       if (id === "psych_screening") for (const o of c.roster) o.sanBonus = 10;
       if (r.offer?.id === id) r.offer = undefined;
       const p = PROJECTS[id], u = p.unlocks;
+      // the Council funds what Site-19 learns about anomalies and the Insurgency, and pays more for breakthroughs
+      const rg = researchGrant(id);
+      if (rg) earn(c, rg, "grants", `Council research grant: ${p.name}`);
       const next = u ? ` ${ITEMS[u].name} can now be built in the workshop.` : p.model || (p.armorTier ?? 0) > 1 ? " Refit the squad in the workshop." : p.attachment ? ` ${ATTACHMENTS[p.attachment].name} can now be built in the workshop.` : "";
       if (p.armorTier === 1) c.armorTier = Math.max(c.armorTier, 1);
       log(c, `Research complete: ${p.name}.${next}`, "good", "research");
@@ -433,7 +440,7 @@ export function canRefit(c: Campaign): string | null {
 }
 export function orderRefit(c: Campaign, key: string) {
   if (canRefit(c) || !pendingRefits(c).some(r => r.key === key)) return;
-  c.funds -= REFIT.cost;
+  spend(c, REFIT.cost, "workshop", "Weapon refit");
   c.orders.push({ refit: key, daysLeft: REFIT.days });
 }
 export const unlockedAttachments = (c: Campaign) =>
@@ -449,7 +456,7 @@ export function canOrderAmmo(c: Campaign, a: AmmoId): string | null {
 }
 export function orderAmmo(c: Campaign, a: AmmoId) {
   if (canOrderAmmo(c, a)) return;
-  c.funds -= ATTACHMENT_COST.cost;
+  spend(c, ATTACHMENT_COST.cost, "workshop", "Attachment");
   c.orders.push({ ammo: a, daysLeft: ATTACHMENT_COST.days });
 }
 export function canOrderAttachment(c: Campaign, a: AttachmentId): string | null {
@@ -461,10 +468,21 @@ export function canOrderAttachment(c: Campaign, a: AttachmentId): string | null 
 }
 export function orderAttachment(c: Campaign, a: AttachmentId) {
   if (canOrderAttachment(c, a)) return;
-  c.funds -= ATTACHMENT_COST.cost;
+  spend(c, ATTACHMENT_COST.cost, "workshop", "Special ammunition");
   c.orders.push({ attachment: a, daysLeft: ATTACHMENT_COST.days });
 }
 
+/** Phase 4E: surplus stores sell back for half what they cost to build. */
+export type StoreKind = "item" | "att" | "ammo";
+export const sellPrice = (c: Campaign, kind: StoreKind, id: string) => Math.floor((kind === "item" ? itemCost(c, id as ItemId) : ATTACHMENT_COST.cost) / 2);
+const stock = (c: Campaign, kind: StoreKind) => (kind === "item" ? c.inventory : kind === "att" ? c.attachments : c.ammo) as Record<string, number | undefined>;
+export const canSellStore = (c: Campaign, kind: StoreKind, id: string) => (stock(c, kind)[id] ?? 0) > 0 ? null : "None spare in stores.";
+export function sellStore(c: Campaign, kind: StoreKind, id: string) {
+  if (canSellStore(c, kind, id)) return;
+  const st = stock(c, kind); st[id] = (st[id] ?? 0) - 1;
+  const name = kind === "item" ? ITEMS[id as ItemId].name : kind === "att" ? ATTACHMENTS[id as AttachmentId].name : AMMO[id as AmmoId].name;
+  earn(c, sellPrice(c, kind, id), "sales", `${name} sold from stores`);
+}
 export const itemCost = (c: Campaign, item: ItemId) => has(c, "bt_jigs") ? Math.ceil(ITEMS[item].cost / 2) : ITEMS[item].cost;
 export function canOrder(c: Campaign, item: ItemId): string | null {
   if (!countOperational(c, "workshop")) return "Needs a working workshop.";
@@ -475,7 +493,7 @@ export function canOrder(c: Campaign, item: ItemId): string | null {
 }
 export function order(c: Campaign, item: ItemId) {
   if (canOrder(c, item)) return;
-  c.funds -= itemCost(c, item);
+  spend(c, itemCost(c, item), "workshop", ITEMS[item].name);
   c.orders.push({ item, daysLeft: ITEMS[item].days });
 }
 
@@ -519,7 +537,7 @@ export function canTest(c: Campaign, s: ScpRecord, t: TestId): string | null {
 export function startTest(c: Campaign, s: ScpRecord, t: TestId, watchers: Guard[]) {
   if (canTest(c, s, t)) return;
   const d = TESTS[t];
-  c.funds -= d.cost; c.dclass -= d.dclass;
+  spend(c, d.cost, "research", `Test on ${s.name}: ${d.name}`); c.dclass -= d.dclass;
   c.research.testing = { id: t, watchers: watchers.map(g => g.id) };
   c.research.assigned[testKey(t)] = 1;
   log(c, `The ${d.name.toLowerCase()} on ${s.name} begins: ${d.days} researcher-days of preparation, then the cell work.`);
