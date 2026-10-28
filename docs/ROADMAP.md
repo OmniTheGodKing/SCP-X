@@ -788,6 +788,27 @@ Measured:
 - Contracts tested end to end: two on offer, accepting sends the named people away, they return on the due day and
   the pay lands in the ledger. Emergency funding: $120k at standing 20, repaid $30k from each of the next two grants.
 
+### Insurgency operations as a choice of missions (requested during 4E; agreed)
+Like XCOM 2's guerrilla operations against Dark Events. Before, the month's three Insurgency operations were mostly
+answered with Intel (Disrupt), one was hidden, and only one came with a cell to strike.
+- **Three missions:** on the first of each month all three operations are identified, and each comes with a strike
+  mission against the cell running it, in the operation's region (or near Site-19 where there's no front). The three
+  arrive as one group, open until the earliest operation's window starts.
+- **Choose one:** committing a squad to one of them closes the other two (Eta-10 still allows a second answer, as with
+  any group). Winning the mission breaks that operation; losing it lets it go ahead.
+- **The rest are guaranteed:** operations whose missions were passed over or lapsed are marked as going ahead and will
+  happen within their window. They can no longer be disrupted with Intel. Passing them over doesn't cost standing or
+  count as an unanswered incident; the cost is the operation itself.
+- **Intel still works first:** before the choice is made, any of the three can be disrupted with Intel as before,
+  which also removes its mission.
+- **Shown:** the Insurgency card lists each operation with its mission (open, chosen, going ahead or broken); the
+  monthly log says the three missions are in and only one can be answered.
+- **As built (done; verified in source and in-game):** newPlans in chaos.ts identifies all three operations and
+  creates a strike mission for each (port, town or farm map) in one group; lockPlan marks the passed-over and lost ones
+  as going ahead; the strike expiry in world.ts locks instead of raising the agenda; applyResult locks on a loss. Test:
+  three missions appeared together, committing a squad to one closed the other two, winning disrupted that operation,
+  the other two were logged as going ahead, and the card shows them as Going ahead without a Disrupt button.
+
 ### 4F: dynamic Geoscape activity (agreed, priority)
 
 - **Events appear with time:** time-limited supply and equipment recovery, Intel leads, Council assignments, covert opportunities, resource discoveries, and hostile preparations appear dynamically, influenced by campaign state and regional contacts.
@@ -865,12 +886,13 @@ Measured:
 
 ## Phase 4 order
 
-Priority by priority; each part is finished and verified before the next starts. Decided by the user:
+Priority by priority; each part is finished and verified before the next starts. Decided by the user (4F moved ahead
+of 4I and 4G after 4E):
 1. 4A art and sound (done).
-2. 4E economy overhaul.
-3. 4I tactical map geometry, visibility, facing, firing and sound (the foundation 4G builds on).
-4. 4G tactical combat life and presentation.
-5. 4F dynamic World Map activity.
+2. 4E economy overhaul (done).
+3. 4F dynamic World Map activity.
+4. 4I tactical map geometry, visibility, facing, firing and sound (the foundation 4G builds on).
+5. 4G tactical combat life and presentation.
 6. 4B more anomalies, 4C maps and mission variety, 4H combat variety and progression.
 7. 4D campaign story and endgame last.
 

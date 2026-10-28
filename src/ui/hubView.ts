@@ -429,9 +429,9 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         if (!p.known) { const w = canReveal(c, p); return `<li><b>Unidentified operation</b>, ${whenText(c, p)} <span class="muted">· aimed at ${esc(REGIONS[p.region].name)}? Field work there would uncover it.</span>
           <button class="act" type="button" data-reveal="${p.id}" ${w ? `disabled title="${esc(w)}"` : ""}>Identify · ${REVEAL_INTEL} Intel</button></li>`; }
         const w = canDisrupt(c, p);
-        return `<li><b>${esc(d.name)}</b>: ${esc(goalText(p.kind))}, ${whenText(c, p)} <span class="muted">· ${esc(d.desc(p.region))}</span>
-          ${cell ? `<button class="linkbtn" type="button" data-mapinc="${cell.id}">A cell running it is located: strike it</button>` : ""}
-          <button class="act" type="button" data-disrupt="${p.id}" ${w ? `disabled title="${esc(w)}"` : ""}>Disrupt · ${DISRUPT_INTEL} Intel</button></li>`; }).join("")}</ul>` : `<p class="muted">Nothing known. New operations are picked up on the first of the month.</p>`}
+        return `<li><b>${esc(d.name)}</b>${p.locked ? ` <span class="flag bad">Going ahead</span>` : ""}: ${esc(goalText(p.kind))}, ${whenText(c, p)} <span class="muted">· ${esc(d.desc(p.region))}</span>
+          ${cell ? `<button class="linkbtn" type="button" data-mapinc="${cell.id}">${cell.group ? "Strike its cell (one of three: answering one closes the others)" : cell.answered ? "Its cell: Epsilon-11 is committed" : "Strike its cell"}</button>` : ""}
+          ${p.locked ? "" : `<button class="act" type="button" data-disrupt="${p.id}" ${w ? `disabled title="${esc(w)}"` : ""}>Disrupt · ${DISRUPT_INTEL} Intel</button>`}</li>`; }).join("")}</ul>` : `<p class="muted">Nothing known. New operations are picked up on the first of the month.</p>`}
       ${k.active.length ? `<p class="warn">In force: ${k.active.map(a => `${esc(PLANS[a.kind].name)} until ${dateText(a.until)}`).join("; ")}.</p>` : ""}
       <div class="label" style="margin-top:10px">Field commander</div>
       ${k.commander ? `<p><b>${esc(k.commander.rank)} ${esc(k.commander.name)}</b> · in command since ${dateText(k.commander.since)} · met ${plural(k.commander.seen, "time")}${k.commander.escapes ? `, escaped ${plural(k.commander.escapes, "time")}` : ""}. Leads every cell running an operation, and turns up elsewhere too. Captured, they would set the agenda back by 10.</p>` : `<p class="muted">${k.past.length ? "No commander in the field since the last one fell. A replacement will come." : "Not yet identified."}</p>`}

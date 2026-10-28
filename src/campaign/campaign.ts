@@ -15,7 +15,7 @@ import {
   type Base,
   upkeepParts,
 } from "./base";
-import { addThreat, ciRoles, commanderFate, commanderJoins, disrupt, planActive, monthlyChaos, newChaos, threatExtra, tickChaos, type ChaosState } from "./chaos";
+import { lockPlan, addThreat, ciRoles, commanderFate, commanderJoins, disrupt, planActive, monthlyChaos, newChaos, threatExtra, tickChaos, type ChaosState } from "./chaos";
 import { addStanding, councilGrant, grantParts, issueDirectives, monthlyCouncil, newCouncil, rewardText, grantReward, tickCouncil, transferFought, type CouncilState, type Reward, type Transit } from "./council";
 import { isInert, routineEvery, routineOf, firstSightings, resolveScp, scpName, startingScps, tickContainment, type ScpRecord } from "./containment";
 import { reachMilestone, type Milestone } from "./research";
@@ -149,6 +149,8 @@ export interface Incident {
   grown?: number;
   /** An Insurgency operation this cell is running (breaking it stops the plan), and for breaches, what really caused it. */
   plan?: string;
+  /** One of the month's three Insurgency operation strikes (guerrilla-ops style). */
+  ciOp?: boolean;
   cause?: "accident" | "anomalous" | "sabotage";
   /** Forced choices: a task force has been sent to this one. */
   answered?: boolean;
@@ -1020,6 +1022,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   if (kind === "strike" && r.win) c.lastStrike = c.day;
   // the Insurgency's agenda: what this mission did to it
   if (r.win && inc?.plan) disrupt(c, inc.plan, "Epsilon-11 broke the cell running it");
+  else if (inc?.plan) lockPlan(c, inc.plan, "Epsilon-11 couldn't break the cell running it");
   if (kind === "strike") addThreat(c, r.win ? -5 : 3, `${name} ${r.win ? "broken up" : "failed"}`);
   if (kind === "retaliation") addThreat(c, r.win ? -3 : 3, `${name} ${r.win ? "beaten off" : "failed"}`);
   if (kind === "raid") addThreat(c, r.win ? -3 : 5, `${name} ${r.win ? "beaten off" : "lost"}`);
