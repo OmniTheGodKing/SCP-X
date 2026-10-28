@@ -441,7 +441,7 @@ retaliation (done); (5) doors and sirens (done).
 ### As built (src/campaign/taskforces.ts; tactical pieces in mission.ts, abilities.ts and turn.ts)
 
 - **Changed later (user decisions during 4I):** Eta-10 is a separate roster: a recruit is hired into Epsilon-11 or
-  Eta-10 and stays there for good (no reassigning), Eta-10 numbers its own callsigns (H10-01…), and the Personnel tab
+  Eta-10 and stays there for good (no reassigning), Eta-10 numbers its own callsigns (E10-1, E10-2…; older saves are renumbered on load), and the Personnel tab
   shows the two rosters apart. Each task force brings its own bonus (Epsilon-11 +5 aim; Eta-10 video goggles). Squads
   never mix: the deploy panel picks which task force goes, the player plays one, and a hands-off team is also a single
   task force. With Eta-10 formed, a second incident can be answered at the same time, but only
@@ -892,6 +892,81 @@ agents; 60 days of play produced 8 leads of four kinds.
 - **Combat information:** make selection, movement, cover, line of sight, reaction fire, threat positions, action points, and reasons for hits/misses clear. Include an accessible combat log; animations must not conceal underlying outcomes.
 - **Completion check:** compare before/after tactical sessions for clarity, responsiveness, perceived impact, and time per turn; effects must improve atmosphere without slowing down normal play or reducing accessibility.
 
+#### 4G as specified (before building; a refinement of 4A's sprites and effects, no rule changes)
+Open questions settled for now (change them any time): the camera does not move, since the whole map is on screen;
+consequential moments get a short screen shake and an edge flash, behind an "Action highlights" toggle (on by
+default); enemy turns have a Normal/Fast setting. Both settings sit in the Sound panel and are remembered per viewer.
+- **Weapons and impact:** each shot is a visible round travelling from the muzzle to where it lands (a bright head and a
+  fading trail), with bursts for machine guns and SMGs timed to their sound; the shooter's sprite kicks back; hits
+  throw a puff at the target (blood for people, dark ichor for SCP-049-2 and SCP-610, sparks off armor); misses land
+  beside the target with sparks and dust, and a miss that cover caught throws chips off that cover; criticals get a
+  larger "CRITICAL" callout. Explosions: a fireball, a shockwave ring, flying debris, and smoke that lingers, leaving a
+  scorch mark on the floor for the rest of the mission. All effects are under about 0.7 s and drawn translucent.
+- **Operatives:** units in cover show XCOM-style shield badges (half or full, against the threats they can see);
+  overwatch shows the weapon raised; reloading shows a callout and a brief weapon swap; a near miss makes them flinch;
+  anyone under half health shows blood on their uniform; the downed bleed as before.
+- **Living environments:** Site-19's maps flash red alarm lights along the walls while the siren sounds, and lights
+  flicker where power is out; consoles and instrument cabinets blink; the surface compound has a searchlight sweeping
+  at night; towns have street lamps at night; smoke drifts; fire has flames, embers and rising smoke. An ambient bed of
+  sound per kind of map (the hum of Site-19, a town, wind and insects on the farm, water at the port) plays under the
+  score.
+- **Highlights and pacing:** a critical hit, a kill, an explosion, SCP-173 killing, SCP-106 rising, SCP-049 raising a
+  body, and reinforcements arriving give a short shake or edge flash; mission turning points (reinforcements,
+  the anomaly escaping, the objective done) show a banner across the map for about a second without blocking play.
+  Fast enemy turns cut the pauses between enemy actions to a third.
+- **SCP presence:** SCP-173's kill is a hard crack with a red flash; anyone blinking near it darkens the screen edge for
+  an instant; SCP-049 leaves a faint mist and raises bodies with a pale flash; SCP-106 brings a low rumble and bubbles
+  in its puddle before it rises; SCP-610's flesh pulses like a heartbeat.
+- **Combat information:** action-point pips over each team member; the shield badges; floating "MISS", "COVER" or
+  "GRAZE" text that says why; and a one-line summary of what happened in the enemy turn in the action bar. The incident
+  log keeps every outcome in words, so nothing depends on seeing an animation.
+- **Completion check:** before/after screenshots of the same mission; enemy-turn time measured at Normal and Fast (Fast
+  must be faster than before 4G); a turn of play with highlights off shows no shake.
+
+#### 4G as built (done; verified in source and in-game)
+- **Effects (src/game/types.ts, src/ui/fxdraw.ts):** the rules emit effects and the renderer draws them; no rule
+  changed. A shot is a tracer with a bright head and fading trail travelling at about 1.5 px/ms (60 to 240 ms); machine
+  guns fire a 4-round burst 75 ms apart and SMGs 3 rounds 60 ms apart, matching their sound. The shooter kicks back
+  for 140 ms. Where it lands: blood for people, dark ichor for SCP-049-2 and SCP-610 instances, sparks off armor or an
+  anomaly, dust and sparks for a miss, and chips thrown back off the cover for a miss the cover caught (a miss whose
+  roll fell inside the cover penalty strikes the cover tile facing the shooter). The damage number and the
+  MISS/COVER/GRAZE text appear when the round arrives, with a ricochet sound off cover. Criticals add a larger
+  "CRITICAL" callout. Explosions (grenades, rockets, sapper charges, fuel drums) draw a fireball, shockwave ring and
+  debris, leave smoke for about 6 s and a scorch mark for the rest of the mission.
+- **Operatives (src/ui/sprites.ts, render.ts):** shield badges by each operative (blue full, amber half, red "!"
+  flanked) against the hostiles in sight that can see them, or the best adjacent cover when none are; overwatch holds
+  the weapon raised; Reload shows "RELOADING" with the weapon dipped and a magazine in the off hand; a MISS or COVER
+  makes the target duck aside; anyone under half health has blood on their uniform; action-point pips over every team
+  member during the player's turn.
+- **Living environments (src/ui/living.ts):** lab and control-room cabinets and the Site-19 panel blink; on Site-19
+  maps during a breach or riot about 40% of ceiling lamps stutter in bursts; red beacons along the walls turn while the
+  breach siren sounds; the town's street lamps light at night along the kerbs; the surface compound's watchtower
+  searchlight sweeps the yard at night; canister smoke rolls and drifts; fire has flame tongues, embers and rising
+  smoke; SCP-610's flesh beats (a strong and a weak pulse, about once a second). Ambient beds per map
+  (src/ui/audio.ts `ambience`): Site-19 hum with ventilation knocks, a town murmur, farm wind with insect chirps, water
+  at the port, wind at the compound; they stop when the squad returns.
+- **Highlights and pacing:** `highlight()` (shake plus a coloured edge flash) on a critical, a kill (a team death
+  shakes harder and flashes red), any explosion, SCP-173 killing, SCP-106 rising and SCP-049 raising a body.
+  `banner()` across the map for 1.3 s on: Insurgent reinforcements landing, Site Security or Epsilon-11 arriving,
+  SCP-173 escaping, the commander escaping, the radio cut, and the anomaly contained; each plays a short brass sting.
+  The shake moves in whole pixels. The Sound panel gained "Action highlights" (on by default) and "Enemy turns:
+  Normal/Fast", saved with the volumes; Fast divides every pause outside the player's turn by three (`pace` in
+  src/game/state.ts).
+- **SCP presence:** SCP-173's kill is a crack sound, red flash, fracture lines and a red edge flash; a blink by anyone
+  within 6 tiles of it darkens the screen edge for a quarter second; SCP-049 trails a faint mist and raising a body is a
+  pale flash with a rising whine; SCP-106 bubbles in its puddle while under the floor and rises with a rumble and a
+  spreading dark ring. (Fixed in passing: SCP-049's and SCP-106's flashes were drawn at tile numbers instead of pixels,
+  in the map's top-left corner.)
+- **Combat information:** the action bar opens each player turn with a one-line summary of the enemy turn (shots at
+  the team and hits, damage taken by name, anyone lost, hostiles that moved in sight). The incident log is unchanged
+  and still records every outcome in words.
+- **Completion check (tests/accept4g.e2e.cjs, 11 checks pass):** before/after screenshots of the same staged wing C
+  strike, taken mid-shot against a build of the commit before 4G; the shot produces a travelling tracer with an impact
+  and a reason text; the enemy-turn summary appears; with seeded dice and the Insurgents engaging, enemy turns averaged
+  823 ms before 4G, 857 ms at Normal and 311 ms at Fast; the speed setting is saved; with highlights on a jolt shakes
+  the map (control), and with highlights off a turn of play including shots, a jolt and an explosion moves the canvas
+  0 times.
+
 ### 4H: combat variety, mission pacing, and progression (agreed direction, specifics to design together)
 
 - **Encounter variety:** build on existing enemy roles and anomalies with different tactical situations, reinforcements, changing objectives, optional goals, and environmental complications. Do not merely add hit-point-heavy enemies.
@@ -998,10 +1073,10 @@ Priority by priority; each part is finished and verified before the next starts.
 of 4I and 4G after 4E):
 1. 4A art and sound (done).
 2. 4E economy overhaul (done).
-3. 4F dynamic World Map activity.
-4. 4I tactical map geometry, visibility, facing, firing and sound (the foundation 4G builds on).
-5. 4G tactical combat life and presentation.
-6. 4B more anomalies, 4C maps and mission variety, 4H combat variety and progression.
+3. 4F dynamic World Map activity (done).
+4. 4I tactical map geometry, visibility, facing, firing and sound (done; the foundation 4G builds on).
+5. 4G tactical combat life and presentation (done).
+6. Next: 4B more anomalies, 4C maps and mission variety, 4H combat variety and progression.
 7. 4D campaign story and endgame last.
 
 ## Phase 5: 3D, XCOM style

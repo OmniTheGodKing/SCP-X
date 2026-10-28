@@ -2,7 +2,7 @@
 import { DIRS, DRUM, FULL, HALF, L, STEEL, WALL, cheb, passable, tileAt } from "../core/grid";
 import { hasPerk, spend, usesLeft } from "./perks";
 import { maxSanOf } from "./profiles";
-import { S, alive, canAct, canSee, computeVis, full, hooks, isPanicked, log, loseSanity, seen, team } from "./state";
+import { S, alive, banner, canAct, canSee, computeVis, full, hooks, isPanicked, log, loseSanity, seen, team } from "./state";
 import type { AbilityId, PerkId, Unit } from "./types";
 import { PERKS } from "../data/classes";
 import { MAPS } from "../data/maps";
@@ -211,7 +211,7 @@ export function useAbility(u: Unit, p: AbilityId, t: Unit) {
     }
     case "cutradio":
       t.saved = true; S.radioCut = true; S.ciDrop = undefined;
-      log(`${full(u)} smashes the radio set. Nobody is coming to help them.`, "good");
+      log(`${full(u)} smashes the radio set. Nobody is coming to help them.`, "good"); banner("RADIO CUT", "#86c193");
       break;
     case "recover":
       t.saved = true;

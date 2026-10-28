@@ -16,10 +16,10 @@ import { mountHub, openTab } from "./ui/hubView";
 import { L } from "./core/grid";
 import { fireLine, sightFrom } from "./core/sight";
 import { blastStructure, openDoor, opaque, passable } from "./core/grid";
-import { canShoot, lineOfFire, moveUnit } from "./game/combat";
+import { canShoot, fire, lineOfFire, moveUnit } from "./game/combat";
 import { canSee, computeVis } from "./game/state";
 import { emitNoise, settleFacing } from "./game/noise";
-import { reachFor } from "./game/turn";
+import { endTurn, reachFor } from "./game/turn";
 import { mountMission } from "./ui/missionView";
 import { esc } from "./ui/util";
 import { mountDebug } from "./ui/debug";
@@ -129,6 +129,8 @@ function showHub() {
   reach: reachFor,
   // Phase 4I: geometry, firing and hearing, for the acceptance tests
   fireLine, canShoot, lineOfFire, canSee, blastStructure, openDoor, opaque, passable, emitNoise, settleFacing, computeVis, moveUnit,
+  // Phase 4G: a shot and an enemy turn, for the presentation checks
+  fire, endTurn,
 };
 
 mountDebug({ campaign: () => campaign, screen: () => screen, refresh: () => { saveCampaign(campaign); if (screen === "hub") showHub(); } });

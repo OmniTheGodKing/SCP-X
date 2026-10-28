@@ -13,7 +13,7 @@ import { CAT_NAMES, INCOME_CATS, SPEND_CATS, monthIndex } from "../campaign/ledg
 import { LEADS, canLeadAction, leadAction, leadPrice, offerText, type Lead, type LeadAction } from "../campaign/leads";
 import { AUTO_KINDS, canDispatch, dispatchOdds, dispatchTeam } from "../campaign/autoteam";
 import { CONTRACTS, NEEDS, acceptContract, canAcceptContract, contractPool, whoText } from "../campaign/contracts";
-import { playMusic, soundControl, transition, ui, wireSound } from "./audio";
+import { ambience, playMusic, soundControl, transition, ui, wireSound } from "./audio";
 import { DISRUPT_INTEL, INQUIRY, PLANS, goalText, whenText, REVEAL_INTEL, THREAT_STEPS, canDisrupt, canInvestigateBreach, canReveal, disrupt, investigateBreach, reveal } from "../campaign/chaos";
 import { parseCampaign } from "../campaign/save";
 import type { Report } from "../campaign/reports";
@@ -204,7 +204,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     else if (m !== heard.month) ui.month();
     else if (n > heard.notices) ui.notice();
     heard = { notices: n, month: m, alarm: b?.id ?? "" };
-    playMusic(b ? "tense" : tab === "site" ? "site" : "world");
+    playMusic(b ? "tense" : tab === "site" ? "site" : "world"); ambience(null);
   }
   fundsNow = () => c.funds;
   if (!clickSounds.has(root)) {

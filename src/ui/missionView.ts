@@ -41,7 +41,7 @@ import { ESCORT_TURNS, MAX_SEALED } from "../game/turn";
 import { freshBodies, isCalm, isStaggered } from "../game/scp049";
 import { bait, isFeeding } from "../game/scp106";
 import { MAPS } from "../data/maps";
-import { playMusic, soundControl, transition, wireSound } from "./audio";
+import { ambience, playMusic, soundControl, transition, wireSound } from "./audio";
 
 const TEMPLATE = `
 <main class="wrap">
@@ -164,6 +164,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   $("mEyebrow").textContent = `SCP Foundation · ${S.setup.title}`;
   $("sndSlot").innerHTML = soundControl(); wireSound(root);
   transition.missionStart(); playMusic(S.setup.kind === "breach" || S.setup.kind === "raid" ? "tense" : "mission");
+  { const m = S.setup.map ?? "wingC"; ambience(m === "wingC" || m === "dblock" ? "site" : m as "town" | "farm" | "port" | "gate"); }
   const has173 = S.has173, kind = S.setup.kind;
   $("legend").innerHTML = legendHtml();
   // the first mission walks through the basics, one step at a time
@@ -433,6 +434,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
       else if (sel.staring) h = `<b>${esc(full(sel))} is staring</b>, ${sel.ap} action${sel.ap === 1 ? "" : "s"}.\nThey can move anywhere that keeps sight of SCP-173. Press B to look away (free).`;
       else h = `<b>${esc(full(sel))}</b>, ${sel.ap} action${sel.ap === 1 ? "" : "s"}.\nClick a tile to move (blue costs 1, amber costs 2).${sel.side === "mtf" ? " Click a visible Insurgent to fire." : " D-Class are unarmed."}${S.has173 ? " Next to SCP-173, press G to drag it." : ""}${matchMedia("(pointer: coarse)").matches ? " Tap twice to confirm." : ""}`;
     } else h = "No one has actions left. End the turn.";
+    if (can && S.enemySummary && !hintFlash) h = `<span class="esum">${esc(S.enemySummary)}</span>\n${h}`;
     $("hint").innerHTML = h;
 
     if (has173) $("notes").innerHTML = NOTES_173.map(n => {

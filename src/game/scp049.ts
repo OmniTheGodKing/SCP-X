@@ -4,7 +4,7 @@
 import { DIRS, L, TS, area, bfs, canStep, cheb, passable, pathTo, type Pt } from "../core/grid";
 import { rawSight } from "../core/sight";
 import { damage, kill } from "./combat";
-import { S, canSee, computeVis, full, fx, hooks, humans, isPanicked, log, loseSanity, occupied, rand, seen, sleep, team } from "./state";
+import { S, canSee, computeVis, full, fx, highlight, hooks, humans, isPanicked, log, loseSanity, occupied, rand, seen, sleep, team } from "./state";
 import type { Unit } from "./types";
 import { fleshBite, infect } from "./fire";
 
@@ -53,7 +53,8 @@ function cure(b: Unit) {
     log(`SCP-049 bends over ${b.side === "mtf" ? full(b) : b.name}'s body and works for a moment. It gets up again as SCP-049-2.`, "bad");
     for (const m of watchers) { loseSanity(m, 10, "witness"); m.witnessed = (m.witnessed ?? 0) + 1; }
   } else log(`Somewhere in the ${area(x, y)}, something that was dead gets back up.`, "bad");
-  fx({ type: "flash", x, y, dur: 700 });
+  fx({ type: "cue", cue: "raise", x: x * TS + TS / 2, y: y * TS + TS / 2, dur: 900 });
+  if (seen(x, y)) highlight(3, "#e8e4d0");
 }
 
 function touch(v: Unit) {

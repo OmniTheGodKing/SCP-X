@@ -2,8 +2,8 @@
 // reaches into its pocket dimension, then sinks out of sight and rises somewhere else. Gunfire
 // drives it under the floor for a turn. A living person left in the container is bait: it goes
 // straight for them, feeds for a turn, and that turn is the chance to seal it in.
-import { L, area, cheb, inContainer, passable, type Pt } from "../core/grid";
-import { S, canSee, computeVis, full, fx, hooks, humans, isPanicked, log, loseSanity, occupied, rand, seen, sleep, team } from "./state";
+import { L, TS, area, cheb, inContainer, passable, type Pt } from "../core/grid";
+import { S, canSee, computeVis, full, fx, highlight, hooks, humans, isPanicked, log, loseSanity, occupied, rand, seen, sleep, team } from "./state";
 import type { Unit } from "./types";
 
 export const OLD_MAN_MOVE = 4, SINK_AFTER_GRAB = 2;
@@ -57,7 +57,7 @@ function grab(v: Unit) {
   if (watchers.length || v.side === "mtf" || v.side === "dclass") log(`SCP-106 takes hold of ${who} and drags them down into the floor. They are gone.`, "bad");
   else log(`A scream from the ${area(v.x, v.y)}, cut off as if by a closing door.`, "bad");
   for (const w of watchers) { loseSanity(w, 15, "witness"); w.witnessed = (w.witnessed ?? 0) + 1; }
-  fx({ type: "flash", x: v.x, y: v.y, dur: 700 });
+  fx({ type: "flash", x: v.x * TS + TS / 2, y: v.y * TS + TS / 2, dur: 700, color: "#3a2a18" });
 }
 
 /** Rise again near someone nobody is watching (or near the bait, if there is any). */
@@ -71,6 +71,8 @@ function emerge() {
   if (!p) return;
   [m.x, m.y] = p;
   S.submerged = false;
+  fx({ type: "cue", cue: "rise", x: m.x * TS + TS / 2, y: m.y * TS + TS / 2, dur: 1100 });
+  if (seen(m.x, m.y)) highlight(4, "#5a4020");
   if (seen(m.x, m.y)) log(`Black rot spreads across the floor of the ${area(m.x, m.y)}, and SCP-106 rises out of it.`, "bad");
   else log("Somewhere nearby, the smell of rot gets stronger.", "bad");
   S.corroded.add(m.y * L.W + m.x);

@@ -57,9 +57,15 @@ export function reveal(id: string) {
 }
 
 type NewEffect = Effect extends infer E ? E extends Effect ? Omit<E, "t0"> : never : never;
-export function fx(e: NewEffect) { S.effects.push({ ...e, t0: performance.now() } as Effect); }
+/** Add an effect, optionally starting a little later (a hit lands when the tracer gets there). */
+export function fx(e: NewEffect, delay = 0) { S.effects.push({ ...e, t0: performance.now() + delay } as Effect); }
+/** Phase 4G: a consequential moment (shake and edge flash, if the viewer wants them) and a turning-point banner. */
+export const highlight = (mag: number, color = "#ffffff") => fx({ type: "jolt", mag, color, dur: 380 });
+export const banner = (text: string, color = "#d8bf86") => fx({ type: "banner", text, color, dur: 1300 });
 
-export const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+/** Enemy-turn pacing, set from the viewer's settings: Fast cuts every pause outside the player's turn to a third. */
+export const pace = { fast: false };
+export const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, pace.fast && S && S.phase !== "player" ? ms / 3 : ms));
 export const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
 
 export function computeVis() {

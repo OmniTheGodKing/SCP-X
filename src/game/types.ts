@@ -158,11 +158,22 @@ export interface Unit {
 
 export interface LogEntry { t: number; text: string; kind: string; }
 
+/** What a round does where it lands: blood, dark ichor (SCP-049-2, SCP-610), sparks off armor or metal, dust from a
+ *  miss, or chips off the cover that caught it. */
+export type Impact = "blood" | "ichor" | "spark" | "dust" | "cover";
 export type Effect =
-  | { type: "line"; t0: number; dur: number; x0: number; y0: number; x1: number; y1: number; color: string }
-  | { type: "text"; t0: number; dur: number; x: number; y: number; text: string; color: string }
+  // a shot: `rounds` tracers travel from the muzzle and land (bursts `gap` ms apart); `at` is the cover tile a miss struck
+  | { type: "line"; t0: number; dur: number; x0: number; y0: number; x1: number; y1: number; color: string; rounds?: number; gap?: number; impact?: Impact; at?: [number, number] }
+  | { type: "text"; t0: number; dur: number; x: number; y: number; text: string; color: string; big?: boolean }
   | { type: "ghost"; t0: number; dur: number; x: number; y: number }
-  | { type: "flash"; t0: number; dur: number; x: number; y: number };
+  | { type: "flash"; t0: number; dur: number; x: number; y: number; color?: string }
+  // an explosion: fireball, shockwave, debris, then lingering smoke and a scorch mark
+  | { type: "blast"; t0: number; dur: number; x: number; y: number; r: number }
+  // Phase 4G highlights: a shake and an edge flash (drawn only when the viewer has highlights on), and a banner
+  | { type: "jolt"; t0: number; dur: number; mag: number; color: string }
+  | { type: "banner"; t0: number; dur: number; text: string; color: string }
+  // a one-off moment with its own look and sound: a reload, SCP-173's crack, SCP-106 rising, SCP-049 raising a body
+  | { type: "cue"; t0: number; dur: number; x: number; y: number; cue: "reload" | "crack" | "rise" | "raise" | "blink" };
 
 /** One operative as sent from Site-19. */
 export interface SquadMember {
@@ -359,6 +370,9 @@ export interface MissionState {
   smoke: { x: number; y: number; until: number }[];
   /** Site-19 breaches: the alarm siren, and doorways sealed with blast doors from the panel. */
   siren: boolean;
+  /** Phase 4G: what the other side did this enemy turn, tallied as it happens, and the one line that sums it up. */
+  enemyTurn?: { shots: number; hits: number; hurt: Record<string, number>; lost: string[]; start: Record<string, string> };
+  enemySummary?: string;
   lockedDoors: number[];
   /** Escorts: the Insurgency got the truck open. */
   stolen?: boolean;

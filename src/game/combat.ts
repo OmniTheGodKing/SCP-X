@@ -8,8 +8,8 @@ import { emitNoise, facingTo } from "./noise";
 import { hasPerk, rangeOf } from "./perks";
 import { TYPES, rangeMod } from "../data/weapons";
 import { prof } from "./profiles";
-import { S, alive, breakConcealment, canSee, full, fx, hooks, isPanicked, team, isTeam, log, loseSanity, rand, reveal, seen, sleep, computeVis } from "./state";
-import type { Gun, Unit } from "./types";
+import { S, alive, breakConcealment, canSee, full, fx, highlight, hooks, isPanicked, team, isTeam, log, loseSanity, rand, reveal, seen, sleep, computeVis } from "./state";
+import type { Gun, Impact, Unit } from "./types";
 import { SIDEARM } from "../data/weapons";
 import { dropCarried } from "./abilities";
 import { ignite } from "./fire";
@@ -125,7 +125,8 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
   // in a storm the noise covers the shot
   if (sh.side === "mtf" && S.setup.weather !== "storm") breakConcealment("shots fired");
   if (sh.gun && !sidearm) sh.gun.ammo = Math.max(0, sh.gun.ammo - 1);
-  const hit = Math.random() * 100 < info.chance;
+  const roll = Math.random() * 100, hit = roll < info.chance;
+  if (S.enemyTurn && S.phase !== "player" && !isTeam(sh)) { S.enemyTurn.shots++; if (hit) S.enemyTurn.hits++; }
   // leaning out to fire leaves the shooter exposed at that spot through the enemy's reply
   if (info.from.x !== sh.x || info.from.y !== sh.y) sh.exposed = { x: info.from.x, y: info.from.y, turn: S.turn };
   // ordinary glass in the way shatters (and stays broken)
@@ -136,8 +137,17 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
   sh.facing = facingTo(tg.x - sh.x, tg.y - sh.y);
   if (gun?.attachment !== "suppressor") emitNoise(info.from.x, info.from.y, "gunfire", sh);
   const [x0, y0] = center(info.from), [x1, y1] = center(tg);
-  const ox = hit ? 0 : (Math.random() - .5) * 26, oy = hit ? 0 : (Math.random() - .5) * 26;
-  fx({ type: "line", x0, y0, x1: x1 + ox, y1: y1 + oy, color: sh.side === "mtf" ? "#9cc4e4" : "#d0a6e6", dur: 260 });
+  // Phase 4G: the rounds travel and land. A miss the target's cover caught strikes that cover; any other lands beside them.
+  const coverMod = info.mods.find(([n]) => /cover/i.test(n))?.[1] ?? 0, byCover = !hit && coverMod < 0 && roll < info.chance - coverMod;
+  const coverTile = byCover ? coverTileFacing(tg.x, tg.y, info.from.x, info.from.y) : null;
+  let ox = 0, oy = 0;
+  if (coverTile) { ox = (coverTile[0] - tg.x) * TS * 0.55; oy = (coverTile[1] - tg.y) * TS * 0.55; }
+  else if (!hit) { const a = Math.random() * Math.PI * 2; ox = Math.cos(a) * (11 + Math.random() * 8); oy = Math.sin(a) * (11 + Math.random() * 8); }
+  const armored = hit && (tg.armor ?? 0) > (gun?.pierce ?? 0);
+  const impact: Impact = !hit ? (coverTile ? "cover" : "dust") : tg.side === "anomaly" ? "spark" : tg.side === "zombie" && !tg.rioter ? "ichor" : armored ? "spark" : "blood";
+  const burst = sidearm ? null : gun?.type === "mg" ? [4, 75] : gun?.type === "smg" ? [3, 60] : null;
+  const travel = Math.max(60, Math.min(240, Math.hypot(x1 - x0, y1 - y0) / 1.5)), land = travel + (burst ? (burst[0] - 1) * burst[1] : 0);
+  fx({ type: "line", x0, y0, x1: x1 + ox, y1: y1 + oy, color: sh.side === "mtf" ? "#cfe4f4" : "#f0c8a0", dur: land + 360, rounds: burst?.[0] ?? 1, gap: burst?.[1] ?? 0, impact, at: coverTile ?? undefined });
   const visibleShot = sh.side === "mtf" || seen(sh.x, sh.y) || isTeam(tg);
   if (!hasPerk(sh, "quiet_steps") && gun?.attachment !== "suppressor") {   // SCP-173 hears the shot, but only roughly where it came from
     const near = bfs([[sh.x, sh.y]], 3).dist, spots: number[] = [];
@@ -154,25 +164,40 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
     if (hasPerk(sh, "shotgun_drills") && Math.hypot(tg.x - info.from.x, tg.y - info.from.y) <= 3) dmg += 2;
     const soak = Math.min(Math.max(0, (tg.armor ?? 0) - (gun?.pierce ?? 0)), dmg);   // each armor point cuts the hit by 1
     dmg -= soak;
-    fx({ type: "text", x: x1, y: y1 - 14, text: (crit ? `${dmg}!` : `${dmg}`) + (soak ? ` (−${soak})` : ""), color: crit ? "#f0c060" : "#ffffff", dur: 900 });
+    fx({ type: "text", x: x1, y: y1 - 14, text: (crit ? `${dmg}!` : `${dmg}`) + (soak ? ` (−${soak})` : ""), color: crit ? "#f0c060" : "#ffffff", dur: 900 }, travel);
+    if (crit && visibleShot) { fx({ type: "text", x: x1, y: y1 - 30, text: "CRITICAL", color: "#f0c060", dur: 1100, big: true }, travel); highlight(3, "#f0c060"); }
     if (visibleShot) log(`${reaction ? "Overwatch: " : ""}${sidearm ? "Sidearm: " : ""}${full(sh)} hits ${full(tg)} for ${dmg}${crit ? ", critical" : ""}${soak ? `; armor absorbed ${soak}` : ""} (${info.chance}%${why(info, gun?.name)}).`, sh.side === "mtf" ? "good" : "bad");
     if (hasPerk(sh, "shredder") && (tg.armor ?? 0) > 0) { tg.armor!--; log("The hit shreds a point of armor.", "good"); }
     damage(tg, dmg, sh);
     if (gun?.ammoType === "incendiary" && !sidearm) ignite(tg.x, tg.y, 1);
   } else {
     const graze = gun?.attachment === "stock" ? Math.max(0, 1 - (tg.armor ?? 0)) : 0;
-    fx({ type: "text", x: x1, y: y1 - 14, text: graze ? "graze 1" : "miss", color: "#8b939b", dur: 800 });
+    fx({ type: "text", x: x1, y: y1 - 14, text: graze ? "GRAZE 1" : coverTile ? "COVER" : "MISS", color: graze ? "#d8bf86" : coverTile ? "#9cc4e4" : "#8b939b", dur: 900 }, travel);
     if (visibleShot) log(`${reaction ? "Overwatch: " : ""}${full(sh)} misses ${full(tg)} (${info.chance}%${why(info, gun?.name)})${graze ? ", but the round grazes for 1" : ""}.`);
     if (graze) damage(tg, 1, sh);
   }
   hooks.update();
-  await sleep(380);
+  await sleep(Math.max(380, land + 120));
+}
+
+/** The cover tile beside (tx, ty) that faces a shooter at (sx, sy): the one a round meant for the target would strike. */
+function coverTileFacing(tx: number, ty: number, sx: number, sy: number): [number, number] | null {
+  const vx = sx - tx, vy = sy - ty, len = Math.hypot(vx, vy) || 1;
+  let best: [number, number] | null = null, bc = 0;
+  for (const [dx, dy] of DIRS) {
+    const t = tileAt(tx + dx, ty + dy);
+    if (!(t === WALL || t === FULL || t === STEEL || t === HALF || t === DRUM)) continue;
+    const cos = (vx * dx + vy * dy) / (len * Math.hypot(dx, dy));
+    if (cos > bc) { bc = cos; best = [tx + dx, ty + dy]; }
+  }
+  return best;
 }
 
 export const BLEED_TURNS = 3;
 
 export function damage(u: Unit, dmg: number, by?: Unit) {
   if (dmg <= 0) return;
+  if (S.enemyTurn && S.phase !== "player" && isTeam(u)) S.enemyTurn.hurt[u.call || u.name] = (S.enemyTurn.hurt[u.call || u.name] ?? 0) + dmg;
   // SCP-049 can't be hurt, only knocked back a step in its plans
   if (u.side === "anomaly") {
     if (S.has049) { u.staggeredUntil = S.turn; log("SCP-049 staggers under the hit but isn't hurt. It loses its next move.", "key"); }
@@ -219,6 +244,8 @@ export function kill(u: Unit, by173 = false) {
   }
   if (u.carrying) dropCarried(u);
   u.alive = false; u.hp = 0; u.staring = false; u.downed = false;
+  if (wasTeam && S.enemyTurn && S.phase !== "player") S.enemyTurn.lost.push(u.call || u.name);
+  if (wasTeam || seen(u.x, u.y)) highlight(wasTeam ? 4 : 2, wasTeam ? "#d75b47" : "#ffffff");
   if (u.side === "mtf") {
     S.stats.mtfLost++;
     log(`${full(u)} was killed.`, "bad");

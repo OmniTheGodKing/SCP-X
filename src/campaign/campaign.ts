@@ -5,7 +5,7 @@ import { tickLeads, type LeadsState } from "./leads";
 import { DIFFICULTIES, diffOf, type Difficulty, type NewCampaignOptions } from "./difficulty";
 import { FATIGUE, afterMission, bondsOf, restDay, tiredness } from "./condition";
 import { announceHire, hirePerson, losePeople, someone, syncStaff, type Lost, type Person } from "./people";
-import { TF_BONUS, TF_PREFIX, GOGGLES, NU7, canBringAmnestics, canBringResearcher, canCallNu7, nu7Troopers, otherSiteOutcome, scanOutcome, SPECIALIST, tfOf } from "./taskforces";
+import { TF_BONUS, eta10Call, GOGGLES, NU7, canBringAmnestics, canBringResearcher, canCallNu7, nu7Troopers, otherSiteOutcome, scanOutcome, SPECIALIST, tfOf } from "./taskforces";
 import { newTf, tickTf, type TaskForce, type TfState } from "./taskforces";
 import { pickNick, withNick } from "../data/nicknames";
 import { chronicle, type HistEntry } from "./history";
@@ -688,10 +688,10 @@ export function hireCandidate(c: Campaign, k: Candidate, tf: "e11" | "eta10" = "
   c.recruits = (c.recruits ?? []).filter(x => x !== k);
   const o = operativeFrom(c, k);
   // the task force is for good; Eta-10 numbers its own callsigns
-  if (tf === "eta10") { o.tf = "eta10"; o.call = `${TF_PREFIX.eta10}-${String(c.roster.filter(x => x.tf === "eta10").length + 1).padStart(2, "0")}`; }
+  if (tf === "eta10") { o.call = eta10Call(c.roster); o.tf = "eta10"; }
   c.roster.push(o);
   chronicle(c, "personnel", `${o.call} ${o.name} joined ${tf === "eta10" ? "Eta-10" : "Epsilon-11"} from the ${UNITS[k.unit].name}.`, { op: o.id });
-  log(c, `${o.call} ${o.name}, from the ${UNITS[k.unit].name}, joins Epsilon-11.`, "good");
+  log(c, `${o.call} ${o.name}, from the ${UNITS[k.unit].name}, joins ${tf === "eta10" ? "Eta-10" : "Epsilon-11"}.`, "good");
 }
 /** An operative made from a candidate: their unit, look, file, lean, quality and trait. */
 export function operativeFrom(c: Campaign, k: Candidate): Operative {

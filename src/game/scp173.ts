@@ -2,11 +2,11 @@
 // it steps into the sight of anyone whose eyes are open. It kills anyone it reaches unseen and
 // keeps going. It only knows what it can see from where it stands, plus gunfire it hears.
 import { emitNoise } from "./noise";
-import { openDoor, DIRS, L, area, bfs, canStep, cheb, inContainer, passable, pathTo, type Pt } from "../core/grid";
+import { openDoor, DIRS, L, TS, area, bfs, canStep, cheb, inContainer, passable, pathTo, type Pt } from "../core/grid";
 import { rawSight, sightFrom } from "../core/sight";
 import { kill } from "./combat";
 import { STRAY_BLINK, blinkChance, prof } from "./profiles";
-import { S, canSee, computeVis, full, fx, hooks, humans, isBlind, isPanicked, isTeam, log, loseSanity, occupied, reveal, seen, sleep, team } from "./state";
+import { S, banner, canSee, computeVis, full, fx, highlight, hooks, humans, isBlind, isPanicked, isTeam, log, loseSanity, occupied, reveal, seen, sleep, team } from "./state";
 import type { Unit } from "./types";
 import { MAPS } from "../data/maps";
 
@@ -92,6 +92,7 @@ function step173(path: Pt[], blinked: Set<Unit>) {
 
 function killBy173(v: Unit) {
   const witnessed = isTeam(v) || seen(v.x, v.y);
+  if (witnessed) { fx({ type: "cue", cue: "crack", x: v.x * TS + TS / 2, y: v.y * TS + TS / 2, dur: 500 }); highlight(6, "#d75b47"); }
   kill(v, true);
   reveal("hunt");
   if (isTeam(v)) log(`SCP-173 snapped ${full(v)}'s neck. Nobody saw it move.`, "bad");
@@ -159,7 +160,7 @@ export async function release(blinked: Set<Unit>) {
   // a free turn without a kill makes it restless; a kill keeps it busy here
   S.escapeDrive = r.kills ? Math.max(0, S.escapeDrive - 2) : S.escapeDrive + 1;
   computeVis();
-  if (S.escaped) { log("SCP-173 reached the surface hatch. It is outside Site-19.", "bad"); hooks.update(); await sleep(450); return true; }
+  if (S.escaped) { log("SCP-173 reached the surface hatch. It is outside Site-19.", "bad"); banner("SCP-173 HAS ESCAPED", "#d75b47"); hooks.update(); await sleep(450); return true; }
   if (!before && escaping()) log("Something scrapes along the east lab floor, toward the surface hatch.", "bad");
   if (r.moved && wasSeen) {
     fx({ type: "ghost", x: fromX, y: fromY, dur: 1400 });

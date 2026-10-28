@@ -4,7 +4,7 @@
 // turns into one of its instances 5 turns later, for good. Only fire can kill the core.
 import { DIRS, DRUM, FLOOR, HALF, L, STEEL, TS, WALL, area, cheb, passable, tileAt } from "../core/grid";
 import { damage } from "./combat";
-import { S, computeVis, full, fx, hooks, isTeam, log, rand, seen, sleep } from "./state";
+import { S, computeVis, full, fx, highlight, hooks, isTeam, log, rand, seen, sleep } from "./state";
 import type { Unit } from "./types";
 
 export const FIRE_TURNS = 3, BURN_DAMAGE = 2, INFECTION_TURNS = 5, SUIT_TEAR = 0.6, CORE_BURN = 4;
@@ -22,12 +22,13 @@ export function ignite(x: number, y: number, turns = FIRE_TURNS - (wet() ? 1 : 0
   const last = S.turn + (S.core && S.core.x === x && S.core.y === y ? 1 : turns);
   S.fires.set(idx(x, y), Math.max(S.fires.get(idx(x, y)) ?? -1, last));
   S.hadFire = true;
-  if (S.flesh.delete(idx(x, y)) && seen(x, y)) fx({ type: "flash", x: x * TS + TS / 2, y: y * TS + TS / 2, dur: 300 });
+  if (S.flesh.delete(idx(x, y)) && seen(x, y)) fx({ type: "flash", x: x * TS + TS / 2, y: y * TS + TS / 2, dur: 300, color: "#ff9a50" });
 }
 
 function explodeDrum(x: number, y: number) {
   L.grid[y][x] = FLOOR;
-  fx({ type: "flash", x: x * TS + TS / 2, y: y * TS + TS / 2, dur: 600 });
+  fx({ type: "blast", x: x * TS + TS / 2, y: y * TS + TS / 2, r: 1.6, dur: 700 });
+  if (seen(x, y)) highlight(5, "#ff9a50");
   if (seen(x, y)) log(`A fuel drum in the ${area(x, y)} goes up.`, "key");
   for (const v of S.units.filter(u => u.alive && !u.saved && !u.carriedBy && cheb(u.x, u.y, x, y) <= 1 && u.side !== "anomaly")) damage(v, 3);
   for (const [dx, dy] of [[0, 0], ...DIRS]) ignite(x + dx, y + dy);

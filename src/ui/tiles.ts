@@ -88,7 +88,7 @@ function paint(ctx: CanvasRenderingContext2D) {
   }
   // 2. painted markings and lighting, before anything stands on the floor
   markings(ctx, map, surf, areas);
-  if (!outdoorish(map) || map === "gate") lights(ctx, surf, areas);
+  if (!outdoorish(map) || map === "gate") lights(ctx);
 
   // 3. walls: open-ground borders become fences, hedges or rock; buildings get their material with a south face
   for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) {
@@ -255,22 +255,25 @@ function hazard(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, 
   ctx.restore();
 }
 
-/** Pools of light under each indoor room's ceiling lamps. */
-function lights(ctx: CanvasRenderingContext2D, surf: Surface[], areas: string[]) {
+/** Where the ceiling lamps hang: one per twenty-odd tiles of each indoor room, spread through it. */
+export function lampSpots(): number[] {
   const rooms = new Map<string, number[]>();
-  areas.forEach((a, i) => { const x = i % L.W, y = (i / L.W) | 0; if (!passable(x, y) || outdoorArea(a)) return; const list = rooms.get(a) ?? []; list.push(i); rooms.set(a, list); });
+  for (let i = 0; i < L.W * L.H; i++) { const x = i % L.W, y = (i / L.W) | 0, a = area(x, y); if (!passable(x, y) || outdoorArea(a)) continue; const list = rooms.get(a) ?? []; list.push(i); rooms.set(a, list); }
+  const out: number[] = [];
+  for (const [, tiles] of rooms) { const n = Math.max(1, Math.round(tiles.length / 22)); for (let k = 0; k < n; k++) out.push(tiles[Math.floor((k + 0.5) / n * tiles.length)]); }
+  return out;
+}
+export const isOutdoor = (x: number, y: number) => outdoorArea(area(x, y));
+
+/** Pools of light under each indoor room's ceiling lamps. */
+function lights(ctx: CanvasRenderingContext2D) {
   const warm = S.setup.night ? 0.07 : 0.05;
-  for (const [, tiles] of rooms) {
-    // one lamp per twenty-odd tiles, spread through the room
-    const n = Math.max(1, Math.round(tiles.length / 22));
-    for (let k = 0; k < n; k++) {
-      const i = tiles[Math.floor((k + 0.5) / n * tiles.length)], cx = (i % L.W) * TS + TS / 2, cy = ((i / L.W) | 0) * TS + TS / 2;
-      const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, TS * 3.2);
-      g.addColorStop(0, `rgba(255,236,190,${warm})`); g.addColorStop(1, "rgba(255,236,190,0)");
-      ctx.fillStyle = g; ctx.fillRect(cx - TS * 3.2, cy - TS * 3.2, TS * 6.4, TS * 6.4);
-    }
+  for (const i of lampSpots()) {
+    const cx = (i % L.W) * TS + TS / 2, cy = ((i / L.W) | 0) * TS + TS / 2;
+    const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, TS * 3.2);
+    g.addColorStop(0, `rgba(255,236,190,${warm})`); g.addColorStop(1, "rgba(255,236,190,0)");
+    ctx.fillStyle = g; ctx.fillRect(cx - TS * 3.2, cy - TS * 3.2, TS * 6.4, TS * 6.4);
   }
-  void surf;
 }
 
 // ---------- walls ----------

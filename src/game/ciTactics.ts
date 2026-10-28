@@ -3,7 +3,7 @@
 // reinforcements that land in long fights with a turn's warning.
 import { emitNoise } from "./noise";
 import { PART, blastStructure, doorShut, L, FLOOR, WALL, bfs, cheb, pathTo, passable } from "../core/grid";
-import { S, alive, computeVis, fx, log, occupied, seen, team } from "./state";
+import { S, alive, banner, computeVis, fx, highlight, log, occupied, seen, team } from "./state";
 import { damage, moveUnit } from "./combat";
 import type { Unit, MissionSetup } from "./types";
 
@@ -61,7 +61,8 @@ export function demoBreach(r: Unit): boolean {
   const [wx, wy] = best;
   r.charges = (r.charges ?? 1) - 1; r.ap = 0;
   const what = blastStructure(wx, wy, 2);
-  fx({ type: "flash", x: wx * 32 + 16, y: wy * 32 + 16, dur: 500 });
+  fx({ type: "blast", x: wx * 32 + 16, y: wy * 32 + 16, r: 1.2, dur: 650 });
+  if (seen(wx, wy)) highlight(4, "#ff9a50");
   emitNoise(wx, wy, "explosion", r);
   log(`${seen(r.x, r.y) || seen(wx, wy) ? "An Insurgent sapper" : "Something"} blows ${what === "door" ? "a door off its hinges" : "a hole through the wall"}${seen(wx, wy) ? "" : " nearby"}.`, "bad");
   for (const u of S.units) if (u.alive && u !== r && cheb(u.x, u.y, wx, wy) <= 1) damage(u, 2);
@@ -79,7 +80,7 @@ export async function commanderFlees(r: Unit): Promise<boolean> {
   if (best >= 0) await moveUnit(r, pathTo(res, best % L.W, (best / L.W) | 0) || []);
   r.ap = 0;
   if (!r.alive || r.downed) return true;
-  if (L.exitMap[r.y * L.W + r.x] <= 1) { r.saved = true; r.escaped = true; log(`${r.name} gets out. The commander has escaped.`, "bad"); }
+  if (L.exitMap[r.y * L.W + r.x] <= 1) { r.saved = true; r.escaped = true; log(`${r.name} gets out. The commander has escaped.`, "bad"); banner("THE COMMANDER HAS ESCAPED", "#d75b47"); }
   else if (seen(r.x, r.y)) log(`${r.name} is pulling back toward the edge of the area.`, "key");
   return true;
 }
@@ -106,6 +107,7 @@ export function reinforcementsTick() {
     S.setup.insurgents += spots.length;
     S.ciDrop = undefined;
     log(`${spots.length} more Insurgents land at the drop zone.`, "bad");
+    banner("INSURGENT REINFORCEMENTS", "#d75b47"); highlight(3, "#d75b47");
   }
 }
 /** The far edge from the team: the open tile on the map border farthest from any of them. */
