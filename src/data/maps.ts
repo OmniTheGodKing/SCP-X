@@ -176,7 +176,8 @@ export const DBLOCK: MapDef = {
 };
 
 // Site-19's surface compound: the Insurgency comes through the wire from the west, and the lift down into the
-// site is in the lift house on the east side. Epsilon-11 comes up the lift.
+// site is in the lift house on the east side. Epsilon-11 on station comes up the lift; off duty, they drive in through
+// the motor pool's vehicle gate in the south wall.
 export const GATE: MapDef = {
   name: "Site-19 surface compound",
   rows: [
@@ -197,7 +198,7 @@ export const GATE: MapDef = {
     "#.............#.h..h......##",
     "#h....#....D..#.h..h....h.##",
     "#.....#.......#...........##",
-    "############################",
+    "#########...################",
   ],
   area(x, y) {
     if (x <= 5) return "approach road";
@@ -208,6 +209,8 @@ export const GATE: MapDef = {
     return y >= 11 ? "motor pool" : "courtyard";
   },
   squadSpawns: [[22, 8], [22, 9], [23, 8], [23, 9]],
+  // off-duty Epsilon-11 drives in from town through the motor pool's vehicle gate
+  roadSpawns: [[9, 17], [10, 17], [11, 17], [10, 16]],
   scpRooms: [],
   insurgentRooms: [[1, 1, 5, 5], [1, 6, 5, 11], [1, 12, 5, 16]],
   strayRooms: [],

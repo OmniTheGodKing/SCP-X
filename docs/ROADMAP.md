@@ -833,6 +833,11 @@ collapsing).
   with an epilogue built from the campaign history.
 - **Epilogue and record:** a closing report drawn from the History tab: operatives who served, who fell, anomalies held
   and lost, the Council's verdict.
+- **Losing Site-19 to a raid (user idea, saved for 4D):** a raid that breaks through to the lift, on top of failing to
+  stop the breaches it causes, can end the campaign: Site-19's on-site nuclear device goes off, or the Insurgency
+  destroys the facility. Before that, a few warnings: another MTF arrives and saves the site, with the O5 Council making
+  clear they may replace Site-19's command if it can't keep its own facility secure. To be specified with the rest of
+  4D.
 
 ### 4E: economy overhaul (agreed, priority)
 
@@ -1121,6 +1126,18 @@ default); enemy turns have a Normal/Fast setting. Both settings sit in the Sound
 6. A manually oriented unit hearing footsteps turns to investigate, receives a non-exact sound cue, and resumes preferred facing if no threat is found.
 7. A visible enemy behind the operative can still be detected under general XCOM-style awareness; facing does not impose an arbitrary blind sector.
 8. New map props and effects do not create misleading cover, block objectives, or degrade tactical readability; map dimensions remain unchanged.
+
+#### Playtest changes after 4G (done; verified in-game)
+- **Raids and the alert level:** Epsilon-11 only comes up the lift if they are on station. Full alert: the whole squad
+  comes up the lift (a quarter of the breach time, sooner with perimeter alarms). Heightened: half the squad (rounded
+  up) comes up the lift, the rest are off duty and drive in through the compound's new vehicle gate in the south wall
+  of the motor pool on the breach timing. Normal: all of them drive in on the breach timing, which is often after the
+  raid ends on turn 14, so Site Security holds alone. The raid panel, the World Map card and the briefing say which.
+  tests/raidarrival.e2e.cjs checks all three levels and the gate arrival.
+- **Enemies start out of sight:** Insurgent rooms are ranked by walking distance from where the team comes in (the
+  truck on an escort); a room is used only if it is at least 10 steps and 8 tiles in a straight line away and the team
+  can't see into it from its starting tiles, falling back to the single farthest room. tests/spawns.e2e.cjs checks
+  strikes on all six maps with small and 8-strong cells: no Insurgent in sight or within 8 tiles at the start.
 
 #### 4I as built (done; verified in source and in-game)
 - **Structure layer (src/core/grid.ts):** doors have a kind (standard; security inside Site-19; containment into a cell)

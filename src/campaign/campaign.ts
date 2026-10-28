@@ -23,7 +23,7 @@ import { reachMilestone, type Milestone } from "./research";
 import { ITEMS, PROJECTS, armorStats, uniformOf, has, projectLock, monthlyResearch, newResearch, tickResearch, type MaterialId, type ItemId, type Order, type ResearchState } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { addExposure, collapsedCount, COLLAPSE_LIMIT, isContacted, newRegions, regionFunding, tickWorld, travelDays, type RegionState } from "./world";
-import { letGuardsHandle, letGuardsHandleRaid, letGuardsHandleRiot, RAID, raidArrival, raidLoss, tickRaids, ALERTS, breachGuards, guardMember, guardsReady, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
+import { letGuardsHandle, letGuardsHandleRaid, letGuardsHandleRiot, RAID, raidArrival, onStation, raidLoss, tickRaids, ALERTS, breachGuards, guardMember, guardsReady, mtfArrival, newGuard, rollTrait, tickGuards, type Alert, type Guard } from "./security";
 import { MEDALS, rollBio, type MedalId } from "../data/bios";
 import { QUALITY, UNITS, rollCandidate, type Candidate, type UnitId } from "../data/units";
 import { fitLook, rollLook, type Look } from "../data/looks";
@@ -278,6 +278,8 @@ export interface Campaign {
   retired?: Retiree[];
   /** Anomalies destroyed by the GOC or taken by the Soviets: they never turn up again. */
   lostScps?: string[];
+  /** Phase 4B: short spells of extra breach risk on particular wings, left by another anomaly's breach. */
+  riskBoost?: { wings: string[]; until: number; mult: number; why: string }[];
   /** Phase 3K: the difficulty chosen at the start, Ironman (no loading another save over this one), and the
    *  tutorial's progress (unset: off). */
   difficulty?: Difficulty;
@@ -788,7 +790,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     severity: inc.kind === "outbreak" ? c.outbreak?.severity ?? 2 : undefined,
     rioters: inc.kind === "riot" ? riotSize(c) : undefined,
     // a breach at Site-19 catches researchers in the wing and opens the D-Class block
-    researchers: kind === "breach" ? Math.min(c.researchers, rand(1, 3)) : away ? inc.survivors ?? 2 : 0, strayPool: kind === "breach" ? c.dclass : 0, guards: away ? siteGuards : sec.first, lateGuards: sec.late, mtfTurn: kind === "raid" ? raidArrival(c) : mtfArrival(c, inc), witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
+    researchers: kind === "breach" ? Math.min(c.researchers, rand(1, 3)) : away ? inc.survivors ?? 2 : 0, strayPool: kind === "breach" ? c.dclass : 0, guards: away ? siteGuards : sec.first, lateGuards: sec.late, mtfTurn: kind === "raid" ? raidArrival(c) : mtfArrival(c, inc), liftCount: kind === "raid" ? onStation(c, squad.length) : undefined, roadTurn: kind === "raid" ? mtfArrival(c) : undefined, witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
     incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: Math.max(0, Math.max(0, inc.insurgents - (inc.weakened ?? 0)) + (inc.insurgents && inc.kind !== "breach" ? threatExtra(c) + diffOf(c).insurgents : 0)), squad, dclass,
     enemyAim: diffOf(c).aim, tutorial: !!c.tutorial?.on && !c.tutorial.seen.includes("mission"),
     ciRoles: inc.kind === "breach" || inc.kind === "riot" || inc.kind === "outbreak" || inc.kind === "coverup" ? undefined : ciRoles(c),
