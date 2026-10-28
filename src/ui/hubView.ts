@@ -10,6 +10,7 @@ import { AGENT, COOP, ETA10, NU7, SPECIALIST, TF_NAMES, agentsFree, attachNu7, b
 import { councilSeal, dossierPhoto, gearArt, iconBody, icon, incidentScene, insurgencyMark, siteSeal } from "./icons";
 import { ART_DEFS, roomSvg, surfaceSvg } from "./art";
 import { CAT_NAMES, INCOME_CATS, SPEND_CATS, monthIndex } from "../campaign/ledger";
+import { LEADS, canLeadAction, leadAction, leadPrice, offerText, type Lead, type LeadAction } from "../campaign/leads";
 import { CONTRACTS, acceptContract, canAcceptContract, contractOperative, whoText } from "../campaign/contracts";
 import { playMusic, soundControl, transition, ui, wireSound } from "./audio";
 import { DISRUPT_INTEL, INQUIRY, PLANS, goalText, whenText, REVEAL_INTEL, THREAT_STEPS, canDisrupt, canInvestigateBreach, canReveal, disrupt, investigateBreach, reveal } from "../campaign/chaos";
@@ -20,7 +21,7 @@ import { MIN_RANGE } from "../game/perks";
 import { AUDIT_BELOW, PARTNERS, PAY_FOR, REQUESTS, answerOffer, canAcceptOffer, canRequest, canSendAway, councilGrant, grantParts, directiveProgress, directiveText, makeRequest, rewardText, sendAway, tierOf, type RequestId } from "../campaign/council";
 import { REFINE_EVERY, canGivePill, canRefine, givePill, pillsLeft, refine, refineRecipes } from "../campaign/objects";
 import { PROCEDURES, PROCEDURE_610 } from "../data/procedures";
-import { reportOf, TERRITORY, localHour, missionWeather, weatherAt, weatherLine, nightAt, nightPolygon, AMNESTIC_TEAM, BURY, FACILITIES_WORLD, FIELD_OPS, INVESTIGATE, buryCost, buryStory, canBury, canSendTeam, incidentName, sendAmnesticsTeam, briefing, canFieldOp, canInvestigate, groupOf, incidentPlace, incidentState, investigate, startFieldOp, type FieldOpKind, type MarkerGroup } from "../campaign/geo";
+import { reportOf, TERRITORY, TOWN_POS, localHour, missionWeather, weatherAt, weatherLine, nightAt, nightPolygon, AMNESTIC_TEAM, BURY, FACILITIES_WORLD, FIELD_OPS, INVESTIGATE, buryCost, buryStory, canBury, canSendTeam, incidentName, sendAmnesticsTeam, briefing, canFieldOp, canInvestigate, groupOf, incidentPlace, incidentState, investigate, startFieldOp, type FieldOpKind, type MarkerGroup } from "../campaign/geo";
 import { MEDALS } from "../data/bios";
 import { LEANS, QUALITY, UNITS, nationalityOf } from "../data/units";
 import { FACIAL, HAIR_BY_SEX, HAIR_COLORS, HAIR_STYLES, HEADGEAR, LOOK_PARTS, SEX_NAMES, SKIN, fitLook, rollLook } from "../data/looks";
@@ -164,7 +165,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   /** What's selected on the World Map ("inc:<id>" or "fac:<id>"), and which kinds of marker are shown. */
   let mapSel: string | null = pendingMapSel?.startsWith("reg:") ? "region" : pendingMapSel; pendingMapSel = null;
   const WX_ICON: Record<Weather, string> = { clear: "", rain: "☂", storm: "⚡", fog: "≋", snow: "❄" };
-const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "facility", "night", "weather"]);
+const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "lead", "facility", "night", "weather"]);
   let dragMoved = false;
   /** Keep a view inside the world and at the map's proportions, between the whole world and about 8× zoom. */
   const clampView = (vw: { x: number; y: number; w: number; h: number }) => {
@@ -670,6 +671,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     const path = (poly: [number, number][]) => "M" + poly.map(([lo, la]) => project(lo, la).map(v => v.toFixed(1)).join(",")).join("L") + "Z";
     const [sx, sy] = project(SITE19.lon, SITE19.lat);
     const selInc = mapSel?.startsWith("inc:") ? c.incidents.find(i => i.id === mapSel!.slice(4)) ?? null : null;
+    const selLead = mapSel?.startsWith("lead:") ? c.leads?.list.find(l => l.id === mapSel!.slice(5)) ?? null : null;
     const selFac = mapSel?.startsWith("fac:") ? FACILITIES_WORLD.find(f => f.id === mapSel!.slice(4)) ?? null : null;
     const selReg = mapSel === "region";
     // zoom: every on-screen size is multiplied by k so markers and text stay the same size at any zoom
@@ -718,6 +720,11 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         ${moved ? `<line x1="${tx}" y1="${ty}" x2="${mx}" y2="${my}" class="leader" style="stroke-width:${0.4 * k}"/><circle cx="${tx}" cy="${ty}" r="${0.8 * k}" class="truept"/>` : ""}
         <circle cx="${mx}" cy="${my}" r="${4.2 * k}" class="ring" style="stroke-width:${0.8 * k}"/>${shape(groupOf(i), mx, my)}<svg x="${mx - 1.6 * k}" y="${my - 1.6 * k}" width="${3.2 * k}" height="${3.2 * k}" viewBox="0 0 24 24" class="mico" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">${iconBody(i.kind === "recovery" ? "manhunt" : i.kind)}</svg>
         <text x="${mx}" y="${my + 7.6 * k}" class="mlabel" style="font-size:${3 * k}px">${esc(b.short)}</text><title>${esc(incidentName(i))} · ${esc(b.deadline)}</title></g>`; }).join("");
+    const leadMarkers = mapShow.has("lead") ? (c.leads?.list ?? []).map(l => { const pos = TOWN_POS[l.town] ?? [REGIONS[l.region].lon, REGIONS[l.region].lat], [lx, ly] = project(pos[0], pos[1]), m = 2.7 * k;
+      return `<g class="marker lead ${l.working ? "active" : l.until - c.day <= 2 ? "urgent" : ""} ${mapSel === "lead:" + l.id ? "on" : ""}" data-maplead="${l.id}" tabindex="0" role="button" aria-label="${esc(l.title)}">
+        <circle cx="${lx}" cy="${ly}" r="${4.2 * k}" class="ring" style="stroke-width:${0.8 * k}"/><path d="M${lx} ${ly - m}L${lx + m} ${ly - m / 2}L${lx + m} ${ly + m / 2}L${lx} ${ly + m}L${lx - m} ${ly + m / 2}L${lx - m} ${ly - m / 2}Z"/>
+        <svg x="${lx - 1.6 * k}" y="${ly - 1.6 * k}" width="${3.2 * k}" height="${3.2 * k}" viewBox="0 0 24 24" class="mico" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">${iconBody(LEADS[l.kind].icon)}</svg>
+        <text x="${lx}" y="${ly + 7.6 * k}" class="mlabel" style="font-size:${3 * k}px">${l.working ? "agent" : `${Math.max(0, l.until - c.day)}d`}</text><title>${esc(LEADS[l.kind].name)}: ${esc(l.title)}</title></g>`; }).join("") : "";
     const facs = mapShow.has("facility") ? FACILITIES_WORLD.map(f => { const [fx, fy] = project(f.lon, f.lat);
       return `<g class="facility ${mapSel === "fac:" + f.id ? "on" : ""}" data-mapfac="${f.id}" tabindex="0" role="button" aria-label="${esc(f.name)}"><rect x="${fx - 2 * k}" y="${fy - 2 * k}" width="${4 * k}" height="${4 * k}" style="stroke-width:${0.6 * k}"/><svg x="${fx - 1.6 * k}" y="${fy - 1.6 * k}" width="${3.2 * k}" height="${3.2 * k}" viewBox="0 0 24 24" class="fico" fill="none" stroke-width="2.4">${iconBody("build")}</svg><text x="${fx + 3 * k}" y="${fy + 1.2 * k}" style="font-size:${3.2 * k}px">${esc(f.name)}</text></g>`; }).join("") : "";
     const route = selInc ? (() => { const pl = incidentPlace(selInc), [mx, my] = project(pl.lon, pl.lat), b = briefing(c, selInc);
@@ -784,6 +791,20 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
           ${i.kind === "riot" || i.kind === "raid" ? `<button class="act" type="button" data-guards="${i.id}" ${c.over ? "disabled" : ""}>Let the guards handle it${i.kind === "raid" ? ` (${Math.round(raidOdds(c, i) * 100)}%)` : ""}</button>` : ""}
           ${back}</div>
       </div>`; };
+    const leadPanel = (l: Lead) => { const d = LEADS[l.kind], left = l.until - c.day;
+      const acts = (Object.keys(d.actions) as LeadAction[]).map(a => { const def = d.actions[a]!, w = canLeadAction(c, l, a), disc = l.kind === "discovery";
+        const label = disc ? `${offerText(c, l)} · $${leadPrice(c, l)}k` : `${def.label}${def.cost ? ` · $${def.cost}k` : ""}${def.days ? ` · ${plural(def.days, "day")}` : ""}`;
+        return `<div class="row"><button class="act ${a === "squad" || disc ? "primary" : ""}" type="button" data-leadact="${l.id}:${a}" ${w ? `disabled title="${esc(w)}"` : ""}>${esc(label)}</button><span class="muted">${esc(w ?? (disc ? "Done at once." : def.desc))}</span></div>`; }).join("");
+      return `<div class="file brief">
+        <div class="label">${icon(d.icon, 13)}Lead · ${esc(d.name)} · ${esc(REGIONS[l.region].name)}</div>
+        <h2>${esc(l.title)}</h2>
+        <div class="specs">${esc(l.town)} · ${l.working ? `an agent is on it: result ${dateText(l.working.done)}` : `open ${left <= 0 ? "until tonight" : `for ${plural(left, "more day")}`}, until ${dateText(l.until)}`}</div>
+        <p><b>Risk:</b> ${esc(d.risk)}</p><p><b>If it goes well:</b> ${esc(d.reward)}</p>
+        ${l.working ? "" : l.kind === "hostile" ? `<p class="warn"><b>If it's ignored:</b> the Insurgents attack ${esc(l.town)} on ${dateText(l.until)}.</p>` : `<p class="muted">Ignored, it goes cold on ${dateText(l.until)}.</p>`}
+        ${l.working ? "" : acts}
+        ${!l.working && l.kind !== "council" ? `<div class="row"><button class="act" type="button" data-leadact="${l.id}:decline">Let it go</button></div>` : ""}
+        <p class="muted">Agents are shared with field operations: ${agentsFree(c)} of ${c.tf.agents} free.</p>
+        <div class="row">${back}</div></div>`; };
     const facPanel = (f: typeof FACILITIES_WORLD[number]) => `<div class="card"><div class="label">Independent Foundation facility · ${esc(REGIONS[f.region].name)}</div>
         <h3 class="fac">${esc(f.name)}</h3><p class="muted">${esc(f.desc)}</p>
         <p class="muted">Site-19 doesn't run ${esc(f.name)}: it has its own staff and command. It can take transfers, lend people, buy what Site-19 captures, and sometimes calls for help.</p>
@@ -802,18 +823,19 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         <div class="label">Active incidents · ${c.incidents.length}</div>
         ${order.length ? `<ul class="inclist">${order.map(i => { const stt = incidentState(c, i), b = briefing(c, i);
           return `<li class="${stt} ${i.dispatch ? "dispatched" : ""}"><button class="linkbtn" type="button" data-mapinc="${i.id}"><span class="dot ${groupOf(i)}"></span>${icon(i.kind === "recovery" ? "manhunt" : i.kind, 14)}${esc(incidentName(i))}</button><span class="incmeta">${KIND_NAMES[i.kind]} · ${esc(b.place.name)} · ${esc(b.short)}${stt === "urgent" && !i.dispatch ? " · urgent" : ""}${i.group ? " · choose one" : ""}${i.reward ? ` · ${esc(rewardText(i.reward))}` : ""}</span></li>`; }).join("")}</ul>` : `<p class="muted">Nothing needs Site-19 right now. Let time run.</p>`}
+        ${(c.leads?.list ?? []).length ? `<div class="label" style="margin-top:10px">Leads · ${c.leads!.list.length}</div><ul class="inclist">${c.leads!.list.map(l => `<li class="${l.working ? "active" : ""}"><button class="linkbtn" type="button" data-maplead="${l.id}"><span class="dot lead"></span>${icon(LEADS[l.kind].icon, 14)}${esc(l.title)}</button><span class="incmeta">${esc(LEADS[l.kind].name)} · ${esc(l.town)} · ${l.working ? `agent, result ${dateText(l.working.done)}` : `${plural(Math.max(0, l.until - c.day), "day")} left`}</span></li>`).join("")}</ul>` : ""}
         ${away.length ? `<p class="muted">In the air: ${away.map(o => esc(o.name)).join(", ")}, back ${dateText(c.day + Math.max(...away.map(o => o.busy!.daysLeft)))}.</p>` : ""}
         ${(c.ops ?? []).length ? `<p class="muted">Field operations: ${c.ops!.map(op => `${esc(FIELD_OPS[op.kind].name)} in ${esc(REGIONS[op.region].name)} (${dateText(op.done)})`).join("; ")}.</p>` : ""}
         <p class="muted">Next month: $${councilGrant(c)}k from the O5 Council and $${frontsFunding(c)}k from the fronts, $${monthlyUpkeep(c)}k upkeep and salaries. Global exposure ${c.exposure}; ${collapsedCount(c)} of ${COLLAPSE_LIMIT} fronts lost. Select a region on the map for its front and field operations.</p>
       </div>`;
-    const side = selInc ? briefPanel(selInc) : selFac ? facPanel(selFac) : selReg ? regionPanel() : overview;
+    const side = selInc ? briefPanel(selInc) : selLead ? leadPanel(selLead) : selFac ? facPanel(selFac) : selReg ? regionPanel() : overview;
     const clock = `<div class="geobar">
         <b class="geodate">${dateText(c.day)} · ${String(Math.floor(c.hour ?? 0)).padStart(2, "0")}:00</b>
         <div class="speeds"><button class="act ${speed ? "" : "on"}" type="button" data-speed="0" aria-pressed="${!speed}" title="Pause (Space)">❚❚</button>
           ${SPEEDS.map((n, k) => `<button class="act ${speed === n ? "on" : ""}" type="button" data-speed="${n}" aria-pressed="${speed === n}" ${clockBlocked() ? "disabled" : ""} title="${n}× (${k + 1})">${n}×</button>`).join("")}</div>
         <button class="agenda linkbtn" type="button" data-goto="command" title="The Chaos Insurgency's global agenda. At 100 it completes: exposure everywhere, sabotage at Site-19 and a blow to Council standing. Details on the Command tab."><span>Insurgency agenda</span><span class="mini"><span style="width:${c.chaos.threat}%"></span></span><b>${c.chaos.threat}</b></button>
         ${pendingBreach(c) ? `<span class="warn">${pendingBreach(c)!.kind === "escort" ? "A convoy is under attack" : "Site-19 needs an answer"}: time is held.</span>` : ""}
-        <div class="mapfilters">${(["anomaly", "insurgency", "coverup", "site", "facility", "night", "weather"] as const).map(g => `<button class="act ${mapShow.has(g) ? "on" : ""}" type="button" data-mapfilter="${g}" aria-pressed="${mapShow.has(g)}" title="${{ anomaly: "Anomalies", insurgency: "Insurgency", coverup: "Cover-ups", site: "At Site-19", facility: "Facilities", night: "Day and night", weather: "Weather" }[g]}"><span class="dot ${g}"></span><span class="fname">${{ anomaly: "Anomalies", insurgency: "Insurgency", coverup: "Cover-ups", site: "Site-19", facility: "Facilities", night: "Night", weather: "Weather" }[g]}</span></button>`).join("")}</div>
+        <div class="mapfilters">${(["anomaly", "insurgency", "coverup", "site", "lead", "facility", "night", "weather"] as const).map(g => `<button class="act ${mapShow.has(g) ? "on" : ""}" type="button" data-mapfilter="${g}" aria-pressed="${mapShow.has(g)}" title="${{ anomaly: "Anomalies", insurgency: "Insurgency", coverup: "Cover-ups", site: "At Site-19", lead: "Leads: opportunities", facility: "Facilities", night: "Day and night", weather: "Weather" }[g]}"><span class="dot ${g}"></span><span class="fname">${{ anomaly: "Anomalies", insurgency: "Insurgency", coverup: "Cover-ups", site: "Site-19", lead: "Leads", facility: "Facilities", night: "Night", weather: "Weather" }[g]}</span></button>`).join("")}</div>
       </div>`;
     return `<div class="geo">
       <div class="card geomap">
@@ -843,11 +865,12 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
             <text x="${s19x - 4.4 * k}" y="${s19y - 3.5 * k}" text-anchor="end" style="font-size:${4 * k}px">Site-19</text><title>Site-19 · exact location classified</title></g>
           ${facs}
           ${ops}
+          ${leadMarkers}
           ${markers}
         </svg>
         <div class="zoombtns"><button class="act" type="button" data-zoom="in" aria-label="Zoom in">+</button><button class="act" type="button" data-zoom="out" aria-label="Zoom out">−</button><button class="act" type="button" data-zoom="world" aria-label="Show the whole world">World</button></div>
         </div>
-        <p class="muted geohelp">Markers: <span class="dot anomaly"></span>anomaly <span class="dot insurgency"></span>Insurgency <span class="dot coverup"></span>cover-up <span class="dot site"></span>at Site-19. Ring: <span class="urgenttxt">urgent</span>, <span class="newtxt">new</span>, <span class="activetxt">under way</span>. Select a marker or region.</p>
+        <p class="muted geohelp">Markers: <span class="dot anomaly"></span>anomaly <span class="dot insurgency"></span>Insurgency <span class="dot coverup"></span>cover-up <span class="dot site"></span>at Site-19 <span class="dot lead"></span>lead (an opportunity). Ring: <span class="urgenttxt">urgent</span>, <span class="newtxt">new</span>, <span class="activetxt">under way</span>. Select a marker or region.</p>
       </div>
       <aside class="geoside">${side}</aside>
     </div>
@@ -1573,6 +1596,10 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       const pick = () => { const i = c.incidents.find(x => x.id === b.dataset.mapinc); if (!i) return; mapSel = "inc:" + i.id; regionSel = i.region; if (planning && planning !== i.id) planning = null; flashMsg = ""; tab = "world"; render(); };
       b.onclick = pick; b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } };
     });
+    root.querySelectorAll<HTMLElement>("[data-maplead]").forEach(b => { const pick = () => { mapSel = "lead:" + b.dataset.maplead; planning = null; flashMsg = ""; tab = "world"; render(); };
+      b.onclick = pick; b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } }; });
+    root.querySelectorAll<HTMLElement>("[data-leadact]").forEach(b => b.onclick = () => { const [id, a] = b.dataset.leadact!.split(":");
+      change(() => { const inc = leadAction(c, id, a as LeadAction); mapSel = inc ? "inc:" + inc.id : null; }); });
     root.querySelectorAll<HTMLElement>("[data-mapfac]").forEach(b => { const pick = () => { mapSel = "fac:" + b.dataset.mapfac; planning = null; render(); };
       b.onclick = pick; b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } }; });
     // ---- World Map zoom and pan ----

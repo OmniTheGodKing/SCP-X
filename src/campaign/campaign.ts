@@ -1,6 +1,7 @@
 // Site-19 between missions: the roster, time passing, funding, public exposure and incidents.
 import { earn, spend, type Ledger } from "./ledger";
 import { tickContracts, type ContractState } from "./contracts";
+import { tickLeads, type LeadsState } from "./leads";
 import { DIFFICULTIES, diffOf, type Difficulty, type NewCampaignOptions } from "./difficulty";
 import { FATIGUE, afterMission, bondsOf, restDay, tiredness } from "./condition";
 import { announceHire, hirePerson, losePeople, someone, syncStaff, type Lost, type Person } from "./people";
@@ -151,6 +152,8 @@ export interface Incident {
   plan?: string;
   /** One of the month's three Insurgency operation strikes (guerrilla-ops style). */
   ciOp?: boolean;
+  /** A pre-emptive strike on Insurgents gathering near a town: if it isn't won, the town is attacked. */
+  hostileLead?: boolean;
   cause?: "accident" | "anomalous" | "sabotage";
   /** Forced choices: a task force has been sent to this one. */
   answered?: boolean;
@@ -231,6 +234,8 @@ export interface Campaign {
   /** Phase 4E: the books, and the Council contracts on offer or under way. */
   ledger?: Ledger;
   contracts?: ContractState;
+  /** Phase 4F: opportunities on the World Map. */
+  leads?: LeadsState;
   /** The last monthly grant's parts, to explain how the next one differs. */
   lastGrant?: ReturnType<typeof grantParts> & { standingNow: number };
   exposure: number;
@@ -496,6 +501,7 @@ export function advanceDay(c: Campaign) {
   tickContainment(c);
   tickWorld(c);
   tickContracts(c);
+  tickLeads(c);
   tickGeo(c);
   for (const s of c.scps) if (s.status === "contained" && !isInert(s) && c.day - s.lastCleaned === routineEvery(s)) {
     c.council.tally.overdue++;
@@ -1023,6 +1029,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   // the Insurgency's agenda: what this mission did to it
   if (r.win && inc?.plan) disrupt(c, inc.plan, "Epsilon-11 broke the cell running it");
   else if (inc?.plan) lockPlan(c, inc.plan, "Epsilon-11 couldn't break the cell running it");
+  if (!r.win && inc?.hostileLead) (c.retaliations ??= []).push({ region: inc.region, day: c.day + 2 });
   if (kind === "strike") addThreat(c, r.win ? -5 : 3, `${name} ${r.win ? "broken up" : "failed"}`);
   if (kind === "retaliation") addThreat(c, r.win ? -3 : 3, `${name} ${r.win ? "beaten off" : "failed"}`);
   if (kind === "raid") addThreat(c, r.win ? -3 : 5, `${name} ${r.win ? "beaten off" : "lost"}`);

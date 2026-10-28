@@ -818,6 +818,55 @@ answered with Intel (Disrupt), one was hidden, and only one came with a cell to 
 - **Keep the map alive:** show incident updates, faction activity, travel, new leads, and resolved operations without overwhelming the player with repetitive notifications.
 - **Completion check:** during a normal campaign month, players see varied optional activities and can make useful strategic choices while squads recover, without introducing a duplicate Intel economy or artificial scanning timer.
 
+#### 4F as specified (before building)
+What exists: incidents (anomalies, cover-ups, cells, attacks, emergencies), field operations the player starts by
+hand with agents, Council orders, offers and contracts. What's missing: opportunities that turn up on their own,
+on the map, that aren't all fights. 4F adds **leads**: a new kind of World Map marker.
+- **Kinds (each with a deadline and its own actions):**
+  - *Supply recovery*: a crashed Insurgency truck or an abandoned army dump. Send an agent (3 days, $10k, 75%:
+    two workshop items or captured weapons; 15% the agent is hurt) or send Epsilon-11 (a recovery mission on the
+    map, guaranteed haul plus salvage).
+  - *Intel lead*: a defector, a talkative clerk, an intercepted courier. Agent meeting (3 days: +3 Intel; 15% a trap,
+    the agent is hurt) or buy the papers ($40k: +2 Intel at once).
+  - *Council assignment*: the O5 Council wants something checked in person. Agent (4 days: +4 standing and $30k;
+    10% the agent is hurt) or decline (−2 standing).
+  - *Covert opportunity*: an Insurgency safehouse is lightly held. Agent surveillance (5 days: +2 Intel and the
+    Insurgency agenda −3) or a strike by Epsilon-11 (a strike mission with a reward attached).
+  - *Resource discovery*: a university lab closing, a contractor folding, a surplus sale. Hire a researcher ($25k)
+    or two engineers ($60k) at once, or buy two workshop items at half price.
+  - *Hostile preparation*: Insurgents gathering near a town. Pre-emptive strike by Epsilon-11 (a strike mission),
+    have the front quietly disrupt it ($50k, 60%), or ignore it; ignored or failed, it becomes an attack on that town
+    (the existing retaliation incident) on its deadline.
+- **How they appear:** roughly one every week (3 to 5 a month), at most four on the map at once, weighted by the
+  campaign: regions with a front produce most of them (the fronts hear things); the Insurgency's agenda makes hostile
+  preparations and covert opportunities likelier; higher standing brings more Council assignments. No region gets two
+  at once. Each is open for 5 to 12 days.
+- **On the map:** a teal marker with the kind's icon. Selecting it shows the place, the deadline, what's known of the
+  risk, the possible rewards, each action with its cost, duration and chance, and Decline. Agent actions need a free
+  field agent (shared with field operations); Epsilon-11 actions use the existing deploy panel and travel time.
+- **Consequences:** an agent action shows as under way on the marker until its result; a declined or lapsed lead
+  disappears, except hostile preparations, which turn into attacks. Results are logged once, without pausing time.
+- **No scan loop:** nothing requires parking a plane or waiting at a location; agents and the fronts do the legwork.
+- **Completion check:** a test month shows several leads of different kinds; each action resolves with its stated
+  outcomes; an ignored hostile preparation becomes an attack; agents are shared correctly with field operations.
+
+#### 4F as built (done; verified in source and in-game)
+src/campaign/leads.ts holds the six kinds, their actions and outcomes, spawning and the daily tick; the World Map
+draws leads as teal hexagon markers with the kind's icon and days left (or "agent" while one is working it), lists
+them under the incidents in the side panel, has a Leads filter, and opens a briefing with the place, deadline, risk,
+reward and each action's cost, duration and odds. Agents on leads count against field operations (agentsFree).
+Squad actions turn the lead into a strike mission with its reward attached (gear for supply, 3 Intel for covert) or,
+for hostile preparations, a strike whose failure or lapse still brings the attack. The debug menu can spawn each kind
+and bring results and deadlines forward. Spawning is about one every five days, never two days running, and always
+one after ten quiet days, so a month shows three to five.
+
+Tested: every action of every kind resolved as stated (supply by agent; intel by agent +3 Intel and by purchase
++2 Intel for $40k; Council assignment +4 standing and $30k, declined −2 standing; covert surveillance +2 Intel and
+agenda −3, with the agent hurt on that run; covert strike created a strike with an Intel reward; a researcher hired
+from a closing lab for $25k; the front's disruption failing and scheduling the attack; a declined hostile preparation
+scheduling the attack; supply by squad creating a strike with a gear reward); a lead in progress reduced the free
+agents; 60 days of play produced 8 leads of four kinds.
+
 ### 4G: tactical combat life and presentation (agreed, priority)
 
 **Problem:** tactical combat currently feels underwhelming and lifeless despite existing rules such as overwatch, suppression, flanking, critical hits, and status effects. Improve their *presentation* rather than reimplementing them.
