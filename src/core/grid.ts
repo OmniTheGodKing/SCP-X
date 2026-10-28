@@ -62,13 +62,16 @@ export class Level {
       });
     });
     L = this;
-    // doors: into a containment cell they are containment doors, inside Site-19 security doors, elsewhere ordinary;
-    // all start closed
+    // doors: into a containment cell they are containment doors, inside Site-19 security doors, elsewhere ordinary.
+    // Each mission finds them as people left them: cell doors shut, the rest open or shut at random, now and then
+    // one already kicked in
     for (const i of this.doors) {
       const x = i % this.W, y = (i / this.W) | 0;
       const near = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => def.area(x + dx, y + dy));
       const kind: DoorKind = near.some(a => /containment cell/.test(a)) ? "containment" : def.reinforced ? "security" : "standard";
-      this.door.set(i, { kind, state: "closed" });
+      const r = Math.random();
+      const state: DoorState = kind === "containment" ? "closed" : r < 0.06 ? "breached" : r < 0.53 ? "open" : "closed";
+      this.door.set(i, { kind, state });
     }
     const exits: Pt[] = [];
     for (let y = 0; y < this.H; y++) for (let x = 0; x < this.W; x++) if (this.grid[y][x] === EXIT) exits.push([x, y]);

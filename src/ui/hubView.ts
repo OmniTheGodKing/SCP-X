@@ -191,7 +191,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
 
   const ready = () => c.roster.filter(o => deployable(c, o));
   // an ambushed convoy is defended by whoever made the capture, wounded or not
-  const readyFor = (inc: Incident) => inc.kind === "escort" && inc.squad ? c.roster.filter(o => o.alive && inc.squad!.includes(o.id)) : ready();
+  // a squad is one task force: with Eta-10 formed, the panel picks which one goes
+  const readyFor = (inc: Incident) => inc.kind === "escort" && inc.squad ? c.roster.filter(o => o.alive && inc.squad!.includes(o.id)) : c.tf.eta10 ? ready().filter(o => tfOf(o) === tfPick) : ready();
   const watchPool = () => guardsReady(c);
   const scp173 = () => c.scps.find(s => s.id === "173")!;
 
@@ -608,7 +609,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
         <button class="act" type="button" id="intelBtn" ${canWeaken(c, inc) ? `disabled title="${esc(canWeaken(c, inc)!)}"` : ""}>Spend 1 Intel: intercept one</button></div>` : ""}
       ${inc.kind === "raid" ? (() => { const g = guardsReady(c).slice(0, 8); return `<p>Site Security: <b>${g.length}</b> ${g.length === 1 ? "guard holds" : "guards hold"} the compound${g.length ? ` (${g.map(x => esc(x.name)).join(", ")})` : ""}${has(c, "perimeter_alarms") ? ", already on overwatch" : ""}. Insurgents: about <b>${inc.insurgents}</b>. Operatives you pick come up the lift on turn <b>${raidArrival(c)}</b>.</p>`; })() : ""}
       ${inc.kind === "riot" ? (() => { const g = guardsReady(c).slice(0, 8); return `<p>Site Security: <b>${g.length}</b> ${g.length === 1 ? "guard answers" : "guards answer"}${g.length ? ` (${g.map(x => esc(x.name)).join(", ")})` : ". Nobody is fit to respond"}. D-Class left: <b>${c.dclass}</b>.</p>`; })() : `
-      ${c.tf.eta10 && inc.kind !== "escort" ? `<p class="muted">The squad can draw on both task forces. Epsilon-11: ${esc(TF_DESC.e11)} Eta-10: ${esc(TF_DESC.eta10)}</p>` : ""}
+      ${c.tf.eta10 && inc.kind !== "escort" ? `<div class="row">${(["e11", "eta10"] as TaskForce[]).map(t => `<button class="act ${tfPick === t ? "on" : ""}" type="button" data-tf="${t}" aria-pressed="${tfPick === t}">${esc(TF_NAMES[t])}</button>`).join("")}</div>
+        <p class="muted">A squad is one task force: ${esc(TF_DESC[tfPick])} You play one; the other can only go hands-off.</p>` : ""}
       <p class="muted">Pick up to ${squadSize(c)} operatives. Only fully healed operatives can deploy; sanity carries over, so watch it.${inc.kind === "breach" ? " You can also send nobody and play it with the guards alone." : ""}</p>
       <div class="pick">${ops.length ? ops.map(o => `<label class="pickop ${chosen.has(o.id) ? "on" : ""}">
         <input type="checkbox" id="pick-${o.id}" data-pick="${o.id}" ${chosen.has(o.id) ? "checked" : ""} ${!chosen.has(o.id) && chosen.size >= squadSize(c) ? "disabled" : ""}>
