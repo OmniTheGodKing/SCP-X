@@ -1293,6 +1293,13 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   }
 
   // ---------- Personnel ----------
+  /** HP an operative deploys with: their own, plus the armor in their kit and the researched uniform, as the mission
+   *  adds them (playtest fix: the Personnel tab used to show only their own). */
+  function fieldHp(o: Operative) {
+    const armor = o.kit?.armor ? armorStats(o.kit.armor, c.armorTier).hp : 0, uni = uniformOf(c).hp, bonus = armor + uni;
+    const why = bonus ? `${o.maxHp} base${armor ? ` + ${armor} ${ITEMS[o.kit!.armor as ItemId].name.toLowerCase()}` : ""}${uni ? ` + ${uni} ${uniformOf(c).name.toLowerCase()}` : ""}` : "";
+    return { hp: o.hp + bonus, max: o.maxHp + bonus, why };
+  }
   function personnelTab() {
     return `<div class="hubgrid">
     <section class="col">
@@ -1359,13 +1366,14 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
         }
       }
     })();
-    return `<div class="label" style="margin-top:10px">Equipment</div>
+    const fh = fieldHp(o);
+    return `<div class="label" style="margin-top:10px">Equipment · field HP ${fh.hp}/${fh.max}${fh.why ? ` (${esc(fh.why)})` : ""}</div>
       <div class="eqgrid">
         ${tile("weapon", "Primary weapon", gun.name, `${gun.dmg.join("–")} dmg · ${gun.mag} rounds`, t)}
         ${tile("attachment", "Attachment", o.attachment ? ATTACHMENTS[o.attachment].name : "None", "", o.attachment ? "attachment" : "empty")}
         ${tile("ammo", "Ammunition", o.ammoType ? AMMO[o.ammoType].name : "Standard ball", "", "ammo")}
         ${tile("armor", "Armor", g.armor ? ITEMS[g.armor].name : "None", g.armor ? `+${armorStats(g.armor, c.armorTier).hp} HP` : "", g.armor || "empty")}
-        ${tile("uniform", "Uniform", uni.name, "", "uniform")}
+        ${tile("uniform", "Uniform", uni.name, uni.hp ? `+${uni.hp} HP` : "", "uniform")}
         ${tile("sidearm", "Sidearm", SIDEARM.name, "", "pistol")}
         ${Array.from({ length: slots }, (_, i) => tile(`item${i}`, `Utility ${i + 1}`, g.items[i] ? ITEMS[g.items[i] as ItemId].name : "Empty", "", g.items[i] || "empty")).join("")}
       </div>
@@ -1442,7 +1450,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       <span class="nm">${esc(fieldName(o))} <span class="muted">${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}</span></span>
       ${status}
       <span class="bars">
-        <span>HP ${o.hp}/${o.maxHp}<span class="meter" style="--c: var(--mtf)"><span style="width:${(o.hp / o.maxHp) * 100}%"></span></span></span>
+        ${(() => { const f = fieldHp(o); return `<span title="${f.why ? `Field HP: ${esc(f.why)}` : "No armor or uniform bonus"}">HP ${f.hp}/${f.max}${f.why ? ` <span class="muted">(+${f.max - o.maxHp} gear)</span>` : ""}<span class="meter" style="--c: var(--mtf)"><span style="width:${(f.hp / f.max) * 100}%"></span></span></span>`; })()}
         <span>SAN ${o.san}<span class="meter" style="--c: ${o.san <= ms * 0.3 ? "var(--alert)" : "var(--manila)"}"><span style="width:${(o.san / ms) * 100}%"></span></span></span>
         <span>Aim ${aimOf(o)}</span>
         <span>Blink ${Math.round(blinkFullOf(o) * 100)}%</span>
