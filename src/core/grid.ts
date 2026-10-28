@@ -33,6 +33,8 @@ export interface MapDef {
   /** Site-19's walls are reinforced: only partitions, doors and windows give way. Elsewhere a rocket or a breaching
    *  charge can open an interior wall. */
   reinforced?: boolean;
+  /** Where people arriving from outside come in (off-duty Epsilon-11 driving to the surface compound); squadSpawns if unset. */
+  roadSpawns?: Pt[];
 }
 
 export class Level {

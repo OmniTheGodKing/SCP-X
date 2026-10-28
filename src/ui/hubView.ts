@@ -58,7 +58,7 @@ import {
 } from "../campaign/world";
 import {
   ALERTS, GUARD, PROMOTE, canHireGuard, canPromote, guardCapacity, guardOdds, guardsAlive, guardsReady, hireGuard, letGuardsHandle, mtfArrival,
-  promoteGuard, breachGuards, letGuardsHandleRiot, letGuardsHandleRaid, raidArrival, raidOdds, postedAt, postGuard, unposted, TRAINING, canTrain, squadSize, train, type Alert, type Guard,
+  promoteGuard, breachGuards, letGuardsHandleRiot, letGuardsHandleRaid, raidArrivalText, raidOdds, postedAt, postGuard, unposted, TRAINING, canTrain, squadSize, train, type Alert, type Guard,
 } from "../campaign/security";
 import { HEAVY, type ScpId } from "../game/types";
 import { esc } from "./util";
@@ -607,7 +607,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       ${inc.kind === "coverup" ? `<p class="${c.amnestics < (inc.witnesses ?? 0) ? "warn" : "muted"}">The squad carries all ${c.amnestics} amnestic doses in storage, for ${plural(inc.witnesses ?? 0, "witness")}.</p>` : ""}
       ${inc.insurgents || reportOf(inc).ins ? `<div class="row"><span>Insurgents expected: <b>${confirmedIns(inc) ? inc.insurgents - (inc.weakened ?? 0) : `about ${Math.max(0, reportOf(inc).ins - (inc.weakened ?? 0))} (estimated)`}</b>${inc.weakened ? ` (${inc.weakened} intercepted)` : ""}</span>
         <button class="act" type="button" id="intelBtn" ${canWeaken(c, inc) ? `disabled title="${esc(canWeaken(c, inc)!)}"` : ""}>Spend 1 Intel: intercept one</button></div>` : ""}
-      ${inc.kind === "raid" ? (() => { const g = guardsReady(c).slice(0, 8); return `<p>Site Security: <b>${g.length}</b> ${g.length === 1 ? "guard holds" : "guards hold"} the compound${g.length ? ` (${g.map(x => esc(x.name)).join(", ")})` : ""}${has(c, "perimeter_alarms") ? ", already on overwatch" : ""}. Insurgents: about <b>${inc.insurgents}</b>. Operatives you pick come up the lift on turn <b>${raidArrival(c)}</b>.</p>`; })() : ""}
+      ${inc.kind === "raid" ? (() => { const g = guardsReady(c).slice(0, 8); return `<p>Site Security: <b>${g.length}</b> ${g.length === 1 ? "guard holds" : "guards hold"} the compound${g.length ? ` (${g.map(x => esc(x.name)).join(", ")})` : ""}${has(c, "perimeter_alarms") ? ", already on overwatch" : ""}. Insurgents: about <b>${inc.insurgents}</b>. ${esc(raidArrivalText(c))}</p>`; })() : ""}
       ${inc.kind === "riot" ? (() => { const g = guardsReady(c).slice(0, 8); return `<p>Site Security: <b>${g.length}</b> ${g.length === 1 ? "guard answers" : "guards answer"}${g.length ? ` (${g.map(x => esc(x.name)).join(", ")})` : ". Nobody is fit to respond"}. D-Class left: <b>${c.dclass}</b>.</p>`; })() : `
       ${c.tf.eta10 && inc.kind !== "escort" ? `<div class="row">${(["e11", "eta10"] as TaskForce[]).map(t => `<button class="act ${tfPick === t ? "on" : ""}" type="button" data-tf="${t}" aria-pressed="${tfPick === t}">${esc(TF_NAMES[t])}</button>`).join("")}</div>
         <p class="muted">A squad is one task force: ${esc(TF_DESC[tfPick])} You play one; the other can only go hands-off.</p>` : ""}

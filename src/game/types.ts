@@ -229,6 +229,10 @@ export interface MissionSetup {
   guards?: SquadMember[];
   lateGuards?: SquadMember[];
   mtfTurn?: number;
+  /** Raids: how many of the squad are on station and come up the lift on mtfTurn; the rest are off duty and arrive
+   *  from outside on roadTurn (Phase 4 playtest change). */
+  liftCount?: number;
+  roadTurn?: number;
   dclass: string[];
   known: string[];
   mods: MissionMods;
@@ -386,7 +390,7 @@ export interface MissionState {
   flares: { x: number; y: number; until: number }[];
   throwing: Carried | null;
   /** Squad members still on their way, and the turn they arrive. */
-  reinforce: { turn: number; members: SquadMember[] }[];
+  reinforce: { turn: number; members: SquadMember[]; road?: boolean }[];
   /** SCP-173's urge to leave: it grows each turn it roams unseen without a kill. */
   escapeDrive: number;
   lockedUntil: number;

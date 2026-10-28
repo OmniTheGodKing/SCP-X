@@ -11,7 +11,7 @@ import { anomalyProgress, has } from "./research";
 import { rewardText } from "./council";
 import { addExposure, flightOut, isContacted, locateCell, travelDays } from "./world";
 import { scpName } from "./containment";
-import { mtfArrival, raidArrival } from "./security";
+import { mtfArrival, raidArrivalText } from "./security";
 import { MISSION_BONUS, dateText, gainIntel, log, yearOf, type Campaign, type Incident } from "./campaign";
 import { rollCandidate } from "../data/units";
 import { WEATHER, rollWeather, type Weather } from "../data/weather";
@@ -113,13 +113,13 @@ export function briefing(c: Campaign, inc: Incident) {
     : inc.kind === "outbreak" ? "SCP-610 keeps spreading: more exposure every week and a worse stage every two weeks."
     : inc.first ? "It moves on (+10 exposure here) and turns up somewhere else later."
     : "It goes dark again (+15 exposure here) and resurfaces later.";
-  const arrivalTurn = inc.kind === "breach" ? mtfArrival(c, inc) : inc.kind === "raid" ? raidArrival(c) : 0;
+  const arrivalTurn = inc.kind === "breach" ? mtfArrival(c, inc) : 0;
   return {
     place, travel: t, arrives: c.day + t,
     deadline: immediate ? "Now" : inc.kind === "outbreak" ? "Ongoing: worsens every 2 weeks" : inc.dispatch ? `Handled ${dateText(inc.dispatch.done)}` : left <= 0 ? "Last day" : `${dateText(inc.expires)} (${left} day${left === 1 ? "" : "s"})`,
     short: immediate ? "now" : inc.kind === "outbreak" ? "ongoing" : inc.dispatch ? "en route" : left <= 0 ? "last day" : `${left}d`,
     reachable: inc.kind === "escort" || c.day + t <= inc.expires, known, estimated, unknown, rewards, ignore, worse: worsening(inc),
-    arrival: arrivalTurn ? `Epsilon-11 reaches the scene on turn ${arrivalTurn}.` : t ? `The team lands ${dateText(c.day + t)} after ${t} day${t > 1 ? "s" : ""} in the air.` : "The team goes by road and is there the same day.",
+    arrival: inc.kind === "raid" ? raidArrivalText(c) : arrivalTurn ? `Epsilon-11 reaches the scene on turn ${arrivalTurn}.` : t ? `The team lands ${dateText(c.day + t)} after ${t} day${t > 1 ? "s" : ""} in the air.` : "The team goes by road and is there the same day.",
   };
 }
 

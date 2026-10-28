@@ -5,7 +5,7 @@ import { chronicle } from "./history";
 import { TRAITS, type TraitId } from "../data/classes";
 import { familyOf, withGivenName } from "../data/names";
 import { model } from "../data/weapons";
-import type { SquadMember } from "../game/types";
+import { RAID_TURNS, type SquadMember } from "../game/types";
 import { countOperational, neighbors, operational, nameInText, stationsOnLevel } from "./base";
 import { addExposure } from "./world";
 import { HOME } from "../data/regions";
@@ -180,8 +180,19 @@ export function letGuardsHandleRiot(c: Campaign, inc: Incident) {
 // ---- Insurgency raids on Site-19 ----
 export const RAID = { from: 200, cooldown: 90, base: 0.003, perPrisoner: 0.002, afterStrike: 0.004, bonus: 60 };
 export const raidSize = (c: Campaign) => Math.min(10, 4 + Math.floor((yearOf(c.day) - 1951) / 2));
-/** Epsilon-11 comes up the lift from the barracks: a quarter of the time it takes to reach a breach, sooner with alarms. */
+/** Operatives on station come up the lift from the barracks: a quarter of the time it takes to reach a breach, sooner
+ *  with alarms. */
 export const raidArrival = (c: Campaign) => Math.max(3, Math.round(mtfArrival(c) / 4) - (has(c, "perimeter_alarms") ? 2 : 0));
+/** Who is on station when the Insurgency hits the compound: everyone at full alert, half at heightened, nobody at
+ *  normal (off duty, they aren't at the site). The rest drive in from town, as they would for a breach. */
+export const onStation = (c: Campaign, n: number) => c.alert === "full" ? n : c.alert === "heightened" ? Math.ceil(n / 2) : 0;
+/** One line for the raid panel and the World Map: who arrives how, and when. */
+export function raidArrivalText(c: Campaign, n?: number) {
+  const lift = raidArrival(c), road = mtfArrival(c);
+  if (c.alert === "full") return `On full alert, everyone is on station: Epsilon-11 comes up the lift on turn ${lift}.`;
+  if (c.alert === "heightened") return `On heightened alert, half the squad${n ? ` (${Math.ceil(n / 2)} of ${n})` : ""} is on station and comes up the lift on turn ${lift}; the rest are off duty and drive in through the motor pool gate on turn ${road}${road > RAID_TURNS ? `, after the raid is over` : ""}.`;
+  return `On normal alert, Epsilon-11 is off duty in town: they drive in through the motor pool gate on turn ${road}${road > RAID_TURNS ? `, after the raid is over (it ends on turn ${RAID_TURNS}); Site Security holds alone` : ""}.`;
+}
 
 /** Every day: the Insurgency may hit Site-19 itself, more often with its people in holding or a cell recently broken. */
 export function tickRaids(c: Campaign) {

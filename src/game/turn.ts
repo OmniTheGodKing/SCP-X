@@ -170,16 +170,17 @@ function arrivals(first: boolean) {
   if (first) return;
   for (const r of S.reinforce.filter(r => r.turn <= S.turn)) {
     S.reinforce = S.reinforce.filter(x => x !== r);
-    const free = entryTiles().filter(([x, y]) => !S.units.some(u => u.alive && !u.saved && u.x === x && u.y === y));
+    const free = entryTiles(r.road).filter(([x, y]) => !S.units.some(u => u.alive && !u.saved && u.x === x && u.y === y));
     const came: string[] = [];
     for (const m of r.members) {
       const t = free.shift();
-      if (!t) { S.reinforce.push({ turn: S.turn + 1, members: [m] }); continue; }
+      if (!t) { S.reinforce.push({ turn: S.turn + 1, members: [m], road: r.road }); continue; }
       S.units.push(spawnMember(m, t[0], t[1], S.setup.mods));
       came.push(m.name);
     }
     if (came.length) banner(r.members[0].guard ? "SITE SECURITY ARRIVES" : "EPSILON-11 ON SCENE", "#86c193");
-    if (came.length) log(r.members[0].guard ? `More Site Security arrives: ${came.join(", ")}.` : `Epsilon-11 is on the scene: ${came.join(", ")}.`, "good");
+    if (came.length && r.road && S.setup.kind === "raid") log(`Off-duty Epsilon-11 drives in through the motor pool gate: ${came.join(", ")}.`, "good");
+    else if (came.length) log(r.members[0].guard ? `More Site Security arrives: ${came.join(", ")}.` : `Epsilon-11 is on the scene: ${came.join(", ")}.`, "good");
   }
 }
 
