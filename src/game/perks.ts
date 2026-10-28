@@ -8,7 +8,7 @@ import type { PerkId, Unit } from "./types";
 export const hasPerk = (u: Unit | null | undefined, p: PerkId) => !!u?.perks?.includes(p);
 export const hasTrait = (u: Unit, t: NonNullable<Unit["traits"]>[number]) => !!u.traits?.includes(t);
 /** Phase 4I: in clear daylight anyone can see across the whole map; the dark and the weather set how far. */
-export const NIGHT_SIGHT = 6;
+export const NIGHT_SIGHT = 9;
 /** Night and weather never cut sight below this many tiles. */
 export const MIN_RANGE = 3;
 export const rangeOf = (u: Unit) => {
