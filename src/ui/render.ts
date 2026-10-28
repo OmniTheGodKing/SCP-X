@@ -1,7 +1,7 @@
 // Draws the tactical map, units, sightlines, previews and effects onto the mission canvas.
 import { CONT, DRUM, EXIT, FULL, HALF, L, STEEL, TS, WALL, area, inContainer, passable, pathTo, tileAt, type Pt } from "../core/grid";
 import { sightFrom } from "../core/sight";
-import { activeGun, center, coverAgainst, shotInfo } from "../game/combat";
+import { canShoot, activeGun, center, coverAgainst, shotInfo } from "../game/combat";
 import { S, canAct, canSee, isPanicked, isTeam, seen, team, unitAt } from "../game/state";
 import { blastArea, dragOptions, moveCost, reachFor, throwOptions } from "../game/turn";
 import { abilityTargets } from "../game/abilities";
@@ -449,7 +449,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
 
     // every enemy the selected operative can shoot right now shows its hit chance (hovering one gives the detail)
     if (playing && sel && sel.side === "mtf" && sel.ap > 0 && !S.mode) {
-      for (const r of S.units) if (r.side === "raider" && r.alive && !r.downed && seen(r.x, r.y) && canSee(sel, r.x, r.y) && !(S.hover && S.hover.x === r.x && S.hover.y === r.y)) {
+      for (const r of S.units) if (r.side === "raider" && r.alive && !r.downed && seen(r.x, r.y) && canShoot(sel, r) && !(S.hover && S.hover.x === r.x && S.hover.y === r.y)) {
         const [rx, ry] = center(r); tag(`${shotInfo(sel, r).chance}%`, rx, ry + 19, C.manila);
       }
     }
@@ -475,7 +475,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
           drawStatue(sx, sy, 0.45);
           if (inContainer(sx, sy)) tag("INTO CONTAINER", sx * TS + TS / 2, sy * TS - 6, C.ok);
         }
-      } else if (tu && tu.side === "raider" && seen(hv.x, hv.y) && sel.side === "mtf" && sel.ap > 0 && canSee(sel, hv.x, hv.y)) {
+      } else if (tu && tu.side === "raider" && seen(hv.x, hv.y) && sel.side === "mtf" && sel.ap > 0 && canShoot(sel, tu)) {
         const s = shotInfo(sel, tu), [ax, ay] = center(s.from), [bx, by] = center(tu);
         ctx.strokeStyle = "rgba(215,91,71,0.8)"; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
@@ -520,6 +520,34 @@ export function createRenderer(cv: HTMLCanvasElement) {
           }
         }
       }
+    }
+
+    // Phase 4I: where enemies were last seen (until seen again), and which way the team heard something
+    for (const [id, k] of Object.entries(S.contacts ?? {})) {
+      if (k.seen) continue;
+      const u = S.units.find(v => v.id === id);
+      if (!u || !u.alive || seen(u.x, u.y)) continue;
+      const cx = k.x * TS + TS / 2, cy = k.y * TS + TS / 2;
+      ctx.save(); ctx.globalAlpha = 0.55; ctx.strokeStyle = C.raider; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(cx, cy - 12); ctx.lineTo(cx + 12, cy); ctx.lineTo(cx, cy + 12); ctx.lineTo(cx - 12, cy); ctx.closePath(); ctx.stroke(); ctx.restore();
+      tag(`last seen T${k.turn}`, cx, cy + 18, C.raider);
+    }
+    for (const h of S.heard ?? []) {
+      if (h.turn < S.turn - 0 && h.turn !== S.turn) continue;
+      const m = S.units.find(v => v.id === h.listener);
+      if (!m || !m.alive) continue;
+      const a = h.dir * Math.PI / 4, [mx, my] = center(m), r0 = 19, r1 = 30;
+      const pulse = 0.5 + 0.5 * Math.sin(now / 220 + h.t);
+      ctx.save(); ctx.globalAlpha = 0.35 + 0.5 * h.conf * pulse; ctx.strokeStyle = C.manila; ctx.fillStyle = C.manila; ctx.lineWidth = 2;
+      // an arc as wide as the doubt about the direction, and an arrowhead
+      const spread = (1 - h.conf) * Math.PI / 4 + 0.12;
+      ctx.beginPath(); ctx.arc(mx, my, r0, a - spread, a + spread); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(mx + Math.cos(a) * r1, my + Math.sin(a) * r1); ctx.lineTo(mx + Math.cos(a + 0.18) * (r0 + 3), my + Math.sin(a + 0.18) * (r0 + 3)); ctx.lineTo(mx + Math.cos(a - 0.18) * (r0 + 3), my + Math.sin(a - 0.18) * (r0 + 3)); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    if (sel && sel.alive && sel.prefFacing !== undefined) {
+      const a = sel.prefFacing * Math.PI / 4, [mx, my] = center(sel);
+      ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = C.mtf; ctx.beginPath(); ctx.moveTo(mx, my); ctx.arc(mx, my, 26, a - 0.35, a + 0.35); ctx.closePath(); ctx.fill(); ctx.restore();
     }
 
     // where Insurgent reinforcements will land next turn

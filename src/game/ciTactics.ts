@@ -1,7 +1,8 @@
 // Insurgent specialists and their tricks (Phase 3I): snipers who hold long-range overwatch, demolition specialists who
 // blow through walls, officers (and the named commander) who steady the troops around them, anomalous charms, and
 // reinforcements that land in long fights with a turn's warning.
-import { L, FLOOR, WALL, bfs, cheb, pathTo, passable } from "../core/grid";
+import { emitNoise } from "./noise";
+import { PART, blastStructure, doorShut, L, FLOOR, WALL, bfs, cheb, pathTo, passable } from "../core/grid";
 import { S, alive, computeVis, fx, log, occupied, seen, team } from "./state";
 import { damage, moveUnit } from "./combat";
 import type { Unit, MissionSetup } from "./types";
@@ -50,16 +51,19 @@ export function demoBreach(r: Unit): boolean {
   let best: [number, number] | null = null, gain = 3;
   for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     const wx = r.x + dx, wy = r.y + dy, bx = r.x + 2 * dx, by = r.y + 2 * dy;
-    if (wx <= 0 || wy <= 0 || wx >= L.W - 1 || wy >= L.H - 1 || L.grid[wy][wx] !== WALL || !passable(bx, by)) continue;
+    // a breaching charge opens a partition, a shut door, or an ordinary wall (Site-19's are reinforced)
+    const t = L.grid[wy]?.[wx], breachable = t === PART || doorShut(wx, wy) || (t === WALL && !L.def.reinforced);
+    if (wx <= 0 || wy <= 0 || wx >= L.W - 1 || wy >= L.H - 1 || !breachable || !passable(bx, by)) continue;
     const there = toTeam[by * L.W + bx];
     if (there >= 0 && (here < 0 || here - there > gain)) { best = [wx, wy]; gain = here < 0 ? 999 : here - there; }
   }
   if (!best) return false;
   const [wx, wy] = best;
   r.charges = (r.charges ?? 1) - 1; r.ap = 0;
-  L.grid[wy][wx] = FLOOR;
+  const what = blastStructure(wx, wy, 2);
   fx({ type: "flash", x: wx * 32 + 16, y: wy * 32 + 16, dur: 500 });
-  log(`${seen(r.x, r.y) || seen(wx, wy) ? "An Insurgent sapper" : "Something"} blows a hole through the wall${seen(wx, wy) ? "" : " nearby"}.`, "bad");
+  emitNoise(wx, wy, "explosion", r);
+  log(`${seen(r.x, r.y) || seen(wx, wy) ? "An Insurgent sapper" : "Something"} blows ${what === "door" ? "a door off its hinges" : "a hole through the wall"}${seen(wx, wy) ? "" : " nearby"}.`, "bad");
   for (const u of S.units) if (u.alive && u !== r && cheb(u.x, u.y, wx, wy) <= 1) damage(u, 2);
   S.mem.set("bang-" + r.id, { x: wx, y: wy, turn: S.turn });
   computeVis();

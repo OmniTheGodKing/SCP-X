@@ -108,6 +108,14 @@ export interface Unit {
   flesh?: boolean;
   /** A rioting D-Class: fights with fists, and can be restrained or put down. */
   rioter?: boolean;
+  /** Phase 4I: leaned out to fire from this spot this turn; anyone who can see the spot can shoot back. */
+  exposed?: { x: number; y: number; turn: number };
+  /** Phase 4I facing, in eighths of a turn (0 east, 2 south, 4 west, 6 north): where they face now, and the resting
+   *  direction the player set (they turn back to it after glancing at a noise). */
+  facing?: number;
+  prefFacing?: number;
+  /** Turned toward a noise this turn. */
+  glance?: { dir: number; turn: number };
   /** Escorts: the turn an Insurgent started working the truck open. */
   stealTurn?: number;
   /** The Insurgency fire team this unit belongs to. */
@@ -312,7 +320,7 @@ export interface MissionState {
   busy: boolean;
   over: boolean;
   called: boolean;
-  mode: "drag" | "throw" | "ability" | "lead" | "doors" | null;
+  mode: "drag" | "throw" | "ability" | "lead" | "doors" | "face" | null;
   ability: AbilityId | null;
   units: Unit[];
   statue: Unit;
@@ -328,6 +336,11 @@ export interface MissionState {
   concealed: boolean;
   activePods: number[];
   mem: Map<string, Mem>;
+  /** Phase 4I: noises the team heard (a rough direction per listener), callouts already made, and where enemies
+   *  were last seen. */
+  heard?: import("./noise").HeardNoise[];
+  calledOut?: string[];
+  contacts?: Record<string, { x: number; y: number; turn: number; seen: boolean }>;
   checked: Set<string>;
   known: Set<string>;
   fresh: Set<string>;

@@ -4,12 +4,14 @@ import type { RegionId } from "./regions";
 
 export type Weather = "clear" | "rain" | "storm" | "fog" | "snow";
 export interface WeatherDef { name: string; sight: number; desc: string }
+/** Phase 4I: how far anyone sees in this weather (clear daylight is the whole map). */
+export const WEATHER_SIGHT: Record<string, number> = { clear: 60, rain: 14, storm: 10, fog: 6, snow: 12 };
 export const WEATHER: Record<Weather, WeatherDef> = {
   clear: { name: "Clear", sight: 0, desc: "No effect." },
-  rain: { name: "Rain", sight: 2, desc: "Everyone sees 2 tiles less; fires burn out a turn sooner and spread less." },
-  storm: { name: "Storm", sight: 3, desc: "Everyone sees 3 tiles less and shots past 5 tiles take −10 aim; the noise covers gunfire, so firing doesn't break concealment. Flights there take a day longer." },
-  fog: { name: "Fog", sight: 4, desc: "Everyone sees 4 tiles less, and Insurgents only notice the team from 2 tiles closer." },
-  snow: { name: "Snow", sight: 1, desc: "Everyone sees 1 tile less and moves 1 tile less." },
+  rain: { name: "Rain", sight: 2, desc: "Nobody sees farther than 14 tiles; fires burn out a turn sooner and spread less." },
+  storm: { name: "Storm", sight: 3, desc: "Nobody sees farther than 10 tiles, and shots past 5 tiles take −10 aim; the noise covers gunfire, so firing doesn't break concealment. Flights there take a day longer." },
+  fog: { name: "Fog", sight: 4, desc: "Nobody sees farther than 6 tiles, and Insurgents only notice the team from 2 tiles closer." },
+  snow: { name: "Snow", sight: 1, desc: "Nobody sees farther than 12 tiles, and everyone moves 1 tile less." },
 };
 
 type Odds = Partial<Record<Weather, number>>;

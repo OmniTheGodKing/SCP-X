@@ -1,15 +1,22 @@
 // Tile grid, movement rules and pathfinding for the current mission map.
 
 export const TS = 32;           // tile size in pixels
-export const R = 9;             // sight range in tiles
+export const R = 9;             // the old sight radius; now only a reference for short-range checks (Phase 4I)
 
-export const WALL = 0, FLOOR = 1, HALF = 2, FULL = 3, EXIT = 4, CONT = 5, STEEL = 6, DRUM = 7;
+export const WALL = 0, FLOOR = 1, HALF = 2, FULL = 3, EXIT = 4, CONT = 5, STEEL = 6, DRUM = 7, WINDOW = 8, PART = 9;
+
+/** Phase 4I structure: doors with a kind and a state, windows, and what can be destroyed. */
+export type DoorKind = "standard" | "security" | "containment" | "emergency";
+export type DoorState = "open" | "closed" | "locked" | "breached" | "destroyed";
+export interface Door { kind: DoorKind; state: DoorState }
+export interface Glass { kind: "ordinary" | "reinforced"; broken: boolean }
 export type Tile = number;
 export type Pt = [number, number];
 
 export interface MapDef {
   name: string;
   // # wall · . floor · + doorway · h desk (half cover) · H pillar (full cover)
+  // w window · W reinforced (observation) window · p partition (a thin wall explosives can open)
   // C transport container floor · S container side wall · E exit
   rows: string[];
   area: (x: number, y: number) => string;
@@ -23,6 +30,9 @@ export interface MapDef {
   panel?: Pt;
   /** Keep the furniture as drawn (outdoor maps whose spawn areas aren't rooms). */
   fixedFurniture?: boolean;
+  /** Site-19's walls are reinforced: only partitions, doors and windows give way. Elsewhere a rocket or a breaching
+   *  charge can open an interior wall. */
+  reinforced?: boolean;
 }
 
 export class Level {
@@ -30,22 +40,36 @@ export class Level {
   readonly H: number;
   readonly grid: Tile[][] = [];
   readonly doors = new Set<number>();
+  /** Each doorway's kind and state, and each window's. */
+  readonly door = new Map<number, Door>();
+  readonly glass = new Map<number, Glass>();
+  /** Goes up whenever a door, window or wall changes, so sight and the map's art know to redo their work. */
+  version = 0;
   readonly contTiles: Pt[] = [];
   readonly exitMap: Int16Array;
 
   constructor(readonly def: MapDef) {
     this.W = def.rows[0].length;
     this.H = def.rows.length;
-    const codes: Record<string, Tile> = { "#": WALL, h: HALF, H: FULL, E: EXIT, C: CONT, S: STEEL, D: DRUM };
+    const codes: Record<string, Tile> = { "#": WALL, h: HALF, H: FULL, E: EXIT, C: CONT, S: STEEL, D: DRUM, w: WINDOW, W: WINDOW, p: PART };
     def.rows.forEach((row, y) => {
       this.grid[y] = [];
       [...row].forEach((c, x) => {
         this.grid[y][x] = codes[c] ?? FLOOR;
         if (c === "+") this.doors.add(y * this.W + x);
+        if (c === "w" || c === "W") this.glass.set(y * this.W + x, { kind: c === "W" ? "reinforced" : "ordinary", broken: false });
         if (c === "C") this.contTiles.push([x, y]);
       });
     });
     L = this;
+    // doors: into a containment cell they are containment doors, inside Site-19 security doors, elsewhere ordinary;
+    // all start closed
+    for (const i of this.doors) {
+      const x = i % this.W, y = (i / this.W) | 0;
+      const near = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => def.area(x + dx, y + dy));
+      const kind: DoorKind = near.some(a => /containment cell/.test(a)) ? "containment" : def.reinforced ? "security" : "standard";
+      this.door.set(i, { kind, state: "closed" });
+    }
     const exits: Pt[] = [];
     for (let y = 0; y < this.H; y++) for (let x = 0; x < this.W; x++) if (this.grid[y][x] === EXIT) exits.push([x, y]);
     this.exitMap = bfs(exits, 999).dist;
@@ -63,8 +87,38 @@ export function setVault(on: boolean) { vaulting = on; }
 /** Tiles that cost 2 to move into (floor corroded by SCP-106). */
 let slow: Set<number> = new Set();
 export function setSlow(tiles: Set<number>) { slow = tiles; }
-export const passable = (x: number, y: number) => { const t = tileAt(x, y); return t === FLOOR || t === EXIT || t === CONT || (vaulting && t === HALF); };
-export const opaque = (x: number, y: number) => { const t = tileAt(x, y); return t === WALL || t === FULL || t === STEEL; };
+const doorAt = (x: number, y: number) => (x < 0 || y < 0 || x >= L.W || y >= L.H) ? undefined : L.door.get(y * L.W + x);
+export const doorShut = (x: number, y: number) => { const d = doorAt(x, y); return !!d && (d.state === "closed" || d.state === "locked"); };
+export const passable = (x: number, y: number) => { const t = tileAt(x, y); return (t === FLOOR && doorAt(x, y)?.state !== "locked") || t === EXIT || t === CONT || (vaulting && t === HALF); };
+/** Blocks sight: walls, full cover, steel, partitions, and shut doors. Windows are transparent. */
+export const opaque = (x: number, y: number) => { const t = tileAt(x, y); return t === WALL || t === FULL || t === STEEL || t === PART || doorShut(x, y); };
+/** Blocks a bullet: anything opaque, and reinforced glass while it holds. Ordinary glass shatters and lets it through. */
+export const stopsShot = (x: number, y: number) => opaque(x, y) || (tileAt(x, y) === WINDOW && !!L.glass.get(y * L.W + x) && L.glass.get(y * L.W + x)!.kind === "reinforced" && !L.glass.get(y * L.W + x)!.broken);
+/** Something about the structure changed: sight caches and the map's art must be redone. */
+export const bump = () => { L.version++; };
+/** Walking through a shut (unlocked) door opens it. Returns true if it did. */
+export function openDoor(x: number, y: number) {
+  const d = doorAt(x, y);
+  if (!d || d.state !== "closed") return false;
+  d.state = "open"; bump(); return true;
+}
+export function breakGlass(x: number, y: number) {
+  const g = L.glass.get(y * L.W + x);
+  if (!g || g.broken) return false;
+  g.broken = true; bump(); return true;
+}
+/** An explosion's effect on structure at a tile: power 1 (grenades) takes cover, doors, partitions and glass;
+ *  power 2 (rockets, breaching charges) also takes an interior wall where walls aren't reinforced. Returns what broke. */
+export function blastStructure(x: number, y: number, power: number): string | null {
+  if (x <= 0 || y <= 0 || x >= L.W - 1 || y >= L.H - 1) return null;
+  const t = tileAt(x, y), i = y * L.W + x, d = L.door.get(i);
+  if (t === HALF) { L.grid[y][x] = FLOOR; bump(); return "cover"; }
+  if (d && d.state !== "destroyed") { d.state = "destroyed"; bump(); return "door"; }
+  if (t === PART) { L.grid[y][x] = FLOOR; bump(); return "partition"; }
+  if (t === WINDOW) { return breakGlass(x, y) ? "window" : null; }
+  if (t === WALL && power >= 2 && !L.def.reinforced) { L.grid[y][x] = FLOOR; bump(); return "wall"; }
+  return null;
+}
 export const inContainer = (x: number, y: number) => tileAt(x, y) === CONT;
 export const nearContainer = (x: number, y: number) =>
   !inContainer(x, y) && L.contTiles.some(([cx, cy]) => Math.max(Math.abs(cx - x), Math.abs(cy - y)) <= 1);
