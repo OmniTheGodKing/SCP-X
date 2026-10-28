@@ -1,6 +1,6 @@
 // Line of sight and line of fire (Phase 4I): rays against the real geometry (walls, shut doors, partitions, smoke;
 // windows are transparent), no fixed sight radius, partial visibility, and leaning past cover.
-import { L, WINDOW, d2, opaque, passable, stopsShot, tileAt } from "./grid";
+import { L, PART, WALL, WINDOW, d2, opaque, passable, stopsShot, tileAt } from "./grid";
 
 /** As far as anyone can see in clear daylight: the whole map. Night, fog and weather shorten it (see rangeOf). */
 export const SIGHT_MAX = 60;
@@ -11,9 +11,30 @@ export function setSmoke(tiles: [number, number][]) { smoke = new Set(tiles.map(
 export const smoky = (x: number, y: number) => smoke.has(y * L.W + x);
 const solid = (x: number, y: number) => opaque(x, y) || (smoke.size > 0 && smoke.has(y * L.W + x));
 
+// Thin walls (as XCOM draws them): a wall, partition or shut door standing in a one-tile wall line, with open ground
+// on both sides of the line, only blocks along the line's centre. A window or an open door is a gap in that line, so
+// someone beside a window looks through it at a steep angle into the room beyond. Corners, junctions and solid rock
+// are still full blocks. 0 = full block, 1 = thin along a horizontal line, 2 = thin along a vertical line.
+let thinFor: unknown = null, thinVer = -1, thinMap = new Int8Array(0);
+const lineMember = (x: number, y: number) => { if (x < 0 || y < 0 || x >= L.W || y >= L.H) return false; const t = tileAt(x, y); return t === WALL || t === PART || t === WINDOW || L.door.has(y * L.W + x); };
+function thin(x: number, y: number) {
+  if (thinFor !== L || thinVer !== L.version) {
+    thinFor = L; thinVer = L.version; thinMap = new Int8Array(L.W * L.H);
+    for (let ty = 0; ty < L.H; ty++) for (let tx = 0; tx < L.W; tx++) {
+      const t = tileAt(tx, ty);
+      if (!(t === WALL || t === PART || L.door.has(ty * L.W + tx))) continue;
+      const open = (a: number, b: number) => a >= 0 && b >= 0 && a < L.W && b < L.H && !lineMember(a, b);
+      if (open(tx, ty - 1) && open(tx, ty + 1) && (lineMember(tx - 1, ty) || lineMember(tx + 1, ty))) thinMap[ty * L.W + tx] = 1;
+      else if (open(tx - 1, ty) && open(tx + 1, ty) && (lineMember(tx, ty - 1) || lineMember(tx, ty + 1))) thinMap[ty * L.W + tx] = 2;
+    }
+  }
+  return thinMap[y * L.W + x];
+}
+
 // Exact grid walk between two points (tile units). A ray that passes exactly through a corner is blocked only when
-// both tiles beside that corner are solid (it can't squeeze between two walls touching at a corner); grazing the
-// corner of a single wall is fine, as it would be in reality. There is no limit on the angle through a doorway.
+// both tiles beside that corner are full blocks (it can't squeeze between two walls touching at a corner); grazing the
+// corner of a single wall is fine, as it would be in reality. A thin wall stops the ray only where it crosses the
+// wall's centre line inside that tile. There is no limit on the angle through a doorway or window.
 function walk(x0: number, y0: number, x1: number, y1: number, blocks: (x: number, y: number) => boolean, onTile?: (x: number, y: number) => void) {
   let cx = Math.floor(x0), cy = Math.floor(y0);
   const ex = Math.floor(x1), ey = Math.floor(y1), dx = x1 - x0, dy = y1 - y0;
@@ -21,14 +42,23 @@ function walk(x0: number, y0: number, x1: number, y1: number, blocks: (x: number
   const tdx = sx ? Math.abs(1 / dx) : Infinity, tdy = sy ? Math.abs(1 / dy) : Infinity;
   let tx = sx > 0 ? (cx + 1 - x0) / dx : sx < 0 ? (x0 - cx) / -dx : Infinity;
   let ty = sy > 0 ? (cy + 1 - y0) / dy : sy < 0 ? (y0 - cy) / -dy : Infinity;
+  const full = (x: number, y: number) => blocks(x, y) && !thin(x, y);
   for (let guard = 0; guard < 160 && !(cx === ex && cy === ey); guard++) {
+    let tIn: number;
     if (Math.abs(tx - ty) < 1e-9) {
-      if (blocks(cx + sx, cy) && blocks(cx, cy + sy)) return false;
-      cx += sx; cy += sy; tx += tdx; ty += tdy;
-    } else if (tx < ty) { cx += sx; tx += tdx; }
-    else { cy += sy; ty += tdy; }
+      if (full(cx + sx, cy) && full(cx, cy + sy)) return false;
+      tIn = tx; cx += sx; cy += sy; tx += tdx; ty += tdy;
+    } else if (tx < ty) { tIn = tx; cx += sx; tx += tdx; }
+    else { tIn = ty; cy += sy; ty += tdy; }
     if (cx === ex && cy === ey) break;
-    if (blocks(cx, cy)) return false;
+    if (blocks(cx, cy)) {
+      const k = thin(cx, cy), tOut = Math.min(tx, ty, 1);
+      if (!k) return false;
+      // where the ray crosses this tile's centre line, if it does inside the tile
+      const d = k === 1 ? dy : dx, c = k === 1 ? cy + 0.5 - y0 : cx + 0.5 - x0;
+      if (Math.abs(d) < 1e-12) { if (Math.abs(c) < 1e-9) return false; }
+      else { const tc = c / d; if (tc >= tIn - 1e-9 && tc <= tOut + 1e-9) return false; }
+    }
     onTile?.(cx, cy);
   }
   return true;

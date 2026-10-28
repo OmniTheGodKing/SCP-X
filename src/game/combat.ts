@@ -4,7 +4,7 @@ import { charmTurns, officerNear } from "./ciTactics";
 import { DIRS, DRUM, FULL, HALF, STEEL, TS, WALL, L, bfs, cheb, tileAt, type Pt } from "../core/grid";
 import { MIN_SIGHT, fireLine, viewSpots, visFrac, type View } from "../core/sight";
 import { breakGlass, d2, openDoor } from "../core/grid";
-import { emitNoise, facingTo } from "./noise";
+import { emitNoise, faceThreat, facingTo } from "./noise";
 import { hasPerk, rangeOf } from "./perks";
 import { TYPES, rangeMod } from "../data/weapons";
 import { prof } from "./profiles";
@@ -291,4 +291,6 @@ export async function moveUnit(u: Unit, path: Pt[]) {
     }
     if (isTeam(u) || seen(x, y)) await sleep(60);
   }
+  // having arrived, they turn to face the nearest enemy they can see (otherwise they keep facing the way they walked)
+  if (u.alive && !u.downed && (isTeam(u) || u.side === "raider")) faceThreat(u);
 }
