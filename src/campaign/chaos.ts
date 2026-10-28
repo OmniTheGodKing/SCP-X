@@ -9,7 +9,7 @@ import { cultureOfFamily, fullName } from "../data/names";
 import { dateText, log, yearOf, type Campaign, type Incident } from "./campaign";
 import { addStanding } from "./council";
 import { chronicle } from "./history";
-import { addExposure, isContacted, locateCellFor } from "./world";
+import { addExposure, isContacted, locateCellFor, travelDays } from "./world";
 import { FACILITIES, operational } from "./base";
 import { scpName, startBreach, wreckFacility } from "./containment";
 import { startRaid } from "./security";
@@ -24,6 +24,8 @@ export interface Plan {
   known: boolean;
   /** A located cell is working on it: breaking that cell stops it. */
   cell?: string;
+  /** Its mission was passed over or lost: it will happen, and Intel can no longer stop it. */
+  locked?: boolean;
   /** What Site-19 believes about when it happens: a span of days that holds the real date somewhere inside it. */
   win?: [number, number];
 }
@@ -148,22 +150,24 @@ function newPlans(c: Campaign) {
   k.plans = k.plans.filter(p => p.due >= c.day);
   const open = REGION_IDS.filter(r => !c.regions[r].collapsed);
   const kinds = (Object.keys(PLANS) as PlanKind[]).filter(p => p !== "mole" || k.moles < 2).sort(() => Math.random() - 0.5).slice(0, 3);
-  const made: Plan[] = kinds.map((kind, i) => {
+  const made: Plan[] = kinds.map(kind => {
     const front = kind === "infiltrate" ? pick(REGION_IDS.filter(r => isContacted(c, r) && !c.regions[r].collapsed)) : undefined;
     const due = c.day + rand(14, 24);
-    return { id: "p" + k.nextPlan++, kind, region: front ?? (kind === "raid" || kind === "sabotage" || kind === "mole" || kind === "agitate" ? HOME : pick(open)), due, known: i < 2,
+    return { id: "p" + k.nextPlan++, kind, region: front ?? (kind === "raid" || kind === "sabotage" || kind === "mole" || kind === "agitate" ? HOME : pick(open)), due, known: true,
       win: [Math.max(c.day + 7, due - rand(3, 8)), due + rand(3, 8)] as [number, number] };
   });
-  // one plan is being run from a cell Site-19 can find: break the cell and the plan dies with it
-  const target = made.find(p => p.known);
-  if (target) {
-    const inc = locateCellFor(c, isContacted(c, target.region) ? target.region : HOME);
-    inc.plan = target.id; inc.expires = Math.min(inc.expires, target.win![0]);
-    target.cell = inc.id;
-    inc.title = `${inc.title} (${PLANS[target.kind].name})`;
+  // like guerrilla operations: each operation's cell is located, and the three strikes arrive together. Answering one
+  // closes the others, and the operations behind those go ahead.
+  const group = "ops" + k.nextPlan, open0 = Math.min(...made.map(p => p.win![0]));
+  for (const p of made) {
+    const at = isContacted(c, p.region) ? p.region : HOME, inc = locateCellFor(c, at);
+    inc.plan = p.id; inc.ciOp = true; inc.group = group; inc.map = pick(["port", "town", "farm"] as const);
+    inc.expires = Math.max(open0, c.day + travelDays(c, at) + 3);
+    inc.title = `${inc.title} (${PLANS[p.kind].name})`;
+    p.cell = inc.id;
   }
   k.plans.push(...made);
-  log(c, `Insurgency operations this month: ${made.map(p => p.known ? `${PLANS[p.kind].name} (${goalText(p.kind)}, ${whenText(c, p)})` : "one unidentified").join("; ")}.${target ? ` A cell running ${PLANS[target.kind].name} has been located.` : ""} See the Insurgency on the Command tab.`, "bad", "command");
+  log(c, `Insurgency operations this month: ${made.map(p => `${PLANS[p.kind].name} (${goalText(p.kind)}, ${whenText(c, p)})`).join("; ")}. The cell running each one has been located: three strike missions, and Epsilon-11 can answer only one. The other two operations will go ahead.`, "bad", "command");
 }
 /** When an operation is expected, as Site-19 knows it: a window of days, never the date itself. */
 export function whenText(c: Campaign, p: Plan) {
@@ -172,7 +176,7 @@ export function whenText(c: Campaign, p: Plan) {
   return a <= 0 ? `any day now, within ${b} day${b > 1 ? "s" : ""}` : `sometime in the next ${a} to ${b} days`;
 }
 export const DISRUPT_INTEL = 2, REVEAL_INTEL = 1;
-export function canDisrupt(c: Campaign, p: Plan) { return !p.known ? "Its target isn't known yet." : c.intel < DISRUPT_INTEL ? `Needs ${DISRUPT_INTEL} Intel.` : null; }
+export function canDisrupt(c: Campaign, p: Plan) { return p.locked ? "It's going ahead: the chance to stop it has passed." : !p.known ? "Its target isn't known yet." : c.intel < DISRUPT_INTEL ? `Needs ${DISRUPT_INTEL} Intel.` : null; }
 export function disrupt(c: Campaign, id: string, how = "Intel spent through Foundation contacts") {
   const k = c.chaos, p = k.plans.find(x => x.id === id);
   if (!p) return;
@@ -182,6 +186,13 @@ export function disrupt(c: Campaign, id: string, how = "Intel spent through Foun
   addThreat(c, -6, `${PLANS[p.kind].name} disrupted`);
   chronicle(c, "insurgency", `${PLANS[p.kind].name} (${goalText(p.kind)}) was disrupted: ${how}.`);
   log(c, `${PLANS[p.kind].name} is disrupted (${how}).`, "good");
+}
+/** An operation whose mission was passed over or lost: it will happen. */
+export function lockPlan(c: Campaign, id: string, why: string) {
+  const p = c.chaos.plans.find(x => x.id === id);
+  if (!p || p.locked) return;
+  p.locked = true; p.cell = undefined;
+  log(c, `${PLANS[p.kind].name} goes ahead (${why}): ${goalText(p.kind)}, ${whenText(c, p)}.`, "bad");
 }
 export function canReveal(c: Campaign, p: Plan) { return p.known ? "Already identified." : c.intel < REVEAL_INTEL ? `Needs ${REVEAL_INTEL} Intel.` : null; }
 export function reveal(c: Campaign, id: string, how = "intel") {

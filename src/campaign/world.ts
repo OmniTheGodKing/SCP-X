@@ -1,7 +1,7 @@
 // The world outside Site-19: regional exposure and Foundation fronts, travel, cover-ups,
 // Insurgency cells and amnestics.
 import { earn, spend } from "./ledger";
-import { addThreat, planActive } from "./chaos";
+import { lockPlan, addThreat, planActive } from "./chaos";
 import { chronicle } from "./history";
 import { countOperational } from "./base";
 import { dateOf, log, yearOf, type Campaign, type Incident } from "./campaign";
@@ -237,7 +237,8 @@ export function tickWorld(c: Campaign) {
       noteMissed(c, inc.title.split(":")[0]);
       addExposure(c, inc.region, 12);
       log(c, `${inc.title.split(":")[0]} went unanswered. The story is out in ${REGIONS[inc.region].name} (+12 exposure there).`, "bad", "command");
-    } else { addThreat(c, 4, `a cell near ${inc.title.split(", ").pop()} left alone`); log(c, `The Insurgency cell near ${inc.title.split(", ").pop()} has moved on.`, "key", "command"); }
+    } else if (inc.ciOp && inc.plan) lockPlan(c, inc.plan, `the cell near ${(inc.title.split("cell, ")[1] ?? "").replace(/ \(.*\)$/, "")} was passed over`);
+    else { addThreat(c, 4, `a cell near ${inc.title.split(", ").pop()} left alone`); log(c, `The Insurgency cell near ${inc.title.split(", ").pop()} has moved on.`, "key", "command"); }
   }
 }
 
