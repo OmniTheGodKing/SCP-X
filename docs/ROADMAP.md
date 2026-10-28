@@ -814,7 +814,33 @@ rule (096 triggered by a face sight line and not by an eyes-down approach; 012 c
 footstep and ignoring a still unit, and a voice line; 035 host death, mask pickup and casing; 682 adapting and
 collapsing).
 
-### 4C: maps and mission variety (existing proposal, details pending)
+#### 4B as built (done; verified in source and in-game)
+- **Where it lives:** src/game/scp4b.ts (the five anomalies' tactical rules and eyes down), hooked into the enemy turn
+  (turn.ts: their phase after SCP-049/106, and the end-of-enemy-turn checks), combat (SCP-682's damage, SCP-035's host
+  falling), sight (state.ts: someone looking down sees only adjacent tiles), noise (noise.ts: SCP-939 remembers the
+  latest noise it hears; "lure" and "voice" noises), the abilities list (Hood, Lead SCP-096, Secure the score, Shake
+  them out of it, Case the mask) and the mission screen (titles, objectives, status card, the Eyes down button on V).
+  Campaign side: SCP_DEFS, first sightings (SIGHT_WINDOWS) and save version 24 in containment.ts and save.ts,
+  procedures in src/data/procedures.ts, ten research projects in five new branches, figures in art.ts.
+- **As specified, with these differences:** SCP-096 tears through glass, partitions, furniture and (off Site-19, whose
+  walls are reinforced) ordinary walls to reach a target, not only doors; without that a target behind a window could
+  never be reached. Nobody can photograph SCP-096. SCP-035 held at Site-19 makes an "accident" elsewhere anomalous half
+  the time (rather than doubling a chance that is zero for most anomalies). Staff have no sanity score, so SCP-035's
+  interview is logged as leaving the researcher shaken, and SCP-012's 3% folder-check accident is logged as an injury.
+  The 3% "cured by its interviewer" accident is now SCP-049's alone (it used to apply to any researcher routine).
+  Partner sites' emergencies still only involve SCP-173, 049 and 106.
+- **Tests (tests/accept4b.e2e.cjs, 29 checks passing):** SCP-096: an operative looking down in front of it doesn't
+  trigger it, a face sight line marks the viewer, who survives the scream turn and is killed the next; no hood while
+  it's enraged, then hooded once quiet; the hood is issued. SCP-012: a low-sanity operative in sight is compelled and one
+  looking down is not; the compelled walk to it and bleed; Shake frees them; the score is secured only with eyes down.
+  SCP-939: three instances and two noisemakers; a footstep is heard and remembered; unseen beyond 5 tiles; a mimicked
+  voice line; sealed with an instance inside wins; killing all three wins with no specimen and it isn't held.
+  SCP-035: the host rots, falls, the mask drops; it takes an unsuited operative; downing them frees them; cased by a
+  suited operative wins. SCP-682: half damage after three hits of a kind; regenerates 4; collapses for 2 turns at 0 and
+  can be sealed in while down. Campaign: first sightings scheduled for all five; all five captured into wings; their
+  research appears; an SCP-682 breach wrecks its wing (and, that run, the one next to it).
+
+### 4C: maps and mission variety (agreed: "go ahead with the plans")
 - **More maps:** new field and facility maps (rail yard, church, research lab, ship, Site-19 levels for base defence).
 - **Generated layouts:** maps assembled from room pieces so missions don't repeat, keeping cover, exits and objective
   placement fair.
@@ -822,6 +848,68 @@ collapsing).
   Phase 5.
 - **New mission types:** fighting GOC strike teams and GRU-P units tactically; Site-19 base defence across levels;
   escorting a transfer through a hostile town; investigating a site gone quiet.
+
+#### 4C as specified (before building)
+Map size stays 28 by 18 tiles per floor (4I). Built in two parts: first the floors, the new maps and generated towns;
+then the new mission types.
+
+**Floors (2D, before Phase 5's real elevation)**
+- A map can have two floors. Both live in one grid, stacked, with a band of solid rock between them, so sight, noise,
+  cover, movement and the AI all work unchanged and nothing passes between floors except through a link.
+- Links: stairs and lifts, drawn as their own tiles, joined in pairs. Moving onto one end and on through to the other
+  counts as one step, so the pathfinder (players' moves and the AI) uses them like any other route. Noise carries
+  between floors only faintly (the rock counts as walls).
+- The map shows one floor at a time. Buttons over the map pick the floor ("Surface", "Level 1" and so on), selecting a
+  unit shows its floor, and a strip beside the buttons says who is on the other floor and whether anything hostile is
+  seen there.
+
+**New maps**
+- Rail yard (field): lines of boxcars as full cover with gaps between them, platforms, a signal box with windows and a
+  water tower. Used for recoveries, strikes, cover-ups and escorts.
+- Church (village): the nave with pews as half cover, a bell tower, a graveyard of headstones, the rectory. Recoveries,
+  cover-ups, retaliations.
+- Research site (another Foundation site): two floors, the labs above and a containment basement below, joined by a
+  stair and a lift. Partner-site emergencies and the new "site gone quiet" missions.
+- Freighter (port): two floors, the deck stacked with containers and the hold below, joined by two ladders.
+  Strikes and recoveries at the port.
+- Site-19 level 1: the corridor, barracks, armoury and containment control under the surface compound, joined to it
+  by the lift. Raids become a fight across both floors (see base defence).
+
+**Generated towns**
+- Town missions (recoveries, cover-ups, strikes, retaliations) use a generated layout half the time: a main street
+  across the map with exits at both ends, and two to four buildings on each side built from pieces (house, shop,
+  diner, garage, chapel), each with a street door, windows on the street side, and furniture placed the way
+  existing rooms are furnished; alleys between some of them.
+- Every generated map is checked: every floor tile reachable from the team's entry, at least two rooms qualifying as
+  far enemy starts (the playtest spawn rule), cover on 8 to 15% of open ground, and on a manhunt the truck's container
+  on the street with a free door tile. A layout that fails is thrown away (up to 20 tries), then the hand-made Main
+  Street is used.
+
+**New mission types**
+- **Global Occult Coalition:** a sighting has a 20% chance (from 1953) that a GOC strike team is there instead of the
+  Insurgency: 3 to 4 operatives with armor 1, aim 70 and frag grenades, who fight the team and go for the anomaly.
+  Two of them next to it for a whole enemy turn destroy it: the mission fails and the anomaly is gone for good (it
+  joins the lost list and never resurfaces). SCP-682 can't be destroyed: they try, and it fights back.
+- **GRU Division "P" tactically:** where GRU-P already appear, they now play differently from the Insurgency: a
+  trophy team goes for the anomaly, and two of them next to it for a whole enemy turn take it and carry it (moving
+  2 tiles a turn) toward the nearest exit; shooting either carrier drops it. If they get it off the map it is lost to
+  the Soviets for good.
+- **Base defence across levels:** a raid is fought on the surface and on level 1. Forcing the lift no longer ends it:
+  the Insurgents come down the lift and head for containment control on level 1; one who holds the control room for
+  a whole enemy turn wins it for them (the old lift loss). Epsilon-11 on station starts in the level-1 barracks; off
+  duty they still drive in at the surface gate.
+- **Convoy through a hostile town:** escorting a transfer can now be a convoy: the truck drives along the main street
+  from one end toward the other, 3 tiles each enemy turn, stopping while anyone hostile is next to it or the road is
+  blocked. Insurgents wait in the buildings. Win when the truck leaves the far end; lose if they take it (one beside
+  it for a turn, as now).
+- **A site gone quiet:** a new incident: another Foundation site has stopped answering (from 1952, about once a
+  year). On the research site map, the team doesn't know what happened until it sees it: one of a loose anomaly the
+  site holds, an Insurgency occupation, or escaped instances. Objective: reach containment control in the basement and
+  restore power (the existing panel action), and bring out what survivors and records can be found.
+
+**Completion check:** a test plays a two-floor map (units path across a link, the AI follows, the floor switcher
+shows the right floor), generates 50 towns and checks each against the rules, starts each new map, and drives each
+new mission type to a win and a loss.
 
 ### 4D: campaign story and endgame (existing proposal, details pending)
 - **A campaign arc:** the Chaos Insurgency's agenda, the O5 Council and the anomalies build toward a defined climax
@@ -1208,7 +1296,7 @@ of 4I and 4G after 4E):
 3. 4F dynamic World Map activity (done).
 4. 4I tactical map geometry, visibility, facing, firing and sound (done; the foundation 4G builds on).
 5. 4G tactical combat life and presentation (done).
-6. Next: 4B more anomalies, 4C maps and mission variety, 4H combat variety and progression.
+6. 4B more anomalies (done); next 4C maps and mission variety, then 4H combat variety and progression.
 7. 4D campaign story and endgame last.
 
 ## Phase 5: 3D, XCOM style

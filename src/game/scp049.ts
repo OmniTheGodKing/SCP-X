@@ -13,7 +13,7 @@ export const PLAGUE_MOVE = 4, ZOMBIE_MOVE = 4, CALM_RANGE = 3, CALM_SANITY = 6, 
 const doctor = () => S.statue;
 /** Bodies SCP-049 could still raise. */
 export const freshBodies = () => S.units.filter(u => !u.alive && !u.saved && !u.cured && !u.taken && u !== S.statue && u.side !== "zombie");
-export const zombies = () => S.units.filter(u => u.side === "zombie" && u.alive);
+export const zombies = () => S.units.filter(u => u.side === "zombie" && u.alive && !u.voice && !u.host);
 export const isCalm = () => S.calmUntil >= S.turn;
 export const isStaggered = () => (doctor().staggeredUntil ?? -1) >= S.turn;
 
@@ -137,6 +137,6 @@ export async function leadTo(x: number, y: number) {
   if (!path) return false;
   const d = doctor();
   for (const [px, py] of path) { d.x = px; d.y = py; hooks.update(); await sleep(90); }
-  log(`SCP-049 follows quietly to the ${area(d.x, d.y)}.`, "key");
+  log(S.scp === "096" ? `The hooded SCP-096 shuffles along to the ${area(d.x, d.y)}.` : `SCP-049 follows quietly to the ${area(d.x, d.y)}.`, "key");
   return true;
 }

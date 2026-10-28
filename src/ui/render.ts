@@ -10,6 +10,7 @@ import { mapLayer, noise } from "./tiles";
 import { audioSettings, sfx, transition } from "./audio";
 import { createFx } from "./fxdraw";
 import { bubbles, createLiving, mist } from "./living";
+import { hidden939, inFace, isDown682, isNewScp, isTarget } from "../game/scp4b";
 import type { Effect } from "../game/types";
 import { animOf, badge, drawBase, drawFallen, drawPerson, drawRadio, drawRecords, lookFor, noteEffects, placeOf, resetAnims } from "./sprites";
 import { escaping } from "../game/scp173";
@@ -142,6 +143,87 @@ export function createRenderer(cv: HTMLCanvasElement) {
     ctx.fillStyle = "#b5464e"; ctx.beginPath(); ctx.arc(cx - 2, cy - 2, 3, 0, Math.PI * 2); ctx.fill();
   }
 
+  // ---- Phase 4B figures ----
+  function drawNew(u: Unit, cx: number, cy: number, ang: number, now: number) {
+    if (S.scp === "035" && S.maskHost) return;   // worn: the host is drawn instead
+    // the same kind of ring the other anomalies stand on: red while dangerous, green once it's handled
+    const safe = S.sealed || S.hooded || isDown682();
+    drawBase(ctx, cx, cy, S.scp === "012" || S.scp === "035" ? "square" : "circle", safe ? C.ok : S.scp === "012" || S.scp === "035" ? C.manila : C.alert);
+    ctx.save();
+    if (S.scp === "096") {
+      // pale and impossibly thin, folded over, hands to its face; the hood if it's on
+      ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.beginPath(); ctx.ellipse(cx + 2, cy + 3, 9, 7, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.translate(cx, cy); ctx.rotate(ang);
+      const shake = S.rage && S.turn <= S.rage.scream ? Math.sin(now / 25) * 1.2 : 0;
+      ctx.translate(shake, 0);
+      ctx.fillStyle = "#e2ddd2"; ctx.strokeStyle = "#a9a497"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(-1, 0, 5, 7.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = "#d9d4c8"; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(1, -6); ctx.lineTo(9, -3); ctx.moveTo(1, 6); ctx.lineTo(9, 3); ctx.stroke();
+      ctx.fillStyle = S.hooded ? "#6b5a3e" : "#ece7dc"; ctx.beginPath(); ctx.ellipse(4, 0, 4.2, 4.8, 0, 0, Math.PI * 2); ctx.fill();
+      if (!S.hooded) { ctx.fillStyle = S.rage ? "#5a1010" : "#2a1a18"; ctx.beginPath(); ctx.ellipse(7, 0, 1.4, S.rage ? 2.6 : 1.6, 0, 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore();
+      if (S.rage) tag(S.turn <= S.rage.scream ? "SCREAMING" : "ENRAGED", cx, cy - 20, C.alert);
+      else if (S.hooded) tag("HOODED", cx, cy - 20, C.ok);
+      return;
+    }
+    if (S.scp === "012") {
+      ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.fillRect(cx - 8, cy - 4, 18, 14);
+      ctx.strokeStyle = "#3a3128"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cx - 6, cy + 10); ctx.lineTo(cx, cy + 2); ctx.lineTo(cx + 6, cy + 10); ctx.stroke();
+      ctx.translate(cx, cy - 2); ctx.rotate(-0.1);
+      ctx.fillStyle = "#e3d9b8"; ctx.fillRect(-9, -7, 18, 12);
+      ctx.strokeStyle = "rgba(90,74,50,0.7)"; ctx.lineWidth = 0.6; ctx.beginPath(); for (let k = 0; k < 4; k++) { ctx.moveTo(-7, -4 + k * 2.6); ctx.lineTo(7, -4 + k * 2.6); } ctx.stroke();
+      const pulse = 0.6 + 0.4 * Math.sin(now / 300);
+      ctx.strokeStyle = `rgba(150,24,28,${pulse})`; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(-5, -2); ctx.lineTo(-2, 1); ctx.lineTo(0, -4); ctx.lineTo(4, 2); ctx.stroke();
+      ctx.restore();
+      if (S.sealed) tag("SECURED", cx, cy - 18, C.ok);
+      return;
+    }
+    if (S.scp === "035") {
+      // the mask on the floor
+      ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.beginPath(); ctx.ellipse(cx + 1, cy + 3, 8, 5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#f0ece2"; ctx.beginPath(); ctx.ellipse(cx, cy, 6, 7.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#1a1714"; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(cx - 2.2, cy - 1.5, 1.3, Math.PI, 0); ctx.arc(cx + 2.2, cy - 1.5, 1.3, Math.PI, 0); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, cy + 3, 2.2, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+      ctx.strokeStyle = "rgba(90,74,56,0.8)"; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(cx - 2.2, cy); ctx.lineTo(cx - 2.6, cy + 4 + Math.sin(now / 400)); ctx.moveTo(cx + 2.2, cy); ctx.lineTo(cx + 2.6, cy + 4 + Math.cos(now / 400)); ctx.stroke();
+      ctx.restore();
+      tag(S.sealed ? "CASED" : "THE MASK", cx, cy - 16, S.sealed ? C.ok : C.manila);
+      return;
+    }
+    if (S.scp === "682") {
+      const down = isDown682(), k = down ? 0.85 : 1;
+      ctx.fillStyle = "rgba(0,0,0,0.45)"; ctx.beginPath(); ctx.ellipse(cx + 3, cy + 4, 17, 12, ang, 0, Math.PI * 2); ctx.fill();
+      ctx.translate(cx, cy); ctx.rotate(ang); ctx.scale(k * 1.2, k * 1.2);
+      ctx.fillStyle = down ? "#4a3a2a" : "#455a34"; ctx.strokeStyle = "#2d3a24"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.ellipse(-2, 0, 14, 9, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-14, 0); ctx.quadraticCurveTo(-22, Math.sin(now / 300) * 4, -24, 3); ctx.lineWidth = 3; ctx.strokeStyle = "#3a4a2c"; ctx.stroke();
+      ctx.fillStyle = "#3a4a2c"; for (const [lx, ly] of [[-8, -10], [6, -10], [-8, 10], [6, 10]]) ctx.fillRect(lx - 2, ly - 2, 5, 4);
+      ctx.fillStyle = down ? "#4a3a2a" : "#506a3c"; ctx.beginPath(); ctx.ellipse(13, 0, 6, 5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#d9d2b8"; ctx.beginPath(); ctx.moveTo(17, -3); ctx.lineTo(21, 0); ctx.lineTo(17, 3); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#e0c050"; ctx.beginPath(); ctx.arc(14, -2.5, 1.1, 0, Math.PI * 2); ctx.arc(14, 2.5, 1.1, 0, Math.PI * 2); ctx.fill();
+      if (down) { ctx.fillStyle = "rgba(150,30,30,0.6)"; ctx.beginPath(); ctx.ellipse(0, 0, 10, 6, 0.4, 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore();
+      if (!down) { const w = 28, f = Math.max(0, u.hp / u.maxHp); ctx.fillStyle = "#0f1317"; ctx.fillRect(cx - w / 2 - 1, cy - 22, w + 2, 4); ctx.fillStyle = C.alert; ctx.fillRect(cx - w / 2, cy - 21, w * f, 2); }
+      tag(down ? `DOWN · UP T${(S.downUntil ?? S.turn) + 1}` : `${u.hp} HP`, cx, cy - 28, down ? C.ok : C.alert);
+      return;
+    }
+    ctx.restore();
+  }
+  function draw939(cx: number, cy: number, ang: number, now: number, hurt: number) {
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.beginPath(); ctx.ellipse(cx + 2, cy + 3, 13, 8, ang, 0, Math.PI * 2); ctx.fill();
+    ctx.translate(cx, cy); ctx.rotate(ang);
+    const step = Math.sin(now / 160) * 1.5;
+    ctx.fillStyle = "#5a1416"; for (const [lx, ly] of [[-6, -7], [5, -7], [-6, 7], [5, 7]]) ctx.fillRect(lx - 1.5 + (ly > 0 ? step : -step), ly - 1.5, 4, 3);
+    ctx.fillStyle = hurt ? "#a53034" : "#7a1c1e"; ctx.strokeStyle = "#4a0f10"; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.ellipse(-2, 0, 10, 6, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(9, 0, 5, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#d9c9b0"; ctx.beginPath(); ctx.moveTo(12, -2.5); ctx.lineTo(15.5, 0); ctx.lineTo(12, 2.5); ctx.closePath(); ctx.fill();
+    // a breath of its sedative haze
+    const t = (now / 1400) % 1; ctx.fillStyle = `rgba(210,190,190,${0.25 * (1 - t)})`; ctx.beginPath(); ctx.arc(15 + t * 8, 0, 2 + t * 4, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    badge(ctx, cx + 10, cy + 10, "39", "#c2626a");
+  }
+
   function hpBar(u: Unit, cx: number, cy: number) {
     const w = 20, frac = Math.max(0, u.hp / u.maxHp);
     ctx.fillStyle = "#0f1317"; ctx.fillRect(cx - w / 2 - 1, cy - 20, w + 2, 4);
@@ -156,6 +238,15 @@ export function createRenderer(cv: HTMLCanvasElement) {
     const pose = { kick, flinch: fl, reloading: now - p.a.reload < 650, bloodied: u.hp > 0 && u.hp < u.maxHp / 2, seed: u.id.length + u.name.length };
     if (u.side === "anomaly" && S.has049) { drawDoctor(cx, cy, p.ang); return; }
     if (u.side === "anomaly" && S.has106) { drawOldMan(cx, cy, p.ang, now); return; }
+    if (u.side === "anomaly" && isNewScp(S.scp)) { drawNew(u, cx, cy, p.ang, now); return; }
+    if (u.voice) { draw939(cx, cy, p.ang, now, hurt); hpBar(u, cx, cy); return; }
+    if (u.host) {
+      drawBase(ctx, cx, cy, "circle", "#f0ece2");
+      drawPerson(ctx, cx, cy, p.ang, { ...lookFor({ ...u, side: u.wasSide ?? "civilian" } as Unit), head: "mask", headColor: "#f0ece2" }, { hurt, bob });
+      badge(ctx, cx + 10, cy + 10, "35", "#f0ece2");
+      hpBar(u, cx, cy);
+      return;
+    }
     if (u.side === "anomaly") {
       const key = `${u.x},${u.y}`;
       if (statueAt && statueAt !== key) puff = { x: cx, y: cy, t: now };
@@ -459,10 +550,29 @@ export function createRenderer(cv: HTMLCanvasElement) {
       tag(`T${S.lastSeen.turn}?`, S.lastSeen.x * TS + TS / 2, S.lastSeen.y * TS - 2, C.alert);
     }
 
+    // Phase 4B: SCP-096's face, as the tiles in the wedge in front of it that it can see; and noisemakers playing
+    if (S.scp === "096" && !S.hooded && !S.sealed && st.alive && (seen(st.x, st.y) || S.explored[st.y * L.W + st.x])) {
+      ctx.fillStyle = S.rage ? "rgba(215,91,71,0.22)" : "rgba(215,91,71,0.14)";
+      for (let y = st.y - 10; y <= st.y + 10; y++) for (let x = st.x - 10; x <= st.x + 10; x++)
+        if (x >= 0 && y >= 0 && x < L.W && y < L.H && passable(x, y) && inFace(x, y) && sightFrom(st.x, st.y, x, y, 10)) ctx.fillRect(x * TS + 1, y * TS + 1, TS - 2, TS - 2);
+    }
+    for (const l of S.lures ?? []) if (l.until >= S.turn) {
+      const cx = l.x * TS + TS / 2, cy = l.y * TS + TS / 2, pulse = (now / 700) % 1;
+      ctx.fillStyle = "#3a3d40"; ctx.fillRect(cx - 6, cy - 4, 12, 8); ctx.fillStyle = "#d8bf86"; ctx.beginPath(); ctx.arc(cx - 2, cy, 2, 0, Math.PI * 2); ctx.arc(cx + 3, cy, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = `rgba(216,191,134,${0.7 * (1 - pulse)})`; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(cx, cy, 8 + pulse * 18, 0, Math.PI * 2); ctx.stroke();
+      tag(`LURE · T${l.until}`, cx, cy + 16, C.manila);
+    }
+
     for (const u of S.units) {
       if (!u.alive || u.saved || u.carriedBy) continue;
       if (!isTeam(u) && !seen(u.x, u.y) && !u.restrained) continue;
+      if (hidden939(u)) continue;
       drawUnit(u, now);
+      // Phase 4B markers: eyes on the floor, compelled by SCP-012, marked by SCP-096
+      const pp = placeOf(u, now);
+      if (u.eyesDown) tag("EYES DOWN", pp.x, pp.y + 20, C.ok);
+      if (u.compelled !== undefined) tag("COMPELLED", pp.x, pp.y + 20, C.alert);
+      if (isTarget(u)) tag("MARKED", pp.x, pp.y - 26, C.alert);
     }
 
     // smoke

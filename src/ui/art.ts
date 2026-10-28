@@ -168,6 +168,27 @@ export function anomalyFigure(id: string, x: number, baseY: number, s = 1) {
     case "914": return g(`<rect x="-20" y="-24" width="40" height="24" fill="#5a4630"/><circle cx="0" cy="-14" r="8" fill="#8a6a3a" stroke="#d9a441"/>
       ${[0, 45, 90, 135, 180, 225, 270, 315].map(a => `<rect x="-1" y="-24" width="2" height="4" fill="#d9a441" transform="rotate(${a} 0 -14)"/>`).join("")}<rect x="-18" y="-10" width="6" height="8" fill="#2a2118"/><rect x="12" y="-10" width="6" height="8" fill="#2a2118"/>`);
     case "005": return g(`<rect x="-1.2" y="-22" width="2.4" height="16" fill="#b8a46a"/><circle cx="0" cy="-24" r="4" fill="none" stroke="#b8a46a" stroke-width="2"/><path d="M1 -10h4v2h-2v2h3v2H1" fill="#b8a46a"/>`);
+    // Phase 4B
+    case "096": return g(`<ellipse cx="0" cy="0" rx="9" ry="2" fill="#000" opacity=".4"/>
+      <path d="M-3 0 L-4 -14 M3 0 L4 -14" stroke="#d9d4c8" stroke-width="2.2"/><path d="M-5 -14 Q-6 -26 0 -27 Q6 -26 5 -14Z" fill="#e2ddd2"/>
+      <path d="M-5 -24 Q-12 -16 -10 -6 M5 -24 Q12 -16 10 -6" stroke="#d9d4c8" stroke-width="1.6" fill="none"/>
+      <ellipse cx="0" cy="-32" rx="4.5" ry="6" fill="#e8e3d8"/><ellipse cx="0" cy="-30" rx="2" ry="3" fill="#2a1a18"/>
+      <circle cx="-1.8" cy="-34" r=".9" fill="#1a1110"/><circle cx="1.8" cy="-34" r=".9" fill="#1a1110"/>`);
+    case "012": return g(`<path d="M-2 0 L0 -14 L2 0" stroke="#3a3128" stroke-width="1.6" fill="none"/>
+      <rect x="-9" y="-28" width="18" height="14" fill="#e3d9b8" transform="rotate(-6 0 -21)"/>
+      ${[-25, -22, -19, -16].map(y => `<path d="M-7 ${y}h14" stroke="#6a5a40" stroke-width=".5" transform="rotate(-6 0 -21)"/>`).join("")}
+      <path d="M-5 -24 l2 3 l2 -4 l3 5" stroke="#8a1f22" stroke-width="1.2" fill="none" transform="rotate(-6 0 -21)"/><circle cx="4" cy="-17" r="1.2" fill="#8a1f22"/>`);
+    case "939": return g(`<ellipse cx="0" cy="0" rx="14" ry="2.5" fill="#000" opacity=".4"/>
+      <path d="M-14 0 L-11 -8 Q-4 -14 6 -12 L12 -9 Q16 -8 16 -5 L10 -4 L8 0 M-6 -9 L-8 0 M2 -10 L4 0" stroke="#5a1416" stroke-width="2" fill="#7a1c1e"/>
+      <path d="M12 -9 L17 -7 L12 -5" fill="#d9c9b0"/><path d="M-11 -8 Q-16 -10 -18 -6" stroke="#7a1c1e" stroke-width="2" fill="none"/>`);
+    case "035": return g(`<rect x="-7" y="-22" width="14" height="18" rx="2" fill="#4a4a52" opacity=".85"/>
+      <path d="M-6 -30 Q0 -36 6 -30 Q7 -22 0 -18 Q-7 -22 -6 -30Z" fill="#f0ece2"/>
+      <path d="M-3.5 -28 q1 -1.5 2 0 M1.5 -28 q1 -1.5 2 0" stroke="#1a1714" stroke-width="1.2" fill="none"/>
+      <path d="M-2.5 -23 Q0 -21 2.5 -23" stroke="#1a1714" stroke-width="1" fill="none"/><path d="M-3 -26 l0 5 M3 -26 l0 5" stroke="#5a4a38" stroke-width=".7"/>`);
+    case "682": return g(`<ellipse cx="0" cy="0" rx="20" ry="3.5" fill="#000" opacity=".45"/>
+      <path d="M-20 0 Q-22 -10 -12 -14 Q0 -20 12 -14 L22 -12 Q26 -10 24 -6 L16 -4 L14 0 M-8 -12 L-12 0 M6 -14 L8 0" stroke="#2d3a24" stroke-width="2.5" fill="#455a34"/>
+      <path d="M22 -12 L28 -9 L22 -7" fill="#d9d2b8"/><circle cx="19" cy="-12" r="1.2" fill="#e0c050"/>
+      ${[-12, -6, 0, 6].map(x => `<path d="M${x} -16 l2 -4 l2 4" fill="#3a4a2c"/>`).join("")}`);
     default: return g(`<rect x="-6" y="-20" width="12" height="20" fill="#3a4651"/><text x="0" y="-7" font-size="8" fill="#d8bf86" text-anchor="middle">?</text>`);
   }
 }

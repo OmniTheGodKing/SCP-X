@@ -8,7 +8,7 @@ import type { Guard } from "./security";
 import { AMMO, ATTACHMENTS, WEAPON_TIERS, model, type AmmoId, type AttachmentId } from "../data/weapons";
 import { cellWork, type ScpRecord } from "./containment";
 
-export type Branch = "SCP-173" | "SCP-049" | "SCP-106" | "Objects" | "Insurgency" | "Personnel" | "Weapons" | "Equipment" | "Site" | "Breakthrough";
+export type Branch = "SCP-173" | "SCP-049" | "SCP-106" | "SCP-096" | "SCP-012" | "SCP-939" | "SCP-035" | "SCP-682" | "Objects" | "Insurgency" | "Personnel" | "Weapons" | "Equipment" | "Site" | "Breakthrough";
 /** Things brought back from missions that some studies need (like XCOM autopsies). */
 export type MaterialId = "ciWeapons" | "prisoners" | "intelTotal" | "tissue" | "survivors" | "outbreaks" | "charms";
 export const MATERIALS: Record<MaterialId, string> = {
@@ -97,6 +97,17 @@ export const PROJECTS: Record<string, ProjectDef> = {
   necrotic_study:     { name: "Necrotic tissue study", branch: "SCP-049", days: 40, cost: 80, needsScp: "049", needsMaterial: ["tissue", 1], desc: "Autopsies on SCP-049-2 tissue lead to better wound care. Operatives and guards heal 1 HP a day faster." },
   keter_containment:  { name: "Keter-grade containment", branch: "Site", days: 50, cost: 150, afterWon: 6, desc: "Designs for cells that can hold the worst anomalies: lead-lined, suspended, and wired for electromagnets. Keter-grade wings can be built." },
   em_containment:     { name: "Electromagnetic containment", branch: "SCP-106", days: 40, cost: 120, needsScp: "106", needs: ["keter_containment"], desc: "Electromagnets around SCP-106's cell hold it in place. Its breach risk drops by 30%." },
+  // Phase 4B
+  blindfold_drill:    { name: "Blindfold drill", branch: "SCP-096", days: 25, cost: 50, needsScp: "096", desc: "Operatives train to move with their eyes down. Looking down no longer limits them to the short move." },
+  image_screening:    { name: "Facial-image screening", branch: "SCP-096", days: 40, cost: 90, needsScp: "096", desc: "Every photograph and film reel entering Site-19 is screened for its face. SCP-096's breach risk −30%." },
+  composition_study:  { name: "Composition analysis", branch: "SCP-012", days: 30, cost: 60, needsScp: "012", desc: "Musicologists work out, blindfolded, how the score draws people in. Its compulsion reaches 4 tiles instead of 7." },
+  counter_score:      { name: "Counter-score", branch: "SCP-012", days: 40, cost: 80, needsScp: "012", needs: ["composition_study"], desc: "A dissonant phrase the team hums under their breath. Anyone compelled snaps out of it on their own after 2 turns." },
+  voice_analysis:     { name: "Voice analysis", branch: "SCP-939", days: 30, cost: 70, needsScp: "939", desc: "Recordings of its mimicry show the tells. Its false calls for help are marked \"(mimicry?)\" in the log." },
+  acoustic_lures:     { name: "Acoustic lures", branch: "SCP-939", days: 30, cost: 60, needsScp: "939", desc: "Better noisemakers: 3 are issued instead of 2, and each calls for 4 turns instead of 3." },
+  mask_psychology:    { name: "Mask psychology", branch: "SCP-035", days: 35, cost: 80, needsScp: "035", desc: "Interview transcripts teach staff to stop listening. Its voice costs half the sanity." },
+  sealed_handling:    { name: "Sealed handling", branch: "SCP-035", days: 30, cost: 70, needsScp: "035", needs: ["mask_psychology"], desc: "A drill for casing it with tongs and gauntlets. Casing the mask never lets it take the handler." },
+  regeneration_study: { name: "Regeneration study", branch: "SCP-682", days: 50, cost: 150, needsScp: "682", desc: "Tissue it sheds in the acid shows how it regrows. It stays down for 3 turns instead of 2." },
+  hcl_containment:    { name: "Hydrochloric containment", branch: "SCP-682", days: 60, cost: 200, needsScp: "682", needs: ["keter_containment"], desc: "A deeper acid tank with a faster refill. SCP-682's breach risk −30%." },
   pocket_study:       { name: "Pocket dimension study", branch: "SCP-106", days: 50, cost: 120, needsScp: "106", needsMaterial: ["survivors", 1], desc: "Interviews with the few who came back map parts of the pocket dimension. People SCP-106 takes come back half the time instead of a quarter." },
   // ---- Safe-class objects that come to Site-19 by transfer ----
   panacea_assay:      { name: "Panacea assay", branch: "Objects", days: 25, cost: 50, needsScp: "500", desc: "SCP-500 can't be copied, but half a pill works as well as a whole one. Each pill treats two operatives." },
@@ -210,6 +221,11 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   flashbang: { name: "Stun grenade", cost: 15, days: 1, uses: 1, desc: "Blinds everyone within 1 tile of where it lands until the next turn." },
   smoke:     { name: "M18 smoke grenade", cost: 10, days: 1, uses: 1, desc: "Blocks sight within 1 tile of where it lands for two turns." },
   ward:      { name: "Warding charm", cost: 60, days: 3, uses: 1, desc: "Copied from the Insurgency's charms: the first round that would hit the carrier is turned aside. Used up when it works." },
+  // Phase 4B capture kit: issued for a mission against its anomaly, never stocked or ordered
+  hood:      { name: "Canvas hood", cost: 0, days: 0, uses: 1, desc: "Issued for SCP-096: pulled over its head from beside it while it is quiet." },
+  folder:    { name: "Lined folder", cost: 0, days: 0, uses: 1, desc: "Issued for SCP-012: closes over the score, by someone looking at the floor." },
+  noisemaker: { name: "Noisemaker", cost: 0, days: 0, uses: 2, desc: "Issued for SCP-939: a wind-up tape player that plays voices at the tile it lands on for 3 enemy turns." },
+  case:      { name: "Lead-lined case", cost: 0, days: 0, uses: 1, desc: "Issued for SCP-035: the mask goes in it from the floor." },
   tracker:   { name: "Seismic sensor", cost: 50, days: 3, uses: null, desc: "Detects anything within 6 tiles, through walls." },
 };
 /** Vest protection by researched tier. */
@@ -321,7 +337,7 @@ export function projectLock(c: Campaign, id: string): string | null {
     if (got < n) return `Needs ${n} ${MATERIALS[m]} (${got} so far).`;
   }
   if (p.from && yearOf(c.day) < p.from) return `Available from ${p.from}.`;
-  if (p.needsScp && !c.scps.some(s => s.id === p.needsScp)) return `Needs ${p.needsScp === "049" ? "SCP-049" : p.needsScp === "106" ? "SCP-106" : p.needsScp} held at Site-19.`;
+  if (p.needsScp && !c.scps.some(s => s.id === p.needsScp)) return `Needs SCP-${p.needsScp} held at Site-19.`;
   if (p.needsTest && !c.research.tests.includes(p.needsTest)) return `Needs the ${TESTS[p.needsTest].name.toLowerCase()}.`;
   const missing = (p.needs || []).filter(n => !has(c, n));
   if (missing.length) return `Needs ${missing.map(n => PROJECTS[n].name).join(", ")}.`;

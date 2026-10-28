@@ -81,7 +81,7 @@ export function mountDebug(host: DebugHost) {
       group(`World · ${esc(REGIONS[region].name)} (exposure ${c.regions[region].exposure}${c.regions[region].collapsed ? ", collapsed" : ""})`,
         btn("exp-10", "−10 exposure") + btn("exp+10", "+10 exposure") + btn("exp0", "Set to 0") + btn("collapse", "Collapse") + btn("restore", "Restore")),
       group(`SCP-173 (${c.scps[0].status})`, btn("s-contained", "Contained") + btn("s-breach", "Breach now") + btn("s-loose", "Loose")),
-      ...(["049", "106"] as const).map(id => group(`SCP-${id} (${c.scps.find(s => s.id === id)?.status ?? (c.sightings[id] ? `first sighting ${dateText(c.sightings[id]!)}` : "not held")})`,
+      ...(["049", "106", "096", "012", "939", "035", "682"] as const).map(id => group(`SCP-${id} (${c.scps.find(s => s.id === id)?.status ?? (c.sightings[id] ? `first sighting ${dateText(c.sightings[id]!)}` : "not held")})`,
         btn("see" + id, "First sighting now") + btn("get" + id, "Capture into a free wing") + btn("breach" + id, "Breach now"))),
       group(`SCP-610 (${c.outbreak ? `severity ${c.outbreak.severity} in ${REGIONS[c.outbreak.region].name}` : c.outbreakDay ? `first outbreak ${dateText(c.outbreakDay)}` : "none"})`, btn("outbreak", "Start the outbreak now") + btn("worsen", "Severity +1")),
       group(`Staff incidents${c.staffEvent ? ` (waiting: ${STAFF_EVENTS[c.staffEvent.id].title.toLowerCase()})` : ""}`, (Object.keys(STAFF_EVENTS) as StaffEventId[]).map(id => btn("staff-" + id, STAFF_EVENTS[id].title)).join("")),
@@ -200,8 +200,10 @@ export function mountDebug(host: DebugHost) {
         break;
       case "outbreak": if (!c.outbreak) { c.outbreakDay = c.day; days(1); } else note = "An outbreak is already under way."; break;
       case "worsen": if (c.outbreak) { c.outbreak.severity = Math.min(5, c.outbreak.severity + 1); } break;
-      case "see049": case "see106": case "get049": case "get106": case "breach049": case "breach106": {
-        const id = id_.slice(-3) as "049" | "106", known = c.scps.find(x => x.id === id);
+      case "see049": case "see106": case "get049": case "get106": case "breach049": case "breach106":
+      case "see096": case "get096": case "breach096": case "see012": case "get012": case "breach012": case "see939": case "get939": case "breach939":
+      case "see035": case "get035": case "breach035": case "see682": case "get682": case "breach682": {
+        const id = id_.slice(-3) as ScpId, known = c.scps.find(x => x.id === id);
         if (id_.startsWith("breach")) { if (known?.status === "contained") startBreach(c, known, "Debug:"); else note = `SCP-${id} has to be contained first.`; }
         else if (known) note = `SCP-${id} is already known.`;
         else { delete c.sightings[id]; if (id_.startsWith("see")) firstSighting(c, id); else { captureNow(c, id); if (!c.scps.some(x => x.id === id)) note = `No free wing of the right grade, so SCP-${id} was handed off.`; } }

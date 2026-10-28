@@ -20,7 +20,8 @@ import {
   S, alive, banner, breakConcealment, canAct, canSee, computeVis, full, fx, highlight, hooks, humans, isPanicked, isTeam, label, log, loseSanity,
   occupied, reveal, seen, sleep, starers, team, unitAt,
 } from "./state";
-import { RAID_TURNS, THROWN, type Unit } from "./types";
+import { RAID_TURNS, THROWN, type ScpId, type Unit } from "./types";
+import { check096, endOfEnemyPhase, eyesMoveCap, hidden939, isDown682, isNewScp, newAnomalyPhase, placeLure, sealBlock, sealTarget, syncMask, voices } from "./scp4b";
 
 const DRAG_SANITY = 5;
 
@@ -77,7 +78,12 @@ const dragOf = (u: Unit) => (u.side === "mtf" ? S.setup.mods.mtfDrag : prof(u).d
 export function dragOptions(u: Unit) {
   const out = new Map<number, Pt[]>(), st = S.statue;
   const watchers = team().filter(w => w !== u && w.staring && !isPanicked(w));
-  const watched = (x: number, y: number) => watchers.some(w => canSee(w, x, y));
+  // SCP-682 needs no watching while it's down; it's heavy, so one tile at a time
+  const watched = S.scp === "682" ? () => true : (x: number, y: number) => watchers.some(w => canSee(w, x, y));
+  if (S.scp === "682") {
+    for (const [dx, dy] of DIRS) { const ax = u.x + dx, ay = u.y + dy; if (canStep(u.x, u.y, dx, dy) && !S.units.some(o => o !== u && o !== st && o.alive && !o.saved && o.x === ax && o.y === ay)) out.set(ay * L.W + ax, [[ax, ay]]); }
+    return out;
+  }
   const free = (x: number, y: number, ignoreStatue: boolean) =>
     !S.units.some(o => o !== u && o.alive && !o.saved && o.x === x && o.y === y && !(ignoreStatue && o === st));
   if (!watched(u.x, u.y)) return out;
@@ -119,6 +125,14 @@ export function callCheck() {
 export function dragCheck(u: Unit | null) {
   const st = S.statue;
   if (!u || !isTeam(u)) return "Select someone.";
+  if (S.scp === "682") {
+    if (S.sealed) return "SCP-682 is sealed.";
+    if (!isDown682()) return "SCP-682 can only be dragged while it's down.";
+    if (u.ap < 1) return "No actions left this turn.";
+    if (cheb(u.x, u.y, st.x, st.y) !== 1) return "Stand next to SCP-682 first.";
+    if (!dragOptions(u).size) return "No room to drag it.";
+    return null;
+  }
   if (S.sealed) return "SCP-173 is sealed.";
   if (u.ap < 1) return "No actions left this turn.";
   if (cheb(u.x, u.y, st.x, st.y) !== 1) return "Stand next to SCP-173 first.";
@@ -127,10 +141,13 @@ export function dragCheck(u: Unit | null) {
   return null;
 }
 export function sealCheck(u: Unit | null) {
-  const st = S.statue;
+  const st = sealTarget() ?? S.statue;
   if (S.sealed) return "Already sealed.";
   if (!u || u.side !== "mtf") return "Only an operative can seal the container.";
-  if (!inContainer(st.x, st.y) || (S.has106 && S.submerged)) return `${st.name} isn't in the container yet.`;
+  const block = sealBlock();
+  if (block && (S.scp === "012" || S.scp === "035")) return block;
+  if (!inContainer(st.x, st.y) || (S.has106 && S.submerged) || (S.scp === "939" && !sealTarget())) return `${S.scp === "939" ? "No SCP-939 instance is" : `${st.name} isn't`} in the container yet.`;
+  if (block) return block;
   if (u.ap < 1) return "No actions left this turn.";
   if (!nearContainer(u.x, u.y)) return "Stand at the container door to close it.";
   if (humans().some(h => inContainer(h.x, h.y))) return "Get everyone out of the container first.";
@@ -154,8 +171,9 @@ export function startPlayerTurn(first: boolean) {
   if (!first) turnInfected();
   for (const m of team()) {
     m.overwatch = false;
-    m.ap = isPanicked(m) ? 0 : m.staring ? 1 : 2;
+    m.ap = isPanicked(m) || m.compelled !== undefined ? 0 : m.staring ? 1 : 2;
     if (isPanicked(m)) log(`${full(m)} has their eyes shut and will not act this turn.`, "bad");
+    else if (m.compelled !== undefined) log(`${full(m)} is lost in SCP-012 and won't act. Shake them out of it.`, "bad");
   }
   computeVis();
   S.selected = team().find(m => m.ap > 0) || null;
@@ -211,7 +229,7 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
   // turning to face somewhere costs nothing; it's where they look when nothing else needs their attention
   if (S.mode === "face" && sel) { if (x !== sel.x || y !== sel.y) { sel.prefFacing = sel.facing = facingTo(x - sel.x, y - sel.y); log(`${sel.call || sel.name} faces ${facingName(sel.facing)}.`); } S.mode = null; hooks.update(); return; }
   if (S.mode === "lead") {
-    if (!leadOptions().has(y * L.W + x)) { flash("SCP-049 can be led up to 3 tiles along open floor."); return; }
+    if (!leadOptions().has(y * L.W + x)) { flash(`${S.statue.name} can be led up to 3 tiles along open floor.`); return; }
     if (!confirm()) return;
     S.busy = true; S.mode = null;
     await leadTo(x, y);
@@ -252,12 +270,13 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
     await fire(sel, u, false);
     S.busy = false; afterAction(); return;
   }
-  if (u && u.side === "anomaly" && seen(x, y)) {
-    reveal("arms");
-    log("Rounds would do nothing to SCP-173. It has to go in the container.");
+  if (u && u.side === "anomaly" && seen(x, y) && S.scp !== "682") {
+    if (S.has173) { reveal("arms"); log("Rounds would do nothing to SCP-173. It has to go in the container."); }
+    else flash(S.scp === "096" ? "Gunfire does nothing to SCP-096." : S.scp === "012" ? "It's sheet music. Put it in the folder, with your eyes down." : S.scp === "035" ? "Shoot the host, not the mask." : `Gunfire won't stop ${u.name}.`);
     hooks.update(); return;
   }
-  if (u && (u.side === "raider" || u.side === "zombie") && seen(x, y)) {
+  if (u && sel.eyesDown && (u.side === "raider" || u.side === "zombie" || u.side === "anomaly")) { flash("They're looking at the floor: look up first (E) to fire."); return; }
+  if (u && ((u.side === "raider" || u.side === "zombie") && !hidden939(u) || (u.side === "anomaly" && S.scp === "682")) && seen(x, y)) {
     if (sel.side !== "mtf") { flash("D-Class are unarmed."); return; }
     if (!canSee(sel, x, y)) { flash(`${sel.call} has no line of sight to that target.`); return; }
     if (!canShoot(sel, u)) { flash(`${sel.call} can see the target but has no line of fire (a wall or reinforced glass is in the way).`); return; }
@@ -271,7 +290,7 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
       breakConcealment("a bayonet attack");
       log(`${full(sel)} drives the bayonet home (3 damage).`, "good");
       fx({ type: "text", x: u.x * TS + TS / 2, y: u.y * TS - 2, text: "3", color: "#ffffff", dur: 800 });
-      damage(u, 3, sel); await wakePods(); afterAction(); return;
+      S.hitKind = "bayonet"; damage(u, 3, sel); await wakePods(); afterAction(); return;
     }
     if (activeGun(sel)?.type === "smg") sel.ap -= 1;
     else if (hasPerk(sel, "double_tap") && sel.ap >= 2 && sel.gun?.type !== "marksman" && usesLeft(sel, "double_tap", 1) > 0) { spend(sel, "double_tap"); sel.ap = 1; log(`${full(sel)}: double tap.`, "key"); }
@@ -286,6 +305,7 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
   if (d <= 0 || !res) return;
   const cost = moveCost(sel, d);
   if (cost > sel.ap) return;
+  if (cost > 1 && eyesMoveCap(sel)) { flash("Looking at the floor, they can only make the short move."); return; }
   if (!confirm()) return;
   S.busy = true; S.pending = null;
   sel.ap -= cost;
@@ -299,7 +319,9 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
 
 function afterAction() {
   gatherResearchers();
+  syncMask();
   computeVis();
+  check096();
   if (checkEnd()) return;
   if (S.selected && (!S.selected.alive || !isTeam(S.selected) || S.selected.ap === 0)) selectNext();
   hooks.update();
@@ -307,7 +329,7 @@ function afterAction() {
 
 export function doOverwatch() {
   const u = S.selected;
-  if (!canAct() || !u || u.side !== "mtf" || u.ap < 1 || (u.gun && u.gun.ammo < 1)) return;
+  if (!canAct() || !u || u.side !== "mtf" || u.ap < 1 || (u.gun && u.gun.ammo < 1) || u.eyesDown) return;
   u.overwatch = true; u.ap = 0; u.overwatchShots = hasPerk(u, "rapid_reaction") ? 2 : 1;
   log(`${full(u)} on overwatch.`);
   afterAction();
@@ -369,6 +391,11 @@ async function doDrag(u: Unit, path: Pt[]) {
     hooks.update();
     await sleep(140);
   }
+  if (S.scp === "682") {
+    u.ap -= 1;
+    log(`${label(u)} hauls SCP-682 a tile${inContainer(st.x, st.y) ? " into the container" : ""}.`, inContainer(st.x, st.y) ? "good" : "");
+    S.busy = false; afterAction(); return;
+  }
   u.ap = 0;
   reveal("drag");
   log(`${label(u)} drags SCP-173 ${path.length} tile${path.length > 1 ? "s" : ""}${inContainer(st.x, st.y) ? " into the container" : ""}.`, inContainer(st.x, st.y) ? "good" : "");
@@ -411,6 +438,7 @@ export function throwCheck(u: Unit | null, idx: number) {
   if (!it || !THROWN.includes(it.id)) return "Nothing to throw in that slot.";
   if (it.uses < 1) return "Used up.";
   if (u.ap < 1) return "No actions left this turn.";
+  if (u.eyesDown) return "They're looking at the floor: look up first (E).";
   return null;
 }
 export function toggleThrow(idx: number, flash: (t: string) => void) {
@@ -435,8 +463,10 @@ export function useCheck(u: Unit | null, idx: number) {
 }
 const medkitTarget = (u: Unit) => team().filter(a => a.side === "mtf" && a.hp < a.maxHp && cheb(a.x, a.y, u.x, u.y) <= 1).sort((a, b) => a.hp - b.hp)[0];
 const cameraTarget = (u: Unit) => {
-  const st = S.statue, id = S.has049 ? "049" : S.has106 ? "106" : S.has173 ? "173" : null;
-  return id && st.alive && !S.sealed && !(S.has106 && S.submerged) && canSee(u, st.x, st.y) && !S.photos.includes(id) ? id : null;
+  const st = S.statue, id = S.has049 ? "049" : S.has106 ? "106" : S.has173 ? "173" : S.scp === "012" || S.scp === "035" || S.scp === "682" || S.scp === "939" ? S.scp : null;
+  // nobody photographs SCP-096: a picture of its face is all it takes
+  const subject = S.scp === "939" ? voices().find(v => seen(v.x, v.y) && !hidden939(v)) : st;
+  return id && subject && subject.alive && !S.sealed && !(S.has106 && S.submerged) && canSee(u, subject.x, subject.y) && !S.photos.includes(id) ? id : null;
 };
 export function useItem(idx: number, flash: (t: string) => void) {
   const u = S.selected;
@@ -451,7 +481,7 @@ export function useItem(idx: number, flash: (t: string) => void) {
     log(`${full(u)} uses a medkit on ${t === u ? "themselves" : full(t)} (+${S.setup.mods.medkitHeal} HP).`, "good");
   } else {
     const id = cameraTarget(u)!;
-    S.photos.push(id as "173" | "049" | "106");
+    S.photos.push(id as ScpId);
     log(`${full(u)} photographs SCP-${id}. The film will help the researchers.`, "good");
   }
   afterAction();
@@ -459,8 +489,9 @@ export function useItem(idx: number, flash: (t: string) => void) {
 
 function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y: number) {
   item.uses--; u.ap = 0;
-  breakConcealment(item.id === "smoke" ? "a smoke canister hissing" : item.id === "flare" ? "a flare lighting up the area" : "an explosion");
+  breakConcealment(item.id === "smoke" ? "a smoke canister hissing" : item.id === "flare" ? "a flare lighting up the area" : item.id === "noisemaker" ? "a noisemaker playing" : "an explosion");
   S.mode = null; S.throwing = null; S.pending = null;
+  if (item.id === "noisemaker") { placeLure(u, x, y); return; }
   const area = blastArea(x, y);
   const inArea = (v: Unit) => area.some(([a, b]) => a === v.x && b === v.y);
   if (item.id === "frag" || item.id === "bazooka" || item.id === "law") {
@@ -469,8 +500,9 @@ function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y
     highlight(power >= 4 ? 6 : 5, "#ff9a50");
     emitNoise(x, y, "explosion", u);
     log(item.id === "frag" ? `${full(u)} throws a frag grenade.` : `${full(u)} fires the ${item.id === "bazooka" ? "bazooka" : "LAW"}.`, "key");
-    for (const v of S.units.filter(v => v.alive && !v.saved && v.side !== "anomaly").filter(inArea)) {
+    for (const v of S.units.filter(v => v.alive && !v.saved && (v.side !== "anomaly" || S.scp === "682")).filter(inArea)) {
       const soak = Math.min(v.armor ?? 0, power);
+      S.hitKind = "explosive";
       damage(v, power - soak, u);
       if (v.armor && hasPerk(u, "shredder")) v.armor--;
     }
@@ -501,7 +533,7 @@ function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y
     for (let k = 1; k <= n; k++) line.push([Math.round(u.x + (x - u.x) * k / n), Math.round(u.y + (y - u.y) * k / n)]);
     const hitTiles = [...line, ...area];
     log(`${full(u)} sweeps the flamethrower across the ${area_(x, y)}.`, "key");
-    for (const v of S.units.filter(v => v.alive && !v.saved && v !== u && v.side !== "anomaly" && hitTiles.some(([a, b]) => a === v.x && b === v.y))) damage(v, v.flesh ? 6 : 3, u);
+    for (const v of S.units.filter(v => v.alive && !v.saved && v !== u && (v.side !== "anomaly" || S.scp === "682") && hitTiles.some(([a, b]) => a === v.x && b === v.y))) { S.hitKind = "fire"; damage(v, v.flesh ? 6 : 3, u); }
     for (const [a, b] of hitTiles) ignite(a, b);
     if (S.core && hitTiles.some(([a, b]) => a === S.core!.x && b === S.core!.y)) { S.core.hp -= CORE_BURN; log(`The core catches (${Math.max(0, S.core.hp)} left).`, "good"); }
   } else if (item.id === "flare") {
@@ -558,6 +590,7 @@ export async function endTurn() {
   if (checkEnd()) { S.busy = false; return; }
   S.phase = "subjects"; hooks.update();
   await subjectPhase();
+  endOfEnemyPhase();
   if (checkEnd()) { S.busy = false; return; }
   // fire burns, the flesh grows, and anyone left standing on it is infected
   await firePhase();
@@ -590,6 +623,7 @@ function enemySummary() {
 async function anomalyPhase() {
   if (S.has049 && !S.debug?.freeze173) await plaguePhase();
   if (S.has106 && !S.debug?.freeze173) await oldManPhase();
+  if (isNewScp(S.scp) && !S.debug?.freeze173) await newAnomalyPhase();
   await zombiePhase();
   if (!S.has173 || S.sealed || S.debug?.freeze173) return;
   for (const m of starers()) { loseSanity(m, prof(m).drain, "sight"); reveal("mind"); }
@@ -619,6 +653,8 @@ export function checkEnd() {
   if (S.over) return true;
   const k = S.setup.kind;
   if ((k === "breach" || k === "manhunt") && S.sealed) { finish(true, false); return true; }
+  // every SCP-939 instance dead: the team wins, but there's no specimen to hold
+  if ((k === "breach" || k === "manhunt") && S.scp === "939" && !voices().length) { S.noSpecimen = true; log("The last SCP-939 instance is dead. There's nothing left to take back.", "key"); finish(true, false); return true; }
   if (k === "coverup" && !looseWitnesses().length) {
     // the job is done once nobody is left to dose; it counts as a success if at least half were dosed
     const w = S.units.filter(u => u.witness);
@@ -692,7 +728,9 @@ export function debugAfter() { computeVis(); if (!checkEnd()) hooks.update(); }
 function finish(win: boolean, evacuated: boolean) {
   S.over = true; S.phase = "over";
   S.result = missionResult(win, evacuated);
-  log(win ? "Incident closed." : evacuated ? "The team has evacuated." : S.escaped ? "SCP-173 is outside Site-19." : "Incident open. Nobody is left to respond.", win ? "good" : "bad");
+  // anyone SCP-035 still wears when it ends is lost with it
+  for (const u of S.units) if (u.host && u.alive && u.wasSide === "mtf") { u.alive = false; log(`${full(u)} is still wearing the mask. They are lost.`, "bad"); }
+  log(win ? "Incident closed." : evacuated ? "The team has evacuated." : S.escaped ? `${S.has173 ? "SCP-173 is outside Site-19" : `${S.statue.name} is gone`}.` : "Incident open. Nobody is left to respond.", win ? "good" : "bad");
   hooks.update();
   hooks.finished(S.result);
 }

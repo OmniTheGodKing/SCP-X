@@ -6,12 +6,13 @@ import { S, alive, banner, canAct, canSee, computeVis, full, hooks, isPanicked, 
 import type { AbilityId, PerkId, Unit } from "./types";
 import { PERKS } from "../data/classes";
 import { MAPS } from "../data/maps";
+import { caseMask, caseTargets, hoodTargets, leadTargets096, putHood, scoreTargets, secureScore, shakeOut, shakeTargets } from "./scp4b";
 
 export interface AbilityDef {
   perk: AbilityId;
   label: string;
   desc?: string;
-  target: "ally" | "downed" | "panicked" | "enemy" | "self" | "captive" | "witness" | "panel" | "doctor" | "stray" | "carryable" | "record" | "specimen" | "radio";
+  target: "ally" | "downed" | "panicked" | "enemy" | "self" | "captive" | "witness" | "panel" | "doctor" | "stray" | "carryable" | "record" | "specimen" | "radio" | "scp4b";
   /** For self-targeted actions that only make sense sometimes: when they show up. */
   when?: (u: Unit) => boolean;
   endsTurn?: boolean;
@@ -42,9 +43,15 @@ export const ABILITIES: AbilityDef[] = [
   { perk: "restore", label: "Restore power", target: "panel", endsTurn: true, desc: "At the panel: bring the site's power back. The lights come on (no more darkness penalty). Takes both actions." },
   { perk: "scan", label: "Scan the anomaly", target: "specimen", desc: "Field researcher only: take readings on an anomaly in sight within 8 tiles. Each scan (up to 3) puts work into research on it." },
   { perk: "dose", label: "Dose with amnestics", target: "witness", desc: "Give an adjacent witness amnestics. They forget what they saw and stop running." },
+  // Phase 4B
+  { perk: "hood", label: "Hood SCP-096", target: "scp4b", desc: "Next to SCP-096 while it's quiet, with your eyes down or from outside its face's wedge: pull the hood over its head. Then lead it into the container." },
+  { perk: "lead096", label: "Lead SCP-096", target: "scp4b", desc: "Next to the hooded SCP-096: lead it up to 3 tiles." },
+  { perk: "score", label: "Secure the score", target: "scp4b", desc: "Eyes down, next to SCP-012: close the lined folder over it. That's the mission." },
+  { perk: "shake", label: "Shake them out of it", target: "scp4b", desc: "Pull someone compelled by SCP-012 away from it. They lose 10 sanity and stop." },
+  { perk: "casemask", label: "Case the mask", target: "scp4b", desc: "Next to SCP-035 on the floor: lock it in the lead-lined case. Without a suit, there's a 20% chance it takes you instead." },
 ];
 
-const UNIVERSAL: AbilityId[] = ["cutradio", "secure", "dose", "lockdown", "doors", "siren", "calm", "restrain", "pickup", "drop", "exfil", "hunker", "recover", "restore", "scan"];
+const UNIVERSAL: AbilityId[] = ["cutradio", "secure", "dose", "lockdown", "doors", "siren", "calm", "restrain", "pickup", "drop", "exfil", "hunker", "recover", "restore", "scan", "hood", "lead096", "score", "shake", "casemask"];
 const onExit = (u: Unit) => L.exitMap[u.y * L.W + u.x] === 0;
 const hasCover = (u: Unit) => DIRS.some(([dx, dy]) => { const t = tileAt(u.x + dx, u.y + dy); return t === WALL || t === FULL || t === HALF || t === STEEL || t === DRUM; });
 const knows = (u: Unit, p: AbilityId) => UNIVERSAL.includes(p)
@@ -87,6 +94,7 @@ export function abilityTargets(u: Unit, p: AbilityId): Unit[] {
     case "enemy": return alive("raider").filter(r => seen(r.x, r.y) && canSee(u, r.x, r.y));
     case "record": return S.units.filter(a => a.record && !a.radio && !a.saved && adjacent(u, a));
     case "radio": return S.units.filter(a => a.radio && !a.saved && adjacent(u, a));
+    case "scp4b": return p === "hood" ? hoodTargets(u) : p === "lead096" ? leadTargets096(u) : p === "score" ? scoreTargets(u) : p === "shake" ? shakeTargets(u) : caseTargets(u);
     case "specimen": {
       if (u.specialist !== "researcher" || Object.values(S.scans ?? {}).reduce((a, n) => a + n, 0) >= 3 || u.used?.["scan" + S.turn]) return [];
       return S.units.filter(a => a.alive && !a.downed && (a === S.statue || a.side === "zombie" || a.flesh) && !(a === S.statue && S.sealed) && seen(a.x, a.y) && cheb(u.x, u.y, a.x, a.y) <= 8 && canSee(u, a.x, a.y)).slice(0, 1);
@@ -124,6 +132,7 @@ export function startAbility(p: AbilityId, flash: (t: string) => void) {
   if (p === "doors") { if (u.ap < 1) { flash("No actions left this turn."); return; } S.mode = "doors"; hooks.update(); return; }
   if (def(p).target === "self" || def(p).target === "panel") { useAbility(u, p, u); return; }
   if (def(p).target === "doctor") { useAbility(u, p, S.statue); return; }
+  if (def(p).target === "scp4b" && p !== "shake") { useAbility(u, p, abilityTargets(u, p)[0]); return; }
   S.mode = "ability"; S.ability = p; S.pending = null;
   hooks.update();
 }
@@ -209,6 +218,11 @@ export function useAbility(u: Unit, p: AbilityId, t: Unit) {
       log(`Out through the exit: ${out.join(", ")}.`, "good");
       break;
     }
+    case "hood": putHood(u); S.mode = "lead"; S.selected = u; break;
+    case "lead096": log(`${full(u)} takes the hooded SCP-096 by the arm.`, "key"); S.mode = "lead"; S.selected = u; break;
+    case "score": secureScore(u); break;
+    case "shake": shakeOut(u, t); break;
+    case "casemask": caseMask(u); break;
     case "cutradio":
       t.saved = true; S.radioCut = true; S.ciDrop = undefined;
       log(`${full(u)} smashes the radio set. Nobody is coming to help them.`, "good"); banner("RADIO CUT", "#86c193");

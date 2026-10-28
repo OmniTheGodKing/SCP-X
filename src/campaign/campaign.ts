@@ -180,7 +180,7 @@ export interface SiteLogEntry { day: number; text: string; kind: string; }
 export interface Loadout { opId: string; armor: ItemId | ""; items: ItemId[]; }
 
 export interface Campaign {
-  version: 23;
+  version: 24;
   /** A squad in the air on its way to an incident: the mission waits for it to land (times are days, hours as
    *  fractions). */
   outbound?: { incId: string; region: RegionId; depart: number; arrive: number; setup: MissionSetup; tf: string };
@@ -423,7 +423,7 @@ export function newCampaign(opts: NewCampaignOptions = { difficulty: "agent", ir
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
-    version: 23, tf: newTf(1), chaos: newChaos(), council: newCouncil(1), morale: 60, dPolicy: "terminate", outbreakDay: rand(945, 1310), materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
+    version: 24, tf: newTf(1), chaos: newChaos(), council: newCouncil(1), morale: 60, dPolicy: "terminate", outbreakDay: rand(945, 1310), materials: {}, purchases: [], sightings: firstSightings(), guards: [], nextGuard: 1, alert: "normal", regions: newRegions(10), amnestics: 4, nextCoverupDay: 20 + rand(0, 15), models: startingModels(), armorTier: 0, attachments: {}, ammo: {}, weaponTier: 1, prisoners: [], intel: 0, cleaningOrder: true,
     day: 1, funds: 400 + DIFFICULTIES[opts.difficulty].funds, exposure: 10, difficulty: opts.difficulty, ironman: opts.ironman || undefined, tutorial: opts.tutorial ? { on: true, seen: [] } : undefined, dclass: 6, engineers: 6, researchers: 2, research: newResearch(),
     inventory: {}, orders: [], knownNotes: [], nextD: 9101, nextOp: 1, nextIncident: 1,
     roster: [], incidents: [], base, scps: startingScps(wing.id), log: [], stats: { won: 0, lost: 0, missed: 0 },
@@ -817,6 +817,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
       ciAnalysis: has(c, "weapon_analysis"),
       strays: has(c, "cell_lock") ? 1 : 4,
       alarms: has(c, "perimeter_alarms"),
+      r4b: ["blindfold_drill", "composition_study", "counter_score", "voice_analysis", "acoustic_lures", "mask_psychology", "sealed_handling", "regeneration_study"].filter(id => has(c, id)),
     },
   };
 }
@@ -1007,8 +1008,9 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   for (const l of [...lines, ...promotions]) log(c, l, r.win ? "good" : "bad");
   if (inc?.transfer) lines.push(transferFought(c, inc.transfer, r.win));
   else if (inc?.scpId && inc.kind !== "emergency") {   // another site's anomaly stays theirs
-    resolveScp(c, inc, r.win);
-    if (!r.win) lines.push(`${scpName(inc.scpId)} got away. It will turn up again somewhere, in its own time.`);
+    resolveScp(c, inc, r.win && !r.noSpecimen);
+    if (r.noSpecimen) lines.push(`The ${scpName(inc.scpId)} pack is dead, so there is no specimen to hold. Another pack will be heard of somewhere, in time.`);
+    else if (!r.win) lines.push(`${scpName(inc.scpId)} got away. It will turn up again somewhere, in its own time.`);
   }
   if (ambush && c.scps.some(s => s.id === inc!.scpId && s.status === "contained")) {
     const esc: Incident = {

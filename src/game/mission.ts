@@ -9,8 +9,9 @@ import { insurgentGuns } from "../data/weapons";
 import { STARTING_NOTES } from "./notes";
 import { PROFILE } from "./profiles";
 import { S, computeVis, log, setMission } from "./state";
+import { isNewScp } from "./scp4b";
 import { WEATHER } from "../data/weather";
-import { RAID_TURNS, type OptionalId, type MissionKind, type MissionResult, type MissionSetup, type MissionState, type SquadMember, type Unit } from "./types";
+import { RAID_TURNS, type ItemId, type OptionalId, type MissionKind, type MissionResult, type MissionSetup, type MissionState, type SquadMember, type Unit } from "./types";
 
 function mk(o: Partial<Unit> & Pick<Unit, "id" | "side" | "name" | "x" | "y" | "hp" | "maxHp" | "san">): Unit {
   return { aim: 0, alive: true, saved: false, ap: 0, overwatch: false, panicUntil: -1, staring: false, hadLos: false, seen173: false, fled: false, kills: 0, ...o };
@@ -58,6 +59,10 @@ export function createMission(setup: MissionSetup) {
   const units: Unit[] = [];
   const contain = setup.kind === "breach" || setup.kind === "manhunt" || (setup.kind === "emergency" && setup.hazard === "scp");
   const has173 = contain && (setup.scp ?? "173") === "173", has049 = contain && setup.scp === "049", has106 = contain && setup.scp === "106";
+  const scp = contain ? setup.scp ?? "173" : undefined, fresh = contain && isNewScp(setup.scp);
+  // Phase 4B: the capture kit for the new anomalies goes to the first operative of the squad
+  const kit = fresh ? ({ "096": ["hood", 1], "012": ["folder", 1], "939": ["noisemaker", (setup.mods.r4b ?? []).includes("acoustic_lures") ? 3 : 2], "035": ["case", 1] } as Record<string, [ItemId, number]>)[setup.scp!] : undefined;
+  if (kit && setup.squad[0] && !setup.squad[0].items.some(i => i.id === kit[0])) setup.squad[0] = { ...setup.squad[0], items: [...setup.squad[0].items, { id: kit[0], uses: kit[1] }] };
 
   // On a breach, Site Security is first on the scene and Epsilon-11 follows later; elsewhere the squad goes in together.
   // at another site's emergency, its own surviving security fights alongside the squad from the start
@@ -137,7 +142,8 @@ export function createMission(setup: MissionSetup) {
       spooked: setup.kind === "manhunt" || setup.kind === "retaliation" }));
   }
   assignRoles(units, setup);
-  const statue = has049
+  const statue = fresh ? newAnomaly(setup.scp!, sx, sy, scpRoom!, claim, setup.kind, units)
+    : has049
     ? mk({ id: "scp049", side: "anomaly", name: "SCP-049", x: sx, y: sy, hp: 1, maxHp: 1, san: 0 })
     : has106 ? mk({ id: "scp106", side: "anomaly", name: "SCP-106", x: sx, y: sy, hp: 1, maxHp: 1, san: 0 })
     : mk({ id: "scp173", side: "anomaly", name: "SCP-173", x: sx, y: sy, hp: 1, maxHp: 1, san: 0, sightBound: true, alive: has173 });
@@ -145,7 +151,7 @@ export function createMission(setup: MissionSetup) {
 
   const W = def.rows[0].length, H = def.rows.length;
   const state: MissionState = {
-    setup, has173, has049, calmUntil: 0, has106, sunkUntil: 0, submerged: false, feedTurn: -1, corroded: new Set(), amnestics: setup.amnestics, turn: 1, phase: "player", busy: false, over: false, called: false, mode: null,
+    setup, scp, has173, has049, calmUntil: 0, has106, sunkUntil: 0, submerged: false, feedTurn: -1, corroded: new Set(), amnestics: setup.amnestics, turn: 1, phase: "player", busy: false, over: false, called: false, mode: null,
     units, statue, sealed: false, selected: null, hover: null, pending: null,
     vis: new Uint8Array(W * H), explored: new Uint8Array(W * H),
     lastSeen: null, raidersActive: false, mem: new Map(), checked: new Set(),
@@ -165,6 +171,7 @@ export function createMission(setup: MissionSetup) {
     escapeDrive: 0, lockedUntil: 0, escaped: false, photos: [],
     optional: optionalFor(setup), siren: setup.kind === "breach", lockedDoors: [], fires: new Map(), flesh: new Set(), core: null,
   };
+  if (fresh && setup.scp === "035") state.maskHost = "host";
   setMission(state);
   // perimeter alarms: Site Security is already in position and watching when the raid starts
   if (setup.kind === "raid" && setup.mods.alarms) for (const u of state.units) if (u.guard) u.overwatch = true;
@@ -187,6 +194,36 @@ export function createMission(setup: MissionSetup) {
   if (setup.commander) log(`Intercepted radio: ${setup.commander} is leading them in person. They'll run when badly hurt.`, "bad");
   if (setup.weather && setup.weather !== "clear") log(`Weather: ${WEATHER[setup.weather].name.toLowerCase()}. ${WEATHER[setup.weather].desc.replace(" Flights there take a day longer.", "")}`, "key");
   computeVis();
+}
+
+/** Phase 4B: the first word on each new anomaly, in the incident log. */
+const NEW_BRIEF: Record<string, string> = {
+  "096": "SCP-096 is sitting somewhere ahead, weeping. Whatever happens, nobody looks at its face. Eyes down (V) to get close; the canvas hood goes over its head, then lead it into the container.",
+  "012": "SCP-012, the score, is on a stand ahead. Anyone who reads it may walk to it and start writing in their own blood. Go in with your eyes down (V) and close the folder over it.",
+  "939": "Three SCP-939 are out there in the dark. They're blind and hunt by sound, and they talk with voices they've heard. Move only when you must; a noisemaker in the container brings them to it.",
+  "035": "SCP-035 is wearing someone. Put the host down, then get the mask into the lead-lined case before it finds another face.",
+  "682": "SCP-682. Nothing you carry will kill it, and it learns from whatever hurts it. Mix your weapons, put it down, and drag it into the container before it stands back up.",
+};
+
+/** Phase 4B: the anomaly unit for a new SCP, and anything that comes with it (SCP-939's pack, SCP-035's host). */
+function newAnomaly(id: string, x: number, y: number, room: [number, number, number, number], claim: (t: Pt[]) => Pt, kind: MissionKind, units: Unit[]): Unit {
+  switch (id) {
+    case "096": return mk({ id: "scp096", side: "anomaly", name: "SCP-096", x, y, hp: 1, maxHp: 1, san: 0, facing: Math.floor(Math.random() * 8) });
+    case "012": return mk({ id: "scp012", side: "anomaly", name: "SCP-012", x, y, hp: 1, maxHp: 1, san: 0 });
+    case "682": return mk({ id: "scp682", side: "anomaly", name: "SCP-682", x, y, hp: 30, maxHp: 30, san: 0, armor: 2 });
+    case "939": {
+      units.push(mk({ id: "v1", side: "zombie", name: "SCP-939", x, y, hp: 7, maxHp: 7, san: 0, armor: 1, voice: true }));
+      for (let i = 2; i <= 3; i++) { const [vx, vy] = claim(floorTiles(room)); units.push(mk({ id: "v" + i, side: "zombie", name: "SCP-939", x: vx, y: vy, hp: 7, maxHp: 7, san: 0, armor: 1, voice: true })); }
+      // the pack has no single body to point at: the anomaly unit stands for the species and is never on the map
+      return mk({ id: "scp939", side: "anomaly", name: "SCP-939", x, y, hp: 1, maxHp: 1, san: 0, alive: false });
+    }
+    default: {
+      // SCP-035 arrives on a host: a researcher caught in the wing on a breach, a local in the field
+      const name = kind === "breach" ? pick(RESEARCHERS) : pick(CIVILIANS);
+      units.push(mk({ id: "host", side: "zombie", name, x, y, hp: 10, maxHp: 10, san: 0, host: true, wasSide: "civilian" }));
+      return mk({ id: "scp035", side: "anomaly", name: "SCP-035", x, y, hp: 1, maxHp: 1, san: 0 });
+    }
+  }
 }
 
 /** Rooms ordered farthest first from where the team starts (by walking distance), leaving out any room within 10 steps
@@ -253,8 +290,8 @@ export const BRIEFINGS: Record<MissionKind, (s: MissionSetup) => string> = {
   emergency: s => `${s.site ?? "The site"} is dark: the power is out and ${s.hazard === "scp" ? `${s.scp ? `SCP-${s.scp}` : "an anomaly"} is loose` : s.hazard === "insurgents" ? "an Insurgency team is inside" : "escaped instances are loose in the wing"}. ${s.researchers ?? 0} researchers are trapped and ${s.records ?? 0} files of records are at risk. Restore power at the panel, get the researchers out, recover the records${s.hazard === "scp" ? ", and seal the anomaly in the container if you can" : ""}. Exfiltrate when you've done what you can.`,
   riot: s => `The D-Class block is rioting: ${s.rioters} prisoners are out of their cells. They have nothing but their fists, but there are a lot of them. Restrain them (next to them, 1 action) or put them down; every one killed is a D-Class you won't have. Only Site Security answers this.`,
   outbreak: s => `SCP-610 has taken hold here. Flesh spreads from a core somewhere in the area, more every turn. Anyone who ends a turn on it without a sealed containment suit is infected, and turns into one of its instances 5 turns later: nothing saves them, not even leaving. Its instances infect with every blow. Only fire kills the core: incendiaries, a flamethrower, or fuel drums. Burn it out.${s.night ? " It's dark: nobody sees farther than 6 tiles." : ""}`,
-  breach: s => s.scp === "106" ? `SCP-106 is out of its cell. It walks through walls, and anyone it reaches is dragged into its pocket dimension. Shooting it only sends it under the floor for a turn. The only way to recontain it is bait: put a D-Class (or a secured Insurgent) in the transport container in the staging room. It will go straight for them and stay a turn to feed. Seal it in during that turn.${s.squad.length ? ` Epsilon-11 arrives on turn ${s.mtfTurn}.` : ""}` : s.scp === "049" ? `SCP-049 is out of its cell in the north rooms and looking for patients. Its touch kills, and it will raise anyone who dies as SCP-049-2. Gunfire only staggers it. Talk it down (Calm, within ${3} tiles) and lead it into the transport container in the staging room, then seal it.${s.squad.length ? ` Epsilon-11 arrives on turn ${s.mtfTurn}.` : ""}` : `SCP-173 is out of its cell in the north rooms. Site Security is first on the scene${s.lateGuards?.length ? `, with ${s.lateGuards.length} more guard${s.lateGuards.length > 1 ? "s" : ""} arriving next turn` : ""}. ${s.squad.length ? `Epsilon-11 arrives on turn ${s.mtfTurn}.` : "Epsilon-11 isn't coming: nobody is available."} The transport container is open at the dock in the staging room: get it inside and seal it. If it reaches the surface hatch in the east lab, it's gone; the panel at the east end of the corridor locks the hatch down.${s.dclass.length ? ` ${s.dclass.join(" and ")} ${s.dclass.length > 1 ? "are" : "is"} assigned to you.` : ""}`,
-  manhunt: s => s.scp === "106" ? "An old man who walks through walls is loose among the locals, and people are disappearing into the floor. That is SCP-106. Shooting only drives it under for a turn. Put a D-Class in the truck's container as bait; it goes straight for them and stays a turn to feed. Seal it in then." : s.scp === "049" ? "A man in a plague doctor's mask is walking among the locals, and some of them have stopped breathing. That is SCP-049. Its touch kills, and the dead get back up. Talk it down (Calm) and lead it into the truck's open container, then seal it. Keep people from dying near it." : "SCP-173 is somewhere nearby, and the locals are out. Every civilian it kills makes the cover story harder. A truck with an open container is waiting: get it inside and seal it.",
+  breach: s => isNewScp(s.scp) ? `${NEW_BRIEF[s.scp!]}${s.squad.length ? ` Epsilon-11 arrives on turn ${s.mtfTurn} with the capture kit.` : " Epsilon-11 isn't coming: nobody is available."}` : s.scp === "106" ? `SCP-106 is out of its cell. It walks through walls, and anyone it reaches is dragged into its pocket dimension. Shooting it only sends it under the floor for a turn. The only way to recontain it is bait: put a D-Class (or a secured Insurgent) in the transport container in the staging room. It will go straight for them and stay a turn to feed. Seal it in during that turn.${s.squad.length ? ` Epsilon-11 arrives on turn ${s.mtfTurn}.` : ""}` : s.scp === "049" ? `SCP-049 is out of its cell in the north rooms and looking for patients. Its touch kills, and it will raise anyone who dies as SCP-049-2. Gunfire only staggers it. Talk it down (Calm, within ${3} tiles) and lead it into the transport container in the staging room, then seal it.${s.squad.length ? ` Epsilon-11 arrives on turn ${s.mtfTurn}.` : ""}` : `SCP-173 is out of its cell in the north rooms. Site Security is first on the scene${s.lateGuards?.length ? `, with ${s.lateGuards.length} more guard${s.lateGuards.length > 1 ? "s" : ""} arriving next turn` : ""}. ${s.squad.length ? `Epsilon-11 arrives on turn ${s.mtfTurn}.` : "Epsilon-11 isn't coming: nobody is available."} The transport container is open at the dock in the staging room: get it inside and seal it. If it reaches the surface hatch in the east lab, it's gone; the panel at the east end of the corridor locks the hatch down.${s.dclass.length ? ` ${s.dclass.join(" and ")} ${s.dclass.length > 1 ? "are" : "is"} assigned to you.` : ""}`,
+  manhunt: s => isNewScp(s.scp) ? NEW_BRIEF[s.scp!] : s.scp === "106" ? "An old man who walks through walls is loose among the locals, and people are disappearing into the floor. That is SCP-106. Shooting only drives it under for a turn. Put a D-Class in the truck's container as bait; it goes straight for them and stays a turn to feed. Seal it in then." : s.scp === "049" ? "A man in a plague doctor's mask is walking among the locals, and some of them have stopped breathing. That is SCP-049. Its touch kills, and the dead get back up. Talk it down (Calm) and lead it into the truck's open container, then seal it. Keep people from dying near it." : "SCP-173 is somewhere nearby, and the locals are out. Every civilian it kills makes the cover story harder. A truck with an open container is waiting: get it inside and seal it.",
   coverup: s => `${s.witnesses} witness${s.witnesses === 1 ? "" : "es"} saw something they shouldn't have. Reach each one and give them amnestics (Dose, 1 action, adjacent) before they get away. Anyone who spots the team will run for the edge of the map. Dose at least half for the job to count.`,
   raid: s => `The Chaos Insurgency is coming through the wire: ${s.insurgents} of them. They want the lift down into Site-19. One who stays at the lift doors for a turn forces them open. Site Security holds the compound${!s.squad.length ? ", and Epsilon-11 isn't coming" : s.liftCount === undefined || s.liftCount >= s.squad.length ? `; Epsilon-11 comes up the lift on turn ${s.mtfTurn}` : s.liftCount > 0 ? `; ${s.liftCount} of Epsilon-11 ${s.liftCount > 1 ? "are" : "is"} on station and come${s.liftCount > 1 ? "" : "s"} up the lift on turn ${s.mtfTurn}, and the rest are off duty and drive in through the motor pool gate on turn ${s.roadTurn}` : `; Epsilon-11 is off duty in town and drives in through the motor pool gate on turn ${s.roadTurn}${(s.roadTurn ?? 99) > RAID_TURNS ? ", too late unless the fight drags on" : ""}`}. Stop them, or hold until turn ${RAID_TURNS} when they pull back.${s.night ? " It's dark: nobody sees farther than 6 tiles." : ""}`,
   escort: s => `The convoy carrying ${s.scp ? `SCP-${s.scp}` : "the anomaly"} to Site-19 has been ambushed. Insurgents are coming for the truck: one who stays next to it for a turn gets it open. Neutralise them, or hold for 8 turns until the convoy can move.${s.night ? " It's dark: nobody sees farther than 6 tiles." : ""}`,
@@ -288,7 +325,7 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
     coreBurned: !!S.core && S.core.hp <= 0,
     riotersKilled: S.units.filter(u => u.rioter && !u.alive).length,
     hadFire: !!S.hadFire,
-    photos: [...S.photos],
+    photos: [...S.photos], noSpecimen: S.noSpecimen,
     restraints: S.units.some(u => u.side === "mtf" && u.items?.some(i => i.id === "restraints")),
     zombiesKilled: S.units.filter(u => u.side === "zombie" && !u.alive).length,
     pocketReturned,

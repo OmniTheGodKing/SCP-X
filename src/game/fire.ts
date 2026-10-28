@@ -30,14 +30,15 @@ function explodeDrum(x: number, y: number) {
   fx({ type: "blast", x: x * TS + TS / 2, y: y * TS + TS / 2, r: 1.6, dur: 700 });
   if (seen(x, y)) highlight(5, "#ff9a50");
   if (seen(x, y)) log(`A fuel drum in the ${area(x, y)} goes up.`, "key");
-  for (const v of S.units.filter(u => u.alive && !u.saved && !u.carriedBy && cheb(u.x, u.y, x, y) <= 1 && u.side !== "anomaly")) damage(v, 3);
+  for (const v of S.units.filter(u => u.alive && !u.saved && !u.carriedBy && cheb(u.x, u.y, x, y) <= 1 && (u.side !== "anomaly" || S.scp === "682"))) { S.hitKind = "explosive"; damage(v, 3); }
   for (const [dx, dy] of [[0, 0], ...DIRS]) ignite(x + dx, y + dy);
 }
 
 /** Hurt whoever is standing in fire: 2 damage, double for SCP-610's instances. */
 function burnUnits() {
-  for (const u of S.units.filter(u => u.alive && !u.saved && !u.carriedBy && u.side !== "anomaly" && burning(u.x, u.y))) {
+  for (const u of S.units.filter(u => u.alive && !u.saved && !u.carriedBy && (u.side !== "anomaly" || S.scp === "682") && burning(u.x, u.y))) {
     const dmg = u.flesh ? BURN_DAMAGE * 2 : BURN_DAMAGE;
+    S.hitKind = "fire";
     if (isTeam(u) || seen(u.x, u.y)) log(`${u.side === "mtf" ? full(u) : u.flesh ? "An SCP-610 instance" : u.name} burns (${dmg}).`, u.flesh || u.side === "raider" ? "good" : "bad");
     damage(u, dmg);
   }

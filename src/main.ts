@@ -20,6 +20,7 @@ import { canShoot, fire, lineOfFire, moveUnit } from "./game/combat";
 import { canSee, computeVis } from "./game/state";
 import { emitNoise, settleFacing } from "./game/noise";
 import { endTurn, reachFor } from "./game/turn";
+import * as scp4b from "./game/scp4b";
 import { mountMission } from "./ui/missionView";
 import { esc } from "./ui/util";
 import { mountDebug } from "./ui/debug";
@@ -131,6 +132,8 @@ function showHub() {
   fireLine, canShoot, lineOfFire, canSee, blastStructure, openDoor, opaque, passable, emitNoise, settleFacing, computeVis, moveUnit,
   // Phase 4G: a shot and an enemy turn, for the presentation checks
   fire, endTurn,
+  // Phase 4B: the new anomalies' rules, for the acceptance tests
+  scp4b,
 };
 
 mountDebug({ campaign: () => campaign, screen: () => screen, refresh: () => { saveCampaign(campaign); if (screen === "hub") showHub(); } });

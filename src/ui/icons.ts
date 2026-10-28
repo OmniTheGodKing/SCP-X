@@ -86,6 +86,8 @@ export function insurgencyMark(size = 56) {
 
 // ---------- illustrations ----------
 /** A small sepia "field photograph" for an incident, 160 × 64, by kind. */
+/** Which anomaly an incident's scene shows: the first SCP number in its seed text, SCP-173 if none. */
+const figureIn = (seed: string) => ["049", "106", "610", "096", "012", "939", "035", "682"].find(id => seed.includes(id)) ?? "173";
 export function incidentScene(kind: string, seed = "") {
   let h = 0; for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) | 0;
   const r = (k: number) => { const x = Math.sin(h * 0.001 + k * 12.9898) * 43758.5453; return x - Math.floor(x); };
@@ -96,10 +98,10 @@ export function incidentScene(kind: string, seed = "") {
   switch (kind) {
     case "breach": body = `<rect width="160" height="64" fill="#2a2522"/><rect y="50" width="160" height="14" fill="#1c1916"/>
       ${[20, 60, 100, 140].map(x => `<rect x="${x - 10}" y="8" width="20" height="42" fill="#332d28" stroke="#1c1916"/>`).join("")}
-      <rect x="62" y="12" width="36" height="38" fill="#120f0d"/>${anomalyFigure(seed.includes("049") ? "049" : seed.includes("106") ? "106" : "173", 80, 50, 1)}
+      <rect x="62" y="12" width="36" height="38" fill="#120f0d"/>${anomalyFigure(figureIn(seed), 80, 50, 1)}
       <circle cx="80" cy="6" r="4" fill="#c0503f" class="blinkdot"/><rect width="160" height="64" fill="#c0503f" opacity=".12"/>`; break;
     case "recovery": case "manhunt": body = `${sky()}${ground}${house(12, 30, 18)}${house(118, 30, 22)}
-      <path d="M0 50 Q80 44 160 52" stroke="#4a4232" stroke-width="5" fill="none"/>${anomalyFigure(seed.includes("049") ? "049" : seed.includes("106") ? "106" : seed.includes("610") ? "610" : "173", 80, 50, 0.85)}
+      <path d="M0 50 Q80 44 160 52" stroke="#4a4232" stroke-width="5" fill="none"/>${anomalyFigure(figureIn(seed), 80, 50, 0.85)}
       <path d="M60 28h40" stroke="#d8bf86" stroke-dasharray="3 3"/>`; break;
     case "coverup": body = `${sky()}${ground}<rect x="56" y="18" width="48" height="28" fill="#3a332a"/><path d="M54 18h52l-26-12z" fill="#2e2922"/><rect x="77" y="0" width="4" height="12" fill="#2e2922"/><path d="M73 4h12" stroke="#2e2922" stroke-width="3"/>
       <rect x="74" y="32" width="12" height="14" fill="#1a1712"/>${[30, 38, 46, 112, 120, 128].map((x, i) => `<g transform="translate(${x} 52)"><circle cy="-10" r="2.6" fill="#a8977a"/><path d="M-3 -7h6l1 7h-8z" fill="#4a4232"/></g>`).join("")}
