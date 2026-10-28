@@ -442,8 +442,9 @@ retaliation (done); (5) doors and sirens (done).
 
 - **Changed later (user decisions during 4I):** Eta-10 is a separate roster: a recruit is hired into Epsilon-11 or
   Eta-10 and stays there for good (no reassigning), Eta-10 numbers its own callsigns (H10-01…), and the Personnel tab
-  shows the two rosters apart. Each task force brings its own bonus (Epsilon-11 +5 aim; Eta-10 video goggles), and a
-  played squad can draw on both. With Eta-10 formed, a second incident can be answered at the same time, but only
+  shows the two rosters apart. Each task force brings its own bonus (Epsilon-11 +5 aim; Eta-10 video goggles). Squads
+  never mix: the deploy panel picks which task force goes, the player plays one, and a hands-off team is also a single
+  task force. With Eta-10 formed, a second incident can be answered at the same time, but only
   hands-off, like leaving a breach to Site Security: "Send them without you" on the deploy panel (anomaly recoveries,
   cover-ups, strikes, attacks on towns, lost teams and site emergencies; 2 to 4 fit operatives from either roster)
   shows the odds (0.3 + 0.12 per operative's weight by rank, aim and class − 0.07 per Insurgent, harder for recoveries,
@@ -940,7 +941,8 @@ agents; 60 days of play produced 8 leads of four kinds.
 
 #### 4I as built (done; verified in source and in-game)
 - **Structure layer (src/core/grid.ts):** doors have a kind (standard; security inside Site-19; containment into a cell)
-  and a state (open, closed, locked, breached, destroyed), all starting closed. New tiles: windows (`w` ordinary, `W`
+  and a state (open, closed, locked, breached, destroyed). Cell doors start shut; the rest are found open (47%), shut
+  (47%) or already kicked in (6%), randomly each mission (user decision). New tiles: windows (`w` ordinary, `W`
   reinforced observation glass, intact or broken) and partitions (`p`). Opaque = walls, full cover, steel, partitions
   and shut doors; windows are transparent. Passable = floor, exits, container, open/closed/breached/destroyed doors
   (not locked doors, windows or partitions). A separate "stops a shot" test adds intact reinforced glass. A version

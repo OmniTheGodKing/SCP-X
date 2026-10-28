@@ -6,6 +6,7 @@ import { applyResult, deployable, log, type Campaign, type Incident, type Operat
 import { flightOut } from "./world";
 import { reportOf } from "./geo";
 import { forfeitGroup } from "./council";
+import { tfOf } from "./taskforces";
 
 export const AUTO_KINDS: Incident["kind"][] = ["recovery", "coverup", "strike", "retaliation", "rescue", "emergency"];
 export const AUTO = { min: 2, max: 4 };
@@ -20,6 +21,7 @@ export function canDispatch(c: Campaign, inc: Incident, ops: Operative[]): strin
   if (ops.length < AUTO.min) return `Pick at least ${AUTO.min} operatives.`;
   if (ops.length > AUTO.max) return `A hands-off team is at most ${AUTO.max} operatives.`;
   if (ops.some(o => !deployable(c, o))) return "Everyone sent has to be fit to deploy.";
+  if (new Set(ops.map(tfOf)).size > 1) return "A team is one task force: send Epsilon-11 or Eta-10, not both.";
   return null;
 }
 
