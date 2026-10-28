@@ -7,6 +7,8 @@ import { STAFF_EVENTS, answerStaff } from "../campaign/staff";
 import { HIST_CATS, type HistCat } from "../campaign/history";
 import { FIELDS, FIELD_BONUS, TRADES, syncStaff, type StaffKind } from "../campaign/people";
 import { AGENT, COOP, ETA10, NU7, SPECIALIST, TF_NAMES, agentsFree, attachNu7, borrow, canAttachNu7, canBorrow, canBringAmnestics, canBringResearcher, canCallNu7, canFormEta10, canHireAgent, canSellWeapons, formEta10, hireAgent, sellWeapons, siteOf, tfOf, type TaskForce } from "../campaign/taskforces";
+import { councilSeal, dossierPhoto, gearArt, iconBody, icon, incidentScene, insurgencyMark, siteSeal } from "./icons";
+import { ART_DEFS, roomSvg, surfaceSvg } from "./art";
 import { playMusic, soundControl, transition, ui, wireSound } from "./audio";
 import { DISRUPT_INTEL, INQUIRY, PLANS, goalText, whenText, REVEAL_INTEL, THREAT_STEPS, canDisrupt, canInvestigateBreach, canReveal, disrupt, investigateBreach, reveal } from "../campaign/chaos";
 import { parseCampaign } from "../campaign/save";
@@ -104,6 +106,8 @@ const nightPointsOf = (c: Campaign) => nightPolygon(c).map(([lo, la]) => project
 /** Research tabs: anomalies, weapons and armor together, gear, facilities, personnel, the Insurgency. */
 type ResearchCat = "anomalies" | "arms" | "gear" | "facilities" | "personnel" | "insurgency";
 const RESEARCH_CATS: ResearchCat[] = ["anomalies", "arms", "gear", "facilities", "personnel", "insurgency"];
+const RESEARCH_ICON: Record<ResearchCat, string> = { anomalies: "anomaly", arms: "weapon", gear: "gear", facilities: "build", personnel: "personnel", insurgency: "insurgency" };
+const HIST_ICON: Record<HistCat, string> = { deployment: "escort", breach: "breach", anomaly: "anomaly", casualty: "death", personnel: "promotion", council: "council", insurgency: "insurgency", region: "front" };
 const RESEARCH_CAT_NAMES: Record<ResearchCat, string> = { anomalies: "Anomalies", arms: "Weapons and armor", gear: "Gear", facilities: "Facilities and power", personnel: "Personnel", insurgency: "Insurgency" };
 const ARMOR_PROJECTS = ["padded_jacket", "nylon_liner", "plated_undersuit", "powered_harness"];
 function researchCat(id: string): ResearchCat {
@@ -117,6 +121,10 @@ function researchCat(id: string): ResearchCat {
 }
 
 const clickSounds = new WeakSet<HTMLElement>();
+/** The World Map's coastline path, built once. */
+let landD: string | null = null;
+/** Facility names short enough for a slot in the cross-section. */
+const SHORT_NAME: Partial<Record<FacilityType, string>> = { cont_safe: "Safe wing", cont_euclid: "Euclid wing", cont_keter: "Keter wing", psych: "Psych services", security: "Security", barracks: "D-Class barracks", training: "Range" };
 export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let planning: string | null = null;
   const chosen = new Set<string>();
@@ -199,24 +207,24 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     dCount = Math.max(0, Math.min(dCount, c.dclass, MAX_DCLASS));
     const pw = powerShort(c);
 
-    root.innerHTML = `
+    root.innerHTML = `${ART_DEFS}
 <main class="wrap hub">
   <header class="top">
-    <div>
+    <div class="brand">${siteSeal(48)}<div>
       <div class="eyebrow">SCP Foundation · Site-19 Command · Mobile Task Force Epsilon-11</div>
       <h1>Site-19 <small>${dateText(c.day)} · <span id="clockHour">${hourText()}</span> · ${speed ? `${speed}×` : "paused"}</small></h1>
-    </div>
+    </div></div>
     <div class="turnbox">
-      <span class="pill">Funds $${c.funds}k</span>
-      <span class="pill">D-Class ${c.dclass}/${dclassCapacity(c)}</span>
-      <span class="pill">Intel ${c.intel}</span>
-      <span class="pill ${c.council.standing < AUDIT_BELOW ? "hot" : c.council.standing < 40 ? "warm" : ""}" title="Standing with the O5 Council: ${esc(tierOf(c.council.standing).name)}. It sets the Council's monthly grant ($${councilGrant(c)}k now) and what Site-19 can ask for. See the Command tab.">Standing ${c.council.standing}</span>
-      <span class="pill" title="Guards alive / posts at working Security stations">Guards ${guardsAlive(c).length}/${guardCapacity(c)}${unposted(c).length ? ` · ${unposted(c).length} unposted` : ""}</span>
-      <span class="pill">Amnestics ${c.amnestics}/${amnesticsCapacity(c)}</span>
-      <span class="pill ${c.exposure >= 60 || collapsedCount(c) ? "hot" : ""}">Exposure ${c.exposure}${collapsedCount(c) ? ` · ${collapsedCount(c)} lost` : ""}</span>
-      <span class="pill ${c.engineers && engineersFree(c) <= 0 ? "warm" : ""}" title="Engineers not assigned to building, repairs, upgrades, excavation or orders, out of everyone on staff.${c.engineers && engineersFree(c) <= 0 ? " All of them are busy: new work has to wait." : ""}">Engineers ${engineersFree(c)}/${c.engineers} free</span>
-      <span class="pill ${c.researchers && researchersFree(c) <= 0 ? "warm" : ""}" title="Researchers not assigned to a project, out of everyone on staff.${c.researchers && researchersFree(c) <= 0 ? " All of them are busy: new research has to wait." : ""}">Researchers ${researchersFree(c)}/${c.researchers} free</span>
-      <span class="pill ${pw ? "hot" : ""}">Power ${powerUse(c)}/${powerSupply(c)}</span>
+      <span class="pill">${icon("funds", 14)}Funds $${c.funds}k</span>
+      <span class="pill">${icon("dclass", 14)}D-Class ${c.dclass}/${dclassCapacity(c)}</span>
+      <span class="pill">${icon("intel", 14)}Intel ${c.intel}</span>
+      <span class="pill ${c.council.standing < AUDIT_BELOW ? "hot" : c.council.standing < 40 ? "warm" : ""}" title="Standing with the O5 Council: ${esc(tierOf(c.council.standing).name)}. It sets the Council's monthly grant ($${councilGrant(c)}k now) and what Site-19 can ask for. See the Command tab.">${icon("standing", 14)}Standing ${c.council.standing}</span>
+      <span class="pill" title="Guards alive / posts at working Security stations">${icon("guards", 14)}Guards ${guardsAlive(c).length}/${guardCapacity(c)}${unposted(c).length ? ` · ${unposted(c).length} unposted` : ""}</span>
+      <span class="pill">${icon("amnestics", 14)}Amnestics ${c.amnestics}/${amnesticsCapacity(c)}</span>
+      <span class="pill ${c.exposure >= 60 || collapsedCount(c) ? "hot" : ""}">${icon("exposure", 14)}Exposure ${c.exposure}${collapsedCount(c) ? ` · ${collapsedCount(c)} lost` : ""}</span>
+      <span class="pill ${c.engineers && engineersFree(c) <= 0 ? "warm" : ""}" title="Engineers not assigned to building, repairs, upgrades, excavation or orders, out of everyone on staff.${c.engineers && engineersFree(c) <= 0 ? " All of them are busy: new work has to wait." : ""}">${icon("engineers", 14)}Engineers ${engineersFree(c)}/${c.engineers} free</span>
+      <span class="pill ${c.researchers && researchersFree(c) <= 0 ? "warm" : ""}" title="Researchers not assigned to a project, out of everyone on staff.${c.researchers && researchersFree(c) <= 0 ? " All of them are busy: new research has to wait." : ""}">${icon("researchers", 14)}Researchers ${researchersFree(c)}/${c.researchers} free</span>
+      <span class="pill ${pw ? "hot" : ""}">${icon("power", 14)}Power ${powerUse(c)}/${powerSupply(c)}</span>
       ${c.debug ? `<span class="pill hot">Debug save</span>` : ""}
       <button class="act" id="campaignsBtn" type="button">Campaigns${c.ironman ? " · Ironman" : ""}</button>
       <button class="act" id="exportBtn" type="button" title="Download this campaign as a file, to keep or move to another browser">Export save</button>
@@ -264,7 +272,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       f = Math.max(0, Math.min(1, f));
       const z = cls === "out" ? 1.7 : 1;   // the squad on its way out is the one to watch
       const px = ax + (bx - ax) * f, py = ay + (by - ay) * f, ang = Math.atan2(by - ay, bx - ax) * 180 / Math.PI;
-      return `<g class="flight ${cls}"><line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" style="stroke-width:${0.4 * k};stroke-dasharray:${1 * k} ${1.5 * k}"/><path d="M${px + 3 * k * z} ${py}L${px - 2 * k * z} ${py - 2 * k * z}L${px - 1 * k * z} ${py}L${px - 2 * k * z} ${py + 2 * k * z}Z" transform="rotate(${ang} ${px} ${py})"/><title>${esc(title)}</title></g>`;
+      return `<g class="flight ${cls}"><line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" style="stroke-width:${0.4 * k};stroke-dasharray:${1 * k} ${1.5 * k}"/><g transform="translate(${px} ${py}) rotate(${ang}) scale(${0.55 * k * z})" class="plane"><path d="M5 0 Q4.6 -.7 3.5 -.8 L.8 -.8 L-.6 -5.5 L-1.8 -5.5 L-1 -.8 L-3.8 -.7 L-4.6 -2.2 L-5.4 -2.2 L-5 0 L-5.4 2.2 L-4.6 2.2 L-3.8 .7 L-1 .8 L-1.8 5.5 L-.6 5.5 L.8 .8 L3.5 .8 Q4.6 .7 5 0Z"/></g><title>${esc(title)}</title></g>`;
     };
     const out = c.outbound ? (() => { const o = c.outbound!, inc = c.incidents.find(i => i.id === o.incId); if (!inc) return "";
       const pl = incidentPlace(inc), [bx, by] = project(pl.lon, pl.lat);
@@ -310,7 +318,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       <div class="row"><button class="act primary" type="button" id="dlgStart">Start</button><button class="act" type="button" id="dlgClose">Cancel</button></div></div></div>`;
   }
 
-  const tabBtn = (t: Tab, label: string) => `<button type="button" class="tab ${tab === t ? "on" : ""}" data-tab="${t}" aria-pressed="${tab === t}">${label}</button>`;
+  const tabBtn = (t: Tab, label: string) => `<button type="button" class="tab ${tab === t ? "on" : ""}" data-tab="${t}" aria-pressed="${tab === t}">${icon(t, 15)}${label}</button>`;
 
   // ---------- Command ----------
   function reportFile(r: Report) {
@@ -340,9 +348,9 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       <div class="card">
         <div class="label">Campaign history · ${`${all.length} ${all.length === 1 ? "entry" : "entries"}`}</div>
         <input type="search" id="histQ" class="histq" placeholder="Search: a name, an anomaly, a place, a year" aria-label="Search the history">
-        <div class="row histcats"><button class="act ${histCat === "all" ? "on" : ""}" type="button" data-hcat="all">All</button>${(Object.keys(HIST_CATS) as HistCat[]).filter(count).map(k => `<button class="act ${histCat === k ? "on" : ""}" type="button" data-hcat="${k}">${HIST_CATS[k]} · ${count(k)}</button>`).join("")}</div>
+        <div class="row histcats"><button class="act ${histCat === "all" ? "on" : ""}" type="button" data-hcat="all">All</button>${(Object.keys(HIST_CATS) as HistCat[]).filter(count).map(k => `<button class="act ${histCat === k ? "on" : ""}" type="button" data-hcat="${k}">${icon(HIST_ICON[k], 13)}${HIST_CATS[k]} · ${count(k)}</button>`).join("")}</div>
         <ul class="history">${shown.map(h => { const alive = h.op && c.roster.some(o => o.id === h.op && o.alive);
-          return `<li data-htext="${esc(`${dateText(h.day)} ${h.text}`.toLowerCase())}"><span class="hday">${dateText(h.day)}</span><span class="flag">${HIST_CATS[h.cat]}</span> ${esc(h.text)}
+          return `<li data-htext="${esc(`${dateText(h.day)} ${h.text}`.toLowerCase())}"><span class="hday">${dateText(h.day)}</span><span class="flag">${icon(HIST_ICON[h.cat], 12)}${HIST_CATS[h.cat]}</span> ${esc(h.text)}
             ${h.report ? `<button class="linkbtn" type="button" data-openreport="${esc(h.report)}">Report ${esc(h.report)}</button>` : ""}${alive ? ` <button class="linkbtn" type="button" data-openop="${h.op}">Personnel file</button>` : ""}</li>`; }).join("") || `<li class="muted">Nothing here yet.</li>`}</ul>
         <p class="muted" id="histNone" hidden>Nothing matches.</p>
       </div>
@@ -364,7 +372,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
   function councilCard() {
     const k = c.council, t = tierOf(k.standing);
     const open = k.directives.filter(d => !d.state);
-    return `<div class="card council">
+    return `<div class="card council"><div class="emblemwrap">${councilSeal(56)}</div>
       <div class="label">O5 Council · standing ${k.standing} · ${esc(t.name)}${k.audit ? ` · <span class="warn">audit ${dateText(c.inspectionDay!)}</span>` : ""}</div>
       <div class="exposure"><div class="exp-bar standing"><span style="width:${k.standing}%"></span></div><b>${k.standing} / 100</b></div>
       <p class="muted">${esc(t.desc)} The Council grants $${councilGrant(c)}k a month (60 + standing${k.grantBonus ? ` + ${k.grantBonus}` : ""}); the fronts add $${frontsFunding(c)}k. Below ${AUDIT_BELOW} it sends an auditor.</p>
@@ -390,7 +398,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
   /** The Chaos Insurgency: its agenda, this month's operations, its commander, and the questions breaches leave. */
   function chaosCard() {
     const k = c.chaos, next = THREAT_STEPS.find(s => s.at > k.threat);
-    return `<div class="card chaos">
+    return `<div class="card chaos"><div class="emblemwrap">${insurgencyMark(56)}</div>
       <div class="label">The Chaos Insurgency · agenda ${k.threat} / 100</div>
       <div class="exposure"><div class="exp-bar threat">${THREAT_STEPS.map(s => `<i style="left:${s.at}%"></i>`).join("")}<span style="width:${k.threat}%"></span></div><b>${k.threat}</b></div>
       <p class="muted">One organization working one agenda worldwide. Cells left alone, operations carried out and commanders who get away push it on; broken cells, disrupted operations and captured leaders set it back.${next ? ` At ${next.at}: ${esc(next.text)}.` : ""}</p>
@@ -429,11 +437,11 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         <ul class="why">${inspectionChecks(c).map(k => `<li class="${k.ok ? "" : "warn"}">${k.ok ? "✓" : "✗"} ${esc(k.label)}</li>`).join("")}</ul></div>` : ""}
       ${c.scps.map(scpSummary).join("")}
       <div class="card">
-        <div class="label">Active incidents</div>
+        <div class="label">${icon("anomaly", 13)}Active incidents</div>
         ${c.incidents.length ? c.incidents.map(incidentCard).join("") : `<p class="muted">No open incidents. Let time run to see what happens next.</p>`}
       </div>
       <div class="card">
-        <div class="label">Global exposure</div>
+        <div class="label">${icon("exposure", 13)}Global exposure</div>
         <div class="exposure"><div class="exp-bar"><span style="width:${c.exposure}%"></span></div><b>${c.exposure} / 100</b></div>
         <p class="muted">The average of the six regions, with a collapsed front counting as 100. A region at 100 collapses: its front stops funding Site-19 for good. If ${COLLAPSE_LIMIT} collapse, the O5 Council relieves Site-19's command. See the World tab.</p>
         <button class="act" type="button" data-goto="world">Open the world map</button>
@@ -441,17 +449,17 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     </section>
     <section class="col">
       <div class="card">
-        <div class="label">Time · ${speed ? `running at ${speed}×` : "paused"}</div>
+        <div class="label">${icon("time", 13)}Time · ${speed ? `running at ${speed}×` : "paused"}</div>
         <p class="muted">Time only passes while the World tab is open. Leaving it pauses the clock.</p>
         <button class="act" type="button" data-goto="world">Open the world map</button>
       </div>
       <div class="card">
-        <div class="label">Alert level · Epsilon-11 reaches a breach on turn ${mtfArrival(c)}, +1 per level below the top</div>
+        <div class="label">${icon("breach", 13)}Alert level · Epsilon-11 reaches a breach on turn ${mtfArrival(c)}, +1 per level below the top</div>
         <div class="row">${(Object.keys(ALERTS) as Alert[]).map(a => `<button class="act ${c.alert === a ? "on" : ""}" type="button" data-alert="${a}" aria-pressed="${c.alert === a}">${ALERTS[a].name}</button>`).join("")}</div>
         <p class="muted">${esc(ALERTS[c.alert].desc)}</p>
       </div>
       <div class="card">
-        <div class="label">Site log · ${c.stats.won} recontained · ${c.stats.lost} failed · ${c.stats.missed} unanswered</div>
+        <div class="label">${icon("history", 13)}Site log · ${c.stats.won} recontained · ${c.stats.lost} failed · ${c.stats.missed} unanswered</div>
         <div class="log">${c.log.map(l => `<p class="${l.kind}"><span>D${l.day}</span>${esc(l.text)}</p>`).join("")}</div>
       </div>
     </section>
@@ -459,6 +467,9 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
   }
 
   function scpSummary(s: ScpRecord) {
+    return scpSummaryText(s).replace(/^<div class="card status([^"]*)">/, m => `${m}<div class="dossierwrap">${dossierPhoto(s.id)}</div>`);
+  }
+  function scpSummaryText(s: ScpRecord) {
     const wing = wingOf(c, s);
     if (s.status === "loose") return `<div class="card status danger"><div class="label">${s.name} · ${s.title} · ${s.cls}</div>
       <div class="status-line"><b>Escaped.</b> Whereabouts unknown. Exposure rises every day it stays loose; it will surface somewhere eventually.</div></div>`;
@@ -482,7 +493,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     const left = i.expires - c.day, t = flightOut(c, i), block = travelBlock(c, i), w = missionWeather(c, i);
     const where = i.kind === "breach" ? "Inside Site-19" : `${REGIONS[i.region].name} · ${t ? `${plural(t, "day")} away` : "a drive from Site-19"}${w !== "clear" ? ` · ${WEATHER[w].name.toLowerCase()}` : ""}${isContacted(c, i.region) ? "" : " · no front"}`;
     return `<div class="incident ${planning === i.id ? "sel" : ""}">
-      <div><b>${esc(i.title)}</b> <span class="flag">${KIND_NAMES[i.kind]}</span></div>
+      <div class="scenewrap">${incidentScene(i.kind === "recovery" ? "recovery" : i.kind, `${i.scpId}-${i.id}`)}<span class="kindtag">${icon(i.kind === "recovery" ? "manhunt" : i.kind, 14)}${KIND_NAMES[i.kind]}</span></div>
+      <div><b>${esc(i.title)}</b></div>
       <div class="muted">${left <= 0 ? "Last day to respond" : `${plural(left, "day")} left to respond`} · ${where} · Insurgency activity: ${confirmedIns(i) ? `${i.insurgents - (i.weakened ?? 0)} Insurgents` : (r => r >= 4 ? "heavy (reported)" : r >= 2 ? "some (reported)" : r ? "light (reported)" : "none reported")(reportOf(i).ins)}${i.witnesses ? ` · ${i.witnesses} witnesses` : ""}</div>
       ${block ? `<div class="warn">${esc(block)}</div>` : ""}
       ${i.reward ? `<div class="ok">Council reward for answering it: ${esc(rewardText(i.reward))}.</div>` : ""}
@@ -593,11 +605,11 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     const v = geoView, k = Math.max(0.25, v.w / mapPx * 2.6);
     const label = (r: RegionId) => REGIONS[r].name.replace("Western ", "W. ").replace("Eastern ", "E. ").replace("United States", "US").replace(" and the Middle East", " & M.E.");
     // regions as territories: the land inside each region's boxes, tinted by its exposure
-    const landPaths = LAND.map(p => path(p)).join(" ");
+    const landPaths = (landD ??= LAND.map(p => path(p)).join(" "));
     const clips = REGION_IDS.map(r => `<clipPath id="terr-${r}">${TERRITORY[r].map(([w0, s0, e0, n0]) => { const [ax, ay] = project(w0, n0), [bx, by] = project(e0, s0); return `<rect x="${ax}" y="${ay}" width="${bx - ax}" height="${by - ay}"/>`; }).join("")}</clipPath>`).join("");
     const LABEL_AT: Record<RegionId, [number, number]> = { west_us: [-118, 52], east_us: [-88, 30], latam: [-60, -14], europe: [2, 60], africa: [20, 2], east_asia: [140, 6] };
     const territories = REGION_IDS.map(r => { const st = c.regions[r];
-      return `<path d="${landPaths}" clip-path="url(#terr-${r})" class="terr ${st.collapsed ? "lost" : ""} ${isContacted(c, r) ? "" : "nofront"} ${selReg && regionSel === r ? "on" : ""}" style="--heat:${st.collapsed ? 100 : st.exposure};--base:${TERR_TINT[r]}" data-region="${r}" tabindex="0" role="button" aria-label="${esc(REGIONS[r].name)}, exposure ${st.exposure}${st.collapsed ? ", collapsed" : ""}"><title>${esc(REGIONS[r].name)} · exposure ${st.exposure}${st.collapsed ? " · front collapsed" : isContacted(c, r) ? "" : " · no front yet"}</title></path>`; }).join("");
+      return `<use href="#landShape" clip-path="url(#terr-${r})" class="terr ${st.collapsed ? "lost" : ""} ${isContacted(c, r) ? "" : "nofront"} ${selReg && regionSel === r ? "on" : ""}" style="--heat:${st.collapsed ? 100 : st.exposure};--base:${TERR_TINT[r]}" data-region="${r}" tabindex="0" role="button" aria-label="${esc(REGIONS[r].name)}, exposure ${st.exposure}${st.collapsed ? ", collapsed" : ""}"><title>${esc(REGIONS[r].name)} · exposure ${st.exposure}${st.collapsed ? " · front collapsed" : isContacted(c, r) ? "" : " · no front yet"}</title></use>`; }).join("");
     // routes between fronts: solid where both ends have one, dashed out to regions a front could reach next
     const links = LINKS.filter(([a, b]) => isContacted(c, a) || isContacted(c, b)).map(([a, b]) => {
       const [x1, y1] = project(...LABEL_AT[a]), [x2, y2] = project(...LABEL_AT[b]), both = isContacted(c, a) && isContacted(c, b);
@@ -605,7 +617,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       if (Math.abs(x1 - x2) > 180) { const [l, r] = x1 < x2 ? [[x1, y1], [x2, y2]] : [[x2, y2], [x1, y1]];
         return [`<line x1="${l[0]}" y1="${l[1]}" x2="${l[0] - 18}" y2="${(l[1] + r[1]) / 2}" class="link ${both ? "both" : ""}" style="stroke-width:${0.5 * k}"/>`, `<line x1="${r[0]}" y1="${r[1]}" x2="${r[0] + 18}" y2="${(l[1] + r[1]) / 2}" class="link ${both ? "both" : ""}" style="stroke-width:${0.5 * k}"/>`].join(""); }
       return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="link ${both ? "both" : ""}" style="stroke-width:${0.5 * k}"/>`; }).join("");
-    const shape = (g: MarkerGroup, x: number, y: number) => { const m = 2.4 * k;
+    const shape = (g: MarkerGroup, x: number, y: number) => { const m = 2.9 * k;
       return g === "site" ? `<path d="M${x} ${y - 1.25 * m}L${x + 1.25 * m} ${y + 0.85 * m}L${x - 1.25 * m} ${y + 0.85 * m}Z"/>`
         : g === "insurgency" ? `<rect x="${x - 0.9 * m}" y="${y - 0.9 * m}" width="${1.8 * m}" height="${1.8 * m}" transform="rotate(45 ${x} ${y})"/>`
         : g === "coverup" ? `<rect x="${x - 0.9 * m}" y="${y - 0.9 * m}" width="${1.8 * m}" height="${1.8 * m}"/>` : `<circle cx="${x}" cy="${y}" r="${m}"/>`; };
@@ -630,10 +642,10 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     const markers = shown.map(({ i, tx, ty, mx, my }) => { const st = incidentState(c, i), b = briefing(c, i), moved = mx !== tx || my !== ty;
       return `<g class="marker ${groupOf(i)} ${st} ${i.dispatch ? "dispatched" : ""} ${mapSel === "inc:" + i.id ? "on" : ""}" data-mapinc="${i.id}" tabindex="0" role="button" aria-label="${esc(incidentName(i))}, ${esc(b.short)}">
         ${moved ? `<line x1="${tx}" y1="${ty}" x2="${mx}" y2="${my}" class="leader" style="stroke-width:${0.4 * k}"/><circle cx="${tx}" cy="${ty}" r="${0.8 * k}" class="truept"/>` : ""}
-        <circle cx="${mx}" cy="${my}" r="${4.2 * k}" class="ring" style="stroke-width:${0.8 * k}"/>${shape(groupOf(i), mx, my)}
+        <circle cx="${mx}" cy="${my}" r="${4.2 * k}" class="ring" style="stroke-width:${0.8 * k}"/>${shape(groupOf(i), mx, my)}<svg x="${mx - 1.6 * k}" y="${my - 1.6 * k}" width="${3.2 * k}" height="${3.2 * k}" viewBox="0 0 24 24" class="mico" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">${iconBody(i.kind === "recovery" ? "manhunt" : i.kind)}</svg>
         <text x="${mx}" y="${my + 7.6 * k}" class="mlabel" style="font-size:${3 * k}px">${esc(b.short)}</text><title>${esc(incidentName(i))} · ${esc(b.deadline)}</title></g>`; }).join("");
     const facs = mapShow.has("facility") ? FACILITIES_WORLD.map(f => { const [fx, fy] = project(f.lon, f.lat);
-      return `<g class="facility ${mapSel === "fac:" + f.id ? "on" : ""}" data-mapfac="${f.id}" tabindex="0" role="button" aria-label="${esc(f.name)}"><rect x="${fx - 1.8 * k}" y="${fy - 1.8 * k}" width="${3.6 * k}" height="${3.6 * k}" style="stroke-width:${0.7 * k}"/><text x="${fx + 3 * k}" y="${fy + 1.2 * k}" style="font-size:${3.2 * k}px">${esc(f.name)}</text></g>`; }).join("") : "";
+      return `<g class="facility ${mapSel === "fac:" + f.id ? "on" : ""}" data-mapfac="${f.id}" tabindex="0" role="button" aria-label="${esc(f.name)}"><rect x="${fx - 2 * k}" y="${fy - 2 * k}" width="${4 * k}" height="${4 * k}" style="stroke-width:${0.6 * k}"/><svg x="${fx - 1.6 * k}" y="${fy - 1.6 * k}" width="${3.2 * k}" height="${3.2 * k}" viewBox="0 0 24 24" class="fico" fill="none" stroke-width="2.4">${iconBody("build")}</svg><text x="${fx + 3 * k}" y="${fy + 1.2 * k}" style="font-size:${3.2 * k}px">${esc(f.name)}</text></g>`; }).join("") : "";
     const route = selInc ? (() => { const pl = incidentPlace(selInc), [mx, my] = project(pl.lon, pl.lat), b = briefing(c, selInc);
       return pl.name === "Site-19" ? "" : `<line x1="${sx}" y1="${sy}" x2="${mx}" y2="${my}" class="route" style="stroke-width:${0.6 * k};stroke-dasharray:${2 * k} ${1.2 * k}"/><text x="${(sx + mx) / 2}" y="${(sy + my) / 2 - 2 * k}" class="routetext" style="font-size:${3.4 * k}px">${b.travel ? plural(b.travel, "day") : "by road"}${nightAt(c, selInc) ? " · night there" : ""}</text>`; })() : "";
     const ops = (c.ops ?? []).map(op => { const d = REGIONS[op.region], [ox, oy] = project(d.lon, d.lat); return `<g class="fieldop"><circle cx="${ox + 9 * k}" cy="${oy - 3 * k}" r="${2 * k}"/><circle cx="${ox + 9 * k}" cy="${oy - 3 * k}" r="${3.6 * k}" class="wave" style="stroke-width:${0.5 * k}"/><title>${esc(FIELD_OPS[op.kind].name)} in ${esc(d.name)}, results ${esc(dateText(op.done))}</title></g>`; }).join("");
@@ -715,7 +727,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     const overview = `<div class="card">
         <div class="label">Active incidents · ${c.incidents.length}</div>
         ${order.length ? `<ul class="inclist">${order.map(i => { const stt = incidentState(c, i), b = briefing(c, i);
-          return `<li class="${stt} ${i.dispatch ? "dispatched" : ""}"><button class="linkbtn" type="button" data-mapinc="${i.id}"><span class="dot ${groupOf(i)}"></span>${esc(incidentName(i))}</button><span class="incmeta">${KIND_NAMES[i.kind]} · ${esc(b.place.name)} · ${esc(b.short)}${stt === "urgent" && !i.dispatch ? " · urgent" : ""}${i.group ? " · choose one" : ""}${i.reward ? ` · ${esc(rewardText(i.reward))}` : ""}</span></li>`; }).join("")}</ul>` : `<p class="muted">Nothing needs Site-19 right now. Let time run.</p>`}
+          return `<li class="${stt} ${i.dispatch ? "dispatched" : ""}"><button class="linkbtn" type="button" data-mapinc="${i.id}"><span class="dot ${groupOf(i)}"></span>${icon(i.kind === "recovery" ? "manhunt" : i.kind, 14)}${esc(incidentName(i))}</button><span class="incmeta">${KIND_NAMES[i.kind]} · ${esc(b.place.name)} · ${esc(b.short)}${stt === "urgent" && !i.dispatch ? " · urgent" : ""}${i.group ? " · choose one" : ""}${i.reward ? ` · ${esc(rewardText(i.reward))}` : ""}</span></li>`; }).join("")}</ul>` : `<p class="muted">Nothing needs Site-19 right now. Let time run.</p>`}
         ${away.length ? `<p class="muted">In the air: ${away.map(o => esc(o.name)).join(", ")}, back ${dateText(c.day + Math.max(...away.map(o => o.busy!.daysLeft)))}.</p>` : ""}
         ${(c.ops ?? []).length ? `<p class="muted">Field operations: ${c.ops!.map(op => `${esc(FIELD_OPS[op.kind].name)} in ${esc(REGIONS[op.region].name)} (${dateText(op.done)})`).join("; ")}.</p>` : ""}
         <p class="muted">Next month: $${councilGrant(c)}k from the O5 Council and $${frontsFunding(c)}k from the fronts, $${monthlyUpkeep(c)}k upkeep and salaries. Global exposure ${c.exposure}; ${collapsedCount(c)} of ${COLLAPSE_LIMIT} fronts lost. Select a region on the map for its front and field operations.</p>
@@ -734,19 +746,27 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         ${clock}
         <div class="mapwrap">
         <svg class="worldmap" id="worldsvg" viewBox="${v.x} ${v.y} ${v.w} ${v.h}" style="aspect-ratio:${(v.w / v.h).toFixed(3)}" role="group" aria-label="World map: regions, incidents and Foundation facilities">
-          <defs>${clips}<pattern id="lostHatch" width="2" height="2" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="2" stroke="#7a2b22" stroke-width=".6"/></pattern></defs>
+          <defs>${clips}<path id="landShape" d="${landPaths}"/>
+            <pattern id="seaWaves" width="12" height="6" patternUnits="userSpaceOnUse"><path d="M0 3 q3 -1.6 6 0 t6 0" fill="none" stroke="#1a2731" stroke-width=".35"/></pattern>
+            <pattern id="landTex" width="5" height="5" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r=".35" fill="#3b4752"/><circle cx="3.5" cy="3.2" r=".25" fill="#1e262e"/></pattern>
+            <radialGradient id="seaGlow" cx=".45" cy=".4" r=".8"><stop offset="0" stop-color="#16222c"/><stop offset="1" stop-color="#0a1016"/></radialGradient>
+            <pattern id="lostHatch" width="2" height="2" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="2" stroke="#7a2b22" stroke-width=".6"/></pattern></defs>
           <rect x="${x0 - 400}" y="${y0 - 200}" width="${w + 800}" height="${h + 400}" class="sea" data-mapclear></rect>
+          <rect x="${x0 - 400}" y="${y0 - 200}" width="${w + 800}" height="${h + 400}" fill="url(#seaWaves)" pointer-events="none"></rect>
           ${[-60, -30, 0, 30, 60].map(la => `<line x1="0" x2="360" y1="${90 - la}" y2="${90 - la}" class="grat" style="stroke-width:${0.3 * k}"></line>`).join("")}
           ${[-120, -60, 0, 60, 120].map(lo => `<line y1="${y0}" y2="${y0 + h}" x1="${lo + 180}" x2="${lo + 180}" class="grat" style="stroke-width:${0.3 * k}"></line>`).join("")}
-          <path d="${landPaths}" class="land" style="stroke-width:${0.4 * k}"></path>
+          <use href="#landShape" class="coast" style="stroke-width:${2.2 * k}"></use>
+          <use href="#landShape" class="land" style="stroke-width:${0.4 * k}"></use>
+          <use href="#landShape" fill="url(#landTex)" pointer-events="none"></use>
           ${territories}
           ${links}
           ${mapShow.has("night") ? `<polygon points="${night}" class="night"><title>Night side of the world</title></polygon>` : ""}
           ${regionLabels}
+          <g class="compass" transform="translate(${v.x + v.w - 12 * k} ${v.y + v.h - 26 * k}) scale(${k})" pointer-events="none"><circle r="7" class="cring"/><path d="M0 -9 L1.6 0 L0 9 L-1.6 0Z" class="cneedle"/><path d="M0 -9 L1.6 0 L-1.6 0Z" class="cnorth"/><path d="M-9 0 L0 1.2 L9 0 L0 -1.2Z" class="cneedle"/><text y="-10.5" text-anchor="middle">N</text></g>
           <g id="flightsG">${flights}</g>
           ${route}
-          <g class="site19"><rect x="${s19x - 2.2 * k}" y="${s19y - 2.2 * k}" width="${4.4 * k}" height="${4.4 * k}" transform="rotate(45 ${s19x} ${s19y})"></rect>
-            <text x="${s19x - 4 * k}" y="${s19y - 3.5 * k}" text-anchor="end" style="font-size:${4 * k}px">Site-19</text><title>Site-19 · exact location classified</title></g>
+          <g class="site19"><svg x="${s19x - 3.6 * k}" y="${s19y - 3.6 * k}" width="${7.2 * k}" height="${7.2 * k}" viewBox="0 0 48 48">${siteSeal(48).replace(/^<svg[^>]*>/, "").replace(/<\/svg>\s*$/, "")}</svg>
+            <text x="${s19x - 4.4 * k}" y="${s19y - 3.5 * k}" text-anchor="end" style="font-size:${4 * k}px">Site-19</text><title>Site-19 · exact location classified</title></g>
           ${facs}
           ${ops}
           ${markers}
@@ -783,13 +803,13 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
         const cur = cats.find(x => x.k === resCat) ?? cats[0];
         const running = Object.entries(c.research.assigned).filter(([id, n]) => n && PROJECTS[id]).map(([id]) => id);
         return `${running.length ? `<div class="card"><div class="label">Under way</div><div class="projects">${running.map(projectRow).join("")}</div></div>` : ""}
-        <div class="card"><div class="row restabs">${cats.map(x => `<button class="act ${x.k === cur.k ? "on" : ""}" type="button" data-rescat="${x.k}" aria-pressed="${x.k === cur.k}">${RESEARCH_CAT_NAMES[x.k]} · ${x.ids.filter(id => !has(c, id)).length}</button>`).join("")}</div>
+        <div class="card"><div class="row restabs">${cats.map(x => `<button class="act ${x.k === cur.k ? "on" : ""}" type="button" data-rescat="${x.k}" aria-pressed="${x.k === cur.k}">${icon(RESEARCH_ICON[x.k], 14)}${RESEARCH_CAT_NAMES[x.k]} · ${x.ids.filter(id => !has(c, id)).length}</button>`).join("")}</div>
           <div class="projects scrollpanel">${cur.ids.length ? [...cur.ids].sort((a, b) => Number(has(c, a)) - Number(has(c, b))).map(projectRow).join("") : `<p class="muted">Nothing to research here yet.</p>`}</div></div>`;
       })()}
     </section>
     <section class="col">
       <div class="file scrollpanel tall">
-        <div class="label">Tests on ${s.name}</div>
+        <div class="dossierwrap">${dossierPhoto(s.id)}</div><div class="label">Tests on ${s.name}</div>
         <h2>Test log</h2>
         <p>Tests fill in ${s.name}'s file and open new research. Each is paid for up front and prepared by researchers like any other project; on the last day the D-Class go into the cell while the guards you chose watch. Riskier tests multiply the chance someone dies, and some can end in a breach. One test at a time.</p>
         ${(Object.keys(TESTS) as TestId[]).map(t => testRow(t)).join("")}
@@ -807,7 +827,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     const status = done ? `<span class="flag">Done</span>` : lock ? `<span class="flag bad">Locked</span>`
       : n ? `<span class="flag stare">${plural(n, "researcher")} · ${plural(eta!, "day")} left</span>` : prog ? `<span class="flag">Paused</span>` : "";
     return `<div class="proj ${done ? "done" : ""} ${lock ? "locked" : ""}">
-      <div class="ptop"><b>${esc(p.name)}</b>${inspired && !done ? `<span class="flag stare">Inspired</span>` : ""}${status}</div>
+      <div class="ptop"><span class="projico">${icon(RESEARCH_ICON[researchCat(id)], 18)}</span><b>${esc(p.name)}</b>${inspired && !done ? `<span class="flag stare">Inspired</span>` : ""}${status}</div>
       <div class="muted">${esc(p.desc)}</div>
       ${done ? "" : `<div class="pbar"><div class="exp-bar"><span style="width:${Math.min(100, (prog / days) * 100)}%"></span></div><span class="specs">${prog}/${days} researcher-days${r.paid.includes(id) ? "" : ` · $${projectCost(c, id)}k to start`}</span></div>`}
       ${lock ? `<div class="why">${esc(lock)}</div>` : done ? "" : `<div class="row assign">
@@ -903,7 +923,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
       <div class="card">
         <div class="label">Site-19 cross-section</div>
         ${powerShort(c) ? `<p class="warn-box">Power shortage: medical bay and psychological services are offline${unpowered(c) ? ", every containment wing is twice as likely to breach, and each cell has a 10% chance a day of failing outright" : ". Backup generators keep the containment wings running"}. Repair or build a generator, or evacuate anomalies from their wings.</p>` : ""}
-        <div class="basegrid">${rows.join("")}</div>
+        <div class="xsection">${surfaceSvg(c.hour ?? 12, c.scps.some(x => x.status === "breach") || c.incidents.some(i => i.kind === "raid"))}<div class="basegrid">${rows.join("")}</div></div>
         <div class="row">
           ${c.base.excavation > 0 ? `<span class="muted">Excavating level ${c.base.levels + 1}: ${plural(c.base.excavation, "day")} left.</span>`
             : c.base.levels < MAX_LEVELS ? `<button class="act" id="digBtn" type="button" ${exWhy ? `disabled title="${esc(exWhy)}"` : ""}>Excavate level ${c.base.levels + 1} · $${EXCAVATE.cost}k · ${EXCAVATE.days} days · ${EXCAVATE.engineers} engineers</button>${exWhy ? `<span class="muted">${esc(exWhy)}</span>` : ""}` : ""}
@@ -921,18 +941,25 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
 
   function slotCell(level: number, slot: number) {
     const f = facilityAt(c, level, slot), on = sel && sel.level === level && sel.slot === slot;
-    if (!f) return `<button type="button" class="slot empty ${on ? "sel" : ""}" data-slot="${level},${slot}"><span class="sname">Empty</span><span class="sstat">Build here</span></button>`;
+    if (!f) return `<button type="button" class="slot empty ${on ? "sel" : ""}" data-slot="${level},${slot}">${roomSvg(null, { seed: `${level}-${slot}` })}<span class="sname">Empty</span><span class="sstat">Build here</span></button>`;
     const d = FACILITIES[f.type], occ = occupantOf(c, f);
     const stat = f.demolishDays ? `Tearing down · ${plural(f.demolishDays, "day")}` : f.daysLeft > 0 ? `Building · ${plural(f.daysLeft, "day")}` : f.repairDays > 0 ? `Repairing · ${plural(f.repairDays, "day")}` : f.disabled ? "Damaged" : occ ? `${occ.name}${occ.status === "breach" ? " · BREACH" : occ.status === "loose" ? " · escaped" : occ.status === "away" ? " · at Site-17" : ""}` : isContainment(f.type) ? "Empty cells" : "Operational";
     const cls = [f.daysLeft > 0 ? "building" : "", f.disabled ? "damaged" : "", isContainment(f.type) ? "cont" : "", occ && (occ.status === "breach" || occ.status === "loose") ? "alarm" : ""].join(" ");
-    return `<button type="button" class="slot ${cls} ${on ? "sel" : ""}" data-slot="${level},${slot}"><span class="sname">${esc(d.name)}</span><span class="sstat">${esc(stat)}</span></button>`;
+    return `<button type="button" class="slot ${cls} ${on ? "sel" : ""}" data-slot="${level},${slot}" title="${esc(d.name)}">${facilityArt(f)}<span class="sname">${esc(SHORT_NAME[f.type] ?? d.name)}</span><span class="sstat">${esc(stat)}</span></button>`;
+  }
+
+  /** A facility's room, drawn in its current state. */
+  function facilityArt(f: NonNullable<ReturnType<typeof facilityAt>>) {
+    const occ = occupantOf(c, f), here = occ && (occ.status === "contained" || occ.status === "breach") ? occ : null;
+    return roomSvg(f.type, { seed: f.id, building: f.daysLeft > 0 || !!f.demolishDays, damaged: f.disabled, alarm: !!occ && occ.status === "breach",
+      occupant: here && occ!.status !== "breach" ? here.id : null, dark: powerShort(c) && (f.type === "medical" || f.type === "psych") });
   }
 
   function slotDetail(level: number, slot: number) {
     const f = facilityAt(c, level, slot);
     if (!f) {
       const types = (Object.keys(FACILITIES) as FacilityType[]).filter(t => FACILITIES[t].buildable);
-      return `<div class="card"><div class="label">Build on level ${level + 1}, slot ${slot + 1}</div>
+      return `<div class="card"><div class="roomart">${roomSvg(null, { seed: `${level}-${slot}` })}</div><div class="label">Build on level ${level + 1}, slot ${slot + 1}</div>
         <div class="buildlist">${types.map(t => {
           const d = FACILITIES[t], why = canBuild(c, t, level, slot);
           return `<div class="buildopt">
@@ -947,7 +974,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     const nb = neighbors(c, f).map(n => FACILITIES[n.type].name).join(", ") || "nothing";
     const s = scp173();
     const moveWhy = isContainment(f.type) && !occ ? canMove(c, s, f) : null;
-    return `<div class="card"><div class="label">Level ${f.level + 1}, slot ${f.slot + 1}</div>
+    return `<div class="card"><div class="roomart">${facilityArt(f)}</div><div class="label">Level ${f.level + 1}, slot ${f.slot + 1}</div>
       <h3 class="fac">${esc(d.name)}</h3>
       <p class="muted">${esc(d.desc)}</p>
       <div class="specs">${f.type === "generator" ? `Supplies ${generatorOutput(f)} power` : d.power < 0 ? `Supplies ${-d.power} power` : `Uses ${d.power} power`} · $${d.upkeep + (f.type === "generator" ? genTierOf(f).upkeep : 0)}k/month upkeep${d.grade !== undefined ? ` · ${GRADE_NAMES[d.grade]} grade` : ""}</div>
@@ -1190,7 +1217,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
   /** XCOM-style equipment: a row of slots, and the one clicked opens below with its stats and what can go in it. */
   function equipment(o: Operative) {
     const g = gearOf(o.id), gun = gunFor(c, o), t = weaponOf(o), uni = uniformOf(c), slots = o.perks.includes("field_kit") ? 3 : 2;
-    const tile = (key: string, label: string, value: string, sub = "") => `<button type="button" class="eqslot ${eqSlot === key ? "on" : ""}" data-eqslot="${key}" aria-pressed="${eqSlot === key}"><span class="eqlabel">${label}</span><b>${esc(value)}</b>${sub ? `<span class="muted">${esc(sub)}</span>` : ""}</button>`;
+    const tile = (key: string, label: string, value: string, sub = "", art = "empty") => `<button type="button" class="eqslot ${eqSlot === key ? "on" : ""}" data-eqslot="${key}" aria-pressed="${eqSlot === key}"><span class="eqlabel">${label}</span>${gearArt(art)}<b>${esc(value)}</b>${sub ? `<span class="muted">${esc(sub)}</span>` : ""}</button>`;
     const stat = (k: string, v: string) => `<span class="eqstat"><span class="muted">${k}</span> ${v}</span>`;
     const pickCard = (attr: string, value: string, on: boolean, title: string, body: string, disabled = "") => `<button type="button" class="eqopt ${on ? "on" : ""}" ${attr}="${value}" ${disabled ? `disabled title="${esc(disabled)}"` : ""}><b>${esc(title)}</b><span class="muted">${body}</span></button>`;
     const detail = (() => {
@@ -1223,13 +1250,13 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "fa
     })();
     return `<div class="label" style="margin-top:10px">Equipment</div>
       <div class="eqgrid">
-        ${tile("weapon", "Primary weapon", gun.name, `${gun.dmg.join("–")} dmg · ${gun.mag} rounds`)}
-        ${tile("attachment", "Attachment", o.attachment ? ATTACHMENTS[o.attachment].name : "None")}
-        ${tile("ammo", "Ammunition", o.ammoType ? AMMO[o.ammoType].name : "Standard ball")}
-        ${tile("armor", "Armor", g.armor ? ITEMS[g.armor].name : "None", g.armor ? `+${armorStats(g.armor, c.armorTier).hp} HP` : "")}
-        ${tile("uniform", "Uniform", uni.name)}
-        ${tile("sidearm", "Sidearm", SIDEARM.name)}
-        ${Array.from({ length: slots }, (_, i) => tile(`item${i}`, `Utility ${i + 1}`, g.items[i] ? ITEMS[g.items[i] as ItemId].name : "Empty")).join("")}
+        ${tile("weapon", "Primary weapon", gun.name, `${gun.dmg.join("–")} dmg · ${gun.mag} rounds`, t)}
+        ${tile("attachment", "Attachment", o.attachment ? ATTACHMENTS[o.attachment].name : "None", "", o.attachment ? "attachment" : "empty")}
+        ${tile("ammo", "Ammunition", o.ammoType ? AMMO[o.ammoType].name : "Standard ball", "", "ammo")}
+        ${tile("armor", "Armor", g.armor ? ITEMS[g.armor].name : "None", g.armor ? `+${armorStats(g.armor, c.armorTier).hp} HP` : "", g.armor || "empty")}
+        ${tile("uniform", "Uniform", uni.name, "", "uniform")}
+        ${tile("sidearm", "Sidearm", SIDEARM.name, "", "pistol")}
+        ${Array.from({ length: slots }, (_, i) => tile(`item${i}`, `Utility ${i + 1}`, g.items[i] ? ITEMS[g.items[i] as ItemId].name : "Empty", "", g.items[i] || "empty")).join("")}
       </div>
       <div class="eqdetail">${detail}</div>`;
   }

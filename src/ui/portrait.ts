@@ -28,18 +28,35 @@ export function portraitSvg(look: Look, unit: UnitId | undefined, size = 56, fal
     : gear[0].includes("slouch") ? `<ellipse cx="32" cy="17" rx="19" ry="4" fill="${gear[1]}"/><path d="M22 17 Q23 8 32 8 Q41 8 42 17Z" fill="${gear[1]}"/>`
     : gear[0].includes("cap") ? `<path d="M20 20 Q20 9 32 9 Q44 9 44 20Z" fill="${gear[1]}"/>${gear[0].includes("patrol") ? `<rect x="19" y="18" width="26" height="3" fill="${gear[1]}"/>` : ""}`
     : `<path d="M18 19 Q17 9 33 9 Q48 10 46 18 Q40 15 30 16 Q22 17 18 19Z" fill="${gear[1]}"/><circle cx="24" cy="15" r="1.6" fill="#c9a45c"/>`;   // beret, badge over the left eye
+  // a darker and a lighter tone of the skin for shading
+  const tone = (hex: string, f: number) => { const n = parseInt(hex.slice(1), 16), ch = (v: number) => Math.max(0, Math.min(255, Math.round(v * f))).toString(16).padStart(2, "0"); return `#${ch(n >> 16)}${ch((n >> 8) & 255)}${ch(n & 255)}`; };
+  const shade = tone(skin, 0.8), lit = tone(skin, 1.08), coatDk = tone(coat, 0.75), id = `p${Math.abs([...JSON.stringify(look)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) | 0, 0))}`;
   return `<svg class="portrait${fallen ? " fallen" : ""}" viewBox="0 0 64 64" width="${size}" height="${size}" role="img" aria-label="Portrait">
-    <rect width="64" height="64" fill="#1c2329"/>
-    <path d="M6 64 Q8 49 32 48 Q56 49 58 64Z" fill="${coat}"/><path d="M27 48 L32 56 L37 48Z" fill="#d8d2c2" opacity=".5"/>
-    <rect x="27" y="38" width="10" height="11" fill="${skin}"/>
+    <defs><radialGradient id="${id}bg" cx=".35" cy=".3" r=".9"><stop offset="0" stop-color="#2c3640"/><stop offset="1" stop-color="#141a1f"/></radialGradient>
+      <radialGradient id="${id}vg" cx=".5" cy=".45" r=".75"><stop offset=".65" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".5"/></radialGradient></defs>
+    <rect width="64" height="64" fill="url(#${id}bg)"/>
+    ${[12, 22, 32, 42, 52].map(y => `<line x1="0" y1="${y}" x2="3" y2="${y}" stroke="#4a5561" stroke-width=".6"/>`).join("")}
+    <path d="M5 64 Q7 48 32 47 Q57 48 59 64Z" fill="${coat}"/>
+    <path d="M5 64 Q7 52 18 49 L22 64Z" fill="${coatDk}" opacity=".7"/>
+    <path d="M24 48 L32 58 L40 48 L37 47 L32 53 L27 47Z" fill="${coatDk}"/>
+    <path d="M27.5 47.5 L32 55 L36.5 47.5Z" fill="#d8d2c2" opacity=".55"/>
+    <rect x="44" y="54" width="7" height="2" rx=".5" fill="#c9a45c" opacity=".85"/><rect x="13" y="53" width="6" height="4" fill="${coatDk}" opacity=".8"/>
+    <path d="M26 37 L26 48 Q32 51 38 48 L38 37Z" fill="${shade}"/>
+    <ellipse cx="19.6" cy="30" rx="2.2" ry="3.4" fill="${shade}"/><ellipse cx="44.4" cy="30" rx="2.2" ry="3.4" fill="${shade}"/>
     <ellipse cx="32" cy="29" rx="12" ry="14" fill="${skin}"/>
+    <path d="M39 18 Q45 26 42 36 Q38 43 32 43 Q38 40 40 33 Q42 25 39 18Z" fill="${shade}" opacity=".55"/>
+    <ellipse cx="28" cy="23" rx="5" ry="3" fill="${lit}" opacity=".35"/>
     ${look.hair === 5 ? "" : hairShape}
-    <circle cx="27" cy="29" r="1.3" fill="#1b1b1b"/><circle cx="37" cy="29" r="1.3" fill="#1b1b1b"/>
-    <path d="M24.5 26 L29 25.5 M35 25.5 L39.5 26" stroke="${hair}" stroke-width="1.4" stroke-linecap="round"/>
-    <path d="M29 37.5 Q32 38.5 35 37.5" stroke="#5a3a2a" stroke-width="1" fill="none" opacity=".7"/>
+    <ellipse cx="27" cy="29.2" rx="2.1" ry="1.3" fill="#e9e4d8"/><ellipse cx="37" cy="29.2" rx="2.1" ry="1.3" fill="#e9e4d8"/>
+    <circle cx="27.3" cy="29.3" r="1.05" fill="#2a2018"/><circle cx="37.3" cy="29.3" r="1.05" fill="#2a2018"/>
+    <path d="M24.8 28.2 Q27 27.4 29.2 28.2 M34.8 28.2 Q37 27.4 39.2 28.2" stroke="${shade}" stroke-width=".7" fill="none"/>
+    <path d="M24.5 26 Q27 24.8 29.3 25.6 M34.7 25.6 Q37 24.8 39.5 26" stroke="${hair}" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+    <path d="M32 29.5 L30.6 34.4 Q32 35.3 33.6 34.4" stroke="${shade}" stroke-width=".9" fill="none" stroke-linecap="round"/>
+    <path d="M28.8 38 Q32 39.4 35.2 38" stroke="#6a3f30" stroke-width="1.1" fill="none" stroke-linecap="round" opacity=".8"/>
     ${facial}
     ${look.scar ? `<path d="M38 27 L42 35" stroke="#b5675a" stroke-width="1.2" opacity=".85"/>` : ""}
     ${look.hair === 5 ? hairShape : ""}
     ${hat}
+    <rect width="64" height="64" fill="url(#${id}vg)"/>
   </svg>`;
 }

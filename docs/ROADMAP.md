@@ -646,6 +646,28 @@ transition sounds, (4) World Map art, (5) Site-19 and the other strategic tabs, 
   ride back down to Site-19. A generative ambient score per scene (World Map, Site-19, missions, tense for breaches
   and raids). A Sound button in both headers sets master, effects, interface and music volume and mute, remembered
   per viewer.
+- **(4) and (5) The strategic layer, every tab (done, src/ui/art.ts, src/ui/icons.ts):** the user asked that nothing in
+  the strategic layer look like a placeholder, so steps 4 and 5 were done together.
+  - Header: a Site-19 seal (drawn for this game, not the wiki logo) and an icon on every resource pill and tab.
+  - Site-19 tab: the surface compound above the cross-section (sky by the hour, wire, gatehouse, offices, the lift
+    head, the flag, lit windows at night, a red pulse during a breach or raid), rock strata around the levels, and
+    every slot drawn as its room seen from the side: command's wall map and radio dials, the generator, bunks,
+    lockers and rifle rack, the medical bay, the psychologist's couch, the lab, the workshop with sparks, the range,
+    holding cells, the amnestics pharmacy, and containment wings with an observation window, a vault door and the
+    grade's colour, the anomaly visible inside. Empty slots are bare rock cavities; building shows scaffolding;
+    damage shows cracks, rubble and smoke; a breach flashes red. The selected facility's panel opens with its room large.
+  - Command tab: the O5 Council's thirteen-seat seal, the Insurgency's mark as Site-19's analysts drew it, a clipped
+    file photo on each anomaly's card, and a field photograph for every incident by kind (breach, manhunt, cover-up,
+    strike, ambush, retaliation, outbreak, riot, raid, lost team, site emergency).
+  - World Map: Natural Earth coastlines (public domain, credited) instead of rough outlines, a lit sea with wave
+    texture, a coastal glow, textured land, a compass rose, each incident's icon in its marker, Site-19's seal,
+    facilities as buildings, and planes drawn as aircraft.
+  - Research: an icon on each category tab and project; SCP-173's file photo on the test log.
+  - Personnel: each equipment slot shows its weapon (by type), armor, suit, uniform, pistol, attachment, ammunition or
+    item drawn side-on.
+  - History: an icon per category.
+- **(6) Portraits (done):** a lit backdrop with measuring marks, shading on the face and neck, ears, eyes with whites,
+  a nose, collar lapels and a rank bar, and a vignette, still built from the same look data.
 
 ### 4B: more anomalies
 - **5 to 8 new SCPs**, each with its own tactical behaviour, containment routine and procedure, research line and
