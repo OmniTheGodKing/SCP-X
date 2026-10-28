@@ -10,7 +10,7 @@ import { REGIONS, SITE19, type RegionId } from "../data/regions";
 import { anomalyProgress, has } from "./research";
 import { rewardText } from "./council";
 import { addExposure, flightOut, isContacted, locateCell, travelDays } from "./world";
-import { scpName } from "./containment";
+import { isInert, scpName } from "./containment";
 import { mtfArrival, raidArrivalText } from "./security";
 import { MISSION_BONUS, dateText, gainIntel, log, yearOf, type Campaign, type Incident } from "./campaign";
 import { rollCandidate } from "../data/units";
@@ -102,7 +102,7 @@ export function briefing(c: Campaign, inc: Incident) {
     inc.reward ? `${rewardText(inc.reward)} from the Council for answering this one` : "",
     inc.kind === "rescue" ? `${inc.site}'s gratitude (relations and standing for each survivor brought home), and maybe a transfer to Epsilon-11` : "",
     inc.kind === "emergency" ? `${inc.site}'s gratitude for every part done: researchers out, records recovered (Intel), power restored, the threat dealt with` : "", inc.transfer ? `${scpName(inc.transfer.scp)} delivered to Site-19` : ""].filter(Boolean);
-  const ignore = inc.kind === "breach" ? "Site Security faces it alone; it may escape or wreck neighbouring facilities."
+  const ignore = inc.kind === "breach" ? (isInert({ id: inc.scpId }) ? `Site Security faces the Insurgents alone; if they lose, ${scpName(inc.scpId)} is stolen for good (−5 standing).` : "Site Security faces it alone; it may escape or wreck neighbouring facilities.")
     : inc.kind === "riot" ? "Leave it to the guards: a few D-Class die."
     : inc.kind === "raid" ? "Leave it to the guards. If they lose, prisoners go free and the raiders open a containment cell: a breach you then have to answer (or, with nothing contained, the payroll is taken and a building wrecked)."
     : inc.kind === "escort" ? "The convoy is lost with its cargo."

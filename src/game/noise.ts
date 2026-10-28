@@ -92,7 +92,7 @@ export function emitNoise(x: number, y: number, kind: NoiseKind, src?: Unit) {
  *  direction; anyone with an enemy in sight keeps their attention on the nearest one. */
 /** Turn toward the nearest enemy in sight, if there is one (after moving, and at the start of a turn). */
 export function faceThreat(m: Unit) {
-  const hostile = (u: Unit) => isTeam(m) ? u.side === "raider" || u.side === "zombie" || (u.side === "anomaly" && u.alive) : m.side === "raider" ? isTeam(u) : false;
+  const hostile = (u: Unit) => isTeam(m) ? u.side === "raider" || u.side === "zombie" || (u.side === "anomaly" && u.alive && !u.object) : m.side === "raider" ? isTeam(u) : false;
   const threats = S.units.filter(u => u !== m && u.alive && !u.downed && !u.saved && hostile(u) && canSee(m, u.x, u.y));
   if (!threats.length) return false;
   const t = threats.sort((a, b) => cheb(m.x, m.y, a.x, a.y) - cheb(m.x, m.y, b.x, b.y))[0];

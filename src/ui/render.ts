@@ -256,6 +256,14 @@ export function createRenderer(cv: HTMLCanvasElement) {
     // Phase 4G: recoil after firing, a duck aside from a near miss, the weapon down while reloading, blood when badly hurt
     const kick = Math.max(0, 1 - (now - p.a.fired) / 140) * 2.6, fl = now - p.a.flinch < 260 ? (now - p.a.flinch) / 260 : 0;
     const pose = { kick, flinch: fl, reloading: now - p.a.reload < 650, bloodied: u.hp > 0 && u.hp < u.maxHp / 2, seed: u.id.length + u.name.length };
+    if (u.object) {
+      // an object in its case: a steel strongbox with a hazard stripe
+      ctx.fillStyle = "#5a5f66"; ctx.fillRect(cx - 9, cy - 7, 18, 14);
+      ctx.fillStyle = "#3d4147"; ctx.fillRect(cx - 9, cy - 7, 18, 3);
+      ctx.fillStyle = "#d9b23c"; ctx.fillRect(cx - 9, cy + 3, 18, 2);
+      badge(ctx, cx + 10, cy + 10, (S.scp ?? "").slice(0, 3), "#d9b23c");
+      return;
+    }
     if (u.side === "anomaly" && S.has049) { drawDoctor(cx, cy, p.ang); return; }
     if (u.side === "anomaly" && S.has106) { drawOldMan(cx, cy, p.ang, now); return; }
     if (u.side === "anomaly" && isNewScp(S.scp)) { drawNew(u, cx, cy, p.ang, now); return; }

@@ -104,11 +104,21 @@ export function startBreach(c: Campaign, s: ScpRecord, cause: string) {
     // what really caused it is only known if someone looks into it afterwards
     cause: c.chaos.pendingCause ?? (c.chaos.moles && Math.random() < 0.3 ? "sabotage" : ANOMALOUS_CAUSE.includes(s.id) ? (Math.random() < 0.5 ? "anomalous" : "accident") : "accident"),
   };
+  // an object can't get out of its cell: if its cell is opened, it's because Insurgents came for it
+  if (isInert(s)) {
+    inc.title = `Incident ${String(c.nextIncident).padStart(3, "0")}: Insurgents after ${s.name}, ${nameInText(wing.type)} on level ${wing.level + 1}`;
+    inc.insurgents = Math.max(3, inc.insurgents); inc.cause = "sabotage";
+  }
   // SCP-035 held at Site-19 whispers to the staff: an "accident" elsewhere is anomalous half the time
   if (inc.cause === "accident" && s.id !== "035" && c.scps.some(x => x.id === "035" && x.status === "contained") && Math.random() < 0.5) inc.cause = "anomalous";
   c.nextIncident++;
   c.incidents.push(inc);
   openInquiry(c, inc);
+  if (isInert(s)) {
+    chronicle(c, "breach", `Insurgents broke into ${s.name}'s cell in the ${nameInText(wing.type)} on level ${wing.level + 1}. ${cause}`);
+    log(c, `${cause} Insurgents are in ${s.name}'s cell and mean to carry it out. Site Security is responding now: send Epsilon-11 in, or leave it to the guards.`, "bad", "command");
+    return inc;
+  }
   chronicle(c, "breach", `${s.name} breached containment in the ${nameInText(wing.type)} on level ${wing.level + 1}. ${cause}`);
   log(c, `${cause} ${s.name} is out of its cell. Site Security is responding now: send Epsilon-11 in after them, or leave it to the guards.`, "bad", "command");
   breachKnockOn(c, s, wing);
@@ -183,7 +193,7 @@ export function wreckFacility(c: Campaign, f: Facility, text: string, wrecked = 
   if (f.type === "generator") reachMilestone(c, "power_failure");
   log(c, `${text} The ${nameInText(f.type)} on level ${f.level + 1} is ${f.wrecked ? "wrecked and has to be rebuilt" : "damaged and out of action until repaired"}. ${damageEffect(c, f)}`, "bad", "site");
   const occ = occupantOf(c, f);
-  if (occ?.status === "contained" && Math.random() < POWER.wreckBreach) startBreach(c, occ, "The damage cracked its cell open.");
+  if (occ?.status === "contained" && !isInert(occ) && Math.random() < POWER.wreckBreach) startBreach(c, occ, "The damage cracked its cell open.");
 }
 
 /** Every day: generators can fail (1% a month, 3% next to a damaged facility, plus winter storms at 2%), and
@@ -200,7 +210,7 @@ function tickPower(c: Campaign) {
     return;
   }
   if (!unpowered(c)) return;
-  for (const s of c.scps) if (s.status === "contained" && Math.random() < POWER.cascade) startBreach(c, s, "The cell's locks failed when the power went.");
+  for (const s of c.scps) if (s.status === "contained" && !isInert(s) && Math.random() < POWER.cascade) startBreach(c, s, "The cell's locks failed when the power went.");
 }
 
 /** Wings an anomaly can be rushed into in an emergency: its own is damaged or has no power. */
@@ -462,14 +472,14 @@ function gocMaybe(c: Campaign, inc: Incident) {
 }
 
 /** Phase 4C: destroyed by the GOC or carried off by GRU-P. It never comes back, and the Council remembers. */
-export function loseForGood(c: Campaign, inc: Incident, to: "goc" | "gru") {
+export function loseForGood(c: Campaign, inc: Incident, to: "goc" | "gru" | "ci") {
   const id = inc.scpId as ScpId, name = scpName(id);
   c.scps = c.scps.filter(s => s.id !== id);
   delete c.sightings[id];
   (c.lostScps ??= []).push(id);
-  addStanding(c, -5, `${name} lost to ${to === "goc" ? "the GOC" : "GRU-P"}`);
-  chronicle(c, "anomaly", to === "goc" ? `${name} was destroyed by a Global Occult Coalition strike team before Epsilon-11 could take it.` : `${name} was carried off by GRU Division "P". It is in Soviet hands now.`);
-  return to === "goc" ? `The GOC destroyed ${name}. There is nothing left to contain (−5 standing).` : `GRU-P got away with ${name}. It's beyond the Foundation's reach now (−5 standing).`;
+  addStanding(c, -5, `${name} lost to ${to === "goc" ? "the GOC" : to === "gru" ? "GRU-P" : "the Insurgency"}`);
+  chronicle(c, "anomaly", to === "goc" ? `${name} was destroyed by a Global Occult Coalition strike team before Epsilon-11 could take it.` : to === "gru" ? `${name} was carried off by GRU Division "P". It is in Soviet hands now.` : `${name} was stolen from its cell at Site-19 by the Chaos Insurgency.`);
+  return to === "goc" ? `The GOC destroyed ${name}. There is nothing left to contain (−5 standing).` : to === "gru" ? `GRU-P got away with ${name}. It's beyond the Foundation's reach now (−5 standing).` : `The Insurgency got away with ${name}. The Foundation has lost it (−5 standing).`;
 }
 
 /** Debug: capture an anomaly as if a first-contact mission had been won. */
