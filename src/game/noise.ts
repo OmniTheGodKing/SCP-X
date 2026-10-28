@@ -86,13 +86,19 @@ export function emitNoise(x: number, y: number, kind: NoiseKind, src?: Unit) {
 
 /** At the start of the player's turn: anyone who glanced at a noise and found nothing turns back to their resting
  *  direction; anyone with an enemy in sight keeps their attention on the nearest one. */
+/** Turn toward the nearest enemy in sight, if there is one (after moving, and at the start of a turn). */
+export function faceThreat(m: Unit) {
+  const hostile = (u: Unit) => isTeam(m) ? u.side === "raider" || u.side === "zombie" || (u.side === "anomaly" && u.alive) : m.side === "raider" ? isTeam(u) : false;
+  const threats = S.units.filter(u => u !== m && u.alive && !u.downed && !u.saved && hostile(u) && canSee(m, u.x, u.y));
+  if (!threats.length) return false;
+  const t = threats.sort((a, b) => cheb(m.x, m.y, a.x, a.y) - cheb(m.x, m.y, b.x, b.y))[0];
+  m.facing = facingTo(t.x - m.x, t.y - m.y);
+  return true;
+}
 export function settleFacing() {
   for (const m of team()) {
-    const threats = S.units.filter(u => u.alive && !u.downed && (u.side === "raider" || u.side === "zombie" || u.side === "anomaly") && canSee(m, u.x, u.y));
-    if (threats.length) {
-      const t = threats.sort((a, b) => cheb(m.x, m.y, a.x, a.y) - cheb(m.x, m.y, b.x, b.y))[0];
-      m.facing = facingTo(t.x - m.x, t.y - m.y);
-    } else if (m.glance && m.prefFacing !== undefined) m.facing = m.prefFacing;
+    if (faceThreat(m)) { /* facing the nearest enemy in sight */ }
+    else if (m.glance && m.prefFacing !== undefined) m.facing = m.prefFacing;
     m.glance = undefined;
   }
   S.heard = (S.heard ?? []).filter(h => h.turn >= S.turn - 1);

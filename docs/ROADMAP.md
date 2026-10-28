@@ -697,7 +697,7 @@ transition sounds, (4) World Map art, (5) Site-19 and the other strategic tabs, 
 - **(6) Portraits (done):** a lit backdrop with measuring marks, shading on the face and neck, ears, eyes with whites,
   a nose, collar lapels and a rank bar, and a vignette, still built from the same look data.
 
-### 4B: more anomalies (existing proposal, details pending)
+### 4B: more anomalies (agreed: "go ahead with the plans")
 - **5 to 8 new SCPs**, each with its own tactical behaviour, containment routine and procedure, research line and
   capture method, in the way SCP-173, 049, 106 and 610 differ (candidates: SCP-096, SCP-939, SCP-008, SCP-012,
   SCP-035, and SCP-682 as a long-term Keter threat that can't be killed, only held). Every one credited to its author
@@ -705,6 +705,114 @@ transition sounds, (4) World Map art, (5) Site-19 and the other strategic tabs, 
 - **Sightings, transfers and breaches** reuse the existing systems; new Safe-class objects can join the transfer pool.
 - **Anomaly interactions:** some anomalies affect others or the site (for example a breach in one wing raising the
   risk next door in specific ways).
+
+#### 4B as specified (before building)
+Five new anomalies: SCP-096, SCP-012, SCP-939, SCP-035 and SCP-682. SCP-008 is left out because its zombie plague
+would repeat SCP-049-2 and SCP-610. Each one arrives the way SCP-049 and SCP-106 do (a first sighting somewhere in the
+world, then held, studied, cleaned, breached, lost and resurfacing through the existing systems), and each has a
+procedure file, a research branch on the Research tab, a dossier photo, a tactical figure drawn in code, and its own
+lines on the mission status card. First sightings: SCP-012 between day 400 and 900, SCP-096 between 730 and 1100,
+SCP-939 between 950 and 1400, SCP-035 between 1100 and 1500, SCP-682 between 1460 and 1900 (year 5). An existing save
+gets the same windows counted from its current day. Mission kinds are unchanged: a first sighting or resurfacing is a
+recovery (manhunt) on a field map, a breach is on wing C.
+
+**Credits:** the SCP Wiki can't be reached from this build environment, so each one is credited as "credited to its
+author on the SCP Wiki (name to be confirmed)" with its page link, as SCP-610 and SCP-500 are now, and the names are
+to be checked against each page before release.
+
+**Shared new mechanics**
+- **Eyes down** (free toggle, any team member, shown on the action bar on SCP-096 and SCP-012 missions): the unit looks
+  at the floor. It sees only adjacent tiles, can't fire, throw, stare or use abilities that need sight, and can only make
+  the short (blue) move. It can't trigger SCP-096 or be compelled by SCP-012. The toggle is free and lasts until
+  switched back.
+- **Capture kit** issued automatically for the mission's anomaly, carried by the first operative and shown as an item:
+  the canvas hood (SCP-096), the lined folder (SCP-012), two noisemakers (SCP-939), the lead-lined case (SCP-035).
+
+**SCP-096, "The Shy Guy" (Euclid)**
+- On the map it sits weeping in a room, facing one way; its face is drawn as a red wedge 120 degrees wide in front of
+  it. Anyone (team, D-Class, civilian or Insurgent) not looking down who has a sight line to it from inside that wedge
+  has seen its face. Checked after every team action and every enemy phase.
+- Seen: it marks everyone who saw it, spends its next turn screaming (a turn's warning, logged and bannered), then runs
+  up to 14 tiles a turn toward the nearest marked person, smashing shut doors open, and kills them on reaching them. Gunfire
+  does nothing (logged once). Once every marked person is dead or gone it sits down where it is and goes quiet. If a
+  marked person leaves the map it follows them off it: the mission fails and it is loose.
+- **Capture:** an operative with the hood, next to it while it is quiet (eyes down, or standing outside the wedge),
+  uses Hood (1 action). Hooded, it can't be triggered and is led like a calmed SCP-049 (Lead, up to 3 tiles, by an
+  operative next to it) into the transport container, then sealed.
+- **Procedure:** an airtight steel cell. Routine "Cell inspection" every 14 days, 1 engineer, $5k. Overdue: maintenance
+  falls and the breach risk climbs.
+- **Research:** "Blindfold drill" (operatives looking down can make the long move too) and "Facial-image screening"
+  (its breach risk −30%).
+- **Interaction:** when it breaches, every other containment wing on its level loses 20 maintenance (it tears through
+  walls on the way out).
+
+**SCP-012, "A Bad Composition" (Euclid)**
+- On the map: the score on a stand in one room. At the end of each enemy phase anyone not looking down with a sight
+  line to it within 7 tiles has a 30% chance (+0.5% per point of sanity below 50) to be compelled. Compelled people
+  aren't controlled: they walk to it (4 tiles a turn) and once beside it take 2 damage a turn writing in their own
+  blood. An operative next to a compelled person can Shake them out of it (1 action; they lose 10 sanity and stop).
+- **Capture:** an operative with the folder, looking down, next to the score, uses Secure the score (1 action). That
+  wins the mission; no container is needed.
+- **Procedure:** a locked room, the score in a closed folder. Routine "Folder check" every 14 days, 1 researcher, done
+  blindfolded; 3% chance the researcher is compelled and hurt (an injury, logged).
+- **Research:** "Composition analysis" (compulsion range 4 instead of 7) and "Counter-score" (compelled people stop on
+  their own after 2 turns).
+- **Interaction:** when it breaches, one D-Class held at Site-19 is found dead in its room before Security arrives.
+
+**SCP-939, "With Many Voices" (Keter)**
+- Three instances (hp 7, armor 1, move 6, bite 3 to 4). Blind: they never use sight. They hunt by sound through the 4I
+  hearing rules: they go to the most recent noise they heard (footsteps, doors, glass, gunfire, explosions, noisemakers)
+  and attack anyone next to them. Anyone making no noise (not moving, Quiet steps, suppressed fire) is only found when
+  adjacent. They are hard to see: the team sees them only within 5 tiles, or anywhere inside a flare's light.
+- **Voices:** each enemy turn there is a 50% chance one instance speaks in the voice of a team member or a civilian.
+  The log shows a call for help in that person's name ("E11-03: 'Over here, I'm hit!'"), and the team hears it as a
+  sound with a direction, the same way as real noise. Civilians and researchers following the team walk toward it.
+  After "Voice analysis" research those lines are tagged "(mimicry?)".
+- **Capture:** throw a noisemaker (thrown like a grenade, 2 issued): it makes a loud noise at that tile at the start of
+  each of the next 3 enemy turns. Seal the container with at least one live instance inside and no people. Killing
+  every instance ends the mission as a win for the team but no specimen: it isn't held, and another pack is sighted
+  later.
+- **Procedure:** a Keter-grade pen. Routine "Feeding" every 7 days, 1 engineer, $5k (lowered by winch). Overdue: it
+  calls in staff voices over the intercom: maintenance falls and the guards lose 5 sanity.
+- **Research:** "Voice analysis" (mimicry tagged), "Acoustic lures" (3 noisemakers instead of 2, and each lasts 4
+  turns).
+- **Interaction:** when it breaches, guards are lured off their posts: for 3 days every other anomaly on its level has
+  twice the breach risk.
+
+**SCP-035, "Possessive Mask" (Keter)**
+- On the map it is worn by a host (a civilian on a sighting, a researcher on a breach): hp 10, move 4, a corroding
+  touch for 3, and its voice costs everyone on the team who can see it within 6 tiles 4 sanity each enemy turn. The host
+  rots: −1 hp every turn.
+- When the host dies the mask falls to the floor. At the end of each enemy phase it reaches for the nearest person within
+  2 tiles: 50% (+1% per sanity point under 50, never for anyone in a hazmat, lead or containment suit) they put it on and
+  become its new host. A possessed operative fights for it; downing them knocks the mask off and they are downed, not
+  dead.
+- **Capture:** an operative with the case, next to the mask on the floor, uses Case the mask (1 action). Without a suit
+  there's a 20% chance the mask takes them instead. Cased wins the mission.
+- **Procedure:** a sealed case inside a Keter-grade cell. Routine "Interview" every 14 days, 1 researcher; the researcher
+  loses 10 sanity, and 3% of the time it talks someone into opening the case: a breach.
+- **Research:** "Mask psychology" (its voice costs half the sanity) and "Sealed handling" (casing it never possesses the
+  handler).
+- **Interaction:** while it is held, every breach elsewhere at Site-19 is twice as likely to have an anomalous cause (the
+  inquiry system's causes), and when it breaches the wing next to it has twice the breach risk for 3 days.
+
+**SCP-682, "Hard-to-Destroy Reptile" (Keter)**
+- On the map: hp 30, armor 2, move 6, a bite for 5 to 7, regenerates 4 hp a turn. It tears through cover and partitions
+  it walks into. It adapts: after 3 hits from the same kind of attack (each weapon type, explosives, fire) that kind does
+  half damage for the rest of the mission (logged).
+- At 0 hp it can't die: it collapses for 2 turns, then rises with 10 hp. While it is down it can be hauled like SCP-173
+  (Drag, 1 tile per operative action, from next to it) into the transport container and sealed.
+- **Procedure:** a Keter-grade cell filled with hydrochloric acid. Routine "Acid bath" every 7 days, 2 engineers, $30k.
+  Overdue: maintenance falls three times as fast. Its base breach risk is twice an ordinary Keter's.
+- **Research:** "Regeneration study" (it stays down 3 turns) and "Hydrochloric containment" (breach risk −30%).
+- **Interaction:** a breach wrecks its own wing and has a 50% chance to damage the facility next to it; while it is loose
+  the O5 Council's standing falls by 2 every 30 days.
+
+**Completion check:** each of the five can be sighted (debug), captured in a played mission using its capture method,
+held with its routine running, researched, breached and recontained, with no errors; a test per anomaly drives its key
+rule (096 triggered by a face sight line and not by an eyes-down approach; 012 compulsion and Shake; 939 hearing a
+footstep and ignoring a still unit, and a voice line; 035 host death, mask pickup and casing; 682 adapting and
+collapsing).
 
 ### 4C: maps and mission variety (existing proposal, details pending)
 - **More maps:** new field and facility maps (rail yard, church, research lab, ship, Site-19 levels for base defence).
@@ -1039,8 +1147,15 @@ default); enemy turns have a Normal/Fast setting. Both settings sit in the Sound
   room and the canteen; the D-Class block's guard room overlooks the cell corridor through reinforced glass; shop and
   house windows on Main Street; farmhouse, port office, gatehouse, office and barracks windows; a storeroom partition at
   the port. Wing C and the D-Class block are marked reinforced. Map sizes are unchanged.
+- **Thin walls (after 4G, from a playtest report):** walls, partitions and shut doors standing in a one-tile wall
+  line with open ground on both sides block only along the line's centre, as XCOM's walls sit on tile edges. Windows
+  and open doors are gaps in that line, so someone diagonally beside a window sees into the room beyond in a cone, and
+  still can't see through the solid wall beside it. Corners, junctions and solid rock stay full blocks. Shots follow
+  the same geometry. tests/window.e2e.cjs checks the reported case (viewer diagonal to a window, six tiles in the
+  cone seen, three behind the wall not) and that the shot goes through and breaks the glass.
 - **Facing (src/game/noise.ts):** units face where they last moved, fired or glanced; the Face button (F) sets a
-  resting direction for free. Facing is not a sight cone: anyone behind is still seen. A reaction shot at someone more
+  resting direction for free. After any move a unit turns to the nearest enemy it can see (Insurgents to the
+  nearest team member); with nobody in sight it keeps facing the way it walked. Facing is not a sight cone: anyone behind is still seen. A reaction shot at someone more
   than 90° off the shooter's facing takes −10 ("Turning to fire").
 - **Hearing:** footsteps 7 tiles, doors 9, SCP-173's scrape 9, breaking glass 12, gunfire 24, explosions 32; −1 per
   tile, −5 per wall or partition, −3 per shut door, less in a storm, rain or under the siren. The team hears only what
