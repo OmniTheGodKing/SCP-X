@@ -1,12 +1,13 @@
 // Chaos Insurgency AI: hold SCP-173 with their eyes when they see it, fight from cover,
 // and push toward the Foundation team.
 import { commanderFlees, demoBreach } from "./ciTactics";
-import { L, area, bfs, cheb, nearContainer, pathTo } from "../core/grid";
+import { L, area, bfs, cheb, floorOf, nearContainer, passable, pathTo } from "../core/grid";
 import { sightFrom } from "../core/sight";
 import { canShoot, coverAgainst, fire, moveUnit, shotInfo } from "./combat";
 import { prof } from "./profiles";
-import { S, alive, breakConcealment, canSee, isBlind, isPanicked, log, occupied, reveal, seen, team } from "./state";
+import { S, alive, banner, breakConcealment, canSee, highlight, isBlind, isPanicked, log, occupied, reveal, seen, team } from "./state";
 import type { Unit } from "./types";
+import { goalOf, truck } from "./rivals";
 
 /** Insurgents who see SCP-173 stare at it too, and crack the same way. */
 export function insurgentsStare() {
@@ -106,7 +107,10 @@ export async function raiderPhase(checkEnd: () => boolean) {
   }
   for (const r of alive("raider")) {
     if (!podActive(r) || !r.alive || !alive("mtf").length || isPanicked(r)) continue;
-    if ((S.setup.kind === "escort" || S.setup.kind === "raid") && nearContainer(r.x, r.y)) { workTruck(r); if (checkEnd()) return; continue; }
+    if (S.trophy?.includes(r.id)) continue;   // GRU-P carriers only carry
+    const lorry = S.setup.convoy ? truck() : undefined;
+    if (lorry ? cheb(r.x, r.y, lorry.x, lorry.y) <= 1 : (S.setup.kind === "escort" || (S.setup.kind === "raid" && !S.liftOpen)) && nearContainer(r.x, r.y) && floorOf(r.y) === 0) { workTruck(r); if (checkEnd()) return; continue; }
+    if (S.setup.kind === "raid" && S.liftOpen && inControl(r)) { holdControl(r); if (checkEnd()) return; continue; }
     if (isBlind(r)) { if (seen(r.x, r.y)) log("A blinded Insurgent stumbles and can't fire."); continue; }
     r.ap = 2; r.overwatch = false;
     if (await commanderFlees(r)) { if (checkEnd()) return; continue; }
@@ -118,10 +122,27 @@ export async function raiderPhase(checkEnd: () => boolean) {
 /** An Insurgent at the truck spends their turn forcing it; a second turn there and it's open. */
 function workTruck(r: Unit) {
   const raid = S.setup.kind === "raid";
+  // Phase 4C: with level 1 on the map, a forced lift lets them down into Site-19 rather than ending it there
+  if (r.stealTurn === S.turn - 1 && raid && L.def.control) {
+    S.liftOpen = true; L.closedLinks.clear(); L.version++;
+    log("The Insurgents have the lift doors open and are going down into Site-19. Stop them reaching containment control on level 1.", "bad");
+    banner("THE LIFT IS FORCED", "#d75b47"); highlight(4, "#d75b47");
+    return;
+  }
   if (r.stealTurn === S.turn - 1) { S.stolen = true; log(raid ? "The Insurgents have the lift doors open and are going down into Site-19." : "The Insurgents have the truck open. The anomaly is gone.", "bad"); return; }
   r.stealTurn = S.turn;
   log(raid ? "An Insurgent is forcing the lift doors. Stop them before next turn." : "An Insurgent is working the truck's door open. Stop them before next turn.", "bad");
 }
+
+const inControl = (u: Unit) => { const c = L.def.control; return !!c && u.x >= c[0] && u.x <= c[2] && u.y >= c[1] && u.y <= c[3]; };
+/** An Insurgent in containment control: hold it through a whole enemy turn and Site-19's containment is theirs. */
+function holdControl(r: Unit) {
+  if (S.controlTurn !== undefined && S.controlTurn === S.turn - 1) {
+    S.stolen = true; log("The Insurgents hold containment control. Site-19's cells are theirs to open.", "bad"); return;
+  }
+  if (S.controlTurn !== S.turn) { S.controlTurn = S.turn; log("An Insurgent has reached containment control on level 1. Clear the room before next turn.", "bad"); banner("CONTAINMENT CONTROL", "#d75b47"); }
+}
+const controlTiles = (): [number, number][] => { const c = L.def.control!; const out: [number, number][] = []; for (let y = c[1]; y <= c[3]; y++) for (let x = c[0]; x <= c[2]; x++) if (passable(x, y)) out.push([x, y]); return out; };
 
 /** The best place within reach to fight from: in cover, flanking if possible, at a middling distance. */
 function bestSpot(r: Unit, t: Spot[]) {
@@ -143,7 +164,9 @@ function bestSpot(r: Unit, t: Spot[]) {
     sc -= Math.abs(pd - 6) * 4;
     if (!S.sealed && st.alive && cheb(st.x, st.y, x, y) <= 2) sc -= 40;
     // on an escort, the truck is what they came for
-    if (S.setup.kind === "escort" || S.setup.kind === "raid") sc -= Math.min(...L.contTiles.map(([cx, cy]) => cheb(cx, cy, x, y))) * 7;
+    if (S.setup.kind === "raid" && S.liftOpen && L.def.control) sc -= Math.min(...controlTiles().map(([cx, cy]) => cheb(cx, cy, x, y) + (floorOf(cy) !== floorOf(y) ? 30 : 0))) * 7;
+    else if (S.setup.convoy && truck()) sc -= cheb(truck()!.x, truck()!.y, x, y) * 7;
+    else if (S.setup.kind === "escort" || S.setup.kind === "raid") sc -= Math.min(...L.contTiles.filter(([, cy]) => floorOf(cy) === 0).map(([cx, cy]) => cheb(cx, cy, x, y))) * 7;
     sc -= res.dist[i] * 0.5 + Math.random() * 3;
     if (sc > bestScore) { bestScore = sc; bestT = [x, y]; }
   }
@@ -155,6 +178,33 @@ async function raiderAct(r: Unit) {
   for (let guard = 0; guard < 4 && r.ap > 0 && r.alive; guard++) {
     const t = team();
     if (!t.length) return;
+    // Phase 4C: the GOC and GRU-P go for the anomaly first, and stay at it once there
+    const goal = goalOf(r);
+    if (goal && guard === 0 && cheb(r.x, r.y, goal.x, goal.y) > 1) {
+      const res = bfs([[r.x, r.y]], 999, (x, y) => occupied(x, y, r));
+      const spots = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]].map(([dx, dy]) => [goal.x + dx, goal.y + dy] as [number, number]).filter(([x, y]) => res.dist[y * L.W + x] > 0);
+      spots.sort((a, b) => res.dist[a[1] * L.W + a[0]] - res.dist[b[1] * L.W + b[0]]);
+      const path = spots[0] ? pathTo(res, spots[0][0], spots[0][1]) : null;
+      if (path?.length) { r.ap--; await moveUnit(r, path.slice(0, 5)); continue; }
+    }
+    if (goal && cheb(r.x, r.y, goal.x, goal.y) <= 1) {
+      const shot = t.filter(m => canShoot(r, m)).map(m => ({ m, s: shotInfo(r, m) })).sort((a, b) => b.s.chance - a.s.chance)[0];
+      if (shot && shot.s.chance >= 20) { r.ap = 0; await fire(r, shot.m, false); }
+      return;
+    }
+    // Phase 4C base defence: once the lift is forced, containment control is all that matters. They move for it with
+    // every action, and only stop to shoot once inside or with no way forward.
+    if (S.setup.kind === "raid" && S.liftOpen && L.def.control && !inControl(r)) {
+      const res = bfs([[r.x, r.y]], 999, (x, y) => occupied(x, y, r));
+      const goal = controlTiles().filter(([x, y]) => res.dist[y * L.W + x] > 0).sort((a, b) => res.dist[a[1] * L.W + a[0]] - res.dist[b[1] * L.W + b[0]])[0];
+      const path = goal ? pathTo(res, goal[0], goal[1]) : null;
+      if (path?.length) { r.ap--; await moveUnit(r, path.slice(0, 5)); continue; }
+    }
+    if (S.setup.kind === "raid" && S.liftOpen && L.def.control) {
+      const shot = t.filter(m => canShoot(r, m)).map(m => ({ m, s: shotInfo(r, m) })).sort((a, b) => b.s.chance - a.s.chance)[0];
+      if (shot && shot.s.chance >= 20) { r.ap = 0; await fire(r, shot.m, false); }
+      return;
+    }
     if (r.gun && r.gun.ammo < 1) { r.gun.ammo = r.gun.mag; r.ap--; if (seen(r.x, r.y)) log(`An Insurgent reloads their ${r.gun.name}.`); continue; }
     let best: { m: Unit; s: ReturnType<typeof shotInfo>; score: number } | null = null;
     // in a retaliation, the locals are targets too

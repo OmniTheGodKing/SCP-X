@@ -527,3 +527,4 @@ ul.fin.entries .hday { margin-right: 8px; }
 .dot.lead { background: #5fb3a8; }
 .worldmap .marker.lead .mlabel { fill: #8fd0c6; }
 .cpick { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; margin: 4px 0 6px; }
+.floorbar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }

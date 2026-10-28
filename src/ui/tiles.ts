@@ -4,13 +4,16 @@
 import { CONT, DRUM, EXIT, FULL, HALF, L, PART, STEEL, TS, WALL, WINDOW, area, passable, tileAt, type Level } from "../core/grid";
 import { S } from "../game/state";
 
-type MapId = "wingC" | "town" | "farm" | "port" | "dblock" | "gate";
+type MapId = "wingC" | "town" | "farm" | "port" | "dblock" | "gate" | "rail" | "church" | "lab" | "ship";
 export type Surface = "asphalt" | "grass" | "dirt" | "concrete" | "wood" | "labtile" | "steel";
 type Material = "concrete" | "brick" | "timber" | "metal";
 
 const SURFACE_BASE: Record<Surface, string> = { asphalt: "#24282c", grass: "#222d22", dirt: "#2b271f", concrete: "#283038", wood: "#2b2520", labtile: "#28313a", steel: "#232a31" };
 export function surfaceFor(name: string): Surface {
-  if (/field/.test(name)) return "grass";
+  if (/field|graveyard/.test(name)) return "grass";
+  if (/rail tracks|goods yard/.test(name)) return "dirt";
+  if (/platform|deck/.test(name)) return "concrete";
+  if (/hold|engine room|crew quarters|bridge/.test(name)) return "steel";
   if (/barn/.test(name)) return "dirt";
   if (/street|road|lot|motor pool|courtyard|dock/i.test(name)) return "asphalt";
   if (/lab/.test(name)) return "labtile";
@@ -18,7 +21,7 @@ export function surfaceFor(name: string): Surface {
   if (/diner|store|church|farmhouse|houses|office|records|barracks|canteen|mess|guard room/.test(name)) return "wood";
   return "concrete";
 }
-const outdoorArea = (name: string) => /field|street|road|lot|motor pool|courtyard|dock/i.test(name);
+const outdoorArea = (name: string) => /field|street|road|lot|motor pool|courtyard|dock|yard|track|platform|graveyard|deck/i.test(name);
 
 /** Each map's building material, the colour of its roofs or bedrock, and what bounds its open ground. */
 const THEME: Record<MapId, { mat: Material; mass: string; border: "fence" | "hedge" | "rock" | "wall"; under: boolean }> = {
@@ -28,6 +31,10 @@ const THEME: Record<MapId, { mat: Material; mass: string; border: "fence" | "hed
   farm: { mat: "timber", mass: "#2c2620", border: "hedge", under: false },
   port: { mat: "metal", mass: "#22272c", border: "wall", under: false },
   gate: { mat: "concrete", mass: "#1f2428", border: "fence", under: false },
+  rail: { mat: "brick", mass: "#2a2622", border: "fence", under: false },
+  church: { mat: "brick", mass: "#2a2422", border: "hedge", under: false },
+  lab: { mat: "concrete", mass: "#15191d", border: "rock", under: true },
+  ship: { mat: "metal", mass: "#16232e", border: "wall", under: false },
 };
 const FACE: Record<Material, { top: string; face: string; line: string; hi: string }> = {
   concrete: { top: "#3b4652", face: "#4a5765", line: "#3a4450", hi: "#5d6b7a" },
@@ -124,6 +131,8 @@ function paint(ctx: CanvasRenderingContext2D) {
     else if (passable(x, y)) decal(ctx, x, y, a, sf, map);
   }
   for (const i of L.doors) door(ctx, i % L.W, (i / L.W) | 0, map, th.mat);
+  // Phase 4C: stairs, lifts and ladders between floors
+  for (const l of L.def.links ?? []) for (const [x, y] of [l.a, l.b]) linkTile(ctx, x, y, l.kind);
   for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) { if (tileAt(x, y) === WINDOW) windowTile(ctx, x, y, th.mat); else if (tileAt(x, y) === PART) partition(ctx, x, y); }
 
   // 5. room names stencilled faintly on the floor, and the tile grid so moves can be counted
@@ -141,7 +150,27 @@ function paint(ctx: CanvasRenderingContext2D) {
     else if (noise(x, y, 77) < 0.22) { ctx.fillStyle = "rgba(120,150,180,0.16)"; ctx.beginPath(); ctx.ellipse(px + 8 + noise(x, y, 78) * 16, py + 8 + noise(x, y, 79) * 16, 6 + noise(x, y, 80) * 6, 3 + noise(x, y, 81) * 3, 0, 0, Math.PI * 2); ctx.fill(); }
   }
 }
-const outdoorish = (m: MapId) => m === "farm" || m === "town" || m === "gate";
+/** One end of a stair, lift or ladder. */
+function linkTile(ctx: CanvasRenderingContext2D, x: number, y: number, kind: "stairs" | "lift" | "ladder") {
+  const px = x * TS, py = y * TS;
+  ctx.save();
+  if (kind === "stairs") {
+    for (let k = 0; k < 6; k++) { ctx.fillStyle = k % 2 ? "#4b5866" : "#5d6b7a"; ctx.fillRect(px + 3, py + 3 + k * 4.4, TS - 6, 4.4); }
+    ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = 1; ctx.strokeRect(px + 3.5, py + 3.5, TS - 7, TS - 7);
+  } else if (kind === "ladder") {
+    ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(px + 6, py + 4, TS - 12, TS - 8);
+    ctx.strokeStyle = "#a9b0a0"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(px + 10, py + 4); ctx.lineTo(px + 10, py + TS - 4); ctx.moveTo(px + TS - 10, py + 4); ctx.lineTo(px + TS - 10, py + TS - 4);
+    for (let k = 0; k < 5; k++) { ctx.moveTo(px + 10, py + 7 + k * 5); ctx.lineTo(px + TS - 10, py + 7 + k * 5); } ctx.stroke();
+  } else {
+    // the lift car: steel floor plate and a call-light
+    ctx.fillStyle = "#3d464e"; ctx.fillRect(px + 2, py + 2, TS - 4, TS - 4);
+    ctx.strokeStyle = "#6d7a85"; ctx.lineWidth = 1; for (let k = 6; k < TS - 4; k += 5) { ctx.beginPath(); ctx.moveTo(px + 4, py + k + 0.5); ctx.lineTo(px + TS - 4, py + k + 0.5); ctx.stroke(); }
+    ctx.fillStyle = "#d8bf86"; ctx.beginPath(); ctx.moveTo(px + TS / 2, py + 7); ctx.lineTo(px + TS / 2 + 5, py + 13); ctx.lineTo(px + TS / 2 - 5, py + 13); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(px + TS / 2, py + TS - 7); ctx.lineTo(px + TS / 2 + 5, py + TS - 13); ctx.lineTo(px + TS / 2 - 5, py + TS - 13); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+const outdoorish = (m: MapId) => m === "farm" || m === "town" || m === "gate" || m === "rail" || m === "church" || m === "ship";
 
 // ---------- floors ----------
 function floor(ctx: CanvasRenderingContext2D, x: number, y: number, sf: Surface, map: MapId) {
@@ -219,6 +248,14 @@ function floor(ctx: CanvasRenderingContext2D, x: number, y: number, sf: Surface,
  *  along Site-19's corridors, and hazard stripes in front of the transport container. */
 function markings(ctx: CanvasRenderingContext2D, map: MapId, surf: Surface[], areas: string[]) {
   const box = (name: string) => { let x0 = 99, y0 = 99, x1 = -1, y1 = -1; areas.forEach((a, i) => { if (a !== name || !passable(i % L.W, (i / L.W) | 0)) return; const x = i % L.W, y = (i / L.W) | 0; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }); return x1 < 0 ? null : { x0, y0, x1, y1 }; };
+  if (map === "rail") {
+    // rails along the track bed, on sleepers
+    const rows = new Set<number>(); areas.forEach((a, i) => { if (a === "rail tracks") rows.add((i / L.W) | 0); });
+    for (const y of rows) if (y % 3 === 2) {
+      ctx.fillStyle = "rgba(60,48,36,0.55)"; for (let x = 0; x < L.W * TS; x += 9) ctx.fillRect(x, y * TS + 8, 5, 16);
+      ctx.strokeStyle = "rgba(160,160,165,0.45)"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(0, y * TS + 11.5); ctx.lineTo(L.W * TS, y * TS + 11.5); ctx.moveTo(0, y * TS + 20.5); ctx.lineTo(L.W * TS, y * TS + 20.5); ctx.stroke();
+    }
+  }
   if (map === "town") {
     const b = box("Main Street");
     if (b) { const my = ((b.y0 + b.y1 + 1) / 2) * TS; ctx.strokeStyle = "rgba(225,200,110,0.28)"; ctx.lineWidth = 2; ctx.setLineDash([14, 12]); ctx.beginPath(); ctx.moveTo(b.x0 * TS, my); ctx.lineTo((b.x1 + 1) * TS, my); ctx.stroke(); ctx.setLineDash([]);
@@ -348,6 +385,18 @@ function shadow(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, 
 }
 function halfCover(ctx: CanvasRenderingContext2D, x: number, y: number, a: string, sf: Surface, map: MapId) {
   const px = x * TS, py = y * TS, n = (k: number) => noise(x, y, k);
+  // Phase 4C: pews in the nave, headstones in the graveyard
+  if (/nave/.test(a)) {
+    ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.fillRect(px + 2, py + 13, TS - 2, 12);
+    ctx.fillStyle = "#5a3f26"; ctx.fillRect(px, py + 10, TS, 11); ctx.fillStyle = "#6e4e30"; ctx.fillRect(px, py + 10, TS, 3);
+    ctx.fillStyle = "#4a3320"; ctx.fillRect(px, py + 21, TS, 3); return;
+  }
+  if (/graveyard/.test(a)) {
+    ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.beginPath(); ctx.ellipse(px + TS / 2 + 3, py + TS / 2 + 6, 9, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = n(1) < 0.5 ? "#8a8a84" : "#7a7c76"; ctx.beginPath(); ctx.moveTo(px + 9, py + 24); ctx.lineTo(px + 9, py + 12); ctx.arc(px + 16, py + 12, 7, Math.PI, 0); ctx.lineTo(px + 23, py + 24); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "rgba(40,40,36,0.6)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px + 12, py + 14); ctx.lineTo(px + 20, py + 14); ctx.moveTo(px + 12, py + 17); ctx.lineTo(px + 18, py + 17); ctx.stroke();
+    return;
+  }
   const kind =
     /lab/.test(a) ? "bench"
     : /office|records|guard|shipping/.test(a) ? "desk"
@@ -475,6 +524,19 @@ function crates(ctx: CanvasRenderingContext2D, px: number, py: number, two: bool
 
 function fullCover(ctx: CanvasRenderingContext2D, x: number, y: number, a: string, sf: Surface, map: MapId) {
   const px = x * TS, py = y * TS, n = (k: number) => noise(x, y, k);
+  // Phase 4C: boxcars on the tracks and shipping containers on a freighter's deck, drawn as one long body per run
+  if (/rail tracks|deck/.test(a)) {
+    const left = tileAt(x - 1, y) === FULL, right = tileAt(x + 1, y) === FULL, deck = /deck/.test(a);
+    const body = deck ? ["#7a3b2e", "#2f5a6a", "#7a6a2e", "#3f5a3a"][Math.floor(noise(Math.floor(x / 3), y, 9) * 4)] : "#5a3a2a";
+    ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.fillRect(px + (left ? 0 : 4), py + 6, TS - (left ? 0 : 4) + (right ? 0 : -1), TS - 4);
+    ctx.fillStyle = body; ctx.fillRect(px + (left ? 0 : 2), py + 3, TS - (left ? 0 : 2) - (right ? 0 : 2), TS - 6);
+    ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1; ctx.beginPath();
+    for (let k = 4; k < TS; k += deck ? 3 : 6) { ctx.moveTo(px + k + 0.5, py + 4); ctx.lineTo(px + k + 0.5, py + TS - 4); }
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,0.08)"; ctx.fillRect(px + (left ? 0 : 2), py + 3, TS - (left ? 0 : 2) - (right ? 0 : 2), 3);
+    if (!left) { ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.fillRect(px + 2, py + 3, 2, TS - 6); }
+    return;
+  }
   if (sf === "grass") {
     // a tree: trunk shadow, then a canopy of overlapping leaves
     ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.beginPath(); ctx.ellipse(px + TS / 2 + 4, py + TS / 2 + 5, 15, 12, 0, 0, Math.PI * 2); ctx.fill();

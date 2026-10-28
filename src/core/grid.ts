@@ -35,6 +35,14 @@ export interface MapDef {
   reinforced?: boolean;
   /** Where people arriving from outside come in (off-duty Epsilon-11 driving to the surface compound); squadSpawns if unset. */
   roadSpawns?: Pt[];
+  /** Phase 4C: a map with floors stacked in one grid (rock between them), by the rows each covers, and the stairs, lifts
+   *  and ladders joining them, as pairs of tiles: stepping onto one end and on to the other is one step. */
+  floors?: { name: string; y0: number; y1: number; under?: boolean }[];
+  links?: { a: Pt; b: Pt; kind: "stairs" | "lift" | "ladder"; closed?: boolean }[];
+  /** Where Epsilon-11 already on station comes from (the level-1 lift lobby under the compound), and the room the
+   *  Insurgency is after once it is inside (containment control). */
+  stationSpawns?: Pt[];
+  control?: [number, number, number, number];
 }
 
 export class Level {
@@ -49,6 +57,10 @@ export class Level {
   version = 0;
   readonly contTiles: Pt[] = [];
   readonly exitMap: Int16Array;
+  /** Each end of a stair, lift or ladder, and the tile at its other end. */
+  readonly link = new Map<number, number>();
+  /** Link ends only the team can use (a lift worked from inside), until something opens them. */
+  readonly closedLinks = new Set<number>();
 
   constructor(readonly def: MapDef) {
     this.W = def.rows[0].length;
@@ -74,6 +86,11 @@ export class Level {
       const r = Math.random();
       const state: DoorState = kind === "containment" ? "closed" : r < 0.06 ? "breached" : r < 0.53 ? "open" : "closed";
       this.door.set(i, { kind, state });
+    }
+    for (const { a, b, closed } of def.links ?? []) {
+      const ia = a[1] * this.W + a[0], ib = b[1] * this.W + b[0];
+      this.link.set(ia, ib); this.link.set(ib, ia);
+      if (closed) { this.closedLinks.add(ia); this.closedLinks.add(ib); }
     }
     const exits: Pt[] = [];
     for (let y = 0; y < this.H; y++) for (let x = 0; x < this.W; x++) if (this.grid[y][x] === EXIT) exits.push([x, y]);
@@ -140,6 +157,12 @@ export function canStep(x: number, y: number, dx: number, dy: number) {
 }
 
 export interface Reach { dist: Int16Array; prev: Int16Array; }
+// The team works closed lifts from inside; set while planning a team member's move.
+let linkAccess = false;
+export function setLinkAccess(on: boolean) { linkAccess = on; }
+/** Where a link end leads, if it can be used right now. */
+export const linkFrom = (i: number) => (L.closedLinks.has(i) && !linkAccess) ? undefined : L.link.get(i);
+
 export function bfs(starts: Pt[], maxD: number, blocked?: (x: number, y: number) => boolean): Reach {
   const { W, H } = L;
   const dist = new Int16Array(W * H).fill(-1), prev = new Int16Array(W * H).fill(-1);
@@ -160,6 +183,8 @@ export function bfs(starts: Pt[], maxD: number, blocked?: (x: number, y: number)
         if (nd > maxD || done[ni] || (dist[ni] !== -1 && dist[ni] <= nd) || (blocked && blocked(x + dx, y + dy))) continue;
         dist[ni] = nd; prev[ni] = i;
       }
+      const li = linkFrom(i);
+      if (li !== undefined && d + 1 <= maxD && !done[li] && (dist[li] === -1 || dist[li] > d + 1) && passable(li % W, (li / W) | 0) && !(blocked && blocked(li % W, (li / W) | 0))) { dist[li] = d + 1; prev[li] = i; }
     }
     return { dist, prev };
   }
@@ -173,6 +198,9 @@ export function bfs(starts: Pt[], maxD: number, blocked?: (x: number, y: number)
       if (dist[ni] !== -1 || (blocked && blocked(x + dx, y + dy))) continue;
       dist[ni] = d + 1; prev[ni] = i; q.push(ni);
     }
+    // Phase 4C: a stair, lift or ladder end leads to its other end
+    const li = linkFrom(i);
+    if (li !== undefined && dist[li] === -1 && passable(li % W, (li / W) | 0) && !(blocked && blocked(li % W, (li / W) | 0))) { dist[li] = d + 1; prev[li] = i; q.push(li); }
   }
   return { dist, prev };
 }
@@ -183,6 +211,9 @@ export function pathTo(res: Reach, x: number, y: number): Pt[] | null {
   while (res.prev[i] !== -1) { p.push(i); i = res.prev[i]; }
   return p.reverse().map(i => [i % L.W, (i / L.W) | 0] as Pt);
 }
+
+/** Which floor a row is on (0 on single-floor maps). */
+export const floorOf = (y: number) => Math.max(0, (L.def.floors ?? []).findIndex(f => y >= f.y0 && y <= f.y1));
 
 /** Random free floor tiles inside a rectangle. */
 export function floorTiles(r: [number, number, number, number]): Pt[] {

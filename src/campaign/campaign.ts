@@ -1,3 +1,4 @@
+import { fieldMap } from "../data/maps";
 // Site-19 between missions: the roster, time passing, funding, public exposure and incidents.
 import { earn, spend, type Ledger } from "./ledger";
 import { tickContracts, type ContractState } from "./contracts";
@@ -18,7 +19,7 @@ import {
 } from "./base";
 import { lockPlan, addThreat, ciRoles, commanderFate, commanderJoins, disrupt, planActive, monthlyChaos, newChaos, threatExtra, tickChaos, type ChaosState } from "./chaos";
 import { addStanding, councilGrant, grantParts, issueDirectives, monthlyCouncil, newCouncil, rewardText, grantReward, tickCouncil, transferFought, type CouncilState, type Reward, type Transit } from "./council";
-import { isInert, routineEvery, routineOf, firstSightings, resolveScp, scpName, startingScps, tickContainment, type ScpRecord } from "./containment";
+import { isInert, loseForGood, routineEvery, routineOf, firstSightings, resolveScp, scpName, startingScps, tickContainment, type ScpRecord } from "./containment";
 import { reachMilestone, type Milestone } from "./research";
 import { ITEMS, PROJECTS, armorStats, uniformOf, has, projectLock, monthlyResearch, newResearch, tickResearch, type MaterialId, type ItemId, type Order, type ResearchState } from "./research";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
@@ -159,6 +160,10 @@ export interface Incident {
   answered?: boolean;
   /** Recoveries in Europe or East Asia where GRU Division "P" is the opposition. */
   gru?: boolean;
+  /** Phase 4C: the Global Occult Coalition is after it instead; an escort that is a moving convoy; a site gone quiet. */
+  goc?: boolean;
+  convoy?: boolean;
+  quiet?: boolean;
   /** What the briefing said when Epsilon-11 was sent, kept for the history. */
   briefed?: string;
   /** The field report it came with: an Insurgent count that may be out of date or wrong (see reportOf). */
@@ -797,7 +802,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     commander: commanderJoins(c, inc) ? `${c.chaos.commander!.rank} ${c.chaos.commander!.name}` : undefined,
     // strikes always have a radio to call for help on; attacks only once the Insurgency's agenda is high
     reinforce: inc.kind === "strike" ? (c.chaos.threat >= 70 ? 6 : 8) : inc.kind === "retaliation" && c.chaos.threat >= 30 ? (c.chaos.threat >= 70 ? 5 : 7) : undefined,
-    gru: inc.gru,
+    gru: inc.gru, goc: inc.goc, convoy: inc.convoy, quiet: inc.quiet,
     year: yearOf(c.day),
     known: [...c.knownNotes],
     insurgentArmor: (yearOf(c.day) >= 1954 ? 1 : 0) + (mole ? 1 : 0),
@@ -1007,6 +1012,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   if (c.tutorial?.on && !c.tutorial.seen.includes("mission")) c.tutorial.seen.push("mission");
   for (const l of [...lines, ...promotions]) log(c, l, r.win ? "good" : "bad");
   if (inc?.transfer) lines.push(transferFought(c, inc.transfer, r.win));
+  else if (inc?.scpId && inc.kind !== "emergency" && r.lostTo) lines.push(loseForGood(c, inc, r.lostTo));
   else if (inc?.scpId && inc.kind !== "emergency") {   // another site's anomaly stays theirs
     resolveScp(c, inc, r.win && !r.noSpecimen);
     if (r.noSpecimen) lines.push(`The ${scpName(inc.scpId)} pack is dead, so there is no specimen to hold. Another pack will be heard of somewhere, in time.`);
@@ -1014,7 +1020,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   }
   if (ambush && c.scps.some(s => s.id === inc!.scpId && s.status === "contained")) {
     const esc: Incident = {
-      id: "inc" + c.nextIncident, kind: "escort", scpId: inc!.scpId, region: inc!.region, map: Math.random() < 0.5 ? "town" : "farm",
+      id: "inc" + c.nextIncident, kind: "escort", scpId: inc!.scpId, region: inc!.region, map: fieldMap("escort"),
       title: `Incident ${String(c.nextIncident).padStart(3, "0")}: Convoy ambushed carrying ${scpName(inc!.scpId)}`,
       appeared: c.day, expires: c.day, insurgents: Math.min(6, 3 + Math.floor((yearOf(c.day) - 1951) / 3)),
       squad: r.squad.filter(s => s.alive && !s.absent).map(s => s.opId),

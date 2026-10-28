@@ -2,7 +2,7 @@
 import { WEATHER_SIGHT } from "../data/weather";
 import { SIGHT_MAX } from "../core/sight";
 import { S } from "./state";
-import { cheb } from "../core/grid";
+import { L, cheb, floorOf } from "../core/grid";
 import type { PerkId, Unit } from "./types";
 
 export const hasPerk = (u: Unit | null | undefined, p: PerkId) => !!u?.perks?.includes(p);
@@ -12,6 +12,8 @@ export const NIGHT_SIGHT = 6;
 /** Night and weather never cut sight below this many tiles. */
 export const MIN_RANGE = 3;
 export const rangeOf = (u: Unit) => {
+  // Phase 4C: underground floors have no weather and no night
+  if (S && L?.def.floors?.[floorOf(u.y)]?.under) return SIGHT_MAX;
   const w = S?.setup.weather ? WEATHER_SIGHT[S.setup.weather] ?? SIGHT_MAX : SIGHT_MAX;
   let r = Math.min(w, S?.setup.night ? NIGHT_SIGHT - (w < SIGHT_MAX ? 2 : 0) : SIGHT_MAX);
   if (r < SIGHT_MAX) r += (hasPerk(u, "keen_eyes") ? 3 : 0) + (u.side === "mtf" && S ? S.setup.mods.sightBonus ?? 0 : 0);

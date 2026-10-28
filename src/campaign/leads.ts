@@ -1,3 +1,4 @@
+import { fieldMap } from "../data/maps";
 // Leads (Phase 4F): opportunities that turn up on the World Map by themselves as time passes, most of them heard by
 // the fronts. Not all of them are fights: agents, money and a decision are often enough. Each has a deadline; a
 // hostile preparation left alone becomes an attack on its town.
@@ -122,7 +123,7 @@ export function leadAction(c: Campaign, id: string, a: LeadAction): Incident | n
     // the squad goes in through the ordinary deploy panel: the lead becomes a strike mission with its reward
     const inc = locateCellFor(c, l.region);
     inc.title = `${inc.title.split(":")[0]}: ${l.title}`;
-    inc.map = l.kind === "supply" ? "port" : pick(["town", "farm", "port"] as const);
+    inc.map = l.kind === "supply" ? pick(["port", "rail"] as const) : fieldMap("strike");
     if (l.kind === "supply") { inc.reward = { kind: "gear", n: 2, item: pick(unlockedItems(c).length ? unlockedItems(c) : ["frag"] as ItemId[]) }; inc.insurgents = Math.max(2, inc.insurgents - 2); }
     if (l.kind === "covert") inc.reward = { kind: "intel", n: 3 };
     if (l.kind === "hostile") inc.hostileLead = true;

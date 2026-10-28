@@ -27,9 +27,10 @@ const close = async p => { while (await p.$('#noticeOk')) await p.click('#notice
     keep.x = 1; keep.y = 1; keep.hp = keep.maxHp = 99; S.activePods = [];
     road.turn = S.turn + 1; S.setup.reinforce = 0;
     await A.endTurn();
-    return S.units.filter(u => u.side === 'mtf' && !u.guard).map(u => [u.x, u.y]);
+    return { at: S.units.filter(u => u.side === 'mtf' && !u.guard).map(u => [u.x, u.y]), gate: window.__site19.grid.def.roadSpawns };
   });
-  const atGate = arrived.length === 4 && arrived.every(([x, y]) => y >= 14 && x >= 7 && x <= 13);
+  // within 2 tiles of the gate (a mirrored map has it on the other side)
+  const atGate = arrived.at.length === 4 && arrived.at.every(([x, y]) => arrived.gate.some(([gx, gy]) => Math.max(Math.abs(gx - x), Math.abs(gy - y)) <= 2));
   console.log(atGate ? 'PASS' : 'FAIL', 'off-duty squad drives in at the motor pool gate ::', JSON.stringify(arrived));
   const ok = out.full.reinforce.filter(r => !r.guard).every(r => !r.road) && out.heightened.reinforce.some(r => r.road) && out.heightened.reinforce.some(r => !r.road && !r.guard) && out.normal.reinforce.filter(r => !r.guard).every(r => r.road);
   console.log(ok ? 'PASS' : 'FAIL', 'arrivals follow the alert level ::', JSON.stringify(out, null, 1));

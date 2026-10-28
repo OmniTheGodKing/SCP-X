@@ -168,6 +168,8 @@ export interface Unit {
   voice?: boolean;
   host?: boolean;
   wasSide?: Side;
+  /** Phase 4C: the convoy's truck (an object on the map, moved by the rules). */
+  vehicle?: boolean;
 }
 
 export interface LogEntry { t: number; text: string; kind: string; }
@@ -223,7 +225,7 @@ export interface MissionSetup {
   kind: MissionKind;
   /** Which anomaly a breach or manhunt is about (SCP-173 if not set). */
   scp?: ScpId;
-  map: "wingC" | "town" | "farm" | "port" | "dblock" | "gate";
+  map: "wingC" | "town" | "farm" | "port" | "dblock" | "gate" | "rail" | "church" | "lab" | "ship";
   /** Riots: how many D-Class are rioting. */
   rioters?: number;
   amnestics: number;
@@ -271,6 +273,11 @@ export interface MissionSetup {
   commander?: string;
   reinforce?: number;
   gru?: boolean;
+  /** Phase 4C: a Global Occult Coalition strike team instead of the Insurgency; an escort that is a moving convoy;
+   *  another site gone quiet (what happened there is found out on the ground). */
+  goc?: boolean;
+  convoy?: boolean;
+  quiet?: boolean;
   year: number;
 }
 
@@ -315,6 +322,8 @@ export interface MissionResult {
   powerRestored?: boolean; hazardDealt?: boolean; scans?: Record<string, number>; specialistsLost?: string[];
   charms?: number;
   gru?: boolean;
+  /** Phase 4C: the anomaly was destroyed by the GOC or carried off by GRU-P: gone for good. */
+  lostTo?: "goc" | "gru";
   /** Anomalies photographed with the field camera, and whether a restraint kit came along. */
   photos: ScpId[];
   restraints: boolean;
@@ -356,6 +365,14 @@ export interface MissionState {
   downUntil?: number;
   noSpecimen?: boolean;
   told?: string[];
+  /** Phase 4C: two GOC operatives have been at the anomaly since this turn; GRU-P carriers holding it; the convoy truck
+   *  has left the far end; the turn a hidden hazard was first seen. */
+  gocTurn?: number;
+  gruTurn?: number;
+  trophy?: string[];
+  lostTo?: "goc" | "gru";
+  convoyOut?: boolean;
+  revealed?: number;
   /** What the hit being dealt right now came from (a weapon type, "explosive" or "fire"), for SCP-682's adaptation. */
   hitKind?: string;
   sunkUntil: number;
@@ -423,7 +440,10 @@ export interface MissionState {
   flares: { x: number; y: number; until: number }[];
   throwing: Carried | null;
   /** Squad members still on their way, and the turn they arrive. */
-  reinforce: { turn: number; members: SquadMember[]; road?: boolean }[];
+  reinforce: { turn: number; members: SquadMember[]; road?: boolean; station?: boolean }[];
+  /** Phase 4C base defence: the Insurgency has forced the lift, and when one of them first held containment control. */
+  liftOpen?: boolean;
+  controlTurn?: number;
   /** SCP-173's urge to leave: it grows each turn it roams unseen without a kill. */
   escapeDrive: number;
   lockedUntil: number;

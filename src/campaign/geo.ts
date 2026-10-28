@@ -91,7 +91,8 @@ export function briefing(c: Campaign, inc: Incident) {
   else if (inc.first) unknown.push("Anomaly: unidentified. Witnesses describe something new; investigating would identify it.");
   if (inc.witnesses) known.push(`${inc.witnesses} witness${inc.witnesses === 1 ? "" : "es"} to dose.`);
   if (inc.kind === "rescue") estimated.push(`${inc.survivors ?? 2} or so of ${inc.team} may still be alive, hiding.`);
-  if (inc.kind === "emergency") { estimated.push(`${inc.survivors ?? 2} researchers trapped, records at risk, the power out.`); unknown.push(`Cause: ${inc.causeText ?? "unknown"}, according to the first report.${inc.hazard === "scp" ? ` ${scpName(inc.scpId)}, held there since Site-19 handed it over, is loose.` : " What's loose inside isn't clear."}`); }
+  if (inc.kind === "emergency" && inc.quiet) { unknown.push("Nobody knows what happened there: the site went silent. Expect anything: a loose anomaly, the Insurgency, or something escaped."); }
+  else if (inc.kind === "emergency") { estimated.push(`${inc.survivors ?? 2} researchers trapped, records at risk, the power out.`); unknown.push(`Cause: ${inc.causeText ?? "unknown"}, according to the first report.${inc.hazard === "scp" ? ` ${scpName(inc.scpId)}, held there since Site-19 handed it over, is loose.` : " What's loose inside isn't clear."}`); }
   if (inc.civilians) (inc.recon ? known : estimated).push(`${inc.recon ? "" : "About "}${inc.civilians} civilian${inc.civilians === 1 ? "" : "s"} in the area.`);
   if (inc.kind !== "breach" && inc.kind !== "riot" && inc.kind !== "raid" && inc.kind !== "escort") known.push(`Weather and light: ${missionWeather(c, inc) === "clear" ? "clear" : WEATHER[missionWeather(c, inc)].name.toLowerCase()}${nightAt(c, inc) ? ", dark" : ""} right now.`);
   const bonus = MISSION_BONUS[inc.kind] ?? 0;

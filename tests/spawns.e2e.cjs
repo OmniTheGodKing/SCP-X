@@ -7,7 +7,7 @@ const dbg = async (p, k) => { await p.evaluate(() => document.activeElement?.blu
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1300, height: 900 } });
   const errs = []; p.on('pageerror', e => errs.push(e.message));
   const rows = [];
-  for (const map of ['wingC', 'town', 'farm', 'port', 'dblock', 'gate']) for (let run = 0; run < 3; run++) {
+  for (const map of ['wingC', 'town', 'farm', 'port', 'dblock', 'gate', 'rail', 'church', 'lab', 'ship']) for (let run = 0; run < 3; run++) {
     await p.goto('file:///home/user/scp-x/dist/index.html'); await p.evaluate(() => localStorage.clear()); await p.reload();
     await p.evaluate(() => { const c = window.__site19.campaign; c.tutorial = false; c.day = 400; });
     await dbg(p, 'strike'); await p.click('[data-tab="command"]');
@@ -15,6 +15,7 @@ const dbg = async (p, k) => { await p.evaluate(() => document.activeElement?.blu
     await p.click(`[data-plan="${id}"]`);
     await p.click('#launchBtn'); await p.waitForTimeout(300);
     if (await p.evaluate(() => !!window.__site19.campaign.outbound)) { await dbg(p, 'land'); await p.waitForTimeout(300); }
+    await (await p.$('#cv')).screenshot({ path: '/tmp/claude-0/-home-user-scp-x/54b8bb60-76e9-5ac7-87cb-a04ccc4cc055/scratchpad/map-' + map + '.png' });
     rows.push(await p.evaluate(m => {
       const A = window.__site19, S = A.mission, G = A.grid;
       const team = S.units.filter(u => u.side === 'mtf' && u.alive), foes = S.units.filter(u => u.side === 'raider' && u.alive);

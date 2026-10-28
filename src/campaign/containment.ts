@@ -1,3 +1,4 @@
+import { fieldMap } from "../data/maps";
 // Anomalies held at Site-19: daily breach risk, cell cleaning, breaches, and escapes.
 import { earn, spend } from "./ledger";
 import { diffOf } from "./difficulty";
@@ -158,8 +159,9 @@ export function resurface(c: Campaign, s: ScpRecord, at?: RegionId) {
     appeared: c.day,
     expires: c.day + travelDays(c, region) + RECOVERY_WINDOW,
     insurgents: Math.min(4, rand(0, 2) + Math.floor((c.day - 1) / 90)),
-    region, map: Math.random() < 0.5 ? "town" : "farm", civilians: rand(3, 4),
+    region, map: fieldMap("recovery"), civilians: rand(3, 4),
   };
+  gocMaybe(c, inc);
   c.nextIncident++;
   c.incidents.push(inc);
   s.resurfaceDay = undefined;
@@ -415,11 +417,12 @@ export function firstSighting(c: Campaign, id: ScpId) {
     id: "inc" + c.nextIncident, kind: "recovery", scpId: id, first: true,
     title: `Incident ${String(c.nextIncident).padStart(3, "0")}: Anomalous sighting near ${where}`,
     appeared: c.day, expires: c.day + travelDays(c, region) + 4,
-    insurgents: rand(0, 2), region, map: Math.random() < 0.5 ? "town" : "farm", civilians: rand(3, 4),
+    insurgents: rand(0, 2), region, map: fieldMap("recovery"), civilians: rand(3, 4),
     // in Europe and East Asia the Soviets' anomalous unit may already be on the ground
     gru: (region === "europe" || region === "east_asia") && Math.random() < 0.5,
   };
   if (inc.gru) inc.insurgents = rand(2, 3);
+  gocMaybe(c, inc);
   c.nextIncident++;
   c.incidents.push(inc);
   log(c, `Reports from ${where}: ${d.sighting}. Something new. Capture it within ${inc.expires - c.day} days.${inc.gru ? " GRU Division \"P\" is in the area too." : ""}`, "bad", "command");
@@ -448,6 +451,25 @@ function firstContact(c: Campaign, inc: Incident, caught: boolean) {
     c.scps.push({ id, name: d.name, title: d.title, cls: d.cls, status: "loose", wingId: "", maintenance: 0, lastCleaned: c.day, resurfaceDay: c.day + rand(30, 90) });
     log(c, `${d.name} slipped away. It will turn up again.`, "bad");
   }
+}
+
+/** Phase 4C: from 1953 a sighting has a 1 in 5 chance that the Global Occult Coalition is there for it instead (not for
+ *  SCP-939's pack, which has nothing for them to blow up in one place). */
+function gocMaybe(c: Campaign, inc: Incident) {
+  if (dateOf(c.day).getUTCFullYear() < 1953 || inc.scpId === "939" || Math.random() >= 0.2) return;
+  inc.goc = true; inc.gru = false; inc.insurgents = rand(3, 4);
+  inc.title = `${inc.title} (GOC present)`;
+}
+
+/** Phase 4C: destroyed by the GOC or carried off by GRU-P. It never comes back, and the Council remembers. */
+export function loseForGood(c: Campaign, inc: Incident, to: "goc" | "gru") {
+  const id = inc.scpId as ScpId, name = scpName(id);
+  c.scps = c.scps.filter(s => s.id !== id);
+  delete c.sightings[id];
+  (c.lostScps ??= []).push(id);
+  addStanding(c, -5, `${name} lost to ${to === "goc" ? "the GOC" : "GRU-P"}`);
+  chronicle(c, "anomaly", to === "goc" ? `${name} was destroyed by a Global Occult Coalition strike team before Epsilon-11 could take it.` : `${name} was carried off by GRU Division "P". It is in Soviet hands now.`);
+  return to === "goc" ? `The GOC destroyed ${name}. There is nothing left to contain (−5 standing).` : `GRU-P got away with ${name}. It's beyond the Foundation's reach now (−5 standing).`;
 }
 
 /** Debug: capture an anomaly as if a first-contact mission had been won. */

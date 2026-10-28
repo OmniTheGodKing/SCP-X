@@ -2,7 +2,7 @@
 // Each one is the mission's anomaly (S.scp); S.statue is the anomaly itself, except for SCP-939, whose instances are
 // hostile units of their own. See docs/ROADMAP.md, "4B as specified", for the rules this follows.
 import { DIRS, L, TS, area, cheb, doorShut, inContainer, passable, tileAt, FULL, HALF, PART, WINDOW, type Pt } from "../core/grid";
-import { blastStructure } from "../core/grid";
+import { blastStructure, linkFrom } from "../core/grid";
 import { damage, kill } from "./combat";
 import { emitNoise, facingTo } from "./noise";
 import { S, banner, canSee, computeVis, full, fx, highlight, hooks, humans, isPanicked, isTeam, lit, log, loseSanity, rand, seen, sleep, team } from "./state";
@@ -39,6 +39,8 @@ function pathTo(x: number, y: number, goal: (x: number, y: number) => boolean, w
       if (dx && dy && (!walkable(cx + dx, cy) || !walkable(cx, cy + dy))) continue;
       prev[ni] = i; q.push(ni);
     }
+    const li = linkFrom(i);
+    if (li !== undefined && prev[li] < 0 && walkable(li % L.W, (li / L.W) | 0)) { prev[li] = i; q.push(li); }
   }
   return null;
 }

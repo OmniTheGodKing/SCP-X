@@ -15,6 +15,7 @@ import { dropCarried } from "./abilities";
 import { ignite } from "./fire";
 import { shotAt106 } from "./scp106";
 import { hit682, hostFalls } from "./scp4b";
+import { dropTrophy } from "./rivals";
 
 export function coverAgainst(tx: number, ty: number, sx: number, sy: number) {
   const vx = sx - tx, vy = sy - ty, len = Math.hypot(vx, vy) || 1;
@@ -199,6 +200,7 @@ export const BLEED_TURNS = 3;
 
 export function damage(u: Unit, dmg: number, by?: Unit) {
   if (dmg <= 0) return;
+  if (S.trophy?.includes(u.id)) dropTrophy("A carrier is hit.");
   if (S.enemyTurn && S.phase !== "player" && isTeam(u)) S.enemyTurn.hurt[u.call || u.name] = (S.enemyTurn.hurt[u.call || u.name] ?? 0) + dmg;
   // SCP-049 can't be hurt, only knocked back a step in its plans
   if (u.side === "anomaly") {

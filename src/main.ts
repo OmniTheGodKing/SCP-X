@@ -21,6 +21,7 @@ import { canSee, computeVis } from "./game/state";
 import { emitNoise, settleFacing } from "./game/noise";
 import { endTurn, reachFor } from "./game/turn";
 import * as scp4b from "./game/scp4b";
+import { generateTown } from "./data/towngen";
 import { mountMission } from "./ui/missionView";
 import { esc } from "./ui/util";
 import { mountDebug } from "./ui/debug";
@@ -134,6 +135,8 @@ function showHub() {
   fire, endTurn,
   // Phase 4B: the new anomalies' rules, for the acceptance tests
   scp4b,
+  // Phase 4C
+  generateTown,
 };
 
 mountDebug({ campaign: () => campaign, screen: () => screen, refresh: () => { saveCampaign(campaign); if (screen === "hub") showHub(); } });
