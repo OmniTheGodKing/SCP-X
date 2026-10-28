@@ -426,12 +426,16 @@ export function crisis(c: Campaign) {
   log(c, `Several reports at once: ${made.map(i => `${i.title.split(": ")[1]} (${rewardText(i.reward!)})`).join("; ")}. Epsilon-11 can only answer one of them. The rest will go unanswered.`, "bad", "command");
 }
 /** Epsilon-11 deployed to one incident in a group: the others are lost. */
+/** A second incident from the same group can only be answered hands-off. */
+export const secondInGroup = (c: Campaign, inc: Incident) => !!inc.group && (c.groupAnswers?.[inc.group] ?? 0) >= 1 && !inc.answered;
 export function forfeitGroup(c: Campaign, chosen: Incident) {
   if (!chosen.group) return;
-  // with Eta-10 formed, two of the group can be answered: the rest go only once both task forces are committed
+  // with Eta-10 formed, two of the group can be answered, one of them by a hands-off team; the rest go only then
+  if (chosen.answered) return;
   chosen.answered = true;
-  const answered = c.incidents.filter(i => i.group === chosen.group && i.answered).length;
-  if (answered < (c.tf.eta10 ? 2 : 1)) { log(c, `${chosen.title.split(": ")[1]} is answered. One more of the incidents that came in with it can be: Site-19 has two task forces.`, "key"); return; }
+  // counted on the campaign, since an answered incident leaves the list once its mission is over
+  const answered = (c.groupAnswers ??= {})[chosen.group] = (c.groupAnswers[chosen.group] ?? 0) + 1;
+  if (answered < (c.tf.eta10 ? 2 : 1)) { log(c, `${chosen.title.split(": ")[1]} is answered. One more of the incidents that came in with it can be answered by a team sent without you (Eta-10 gives Site-19 a second task force).`, "key"); return; }
   const rest = c.incidents.filter(i => i.group === chosen.group && i !== chosen && !i.dispatch && !i.answered);
   for (const i of rest) i.expires = Math.min(i.expires, c.day - 1);
   for (const i of c.incidents.filter(x => x.group === chosen.group)) i.group = undefined;

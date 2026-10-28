@@ -6,19 +6,20 @@ import { BOND_NAMES, FATIGUE, bondsOf, injured, tiredness } from "../campaign/co
 import { STAFF_EVENTS, answerStaff } from "../campaign/staff";
 import { HIST_CATS, type HistCat } from "../campaign/history";
 import { FIELDS, FIELD_BONUS, TRADES, syncStaff, type StaffKind } from "../campaign/people";
-import { AGENT, COOP, ETA10, NU7, SPECIALIST, TF_NAMES, agentsFree, attachNu7, borrow, canAttachNu7, canBorrow, canBringAmnestics, canBringResearcher, canCallNu7, canFormEta10, canHireAgent, canSellWeapons, formEta10, hireAgent, sellWeapons, siteOf, tfOf, type TaskForce } from "../campaign/taskforces";
+import { AGENT, COOP, ETA10, NU7, SPECIALIST, TF_DESC, TF_NAMES, agentsFree, attachNu7, borrow, canAttachNu7, canBorrow, canBringAmnestics, canBringResearcher, canCallNu7, canFormEta10, canHireAgent, canSellWeapons, formEta10, hireAgent, sellWeapons, siteOf, tfOf, type TaskForce } from "../campaign/taskforces";
 import { councilSeal, dossierPhoto, gearArt, iconBody, icon, incidentScene, insurgencyMark, siteSeal } from "./icons";
 import { ART_DEFS, roomSvg, surfaceSvg } from "./art";
 import { CAT_NAMES, INCOME_CATS, SPEND_CATS, monthIndex } from "../campaign/ledger";
 import { LEADS, canLeadAction, leadAction, leadPrice, offerText, type Lead, type LeadAction } from "../campaign/leads";
-import { CONTRACTS, acceptContract, canAcceptContract, contractOperative, whoText } from "../campaign/contracts";
+import { AUTO_KINDS, canDispatch, dispatchOdds, dispatchTeam } from "../campaign/autoteam";
+import { CONTRACTS, NEEDS, acceptContract, canAcceptContract, contractPool, whoText } from "../campaign/contracts";
 import { playMusic, soundControl, transition, ui, wireSound } from "./audio";
 import { DISRUPT_INTEL, INQUIRY, PLANS, goalText, whenText, REVEAL_INTEL, THREAT_STEPS, canDisrupt, canInvestigateBreach, canReveal, disrupt, investigateBreach, reveal } from "../campaign/chaos";
 import { parseCampaign } from "../campaign/save";
 import type { Report } from "../campaign/reports";
 import { WEATHER, type Weather } from "../data/weather";
 import { MIN_RANGE } from "../game/perks";
-import { AUDIT_BELOW, PARTNERS, PAY_FOR, REQUESTS, answerOffer, canAcceptOffer, canRequest, canSendAway, councilGrant, grantParts, directiveProgress, directiveText, makeRequest, rewardText, sendAway, tierOf, type RequestId } from "../campaign/council";
+import { AUDIT_BELOW, PARTNERS, PAY_FOR, REQUESTS, answerOffer, canAcceptOffer, canRequest, canSendAway, councilGrant, grantParts, secondInGroup, directiveProgress, directiveText, makeRequest, rewardText, sendAway, tierOf, type RequestId } from "../campaign/council";
 import { REFINE_EVERY, canGivePill, canRefine, givePill, pillsLeft, refine, refineRecipes } from "../campaign/objects";
 import { PROCEDURES, PROCEDURE_610 } from "../data/procedures";
 import { reportOf, TERRITORY, TOWN_POS, localHour, missionWeather, weatherAt, weatherLine, nightAt, nightPolygon, AMNESTIC_TEAM, BURY, FACILITIES_WORLD, FIELD_OPS, INVESTIGATE, buryCost, buryStory, canBury, canSendTeam, incidentName, sendAmnesticsTeam, briefing, canFieldOp, canInvestigate, groupOf, incidentPlace, incidentState, investigate, startFieldOp, type FieldOpKind, type MarkerGroup } from "../campaign/geo";
@@ -190,7 +191,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
 
   const ready = () => c.roster.filter(o => deployable(c, o));
   // an ambushed convoy is defended by whoever made the capture, wounded or not
-  const readyFor = (inc: Incident) => inc.kind === "escort" && inc.squad ? c.roster.filter(o => o.alive && inc.squad!.includes(o.id)) : c.tf.eta10 ? ready().filter(o => tfOf(o) === tfPick) : ready();
+  const readyFor = (inc: Incident) => inc.kind === "escort" && inc.squad ? c.roster.filter(o => o.alive && inc.squad!.includes(o.id)) : ready();
   const watchPool = () => guardsReady(c);
   const scp173 = () => c.scps.find(s => s.id === "173")!;
 
@@ -412,7 +413,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
         return `<div class="row"><button class="act" type="button" data-request="${id}" ${w ? `disabled title="${esc(w)}"` : ""}>${esc(q.name)}${q.cost ? ` · −${q.cost} standing` : ""}</button><span class="muted">${esc(w ? `${q.desc} ${w}` : q.desc)}</span></div>`; }).join("") || `<p class="muted">Raise standing to ${REQUESTS.funding.min} to start asking the Council for help.</p>`}
       <div class="label" style="margin-top:10px">Task forces</div>
       ${(() => { const ew = canFormEta10(c), nw = canAttachNu7(c);
-        return `${c.tf.eta10 ? `<p class="muted">MTF Eta-10 "See No Evil": ${c.roster.filter(o => o.alive && tfOf(o) === "eta10").length} operatives assigned (Personnel tab).</p>` : `<div class="row"><button class="act" type="button" id="eta10Btn" ${ew ? `disabled title="${esc(ew)}"` : ""}>Form MTF Eta-10 "See No Evil" · $${ETA10.cost}k</button><span class="muted">${esc(ew ?? "A second task force with video goggles: answer two incidents at once.")}</span></div>`}
+        return `${c.tf.eta10 ? `<p class="muted">MTF Eta-10 "See No Evil": ${c.roster.filter(o => o.alive && tfOf(o) === "eta10").length} operatives on its roster (Personnel tab). Hire into it from the recruit pool.</p>` : `<div class="row"><button class="act" type="button" id="eta10Btn" ${ew ? `disabled title="${esc(ew)}"` : ""}>Form MTF Eta-10 "See No Evil" · $${ETA10.cost}k</button><span class="muted">${esc(ew ?? `A second task force with its own roster. ${TF_DESC.eta10}`)}</span></div>`}
         ${c.tf.nu7 ? `<p class="muted">MTF Nu-7 "Hammer Down" is on call for raids and Keter-class breaches ($${NU7.call}k a call, from the deploy panel).</p>` : `<div class="row"><button class="act" type="button" id="nu7Btn" ${nw ? `disabled title="${esc(nw)}"` : ""}>Put MTF Nu-7 "Hammer Down" on call · $${NU7.cost}k</button><span class="muted">${esc(nw ?? "Heavy troopers who join the fight against raids and Keter-class breaches.")}</span></div>`}`; })()}
     </div>`;
   }
@@ -484,13 +485,17 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   function contractsCard() {
     const k = c.contracts;
     if (!k || (!k.offers.length && !k.active.length)) return "";
-    const op = contractOperative(c);
     return `<div class="card">
       <div class="label">${icon("council", 13)}Council contracts · paid work while the squad recovers</div>
       ${k.active.map(x => `<p class="ok">${esc(CONTRACTS[x.kind].name)} for ${esc(x.client)}: ${esc(whoText(c, x))} back ${dateText(x.due!)}, $${x.pay}k on return.</p>`).join("")}
-      ${k.offers.map(x => { const d = CONTRACTS[x.kind], w = canAcceptContract(c, x), sends = (x.kind === "cadre" || x.kind === "courier") && op ? ` Sends ${op.call} ${op.name}.` : "";
+      ${k.offers.map(x => { const d = CONTRACTS[x.kind], w = canAcceptContract(c, x), need = NEEDS[x.kind], pool = contractPool(c, x.kind);
+        // pick exactly who goes: a list for one person, tick boxes for two (the first ones are suggested)
+        const picker = w ? "" : need.n === 1
+          ? `<label class="specs">Send <select data-cpick="${x.id}">${pool.map(([id, name]) => `<option value="${id}">${esc(name)}</option>`).join("")}</select></label>`
+          : `<div class="cpick"><span class="specs">Send ${need.n}:</span>${pool.map(([id, name], i) => `<label class="armorpick"><input type="checkbox" data-cpick="${x.id}" value="${id}" ${i < need.n ? "checked" : ""}> ${esc(name)}</label>`).join("")}</div>`;
         return `<div class="facpanel"><div class="ptop"><b>${esc(d.name)}</b> <span class="muted">for ${esc(x.client)} · offer open until ${dateText(x.until)}</span></div>
-          <p class="muted">${esc(d.desc)} Needs ${esc(d.need)} for ${plural(d.days, "day")}.${esc(sends)}</p>
+          <p class="muted">${esc(d.desc)} Needs ${esc(d.need)} for ${plural(d.days, "day")}.</p>
+          ${picker}
           <div class="row"><button class="act" type="button" data-contract="${x.id}" ${w ? `disabled title="${esc(w)}"` : ""}>Accept · +$${x.pay}k on return</button>${w ? `<span class="muted">${esc(w)}</span>` : ""}</div></div>`; }).join("")}
     </div>`;
   }
@@ -603,12 +608,11 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
         <button class="act" type="button" id="intelBtn" ${canWeaken(c, inc) ? `disabled title="${esc(canWeaken(c, inc)!)}"` : ""}>Spend 1 Intel: intercept one</button></div>` : ""}
       ${inc.kind === "raid" ? (() => { const g = guardsReady(c).slice(0, 8); return `<p>Site Security: <b>${g.length}</b> ${g.length === 1 ? "guard holds" : "guards hold"} the compound${g.length ? ` (${g.map(x => esc(x.name)).join(", ")})` : ""}${has(c, "perimeter_alarms") ? ", already on overwatch" : ""}. Insurgents: about <b>${inc.insurgents}</b>. Operatives you pick come up the lift on turn <b>${raidArrival(c)}</b>.</p>`; })() : ""}
       ${inc.kind === "riot" ? (() => { const g = guardsReady(c).slice(0, 8); return `<p>Site Security: <b>${g.length}</b> ${g.length === 1 ? "guard answers" : "guards answer"}${g.length ? ` (${g.map(x => esc(x.name)).join(", ")})` : ". Nobody is fit to respond"}. D-Class left: <b>${c.dclass}</b>.</p>`; })() : `
-      ${c.tf.eta10 && inc.kind !== "escort" ? `<div class="row">${(["e11", "eta10"] as TaskForce[]).map(t => `<button class="act ${tfPick === t ? "on" : ""}" type="button" data-tf="${t}" aria-pressed="${tfPick === t}">Send ${esc(TF_NAMES[t])}</button>`).join("")}</div>
-        <p class="muted">${tfPick === "eta10" ? "Eta-10 wear video goggles: staring, they blink half as often and lose half the sanity to what they see, at −10 aim." : "Epsilon-11, the site's main task force."}</p>` : ""}
+      ${c.tf.eta10 && inc.kind !== "escort" ? `<p class="muted">The squad can draw on both task forces. Epsilon-11: ${esc(TF_DESC.e11)} Eta-10: ${esc(TF_DESC.eta10)}</p>` : ""}
       <p class="muted">Pick up to ${squadSize(c)} operatives. Only fully healed operatives can deploy; sanity carries over, so watch it.${inc.kind === "breach" ? " You can also send nobody and play it with the guards alone." : ""}</p>
       <div class="pick">${ops.length ? ops.map(o => `<label class="pickop ${chosen.has(o.id) ? "on" : ""}">
         <input type="checkbox" id="pick-${o.id}" data-pick="${o.id}" ${chosen.has(o.id) ? "checked" : ""} ${!chosen.has(o.id) && chosen.size >= squadSize(c) ? "disabled" : ""}>
-        <span><b>${esc(o.call)} ${esc(fieldName(o))}</b> · ${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""} · XP ${o.xp} · SAN ${o.san}/${maxSanOf(o)} · fatigue ${o.fatigue ?? 0}${tiredness(o) === "tired" ? ` <span class="warn">(tired: −5 aim, −10 sanity)</span>` : ""}${bondsOf(o).filter(b => chosen.has(b.id)).map(b => ` · <span class="ok">${BOND_NAMES[b.level].toLowerCase()} with ${esc(c.roster.find(x => x.id === b.id)?.name.split(" ").pop() ?? "")}</span>`).join("")}</span></label>`).join("") : `<p class="muted">Nobody is fit to deploy. Wait for the wounded to heal or recruit.</p>`}</div>
+        <span>${c.tf.eta10 ? `<span class="flag ${tfOf(o) === "eta10" ? "stare" : ""}">${tfOf(o) === "eta10" ? "Eta-10" : "Epsilon-11"}</span> ` : ""}<b>${esc(o.call)} ${esc(fieldName(o))}</b> · ${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""} · XP ${o.xp} · SAN ${o.san}/${maxSanOf(o)} · fatigue ${o.fatigue ?? 0}${tiredness(o) === "tired" ? ` <span class="warn">(tired: −5 aim, −10 sanity)</span>` : ""}${bondsOf(o).filter(b => chosen.has(b.id)).map(b => ` · <span class="ok">${BOND_NAMES[b.level].toLowerCase()} with ${esc(c.roster.find(x => x.id === b.id)?.name.split(" ").pop() ?? "")}</span>`).join("")}</span></label>`).join("") : `<p class="muted">Nobody is fit to deploy. Wait for the wounded to heal or recruit.</p>`}</div>
       ${chosen.size ? `<div class="loadouts"><div class="specs">Loadout: weapon, one armor slot and two item slots each. Unused items come back; gear on anyone killed is lost.</div>
         ${[...chosen].map(id => loadoutRow(c.roster.find(o => o.id === id)!)).join("")}</div>` : ""}`}
       ${extraRow("researcher", "Bring a field researcher", canBringResearcher(c, inc), "Unarmed but for a pistol. Scans the anomaly for research (up to 3 times); if they die, Site-19 loses a researcher.")}
@@ -621,8 +625,13 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
         <button class="act" type="button" id="dPlus" ${dCount >= Math.min(c.dclass, MAX_DCLASS) ? "disabled" : ""}>+</button>
         <span class="muted">of ${c.dclass} in holding</span>
       </div>`}
+      ${(() => { if (!c.tf.eta10 || !AUTO_KINDS.includes(inc.kind)) return "";
+        const team = [...chosen].map(id => c.roster.find(o => o.id === id)!).filter(Boolean), w = canDispatch(c, inc, team);
+        return `<div class="row"><button class="act" type="button" id="autoBtn" ${w ? `disabled title="${esc(w)}"` : ""}>Send them without you${w ? "" : ` · ${Math.round(dispatchOdds(c, inc, team) * 100)}% chance`}</button>
+          <span class="muted">${esc(w ?? "Like leaving it to Site Security: no manual control, and they can fail. Wounds, deaths and rewards come back in the debrief.")}</span></div>`; })()}
+      ${secondInGroup(c, inc) ? `<p class="warn">Another incident from this group is already answered: this one can only go to a team sent without you.</p>` : ""}
       <div class="row">
-        <button class="act primary" type="button" id="launchBtn" ${chosen.size || ((inc.kind === "breach" || inc.kind === "riot" || inc.kind === "raid") && guardsReady(c).length) ? "" : "disabled"}>${inc.kind === "riot" ? `Send in ${plural(Math.min(8, guardsReady(c).length), "guard")}` : `Deploy ${plural(chosen.size, "operative")}`}${noD ? "" : ` and ${dCount} D-Class`}</button>
+        <button class="act primary" type="button" id="launchBtn" ${secondInGroup(c, inc) ? "disabled" : chosen.size || ((inc.kind === "breach" || inc.kind === "riot" || inc.kind === "raid") && guardsReady(c).length) ? "" : "disabled"}>${inc.kind === "riot" ? `Send in ${plural(Math.min(8, guardsReady(c).length), "guard")}` : `Deploy ${plural(chosen.size, "operative")}`}${noD ? "" : ` and ${dCount} D-Class`}</button>
         <button class="act" type="button" id="cancelPlan">Cancel</button>
       </div>
     </div>`;
@@ -1220,7 +1229,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
               <div class="specs">${SEX_NAMES[k.sex]} · ${esc(u.name)} · nationality ${esc(k.nationality ?? nationalityOf(k.home))} · age ${k.age}, from ${esc(k.home)} · starts as ${RANKS[k.quality ? 1 : trainersActive(c) ? 1 : 0]} · aim ${k.aimBase + (u.lean === "aim" ? 6 : 0)}</div>
               <p class="muted">${esc(k.story)} <b>${LEANS[u.lean]}</b> (${esc(u.name)}).${q.desc ? ` ${esc(q.desc)}` : ""}</p>
               ${k.trait ? `<p class="${TRAITS[k.trait].bad ? "warn" : ""}">Comes with <b>${TRAITS[k.trait].name}</b>: ${esc(TRAITS[k.trait].desc)}</p>` : ""}
-              <div class="row"><button class="act" type="button" data-hire="${k.id}" ${w ? `disabled title="${esc(w)}"` : ""}>Hire · $${candidateCost(k)}k</button>${w ? `<span class="muted">${esc(w)}</span>` : ""}</div></div>`; }).join("") : `<p class="muted">Nobody left in this month's pool. More arrive on the first.</p>`}`);
+              <div class="row">${(c.tf.eta10 ? (["e11", "eta10"] as TaskForce[]) : (["e11"] as TaskForce[])).map(t => `<button class="act" type="button" data-hire="${k.id}" data-hiretf="${t}" ${w ? `disabled title="${esc(w)}"` : ""}>Hire${c.tf.eta10 ? ` into ${t === "eta10" ? "Eta-10" : "Epsilon-11"}` : ""} · $${candidateCost(k)}k</button>`).join("")}${w ? `<span class="muted">${esc(w)}</span>` : ""}</div></div>`; }).join("") : `<p class="muted">Nobody left in this month's pool. More arrive on the first.</p>`}`);
       }
       case "security": {
         const here = postedAt(c, f.id), gw = canHireGuard(c, f.id), loose = unposted(c), room = here.length < GUARD.perStation;
@@ -1286,9 +1295,12 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     return `<div class="hubgrid">
     <section class="col">
       <div class="card">
-        <div class="label">Epsilon-11 roster</div>
-        <p class="muted">Select an operative to see their class, perks and traits.</p>
-        <div class="roster">${c.roster.filter(o => o.alive).map(opRow).join("")}</div>
+        <div class="label">Epsilon-11 "Nine-Tailed Fox" roster</div>
+        <p class="muted">Select an operative to see their class, perks and traits. ${esc(TF_DESC.e11)}</p>
+        <div class="roster">${c.roster.filter(o => o.alive && tfOf(o) === "e11").map(opRow).join("") || `<p class="muted">Nobody on this roster.</p>`}</div>
+        ${c.tf.eta10 ? `<div class="label" style="margin-top:14px">Eta-10 "See No Evil" roster</div>
+        <p class="muted">${esc(TF_DESC.eta10)}</p>
+        <div class="roster">${c.roster.filter(o => o.alive && tfOf(o) === "eta10").map(opRow).join("") || `<p class="muted">Nobody yet. Hire recruits into Eta-10 from the recruit pool.</p>`}</div>` : ""}
         <div class="row"><button class="act" type="button" data-gotocommand>Recruit at Command · ${plural((c.recruits ?? []).length, "candidate")} this month</button></div>
       </div>
     </section>
@@ -1382,7 +1394,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       </details>
       <p class="specs">Fatigue ${o.fatigue ?? 0}/100 (${tiredness(o)}; tired at ${FATIGUE.tired}, can't deploy at ${FATIGUE.exhausted}; −${FATIGUE.restPerDay} a day at Site-19${countOperational(c, "psych") ? `, −${FATIGUE.restPsych} more with psychological services` : ""})${o.injury && o.injury.until > c.day ? ` · <span class="warn">${esc(o.injury.name)} until ${dateText(o.injury.until)}</span>` : ""}</p>
       ${bondsOf(o).length || o.lostBonds?.length ? `<p class="specs">Bonds: ${bondsOf(o).map(b => { const m = c.roster.find(x => x.id === b.id); return m ? `${BOND_NAMES[b.level]} with <b>${esc(m.name)}</b>${m.alive ? "" : " (fallen)"} (${b.n} missions together)` : ""; }).filter(Boolean).join("; ")}${o.lostBonds?.length ? `${bondsOf(o).length ? "; " : ""}lost: ${o.lostBonds.map(esc).join(", ")}` : ""}</p>` : ""}
-      ${c.tf.eta10 ? `<div class="row"><span class="specs">Task force</span>${(["e11", "eta10"] as TaskForce[]).map(t => `<button class="act ${tfOf(o) === t ? "on" : ""}" type="button" data-assigntf="${t}" aria-pressed="${tfOf(o) === t}">${esc(TF_NAMES[t])}</button>`).join("")}</div>` : ""}
+      <p class="specs">Task force: <b>${esc(TF_NAMES[tfOf(o)])}</b> (for good, from hiring). ${esc(TF_DESC[tfOf(o)])}</p>
       <details class="archived"><summary>Rename</summary><div class="row">
         <label class="specs" for="renameName">Full name</label><input id="renameName" maxlength="40" value="${esc(o.name)}">
         <label class="specs" for="renameNick">Nickname</label><input id="renameNick" maxlength="16" value="${esc(o.nick ?? "")}" placeholder="${o.rank >= NICK_RANK ? "none" : "given at Corporal"}">
@@ -1460,7 +1472,11 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     root.querySelectorAll<HTMLElement>("[data-test]").forEach(b => b.onclick = () => change(() => startTest(c, scp173(), b.dataset.test as TestId, chosenWatchers())));
     root.querySelectorAll<HTMLElement>("[data-order]").forEach(b => b.onclick = () => change(() => order(c, b.dataset.order as ItemId)));
     root.querySelectorAll<HTMLElement>("[data-sellstore]").forEach(b => b.onclick = () => { const [k, id] = b.dataset.sellstore!.split(":"); change(() => sellStore(c, k as StoreKind, id)); });
-    root.querySelectorAll<HTMLElement>("[data-contract]").forEach(b => b.onclick = () => change(() => acceptContract(c, b.dataset.contract!)));
+    root.querySelectorAll<HTMLElement>("[data-contract]").forEach(b => b.onclick = () => { const id = b.dataset.contract!;
+      const pick = [...root.querySelectorAll<HTMLInputElement | HTMLSelectElement>(`[data-cpick="${id}"]`)].filter(e => e instanceof HTMLSelectElement || (e as HTMLInputElement).checked).map(e => e.value);
+      const x = c.contracts?.offers.find(o => o.id === id), why = x && canAcceptContract(c, x, pick);
+      if (why) { flashMsg = why; render(); return; }
+      change(() => acceptContract(c, id, pick)); });
     root.querySelectorAll<HTMLSelectElement>("[data-armor]").forEach(b => b.onchange = () => {
       const g = gearOf(b.dataset.armor!); g.armor = b.value as ItemId | "";
       if (g.armor !== "armor_heavy") g.items = g.items.map(i => (i && HEAVY.includes(i) ? "" : i));
@@ -1485,7 +1501,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       if (f) sel = { level: f.level, slot: f.slot };
       flashMsg = ""; tab = "site"; speed = 0; render();
     });
-    root.querySelectorAll<HTMLElement>("[data-hire]").forEach(b => b.onclick = () => { const k = c.recruits?.find(x => x.id === b.dataset.hire); if (k) change(() => hireCandidate(c, k)); });
+    root.querySelectorAll<HTMLElement>("[data-hire]").forEach(b => b.onclick = () => { const k = c.recruits?.find(x => x.id === b.dataset.hire); if (k) change(() => hireCandidate(c, k, b.dataset.hiretf === "eta10" ? "eta10" : "e11")); });
     root.querySelectorAll<HTMLElement>("[data-op]").forEach(b => b.onclick = () => { opSel = opSel === b.dataset.op ? null : b.dataset.op!; lookOpen = false; render(); });
     const opNow = () => c.roster.find(x => x.id === opSel)!;
     root.querySelectorAll<HTMLElement>("[data-class]").forEach(b => b.onclick = () => change(() => chooseClass(c, opNow(), b.dataset.class as ClassId)));
@@ -1529,7 +1545,6 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     on("agentBtn", () => change(() => hireAgent(c)));
     root.querySelectorAll<HTMLElement>("[data-sell]").forEach(b => b.onclick = () => change(() => sellWeapons(c, b.dataset.sell!)));
     root.querySelectorAll<HTMLElement>("[data-borrow]").forEach(b => b.onclick = () => change(() => borrow(c, b.dataset.site!, b.dataset.borrow as "engineers" | "guards")));
-    root.querySelectorAll<HTMLElement>("[data-assigntf]").forEach(b => b.onclick = () => { const o = c.roster.find(x => x.id === opSel); if (o) change(() => { o.tf = b.dataset.assigntf === "eta10" ? "eta10" : undefined; }); });
     root.querySelectorAll<HTMLElement>("[data-tf]").forEach(b => b.onclick = () => { tfPick = b.dataset.tf as TaskForce; chosen.clear(); render(); });
     root.querySelectorAll<HTMLInputElement>("[data-extra]").forEach(b => b.onchange = () => { extras[b.dataset.extra as keyof Extras] = b.checked; });
     root.querySelectorAll<HTMLElement>("[data-disrupt]").forEach(b => b.onclick = () => change(() => disrupt(c, b.dataset.disrupt!)));
@@ -1658,6 +1673,9 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     on("dMinus", () => { dCount--; render(); });
     on("dPlus", () => { dCount++; render(); });
     on("cancelPlan", () => { planning = null; render(); });
+    on("autoBtn", () => { const inc = c.incidents.find(i => i.id === planning); if (!inc) return;
+      const team = [...chosen].map(id => c.roster.find(o => o.id === id)!).filter(Boolean);
+      change(() => { dispatchTeam(c, inc, team); chosen.clear(); planning = null; }); });
     on("launchBtn", () => {
       const inc = c.incidents.find(i => i.id === planning);
       if (!inc || (!chosen.size && !((inc.kind === "breach" || inc.kind === "riot" || inc.kind === "raid") && guardsReady(c).length))) return;

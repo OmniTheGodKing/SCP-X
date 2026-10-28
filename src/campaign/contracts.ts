@@ -1,9 +1,9 @@
 // Council contracts (Phase 4E): paid, noncombat work other parts of the Foundation need done, offered two at a time.
 // Taking one sends Site-19's own people away for a while; they come back with the pay. It gives Site-19 something
 // useful to do while squads recover, without being a source of unlimited money.
-import { log, type Campaign, type Operative } from "./campaign";
+import { RANKS, log, type Campaign, type Operative } from "./campaign";
 import { earn } from "./ledger";
-import { bringBack, sendAway } from "./people";
+import { FIELDS, TRADES, bringBack, present, sendAway, syncStaff } from "./people";
 import { engineersFree } from "./base";
 import { researchersFree } from "./research";
 import { guardsReady } from "./security";
@@ -38,31 +38,48 @@ function offer(c: Campaign) {
   k.offers.push({ id: "k" + k.next++, kind, client: pick(CONTRACTS[kind].client), pay: pay(c, kind), until: c.day + CONTRACT.open });
 }
 
-export function canAcceptContract(c: Campaign, x: Contract): string | null {
-  switch (x.kind) {
-    case "engineers": return engineersFree(c) < 2 ? "Needs 2 free engineers." : null;
-    case "consult": return researchersFree(c) < 1 ? "Needs an unassigned researcher." : null;
-    case "security": return guardsReady(c).length < 2 ? "Needs 2 guards fit for duty." : null;
-    default: return contractOperative(c) ? null : "Needs a fit operative with nothing else to do.";
-  }
+/** How many people of what sort a contract takes. */
+export const NEEDS: Record<ContractKind, { kind: "engineer" | "researcher" | "guard" | "operative"; n: number }> = {
+  engineers: { kind: "engineer", n: 2 }, consult: { kind: "researcher", n: 1 }, security: { kind: "guard", n: 2 }, cadre: { kind: "operative", n: 1 }, courier: { kind: "operative", n: 1 },
+};
+/** Who could be sent on a contract of this kind: [id, label] pairs. */
+export function contractPool(c: Campaign, kind: ContractKind): [string, string][] {
+  const need = NEEDS[kind];
+  if (need.kind === "engineer" || need.kind === "researcher") { syncStaff(c); return present(c, need.kind).map(p => [p.id, `${p.name}${p.field ? ` (${FIELDS[p.field].name.toLowerCase()})` : p.trade ? ` (${TRADES[p.trade].name.toLowerCase()})` : ""}`]); }
+  if (need.kind === "guard") return guardsReady(c).map(g => [g.id, g.name]);
+  return fitOps(c).map(o => [o.id, `${o.call} ${o.name} (${RANKS[o.rank]})`]);
 }
-export function acceptContract(c: Campaign, id: string) {
+export function canAcceptContract(c: Campaign, x: Contract, pick?: string[]): string | null {
+  const need = NEEDS[x.kind];
+  if (x.kind === "engineers" && engineersFree(c) < 2) return "Needs 2 free engineers.";
+  if (x.kind === "consult" && researchersFree(c) < 1) return "Needs an unassigned researcher.";
+  const pool = contractPool(c, x.kind);
+  if (pool.length < need.n) return need.kind === "guard" ? "Needs 2 guards fit for duty." : need.kind === "operative" ? "Needs a fit operative with nothing else to do." : `Needs ${need.n} ${need.kind}${need.n > 1 ? "s" : ""}.`;
+  if (pick) {
+    const ids = new Set(pool.map(([id]) => id)), chosen = [...new Set(pick)].filter(id => ids.has(id));
+    if (chosen.length !== need.n) return `Choose ${need.n === 1 ? "who goes" : `${need.n} to send`}.`;
+  }
+  return null;
+}
+/** Take a contract, sending exactly the people the player chose (or the obvious ones if none were chosen). */
+export function acceptContract(c: Campaign, id: string, pick?: string[]) {
   const k = c.contracts; const x = k?.offers.find(o => o.id === id);
-  if (!k || !x || canAcceptContract(c, x)) return;
-  const d = CONTRACTS[x.kind];
+  if (!k || !x || canAcceptContract(c, x, pick)) return;
+  const d = CONTRACTS[x.kind], need = NEEDS[x.kind];
+  const ids = (pick && pick.length ? [...new Set(pick)] : contractPool(c, x.kind).map(([i]) => i)).slice(0, need.n);
   x.due = c.day + d.days; x.who = [];
-  if (x.kind === "engineers") { for (let i = 0; i < 2; i++) { const p = sendAway(c, "engineer"); if (p) x.who.push(p.name); } }
-  else if (x.kind === "consult") { const p = sendAway(c, "researcher"); if (p) x.who.push(p.name); }
-  else if (x.kind === "security") { for (const g of guardsReady(c).slice(0, 2)) { g.away = x.due; x.who.push(g.id); } }
-  else { const o = contractOperative(c)!; o.busy = { kind: "contract", daysLeft: d.days }; x.who.push(o.id); }
+  if (need.kind === "engineer" || need.kind === "researcher") { for (const pid of ids) { const p = sendAway(c, need.kind, pid); if (p) x.who.push(p.id); } }
+  else if (need.kind === "guard") { for (const g of c.guards.filter(g => ids.includes(g.id))) { g.away = x.due; x.who.push(g.id); } }
+  else { const o = c.roster.find(r => r.id === ids[0])!; o.busy = { kind: "contract", daysLeft: d.days }; x.who.push(o.id); }
   k.offers = k.offers.filter(o => o !== x); k.active.push(x);
   log(c, `${d.name} for ${x.client} accepted: ${whoText(c, x)} away for ${d.days} days, $${x.pay}k on their return.`, "key");
   offer(c);
 }
 export function whoText(c: Campaign, x: Contract) {
-  if (x.kind === "security") return x.who!.map(id => c.guards.find(g => g.id === id)?.name ?? "a guard").join(" and ");
-  if (x.kind === "cadre" || x.kind === "courier") { const o = c.roster.find(r => r.id === x.who![0]); return o ? `${o.call} ${o.name}` : "an operative"; }
-  return x.who!.join(" and ") || "staff";
+  const need = NEEDS[x.kind];
+  if (need.kind === "guard") return x.who!.map(id => c.guards.find(g => g.id === id)?.name ?? "a guard").join(" and ");
+  if (need.kind === "operative") { const o = c.roster.find(r => r.id === x.who![0]); return o ? `${o.call} ${o.name}` : "an operative"; }
+  return x.who!.map(id => (c.people ?? []).find(p => p.id === id)?.name ?? id).join(" and ") || "staff";
 }
 
 /** Every day: offers lapse and are replaced, finished contracts pay and their people come home. */
@@ -72,8 +89,8 @@ export function tickContracts(c: Campaign) {
   for (const x of k.active.filter(a => (a.due ?? 0) <= c.day)) {
     const d = CONTRACTS[x.kind];
     let note = "";
-    if (x.kind === "engineers") for (let i = 0; i < x.who!.length; i++) bringBack(c, "engineer");
-    else if (x.kind === "consult") bringBack(c, "researcher");
+    if (x.kind === "engineers") for (const pid of x.who!) bringBack(c, "engineer", pid);
+    else if (x.kind === "consult") for (const pid of x.who!) bringBack(c, "researcher", pid);
     else if (x.kind === "security") for (const g of c.guards) { if (x.who!.includes(g.id)) g.away = undefined; }
     else {
       const o = c.roster.find(r => r.id === x.who![0]);

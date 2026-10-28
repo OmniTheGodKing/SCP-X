@@ -5,7 +5,7 @@ import { tickLeads, type LeadsState } from "./leads";
 import { DIFFICULTIES, diffOf, type Difficulty, type NewCampaignOptions } from "./difficulty";
 import { FATIGUE, afterMission, bondsOf, restDay, tiredness } from "./condition";
 import { announceHire, hirePerson, losePeople, someone, syncStaff, type Lost, type Person } from "./people";
-import { GOGGLES, NU7, canBringAmnestics, canBringResearcher, canCallNu7, nu7Troopers, otherSiteOutcome, scanOutcome, SPECIALIST, tfOf } from "./taskforces";
+import { TF_BONUS, TF_PREFIX, GOGGLES, NU7, canBringAmnestics, canBringResearcher, canCallNu7, nu7Troopers, otherSiteOutcome, scanOutcome, SPECIALIST, tfOf } from "./taskforces";
 import { newTf, tickTf, type TaskForce, type TfState } from "./taskforces";
 import { pickNick, withNick } from "../data/nicknames";
 import { chronicle, type HistEntry } from "./history";
@@ -169,7 +169,7 @@ export interface Incident {
   /** An ambushed transfer convoy: the anomaly on the truck and where it was going. */
   transfer?: Transit;
   /** Cover-ups handled without Epsilon-11: an amnestics team on its way, or the front paid to bury the story. */
-  dispatch?: { how: "team" | "bury"; done: number; doses: number };
+  dispatch?: { how: "team" | "bury" | "squad"; done: number; doses: number; ops?: string[]; odds?: number };
 }
 
 export interface Prisoner { name: string; days: number; intel: number; }
@@ -236,6 +236,8 @@ export interface Campaign {
   contracts?: ContractState;
   /** Phase 4F: opportunities on the World Map. */
   leads?: LeadsState;
+  /** How many incidents of each group have been answered (one, or two with a hands-off team from Eta-10). */
+  groupAnswers?: Record<string, number>;
   /** The last monthly grant's parts, to explain how the next one differs. */
   lastGrant?: ReturnType<typeof grantParts> & { standingNow: number };
   exposure: number;
@@ -679,13 +681,16 @@ export function canHire(c: Campaign, k: Candidate): string | null {
   if (c.funds < candidateCost(k)) return `Needs $${candidateCost(k)}k.`;
   return null;
 }
-export function hireCandidate(c: Campaign, k: Candidate) {
+export function hireCandidate(c: Campaign, k: Candidate, tf: "e11" | "eta10" = "e11") {
   if (canHire(c, k)) return;
+  if (tf === "eta10" && !c.tf.eta10) tf = "e11";
   spend(c, candidateCost(k), "hiring", `Recruit: ${k.name}`);
   c.recruits = (c.recruits ?? []).filter(x => x !== k);
   const o = operativeFrom(c, k);
+  // the task force is for good; Eta-10 numbers its own callsigns
+  if (tf === "eta10") { o.tf = "eta10"; o.call = `${TF_PREFIX.eta10}-${String(c.roster.filter(x => x.tf === "eta10").length + 1).padStart(2, "0")}`; }
   c.roster.push(o);
-  chronicle(c, "personnel", `${o.call} ${o.name} joined Epsilon-11 from the ${UNITS[k.unit].name}.`, { op: o.id });
+  chronicle(c, "personnel", `${o.call} ${o.name} joined ${tf === "eta10" ? "Eta-10" : "Epsilon-11"} from the ${UNITS[k.unit].name}.`, { op: o.id });
   log(c, `${o.call} ${o.name}, from the ${UNITS[k.unit].name}, joins Epsilon-11.`, "good");
 }
 /** An operative made from a candidate: their unit, look, file, lean, quality and trait. */
@@ -738,7 +743,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     const uni = uniformOf(c), bonus = st.hp + uni.hp;
     return {
       opId: o.id, name: fieldName(o), call: o.call, hp: o.hp + bonus, maxHp: o.maxHp + bonus, san: Math.min(o.san, maxSanOf(o)),
-      rankShort: RANK_SHORT[o.rank], maxSan: maxSanOf(o), aim: aimOf(o) + (has(c, "marksmanship") ? 5 : 0), blinkFull: blinkFullOf(o), medals: [...(o.medals ?? [])],
+      rankShort: RANK_SHORT[o.rank], maxSan: maxSanOf(o), aim: aimOf(o) + (has(c, "marksmanship") ? 5 : 0) + (tfOf(o) === "e11" ? TF_BONUS.e11Aim : 0), blinkFull: blinkFullOf(o), medals: [...(o.medals ?? [])],
       armor: st.points + uni.points, hasArmor: !!kind || uni.points > 0, armorKind: kind || undefined, armorHp: st.hp + uni.hp, moveBonus: st.move + (o.fleet ? 1 : 0), items: items.map(id => ({ id, uses: ITEMS[id].uses ?? 1 })),
       cls: o.cls, perks: [...o.perks], traits: [...o.traits], gun: gunFor(c, o), goggles: tfOf(o) === "eta10", bonds: undefined as Record<string, number> | undefined,
     };
