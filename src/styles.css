@@ -521,3 +521,7 @@ ul.fin li.warn b { color: var(--alert); }
 ul.fin.entries .hday { margin-right: 8px; }
 .costtip { position: absolute; z-index: 60; pointer-events: none; font: 11px var(--font-mono); padding: 3px 7px; background: #0f1317; border: 1px solid var(--manila); color: var(--manila); }
 .costtip.neg { border-color: var(--alert); color: var(--alert); }
+/* Phase 4F: leads on the World Map */
+.worldmap .marker.lead > :not(.ring):not(svg) { fill: #5fb3a8; }
+.dot.lead { background: #5fb3a8; }
+.worldmap .marker.lead .mlabel { fill: #8fd0c6; }

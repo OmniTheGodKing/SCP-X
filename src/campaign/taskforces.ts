@@ -112,7 +112,7 @@ export function canCallNu7(c: Campaign, inc: Incident) {
 
 // ---------- field agents ----------
 export const AGENT = { cost: 50, max: 6 };
-export const agentsFree = (c: Campaign) => c.tf.agents - c.tf.hurt.length - (c.ops ?? []).length;
+export const agentsFree = (c: Campaign) => c.tf.agents - c.tf.hurt.length - (c.ops ?? []).length - (c.leads?.list ?? []).filter(l => l.working).length;
 export function canHireAgent(c: Campaign) { return c.tf.agents >= AGENT.max ? `Site-19 runs at most ${AGENT.max} agents.` : c.funds < AGENT.cost ? `Needs $${AGENT.cost}k.` : null; }
 export function hireAgent(c: Campaign) { if (canHireAgent(c)) return; spend(c, AGENT.cost, "hiring", "Field agent hired"); c.tf.agents++; log(c, "A field agent joins Site-19's covert staff.", "good"); }
 /** After covert work: the agent may come back hurt, or not at all. */

@@ -8,6 +8,7 @@ import { addExposure, locateCell, spawnCoverup, locateIntel } from "../campaign/
 import { newGuard, startRaid, type Alert } from "../campaign/security";
 import { inspect } from "../campaign/inspection";
 import { lostTeam, siteEmergency, siteOf } from "../campaign/taskforces";
+import { spawnLead, tickLeads, type LeadKind } from "../campaign/leads";
 import { addThreat, monthlyChaos, sabotage, tickChaos } from "../campaign/chaos";
 import { addStanding, crisis, issueDirectives, newOffer, receive } from "../campaign/council";
 import type { ScpId } from "../game/types";
@@ -73,6 +74,7 @@ export function mountDebug(host: DebugHost) {
       group("Research and building", btn("materials", "+5 of every material") + btn("offer", "Offer a breakthrough") + btn("research", "Finish current research") + btn("unlockall", "Unlock all research") + btn("build", "Finish construction and orders") + btn("genfail", "Generator fault") + btn("inspwarn", "O5 inspection in 14 days") + btn("inspnow", "O5 inspection now")),
       group("O5 Council", btn("st+20", "+20 standing") + btn("st-20", "−20 standing") + btn("orders", "New orders") + btn("xoffer", "Transfer offer") + btn("crisis", "Forced choice") + btn("contactall", "Contact every region") + btn("get500", "Receive SCP-500") + btn("get914", "Receive SCP-914") + btn("get005", "Receive SCP-005")),
       group("Chaos Insurgency", btn("th+20", "+20 agenda") + btn("th-20", "−20 agenda") + btn("ciops", "New operations") + btn("ciexec", "Carry out operations now") + btn("cicmd", "Commander now") + btn("cimole", "+1 mole") + btn("cisab", "Sabotage now")),
+      group("Leads", (["supply", "intel", "council", "covert", "discovery", "hostile"] as const).map(k => btn("lead-" + k, k)).join("") + btn("leadsdue", "Leads: results and deadlines now")),
       group("Task forces and sites", btn("eta10", "Form Eta-10 free") + btn("nu7", "Nu-7 on call free") + btn("lostteam", "Lost team") + btn("emerg", "Site emergency") + btn("emerg-scp", "Emergency (SCP-049 loose)") + btn("agents", "+2 agents") + btn("land", "Land the squad now")),
       group("Operatives and guards", btn("heal", "Heal everyone") + btn("sanity", "Restore sanity") + btn("unbusy", "Clear busy and training") + btn("rankup", "+1 rank to all operatives") + btn("guardvet", "Guards: 3 breaches survived")),
       group("Alert level", (["normal", "heightened", "full"] as Alert[]).map(a => btn("alert-" + a, a)).join("")),
@@ -171,7 +173,9 @@ export function mountDebug(host: DebugHost) {
       case "agents": c.tf.agents += 2; break;
       case "land": if (c.outbound) c.outbound.arrive = c.day + (c.hour ?? 0) / 24; break;
       case "th-20": addThreat(c, -20, "debug"); break;
+      case "lead-supply": case "lead-intel": case "lead-council": case "lead-covert": case "lead-discovery": case "lead-hostile": if (c.leads) c.leads.list = c.leads.list.filter(l => l.working); spawnLead(c, id.slice(5) as LeadKind); break;
       case "ciops": monthlyChaos(c); break;
+      case "leadsdue": for (const l of c.leads?.list ?? []) { if (l.working) l.working.done = c.day; else l.until = c.day - 1; } tickLeads(c); break;
       case "ciexec": for (const p of c.chaos.plans) p.due = c.day; tickChaos(c); break;
       case "cicmd": c.chaos.nextCommander = c.day; tickChaos(c); break;
       case "cimole": c.chaos.moles++; break;
