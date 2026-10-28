@@ -112,8 +112,13 @@ export function visFrac(ax: number, ay: number, bx: number, by: number) {
   return visCache[i] / 10;
 }
 
-/** Where someone standing at (x, y) can look from: their own tile, plus the open tile beside
- *  any wall or pillar they are standing next to (leaning out past its edge). */
+/** How far along a piece of cover someone can shift to look past its end, in tiles. */
+export const LEAN_REACH = 2;
+/** Where someone standing at (x, y) can look from: their own tile, plus, for each wall, crate or pillar they stand
+ *  against, the open tile just past each end of it (leaning or shuffling out round the edge), up to LEAN_REACH tiles
+ *  to the side. So a short piece of cover only hides a narrow wedge straight behind it. A long wall doesn't end within
+ *  reach, and a doorway or window more than a tile along isn't an end, so nobody peeks along a wall into the next room
+ *  (one right beside them they can lean into, as before). */
 export function viewSpots(x: number, y: number) {
   ensureCache();
   const k = y * L.W + x;
@@ -123,8 +128,13 @@ export function viewSpots(x: number, y: number) {
   for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     if (!opaque(x + dx, y + dy)) continue;
     for (const [px, py] of [[dy, dx], [-dy, -dx]]) {
-      const lx = x + px, ly = y + py;
-      if (passable(lx, ly) && !opaque(lx + dx, ly + dy) && !spots.some(s => s[0] === lx && s[1] === ly)) spots.push([lx, ly]);
+      for (let n = 1; n <= LEAN_REACH; n++) {
+        const lx = x + px * n, ly = y + py * n;
+        if (!passable(lx, ly)) break;
+        if (opaque(lx + dx, ly + dy)) continue;            // still alongside the cover
+        if ((n === 1 || !lineMember(lx + dx, ly + dy)) && !spots.some(s => s[0] === lx && s[1] === ly)) spots.push([lx, ly]);
+        break;
+      }
     }
   }
   leanCache.set(k, spots);

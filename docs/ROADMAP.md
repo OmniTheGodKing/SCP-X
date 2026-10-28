@@ -1273,8 +1273,8 @@ default); enemy turns have a Normal/Fast setting. Both settings sit in the Sound
   and shut doors; windows are transparent. Passable = floor, exits, container, open/closed/breached/destroyed doors
   (not locked doors, windows or partitions). A separate "stops a shot" test adds intact reinforced glass. A version
   number goes up on every structural change and clears the sight caches and the map's art.
-- **Vision (src/core/sight.ts):** no fixed radius. Clear daylight sees the whole map; rain caps sight at 14 tiles,
-  snow 12, storm 10, fog 6, night 6 (4 at night in bad weather), Keen eyes and research add to a cap; flares still let
+- **Vision (src/core/sight.ts):** no fixed radius. Clear daylight sees the whole map; rain caps sight at 18 tiles,
+  snow 16, storm 12, fog 8, night 9 (7 at night in bad weather; lengthened after 4C), Keen eyes and research add to a cap; flares still let
   the lit area be seen from 30. Rays run against the real geometry; the 30° doorway limit is gone, and a ray grazing
   a single wall corner passes while two walls touching at a corner still block. Leaning out past a wall edge stays.
 - **Line of fire (src/game/combat.ts):** lineOfFire picks a spot the shooter can fire from (own tile or a lean spot)
@@ -1296,6 +1296,15 @@ default); enemy turns have a Normal/Fast setting. Both settings sit in the Sound
   still can't see through the solid wall beside it. Corners, junctions and solid rock stay full blocks. Shots follow
   the same geometry. tests/window.e2e.cjs checks the reported case (viewer diagonal to a window, six tiles in the
   cone seen, three behind the wall not) and that the shot goes through and breaks the glass.
+- **Peeking past cover (after 4C, from a playtest report with drawings):** someone standing against a wall piece, crate
+  or pillar looks and shoots from the open tile just past either end of it, up to 2 tiles to the side
+  (`LEAN_REACH` in src/core/sight.ts), so a short piece of cover only hides a narrow wedge straight behind it that
+  tapers to a point. Before, the lean only reached one tile, so a unit in the middle of a three-tile crate row or at
+  the end of a two-tile one was blind across most of the map ahead. A long wall doesn't end within reach, and a
+  doorway or window more than a tile along isn't an end, so nobody peeks along a wall into the next room; a doorway
+  right beside them still counts. Enemies peek by the same rule. Sight in the dark and bad weather is longer: night 9
+  tiles (was 6), rain 18 (14), storm 12 (10), fog 8 (6), snow 16 (12). Checked with a probe grid (one, two and three
+  blocks in front of an operative on open floor) and the 4I, window, 4B and 4C suites.
 - **Facing (src/game/noise.ts):** units face where they last moved, fired or glanced; the Face button (F) sets a
   resting direction for free. After any move a unit turns to the nearest enemy it can see (Insurgents to the
   nearest team member); with nobody in sight it keeps facing the way it walked. Facing is not a sight cone: anyone behind is still seen. A reaction shot at someone more

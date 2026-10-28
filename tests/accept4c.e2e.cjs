@@ -116,12 +116,12 @@ async function rivalMission(b, who) {
     const { p, errs, E } = await rivalMission(b, 'gru');
     const r = await E(async () => { const A = window.__site19, S = A.mission, d = S.statue;
       const g = S.units.filter(u => u.side === 'raider' && u.alive); for (const u of g) u.eyesDown = true;
-      for (const o of S.units.filter(u => u.side === 'mtf')) { o.x = 1; o.y = 1; o.alive = true; }
+      for (const o of S.units.filter(u => u.side === 'mtf')) { o.x = 1; o.y = 1; o.alive = true; o.eyesDown = true; }
       const free = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1]].map(([dx, dy]) => [d.x + dx, d.y + dy]).filter(([x, y]) => A.passable(x, y));
       g.slice(0, 2).forEach((u, i) => { u.x = free[i][0]; u.y = free[i][1]; });
       for (const u of g.slice(2)) u.alive = false;
       for (let k = 0; k < 16 && !S.over; k++) await A.endTurn();
-      return { lostTo: S.lostTo, over: S.over, win: S.result?.win }; });
+      return { lostTo: S.lostTo, over: S.over, win: S.result?.win, trophy: S.trophy, gru: S.gruTurn, st: [d.x, d.y], rs: g.map(u => [u.x, u.y, u.alive, u.downed]), log: S.log.filter(l => /GRU|carr/.test(l.text)).slice(0, 6).map(l => l.text), mtf: S.units.filter(u => u.side === 'mtf').map(u => [u.x, u.y, u.alive, u.hp]) }; });
     check('GRU-P: left alone, they carry it off the map and the mission is lost', r.lostTo === 'gru' && r.win === false, r);
     check('GRU-P (carried off) ran without errors', !errs.length, errs);
     await p.close();
