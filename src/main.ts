@@ -95,7 +95,7 @@ function showHub() {
       if (!t) { launch(setup, inc); return; }
       // the flight out: the squad takes off, the plane crosses the World Map while time runs, and the mission
       // starts when it lands. Anything at Site-19 meanwhile is Site Security's problem.
-      const depart = campaign.day + (campaign.hour ?? 0) / 24, tf = setup.squad.some(m => m.goggles) ? "Eta-10" : "Epsilon-11";
+      const depart = campaign.day + (campaign.hour ?? 0) / 24, tf = setup.squad.every(m => m.goggles) ? "Eta-10" : setup.squad.some(m => m.goggles) ? "Epsilon-11 and Eta-10" : "Epsilon-11";
       campaign.outbound = { incId: inc.id, region: inc.region, depart, arrive: depart + t, setup, tf };
       for (const m of setup.squad) { const o = campaign.roster.find(x => x.id === m.opId); if (o) o.busy = { kind: "travel", daysLeft: t, out: true }; }
       transition.takeoff();

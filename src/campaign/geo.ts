@@ -1,6 +1,7 @@
 // The Geoscape: where everything on the World Map sits, what state it's in, and what the player knows about it.
 // Incidents are placed at the town they happened in (or at Site-19 for anything inside the site); independent
 // Foundation facilities are shown too, but Site-19 is the only one the player runs.
+import { resolveTeam } from "./autoteam";
 import { earn, spend } from "./ledger";
 import { bringBack, sendAway } from "./people";
 import { agentRisk, agentsFree } from "./taskforces";
@@ -287,6 +288,7 @@ export function buryStory(c: Campaign, inc: Incident) {
   log(c, `${REGIONS[inc.region].front} is paying to bury the story near ${incidentPlace(inc).name}. Word ${dateText(inc.dispatch.done)}.`);
 }
 function resolveDispatch(c: Campaign, inc: Incident) {
+  if (inc.dispatch!.how === "squad") { resolveTeam(c, inc); return; }
   const d = inc.dispatch!, where = REGIONS[inc.region].name;
   c.incidents = c.incidents.filter(i => i !== inc);
   if (d.how === "team") {

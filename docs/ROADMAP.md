@@ -440,6 +440,17 @@ retaliation (done); (5) doors and sirens (done).
 
 ### As built (src/campaign/taskforces.ts; tactical pieces in mission.ts, abilities.ts and turn.ts)
 
+- **Changed later (user decisions during 4I):** Eta-10 is a separate roster: a recruit is hired into Epsilon-11 or
+  Eta-10 and stays there for good (no reassigning), Eta-10 numbers its own callsigns (H10-01…), and the Personnel tab
+  shows the two rosters apart. Each task force brings its own bonus (Epsilon-11 +5 aim; Eta-10 video goggles), and a
+  played squad can draw on both. With Eta-10 formed, a second incident can be answered at the same time, but only
+  hands-off, like leaving a breach to Site Security: "Send them without you" on the deploy panel (anomaly recoveries,
+  cover-ups, strikes, attacks on towns, lost teams and site emergencies; 2 to 4 fit operatives from either roster)
+  shows the odds (0.3 + 0.12 per operative's weight by rank, aim and class − 0.07 per Insurgent, harder for recoveries,
+  emergencies and rescues, easier for cover-ups; 10% to 90%). The team flies out, the outcome is rolled on arrival and
+  goes through the ordinary debrief (rewards or failure, wounds, deaths, sanity, experience, salvage). From a group
+  where only one can be answered, the second answer must be hands-off; once two are answered the rest close
+  (src/campaign/autoteam.ts; the per-group count is kept on the campaign). The original text below is kept for history.
 - **Eta-10 "See No Evil":** formed for $150k from the O5 Council card once Site-19 holds 2 anomalies or standing reaches
   65. Operatives are assigned on their personnel file; the deploy panel sends one task force or the other, so two
   incidents can be answered at once (a forced choice lets two of its incidents be answered). Eta-10's video goggles:
@@ -745,6 +756,8 @@ effectively the only spending money until missions pay out.
   training cadre (1 fit operative, 14 days, $60k, +1 XP); security detail (2 guards, 10 days, $40k); courier escort
   (1 fit operative, 6 days, $50k, 15% chance they come back wounded). Pay rises 10% per campaign year. People away
   can't be used, as with any absence.
+  Changed later (user decision): the player picks exactly who goes: the operative, the two engineers, the researcher
+  or the two guards, from those free, with the obvious choices preselected.
 - **Research grants:** finishing an anomaly, object or Insurgency project earns a $25k Council research grant;
   finishing a breakthrough earns $40k.
 - **Salvage:** after a tactical mission, $5k for each Insurgent put down or captured (weapons and kit recovered
@@ -794,8 +807,7 @@ answered with Intel (Disrupt), one was hidden, and only one came with a cell to 
 - **Three missions:** on the first of each month all three operations are identified, and each comes with a strike
   mission against the cell running it, in the operation's region (or near Site-19 where there's no front). The three
   arrive as one group, open until the earliest operation's window starts.
-- **Choose one:** committing a squad to one of them closes the other two (Eta-10 still allows a second answer, as with
-  any group). Winning the mission breaks that operation; losing it lets it go ahead.
+- **Choose one:** committing a squad to one of them closes the other two. Winning the mission breaks that operation; losing it lets it go ahead.
 - **The rest are guaranteed:** operations whose missions were passed over or lapsed are marked as going ahead and will
   happen within their window. They can no longer be disrupted with Intel. Passing them over doesn't cost standing or
   count as an unanswered incident; the cost is the operation itself.

@@ -112,16 +112,16 @@ export function losePeople(c: Campaign, kind: StaffKind, n: number, how: string,
   return out;
 }
 /** Someone leaves Site-19 for a while (leave, a job in the field). */
-export function sendAway(c: Campaign, kind: StaffKind): Person | null {
+export function sendAway(c: Campaign, kind: StaffKind, id?: string): Person | null {
   syncStaff(c);
-  const p = present(c, kind)[0];
+  const p = (id ? present(c, kind).find(x => x.id === id) : undefined) ?? present(c, kind)[0];
   if (!p) return null;
   p.away = true;
   if (kind === "researcher") c.researchers--; else c.engineers--;
   return p;
 }
-export function bringBack(c: Campaign, kind: StaffKind) {
-  const p = (c.people ?? []).find(x => x.kind === kind && x.away);
+export function bringBack(c: Campaign, kind: StaffKind, id?: string) {
+  const p = (id ? (c.people ?? []).find(x => x.id === id && x.away) : undefined) ?? (c.people ?? []).find(x => x.kind === kind && x.away);
   if (p) p.away = false;
   if (kind === "researcher") c.researchers++; else c.engineers++;
   return p ?? null;

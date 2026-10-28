@@ -22,6 +22,14 @@ const pick = <T>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
 export type TaskForce = "e11" | "eta10";
 export const TF_NAMES: Record<TaskForce, string> = { e11: "Epsilon-11 \"Nine-Tailed Fox\"", eta10: "Eta-10 \"See No Evil\"" };
 export const tfOf = (o: Operative): TaskForce => o.tf ?? "e11";
+/** Each task force is its own roster: an operative joins one when hired and stays in it. What each brings to a
+ *  mission (a squad can include both). One plane still means one deployment at a time. */
+export const TF_BONUS = { e11Aim: 5 };
+export const TF_DESC: Record<TaskForce, string> = {
+  e11: "Site-19's recontainment and combat force: +5 aim.",
+  eta10: "Video goggles: staring, they blink half as often and lose half the sanity to what they see, at −10 aim.",
+};
+export const TF_PREFIX: Record<TaskForce, string> = { e11: "E11", eta10: "H10" };
 
 export interface SiteRelation { rel: number; holds: ScpId[] }
 export interface TfState {
@@ -61,7 +69,7 @@ export function formEta10(c: Campaign) {
   if (canFormEta10(c)) return;
   spend(c, ETA10.cost, "hiring", "Forming MTF Eta-10"); c.tf.eta10 = true;
   chronicle(c, "council", "The O5 Council granted Site-19 a second task force: MTF Eta-10 \"See No Evil\".");
-  log(c, "MTF Eta-10 \"See No Evil\" is formed at Site-19. Assign operatives to it on the Personnel tab: they deploy separately from Epsilon-11, so two incidents can be answered at once.", "good", "personnel");
+  log(c, "MTF Eta-10 \"See No Evil\" is formed at Site-19, with its own roster. Recruits can now be hired into either task force; each keeps its own strengths, and a squad can draw on both.", "good", "personnel");
 }
 /** Eta-10's video goggles: they watch through a camera feed. */
 export const GOGGLES = { blink: 0.5, sightSan: 0.5, aim: -10 };
