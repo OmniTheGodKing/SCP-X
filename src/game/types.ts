@@ -24,6 +24,8 @@ export interface Gun { name: string; type: WeaponType; dmg: [number, number]; ma
   pierce?: number; ammoType?: AmmoId; }
 export interface Carried { id: ItemId; uses: number; }
 
+/** Anomalies that are objects: no will and no legs. They never get out on their own; a "breach" of one is a theft. */
+export const OBJECT_SCPS: readonly string[] = ["500", "914", "005"];
 export type Side = "mtf" | "dclass" | "subject" | "civilian" | "raider" | "anomaly" | "zombie";
 /** Anomalies a mission can be about. */
 export type ScpId = "173" | "049" | "106" | "500" | "914" | "005" | "096" | "012" | "939" | "035" | "682";
@@ -36,6 +38,8 @@ export type MissionKind = "breach" | "manhunt" | "coverup" | "strike" | "escort"
 export type Phase = "player" | "anomaly" | "hand" | "subjects" | "over";
 
 export interface Unit {
+  /** An object anomaly (SCP-500, 914, 005): it just sits there until someone carries it off. */
+  object?: boolean;
   id: string;
   side: Side;
   name: string;
@@ -323,7 +327,7 @@ export interface MissionResult {
   charms?: number;
   gru?: boolean;
   /** Phase 4C: the anomaly was destroyed by the GOC or carried off by GRU-P: gone for good. */
-  lostTo?: "goc" | "gru";
+  lostTo?: "goc" | "gru" | "ci";
   /** Anomalies photographed with the field camera, and whether a restraint kit came along. */
   photos: ScpId[];
   restraints: boolean;
@@ -370,7 +374,7 @@ export interface MissionState {
   gocTurn?: number;
   gruTurn?: number;
   trophy?: string[];
-  lostTo?: "goc" | "gru";
+  lostTo?: "goc" | "gru" | "ci";
   convoyOut?: boolean;
   revealed?: number;
   /** What the hit being dealt right now came from (a weapon type, "explosive" or "fire"), for SCP-682's adaptation. */

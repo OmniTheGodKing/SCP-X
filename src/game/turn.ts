@@ -144,6 +144,7 @@ export function dragCheck(u: Unit | null) {
 }
 export function sealCheck(u: Unit | null) {
   const st = sealTarget() ?? S.statue;
+  if (st.object) return `${st.name} is an object: it only needs keeping out of Insurgent hands.`;
   if (S.sealed) return "Already sealed.";
   if (!u || u.side !== "mtf") return "Only an operative can seal the container.";
   const block = sealBlock();
@@ -273,6 +274,7 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
     await fire(sel, u, false);
     S.busy = false; afterAction(); return;
   }
+  if (u && u.object && seen(x, y)) { flash(`${u.name} is an object. It isn't going anywhere unless they carry it: stop them.`); return; }
   if (u && u.side === "anomaly" && seen(x, y) && S.scp !== "682") {
     if (S.has173) { reveal("arms"); log("Rounds would do nothing to SCP-173. It has to go in the container."); }
     else flash(S.scp === "096" ? "Gunfire does nothing to SCP-096." : S.scp === "012" ? "It's sheet music. Put it in the folder, with your eyes down." : S.scp === "035" ? "Shoot the host, not the mask." : `Gunfire won't stop ${u.name}.`);
@@ -660,6 +662,8 @@ export function checkEnd() {
   if ((k === "breach" || k === "manhunt") && S.sealed) { finish(true, false); return true; }
   // Phase 4C: destroyed by the GOC or carried off by GRU-P; a convoy that got through
   if (S.lostTo) { finish(false, false); return true; }
+  // an object's cell broken into: it's kept once every Insurgent in the wing is down
+  if (k === "breach" && S.statue.object && !alive("raider").length) { finish(true, false); return true; }
   if (k === "escort" && S.setup.convoy) {
     if (S.stolen) { finish(false, false); return true; }
     if (S.convoyOut || !alive("raider").length) { finish(true, false); return true; }

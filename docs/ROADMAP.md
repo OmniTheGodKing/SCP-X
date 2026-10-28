@@ -1308,6 +1308,17 @@ default); enemy turns have a Normal/Fast setting. Both settings sit in the Sound
   the whole map. Checked with a probe grid (one, two and three crates ahead of an operative on open floor), a corridor
   probe, and the 4I, window, 4B, 4C and 4G suites. Two 4B test setups that failed on unlucky placements were fixed
   (the SCP-939 footstep is now 2 tiles away; anyone else in SCP-035's reach is cleared first).
+- **Object thefts (after 4C, from a playtest bug report):** an object anomaly (SCP-500, 914, 005; `OBJECT_SCPS` in
+  src/game/types.ts, `inert` in the campaign) can't get out of its cell, so a "breach" of one was wrongly played as an
+  SCP-173 recontainment. Now power failures and damaged walls never open an object's cell; the only way one is
+  breached is Insurgents coming for it (a lost raid, sabotage, or the debug button), with at least 3 of them. The
+  mission ("SCP-500 Theft") puts the object in its cell as a strongbox that can't be hurt, moved, sealed or
+  photographed. The Insurgents head straight for it; two beside it through a whole enemy turn pick it up and carry it
+  toward the exits, and a hit on either carrier makes them drop it (the GRU-P carry rules, src/game/rivals.ts). The
+  team wins by putting every Insurgent down and keeps the object; if the Insurgents get it out, or the team is lost,
+  it's gone to the Insurgency for good (`loseForGood` with "ci", −5 standing). Left to Site Security, a loss means the
+  same. tests/objecttheft.e2e.cjs checks the incident, the mission setup, a win, and a carry-off. The 4B suite still
+  has two setups (SCP-096, SCP-035) that fail on some placements, with or without this change.
 - **Facing (src/game/noise.ts):** units face where they last moved, fired or glanced; the Face button (F) sets a
   resting direction for free. After any move a unit turns to the nearest enemy it can see (Insurgents to the
   nearest team member); with nobody in sight it keeps facing the way it walked. Facing is not a sight cone: anyone behind is still seen. A reaction shot at someone more

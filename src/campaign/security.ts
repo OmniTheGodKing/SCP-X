@@ -11,7 +11,7 @@ import { addExposure } from "./world";
 import { HOME } from "../data/regions";
 import { has } from "./research";
 import { RANKS, RANK_XP, log, makeOperative, yearOf, type Campaign, type Incident } from "./campaign";
-import { DEPTH, SCP_DEFS, goDark, isInert, startBreach, wingLevel, wingOf, wreckFacility } from "./containment";
+import { DEPTH, SCP_DEFS, goDark, isInert, loseForGood, startBreach, wingLevel, wingOf, wreckFacility } from "./containment";
 import type { ScpId } from "../game/types";
 
 export interface Guard {
@@ -215,7 +215,7 @@ export function raidLoss(c: Campaign, left = 3): string[] {
   const out: string[] = [];
   if (c.prisoners.length) { out.push(`They broke ${c.prisoners.length > 1 ? `all ${c.prisoners.length} prisoners` : "the prisoner"} out of holding.`); c.prisoners = []; }
   const rank = { Keter: 0, Euclid: 1, Safe: 2 } as Record<string, number>;
-  const cells = c.scps.filter(s => s.status === "contained" && !isInert(s) && wingOf(c, s))
+  const cells = c.scps.filter(s => s.status === "contained" && wingOf(c, s))
     .sort((a, b) => (rank[SCP_DEFS[a.id as ScpId]?.cls] ?? 1) - (rank[SCP_DEFS[b.id as ScpId]?.cls] ?? 1));
   if (cells.length) {
     const s = cells[0];
@@ -224,7 +224,7 @@ export function raidLoss(c: Campaign, left = 3): string[] {
     c.chaos.pendingCause = undefined;
     inc.insurgents = Math.max(2, left);
     if (inc.cause) inc.cause = "sabotage";
-    out.push(`They went down the lift and opened ${s.name}'s cell: it is loose on level ${wingOf(c, s)!.level + 1} with about ${inc.insurgents} Insurgents covering the way out. Send a team in.`);
+    out.push(isInert(s) ? `They went down the lift and broke into ${s.name}'s cell: about ${inc.insurgents} Insurgents are in there to carry it out. Send a team in.` : `They went down the lift and opened ${s.name}'s cell: it is loose on level ${wingOf(c, s)!.level + 1} with about ${inc.insurgents} Insurgents covering the way out. Send a team in.`);
   } else {
     const took = Math.min(60, Math.max(0, c.funds));
     spend(c, took, "losses", "Payroll safe emptied in a raid");
@@ -273,12 +273,17 @@ export function letGuardsHandle(c: Campaign, inc: Incident) {
     for (const g of ready) if (g.alive) { g.breaches++; rollTrait(c, g, "nightmares", Math.random() < 0.15); }
     s.status = "contained"; s.maintenance = Math.max(s.maintenance, 60);
     c.stats.won++;
-    log(c, `Site Security recontained ${s.name} on their own.${lost.length ? ` ${lost.join(" and ")} didn't make it.` : " Nobody was lost."}`, "good");
+    log(c, isInert(s) ? `Site Security drove the Insurgents out of ${s.name}'s cell before they could carry it off.${lost.length ? ` ${lost.join(" and ")} didn't make it.` : " Nobody was lost."}` : `Site Security recontained ${s.name} on their own.${lost.length ? ` ${lost.join(" and ")} didn't make it.` : " Nobody was lost."}`, "good");
     return;
   }
   die(rand(1, 2));
   for (const g of ready) if (g.alive) g.breaches++;
   c.stats.lost++;
+  // an object doesn't wander off or tear through walls: the Insurgents leave with it
+  if (isInert(s)) {
+    log(c, `Site Security couldn't stop them.${lost.length ? ` ${lost.join(" and ")} ${lost.length > 1 ? "were" : "was"} killed.` : ""} ${loseForGood(c, inc, "ci")}`, "bad");
+    return;
+  }
   const wing = wingOf(c, s);
   const hit = wing ? neighbors(c, wing).filter(n => n.type !== "command" && !n.disabled && n.daysLeft === 0) : [];
   if (hit.length) {

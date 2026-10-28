@@ -12,11 +12,14 @@ export function prize(): Unit | null {
   return st;
 }
 /** GRU-P only try to carry off what can be carried: the statue, the score, the mask, or a hooded SCP-096. */
-const carriable = () => ["173", "012", "035"].includes(S.scp ?? "") || (S.scp === "096" && !!S.hooded);
+const carriable = () => ["173", "012", "035"].includes(S.scp ?? "") || (S.scp === "096" && !!S.hooded) || !!S.statue?.object;
+/** Someone at the anomaly to carry it off: GRU-P, or the Insurgency stealing an object from its cell. */
+const carriers = () => (S.setup.gru || !!S.statue?.object) && carriable();
+const thief = () => S.setup.gru ? "GRU-P" : "The Insurgents";
 /** Where this enemy is headed, if it has a goal beyond the team. */
 export function goalOf(r: Unit): Unit | null {
   if (r.side !== "raider" || r.downed || S.trophy?.includes(r.id)) return null;
-  if (S.setup.goc || (S.setup.gru && carriable())) return prize();
+  if (S.setup.goc || carriers()) return prize();
   return null;
 }
 const name = () => S.statue.name;
@@ -24,7 +27,7 @@ const name = () => S.statue.name;
 /** After the enemy turn: two of them at the anomaly through a whole enemy turn finish the job. */
 export function rivalPhase() {
   const p = prize();
-  if (!p || (!S.setup.goc && !(S.setup.gru && carriable())) || S.trophy) return;
+  if (!p || (!S.setup.goc && !carriers()) || S.trophy) return;
   const at = alive("raider").filter(r => !r.downed && cheb(r.x, r.y, p.x, p.y) <= 1);
   if (at.length < 2) { S.gocTurn = S.gruTurn = undefined; return; }
   if (S.setup.goc) {
@@ -44,11 +47,11 @@ export function rivalPhase() {
   }
   if (S.gruTurn !== undefined && S.gruTurn < S.turn) {
     S.trophy = at.slice(0, 2).map(r => r.id);
-    log(`GRU-P have ${name()} and are carrying it toward the edge of the area. Shoot either carrier and they'll drop it.`, "bad");
-    banner(`GRU-P ARE CARRYING ${name()} OFF`, "#d75b47");
+    log(`${thief()} have ${name()} and are carrying it toward the way out. Shoot either carrier and they'll drop it.`, "bad");
+    banner(`${thief().replace("The ", "").toUpperCase()} ARE CARRYING ${name()} OFF`, "#d75b47");
     return;
   }
-  if (S.gruTurn === undefined) { S.gruTurn = S.turn; log(`GRU-P operatives are getting ready to lift ${name()}. Stop them before their next turn.`, "bad"); }
+  if (S.gruTurn === undefined) { S.gruTurn = S.turn; log(`${thief()} are getting ready to lift ${name()}. Stop them before their next turn.`, "bad"); }
 }
 
 /** GRU-P's carriers move two tiles toward the nearest exit each enemy turn; once off the map it's gone. */
@@ -73,15 +76,15 @@ export function carryPhase() {
   }
   st.x = lead.x; st.y = lead.y;
   if (L.exitMap[lead.y * L.W + lead.x] === 0) {
-    S.lostTo = "gru";
-    log(`GRU-P carry ${name()} out of the area. It's on its way to the Soviet Union, out of the Foundation's reach.`, "bad");
-    banner(`${name()} LOST TO GRU-P`, "#d75b47");
+    S.lostTo = S.setup.gru ? "gru" : "ci";
+    log(S.setup.gru ? `GRU-P carry ${name()} out of the area. It's on its way to the Soviet Union, out of the Foundation's reach.` : `The Insurgents carry ${name()} out of the wing. The Insurgency has it now.`, "bad");
+    banner(`${name()} LOST TO ${S.setup.gru ? "GRU-P" : "THE INSURGENCY"}`, "#d75b47");
   }
 }
 export function dropTrophy(why: string) {
   if (!S.trophy) return;
   S.trophy = undefined; S.gruTurn = undefined;
-  log(`${why} GRU-P drop ${name()}.`, "good");
+  log(`${why} ${thief()} drop ${name()}.`, "good");
   banner("THEY DROPPED IT", "#86c193");
 }
 

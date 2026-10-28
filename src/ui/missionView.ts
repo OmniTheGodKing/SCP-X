@@ -223,6 +223,11 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("mTitle").innerHTML = kind === "breach" ? "SCP-049 Recontainment <small>“The Plague Doctor” · Euclid</small>" : `SCP-049 ${S.setup.title.startsWith("Anomalous") ? "Capture" : "Manhunt"} <small>“The Plague Doctor” · Euclid</small>`;
     $("objRule").innerHTML = `<b>Objective.</b> Get SCP-049 into the ${kind === "breach" ? "transport container in the staging room" : "truck's open container"}, with nobody else inside, then have an operative seal it. Its touch kills anyone next to it, and it spends a turn beside any fresh body to raise it as SCP-049-2. Gunfire can't hurt it, but a hit staggers it so it loses its next move. <b>Calm</b> (1 action, 6 sanity, within 3 tiles and in sight) stops it acting on its next turn and lets you lead it up to 3 tiles. SCP-049-2 can be killed with gunfire.${kind === "breach" ? " Site Security starts on the scene; Epsilon-11 arrives later." : ""}`;
   }
+  if (S.statue.object) {
+    const t = ({ "500": "Panacea", "914": "The Clockworks", "005": "The Skeleton Key" } as Record<string, string>)[S.scp ?? ""] ?? "";
+    $("mTitle").innerHTML = `${esc(S.statue.name)} Theft <small>“${t}” · Safe</small>`;
+    $("objRule").innerHTML = `<b>Objective.</b> Insurgents are in the wing to steal ${esc(S.statue.name)}. It's an object: it can't escape and doesn't need sealing, only keeping. Two Insurgents beside it for a whole turn pick it up and carry it toward the way out; shoot either carrier and they drop it. Eliminate or capture every Insurgent. If they get it out, it's lost to the Insurgency for good.`;
+  }
   if (kind === "breach") {
     $("squadLabel").textContent = "Site Security and Epsilon-11";
     const extra = document.createElement("div");
