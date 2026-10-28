@@ -2,7 +2,7 @@
 import { BOND_AIM } from "../campaign/condition";
 import { charmTurns, officerNear } from "./ciTactics";
 import { DIRS, DRUM, FULL, HALF, STEEL, TS, WALL, L, bfs, cheb, tileAt, type Pt } from "../core/grid";
-import { MIN_SIGHT, fireLine, viewSpots, visFrac, type View } from "../core/sight";
+import { MIN_SIGHT, fireLine, sightNeeded, viewSpots, visFrac, type View } from "../core/sight";
 import { breakGlass, d2, openDoor } from "../core/grid";
 import { emitNoise, faceThreat, facingTo } from "./noise";
 import { hasPerk, rangeOf } from "./perks";
@@ -51,11 +51,10 @@ export function lineOfFire(sh: Unit, tg: Unit): (View & { tx: number; ty: number
   const aims: [number, number][] = [[tg.x, tg.y]];
   if (tg.exposed && tg.exposed.turn >= S.turn - 1 && (tg.exposed.x !== tg.x || tg.exposed.y !== tg.y)) aims.push([tg.exposed.x, tg.exposed.y]);
   let best: (View & { tx: number; ty: number }) | null = null;
-  for (const [sx, sy] of viewSpots(sh.x, sh.y)) for (const [tx, ty] of aims) {
+  for (const [tx, ty] of aims) for (const [sx, sy] of viewSpots(sh.x, sh.y, tx, ty)) {
     if (d2(sx, sy, tx, ty) > range * range) continue;
-    const f = visFrac(sx, sy, tx, ty);
-    if (f < MIN_SIGHT || !fireLine(sx, sy, tx, ty)) continue;
-    const own = sx === sh.x && sy === sh.y;
+    const f = visFrac(sx, sy, tx, ty), own = sx === sh.x && sy === sh.y;
+    if (f < sightNeeded(own) || !fireLine(sx, sy, tx, ty)) continue;
     if (!best || f > best.f || (f === best.f && own)) best = { f, x: sx, y: sy, tx, ty };
   }
   return best;

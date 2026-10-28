@@ -80,12 +80,11 @@ const SAMPLES: [number, number][] = [[.5, .5], [.15, .15], [.85, .15], [.15, .85
 // The map never changes during a mission, so results are cached per level.
 let cacheFor: unknown = null, cacheVer = -1;
 let visCache = new Int8Array(0);
-const leanCache = new Map<number, [number, number][]>();
 function ensureCache() {
   if (cacheFor === L && cacheVer === L.version) return;
   cacheFor = L; cacheVer = L.version;
   visCache = new Int8Array(L.W * L.H * L.W * L.H).fill(-1);
-  leanCache.clear();
+  spotCache.clear();
 }
 
 /** Share of the 10 sight lines (centre-to-corners, both ways) that get through between two tiles. */
@@ -112,43 +111,47 @@ export function visFrac(ax: number, ay: number, bx: number, by: number) {
   return visCache[i] / 10;
 }
 
-/** How far along a piece of cover someone can shift to look past its end, in tiles. */
-export const LEAN_REACH = 2;
-/** Where someone standing at (x, y) can look from: their own tile, plus, for each wall, crate or pillar they stand
- *  against, the open tile just past each end of it (leaning or shuffling out round the edge), up to LEAN_REACH tiles
- *  to the side. So a short piece of cover only hides a narrow wedge straight behind it. A long wall doesn't end within
- *  reach, and a doorway or window more than a tile along isn't an end, so nobody peeks along a wall into the next room
- *  (one right beside them they can lean into, as before). */
-export function viewSpots(x: number, y: number) {
+/** A lean is a look round the edge, not a clear view: it needs this share of the sight lines (own tile: MIN_SIGHT).
+ *  This keeps a real blind wedge behind a single crate. */
+export const LEAN_SIGHT = 0.8;
+export const sightNeeded = (own: boolean) => own ? MIN_SIGHT : LEAN_SIGHT;
+// A lean spot, and the directions of cover that rule it out: if that cover faces the target, the spot is still
+// behind it (or backing away from it), so it's no help.
+type Spot = { x: number; y: number; bad: [number, number][] };
+const spotCache = new Map<number, Spot[]>();
+/** Where someone standing at (x, y) can look from toward (tx, ty): their own tile, plus any open tile beside them,
+ *  as anyone shifts their weight or leans to see past something a few tiles ahead. Against a wall, crate or pillar
+ *  that faces the target, they can only lean out past an end of it: a lateral tile that still has that cover in
+ *  front of it doesn't count, and nor does stepping back from it. So standing in the middle of a row of crates
+ *  leaves everything behind the row hidden, and a single crate hides a short wedge straight behind it. */
+export function viewSpots(x: number, y: number, tx = x, ty = y): [number, number][] {
   ensureCache();
   const k = y * L.W + x;
-  const hit = leanCache.get(k);
-  if (hit) return hit;
-  const spots: [number, number][] = [[x, y]];
-  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-    if (!opaque(x + dx, y + dy)) continue;
-    for (const [px, py] of [[dy, dx], [-dy, -dx]]) {
-      for (let n = 1; n <= LEAN_REACH; n++) {
-        const lx = x + px * n, ly = y + py * n;
-        if (!passable(lx, ly)) break;
-        if (opaque(lx + dx, ly + dy)) continue;            // still alongside the cover
-        if ((n === 1 || !lineMember(lx + dx, ly + dy)) && !spots.some(s => s[0] === lx && s[1] === ly)) spots.push([lx, ly]);
-        break;
-      }
+  let cand = spotCache.get(k);
+  if (!cand) {
+    const cover = ([[1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]).filter(([dx, dy]) => opaque(x + dx, y + dy));
+    cand = [];
+    for (const [px, py] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const lx = x + px, ly = y + py;
+      if (!passable(lx, ly) || opaque(lx, ly)) continue;
+      const bad = cover.filter(([dx, dy]) => (dx === -px && dy === -py) || (dx * px + dy * py === 0 && opaque(lx + dx, ly + dy)));
+      cand.push({ x: lx, y: ly, bad });
     }
+    spotCache.set(k, cand);
   }
-  leanCache.set(k, spots);
-  return spots;
+  const ox = tx - x, oy = ty - y, out: [number, number][] = [[x, y]];
+  for (const c of cand) if (!c.bad.some(([dx, dy]) => dx * ox + dy * oy > 0)) out.push([c.x, c.y]);
+  return out;
 }
 
 export interface View { f: number; x: number; y: number; }
 /** Best view a person at (x, y) gets of a tile, leaning if that helps. Null means no sight. */
 export function bestView(x: number, y: number, tx: number, ty: number, range = SIGHT_MAX): View | null {
   let best: View | null = null;
-  for (const [sx, sy] of viewSpots(x, y)) {
+  for (const [sx, sy] of viewSpots(x, y, tx, ty)) {
     if (d2(sx, sy, tx, ty) > range * range) continue;
     const f = visFrac(sx, sy, tx, ty);
-    if (f >= MIN_SIGHT && (!best || f > best.f || (f === best.f && sx === x && sy === y))) best = { f, x: sx, y: sy };
+    if (f >= sightNeeded(sx === x && sy === y) && (!best || f > best.f || (f === best.f && sx === x && sy === y))) best = { f, x: sx, y: sy };
   }
   return best;
 }

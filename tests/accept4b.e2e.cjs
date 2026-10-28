@@ -118,7 +118,7 @@ const FREE = `(x, y, n) => { const A = window.__site19, S = A.mission, G = A.gri
       const out = { pack: v.length, kit: ops[0].items.find(i => i.id === 'noisemaker')?.uses };
       // a footstep within earshot is heard; nothing from a unit that stays still
       S.mem.clear();
-      const f = free(v[0].x, v[0].y, 6)[5]; A.emitNoise(f[0], f[1], 'footsteps', ops[0]);
+      const f = free(v[0].x, v[0].y, 2)[1]; A.emitNoise(f[0], f[1], 'footsteps', ops[0]);
       out.heard = !!S.mem.get('939-' + v[0].id);
       out.memAt = S.mem.get('939-' + v[0].id);
       // hidden beyond 5 tiles of the team: put the team in the corner farthest from it
@@ -180,6 +180,7 @@ const FREE = `(x, y, n) => { const A = window.__site19, S = A.mission, G = A.gri
       for (const o of ops) if (o !== m && o !== t) { o.x = h.x > 13 ? 1 : 26; o.y = h.y > 8 ? 1 : 16; }
       // the shooter steps back out of its reach, so the one next to it is the nearest
       const back = free(h.x, h.y, 60).find(([x, y]) => Math.max(Math.abs(x - h.x), Math.abs(y - h.y)) >= 3); t.x = back[0]; t.y = back[1];
+      for (const u of S.units) if (u !== m && u !== h && u.alive && u.side !== 'anomaly' && Math.max(Math.abs(u.x - h.x), Math.abs(u.y - h.y)) <= 2) u.alive = false;
       if (!out.onFloor) { X.dropMask(h); out.onFloor = X.maskOnFloor(); }
       const rnd = Math.random; Math.random = () => 0.01; X.endOfEnemyPhase(); Math.random = rnd;
       out.possessed = m.host === true && m.side === 'zombie';
