@@ -2,6 +2,7 @@
 // unchecked (like XCOM 2's Avatar Project), monthly operations Site-19 can find and disrupt (like dark events), a named
 // field commander who keeps coming back, and the moles behind some "accidents". The other groups, the Global Occult
 // Coalition and GRU Division "P", are separate and act on their own (see rivalTakes).
+import { earn, spend } from "./ledger";
 import { diffOf } from "./difficulty";
 import { REGIONS, REGION_IDS, HOME, type RegionId } from "../data/regions";
 import { cultureOfFamily, fullName } from "../data/names";
@@ -240,7 +241,7 @@ export function canInvestigateBreach(c: Campaign, q: Inquiry) { return q.known ?
 export function investigateBreach(c: Campaign, id: string) {
   const q = c.chaos.inquiries.find(x => x.id === id);
   if (!q || canInvestigateBreach(c, q)) return;
-  c.funds -= INQUIRY.cost; q.known = true;
+  spend(c, INQUIRY.cost, "operations", `Inquiry into the ${scpName(q.scp)} breach`); q.known = true;
   const what = q.cause === "sabotage" ? `The ${scpName(q.scp)} breach of ${dateText(q.day)} was sabotage: the cell locks were tampered with.`
     : q.cause === "anomalous" ? `The ${scpName(q.scp)} breach of ${dateText(q.day)} was the anomaly's own doing: nobody could have stopped it from outside.`
     : `The ${scpName(q.scp)} breach of ${dateText(q.day)} was an accident: wear, a missed routine, or bad luck.`;

@@ -511,3 +511,13 @@ svg.ico { display: inline-block; vertical-align: -3px; margin-right: 6px; flex: 
 .inclist svg.ico { margin: 0 4px 0 2px; opacity: .8; }
 .flag svg.ico { vertical-align: -2px; margin-right: 4px; }
 .histcats svg.ico, .restabs svg.ico { vertical-align: -3px; }
+/* Phase 4E: finances card and the cost preview */
+.fincols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 560px) { .fincols { grid-template-columns: 1fr; } }
+ul.fin { list-style: none; padding: 0; margin: 4px 0 8px; font-size: 13px; }
+ul.fin li { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; border-bottom: 1px dotted var(--line); }
+ul.fin li b { font-family: var(--font-mono); font-weight: 500; white-space: nowrap; }
+ul.fin li.warn b { color: var(--alert); }
+ul.fin.entries .hday { margin-right: 8px; }
+.costtip { position: absolute; z-index: 60; pointer-events: none; font: 11px var(--font-mono); padding: 3px 7px; background: #0f1317; border: 1px solid var(--manila); color: var(--manila); }
+.costtip.neg { border-color: var(--alert); color: var(--alert); }

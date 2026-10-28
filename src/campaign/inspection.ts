@@ -1,5 +1,6 @@
 // O5 inspections: about every six months, with two weeks' warning, the Council sends someone to
 // look the site over. Each of five checks passed is worth $20k; failing three or more costs $50k.
+import { earn, spend } from "./ledger";
 import { chronicle } from "./history";
 import { powerShort } from "./base";
 import { routineOverdue } from "./containment";
@@ -24,7 +25,7 @@ export function inspect(c: Campaign) {
   const checks = inspectionChecks(c), passed = checks.filter(k => k.ok).length, failed = checks.length - passed;
   const audit = !!c.council.audit;
   const bonus = audit ? 0 : passed * INSPECTION.perCheck, docked = failed >= INSPECTION.failAt ? INSPECTION.penalty * (audit ? 2 : 1) : 0;
-  c.funds += bonus - docked;
+  earn(c, bonus, "income", "O5 inspection passed checks"); spend(c, docked, "losses", "Docked by the O5 inspector");
   c.inspectionDay = c.day + rand(INSPECTION.min, INSPECTION.max);
   c.council.audit = undefined;
   const misses = checks.filter(k => !k.ok).map(k => k.label.toLowerCase());

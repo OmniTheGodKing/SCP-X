@@ -1,6 +1,7 @@
 // Phase 3J: Site-19's other task forces (Eta-10 "See No Evil", Nu-7 "Hammer Down"), field agents for covert work,
 // and the independent Foundation sites Site-19 works alongside: their standing with Site-19, what they can lend or
 // buy, the teams they lose, and the emergencies they call for help with. Site-19 never runs those sites.
+import { earn, spend } from "./ledger";
 import { hirePerson } from "./people";
 import { REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { dateText, log, yearOf, type Campaign, type Incident, type Operative } from "./campaign";
@@ -58,7 +59,7 @@ export function canFormEta10(c: Campaign): string | null {
 }
 export function formEta10(c: Campaign) {
   if (canFormEta10(c)) return;
-  c.funds -= ETA10.cost; c.tf.eta10 = true;
+  spend(c, ETA10.cost, "hiring", "Forming MTF Eta-10"); c.tf.eta10 = true;
   chronicle(c, "council", "The O5 Council granted Site-19 a second task force: MTF Eta-10 \"See No Evil\".");
   log(c, "MTF Eta-10 \"See No Evil\" is formed at Site-19. Assign operatives to it on the Personnel tab: they deploy separately from Epsilon-11, so two incidents can be answered at once.", "good", "personnel");
 }
@@ -74,7 +75,7 @@ export function canAttachNu7(c: Campaign): string | null {
 }
 export function attachNu7(c: Campaign) {
   if (canAttachNu7(c)) return;
-  c.funds -= NU7.cost; c.tf.nu7 = true;
+  spend(c, NU7.cost, "hiring", "Putting MTF Nu-7 on call"); c.tf.nu7 = true;
   chronicle(c, "council", "MTF Nu-7 \"Hammer Down\" was put on call for Site-19.");
   log(c, `MTF Nu-7 "Hammer Down" is on call: for $${NU7.call}k a time, four heavy troopers join the fight against a raid or a Keter-class breach.`, "good", "command");
 }
@@ -113,7 +114,7 @@ export function canCallNu7(c: Campaign, inc: Incident) {
 export const AGENT = { cost: 50, max: 6 };
 export const agentsFree = (c: Campaign) => c.tf.agents - c.tf.hurt.length - (c.ops ?? []).length;
 export function canHireAgent(c: Campaign) { return c.tf.agents >= AGENT.max ? `Site-19 runs at most ${AGENT.max} agents.` : c.funds < AGENT.cost ? `Needs $${AGENT.cost}k.` : null; }
-export function hireAgent(c: Campaign) { if (canHireAgent(c)) return; c.funds -= AGENT.cost; c.tf.agents++; log(c, "A field agent joins Site-19's covert staff.", "good"); }
+export function hireAgent(c: Campaign) { if (canHireAgent(c)) return; spend(c, AGENT.cost, "hiring", "Field agent hired"); c.tf.agents++; log(c, "A field agent joins Site-19's covert staff.", "good"); }
 /** After covert work: the agent may come back hurt, or not at all. */
 export function agentRisk(c: Campaign, hurt: number, killed: number, where: string): string {
   const x = Math.random();
@@ -128,7 +129,7 @@ export function canSellWeapons(c: Campaign) { return (c.materials.ciWeapons ?? 0
 export function sellWeapons(c: Campaign, site: string) {
   if (canSellWeapons(c)) return;
   const n = c.materials.ciWeapons ?? 0, pay = n * COOP.sell.per;
-  c.materials.ciWeapons = 0; c.funds += pay; addRel(c, site, 3, "bought captured weapons");
+  c.materials.ciWeapons = 0; earn(c, pay, "sales", `Captured weapons sold to ${site}`); addRel(c, site, 3, "bought captured weapons");
   log(c, `${site} buys ${n} captured Insurgency weapons for study and its armoury: +$${pay}k.`, "good");
 }
 export function canBorrow(c: Campaign, site: string, kind: "engineers" | "guards") {
@@ -246,7 +247,7 @@ export function scanOutcome(c: Campaign, r: MissionResult): string[] {
   for (const [id, n] of Object.entries(r.scans ?? {})) {
     const p = Object.keys(PROJECTS).find(k => PROJECTS[k].branch === `SCP-${id}` && !has(c, k) && !projectLock(c, k));
     if (p) { c.research.progress[p] = (c.research.progress[p] ?? 0) + 6 * n; out.push(`The field researcher's readings put ${6 * n} researcher-days into ${PROJECTS[p].name}.`); }
-    else { c.funds += 10 * n; out.push(`The field researcher's readings go to the other sites (+$${10 * n}k).`); }
+    else { earn(c, 10 * n, "grants", "Field researcher's readings"); out.push(`The field researcher's readings go to the other sites (+$${10 * n}k).`); }
   }
   return out;
 }

@@ -1,5 +1,6 @@
 // Site Security: the guards who are actually at Site-19 when a cell fails, the alert level that
 // decides how quickly Epsilon-11 can get there, and breaches left to the guards alone.
+import { earn, spend } from "./ledger";
 import { chronicle } from "./history";
 import { TRAITS, type TraitId } from "../data/classes";
 import { familyOf, withGivenName } from "../data/names";
@@ -31,6 +32,8 @@ export interface Guard {
   stationId?: string;
   /** Away training for Epsilon-11. */
   training?: number;
+  /** On a Council contract elsewhere until this day. */
+  away?: number;
   diedDay?: number;
 }
 
@@ -58,7 +61,7 @@ export const freePost = (c: Campaign, prefer?: string) =>
   stations(c).filter(f => postedAt(c, f.id).length < GUARD.perStation).sort((a, b) => (a.id === prefer ? -1 : b.id === prefer ? 1 : 0))[0] ?? null;
 export const guardsAlive = (c: Campaign) => c.guards.filter(g => g.alive);
 /** Guards who can respond to a breach: alive, not away training, and not badly hurt. */
-export const guardsReady = (c: Campaign) => guardsAlive(c).filter(g => g.training === undefined && g.hp >= 3);
+export const guardsReady = (c: Campaign) => guardsAlive(c).filter(g => g.training === undefined && g.hp >= 3 && !(g.away && g.away > c.day));
 
 export function newGuard(c: Campaign): Guard {
   const used = new Set(c.guards.map(g => familyOf(g.name)));
@@ -76,7 +79,7 @@ export function canHireGuard(c: Campaign, stationId: string) {
 }
 export function hireGuard(c: Campaign, stationId: string) {
   if (canHireGuard(c, stationId)) return;
-  c.funds -= GUARD.cost;
+  spend(c, GUARD.cost, "hiring", "Guard hired");
   const g = newGuard(c);
   g.stationId = stationId;
   c.guards.push(g);
@@ -96,7 +99,7 @@ export function canPromote(c: Campaign, g: Guard) {
 }
 export function promoteGuard(c: Campaign, g: Guard) {
   if (canPromote(c, g)) return;
-  c.funds -= PROMOTE.cost;
+  spend(c, PROMOTE.cost, "staff", "Guard's transfer to Epsilon-11");
   g.training = PROMOTE.days;
   log(c, `Guard ${g.name} starts Epsilon-11 selection training: ${PROMOTE.days} days.`, "good");
 }
@@ -213,7 +216,7 @@ export function raidLoss(c: Campaign, left = 3): string[] {
     out.push(`They went down the lift and opened ${s.name}'s cell: it is loose on level ${wingOf(c, s)!.level + 1} with about ${inc.insurgents} Insurgents covering the way out. Send a team in.`);
   } else {
     const took = Math.min(60, Math.max(0, c.funds));
-    c.funds -= took;
+    spend(c, took, "losses", "Payroll safe emptied in a raid");
     if (took) out.push(`They emptied the payroll safe ($${took}k).`);
     const hit = c.base.facilities.filter(f => f.level === 0 && f.type !== "command" && f.type !== "generator" && !f.disabled && f.daysLeft === 0);
     if (hit.length) { const f = hit[rand(0, hit.length - 1)]; wreckFacility(c, f, "Demolition charges went off on the way out.", true); out.push(`The ${nameInText(f.type)} on level 1 was wrecked.`); }
@@ -305,7 +308,7 @@ export function canTrain(c: Campaign, id: string) {
 }
 export function train(c: Campaign, id: string) {
   if (canTrain(c, id)) return;
-  c.funds -= TRAINING[id].cost; c.purchases.push(id);
+  spend(c, TRAINING[id].cost, "staff", TRAINING[id].name); c.purchases.push(id);
   log(c, `Training range: ${TRAINING[id].name}. ${TRAINING[id].desc}`, "good");
 }
 

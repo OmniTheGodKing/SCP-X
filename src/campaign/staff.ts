@@ -1,6 +1,7 @@
 // Staff incidents: small things that go wrong (or right) among the people who run Site-19. About
 // once a month one comes up on the Command tab with two choices, each with a clear cost. Left
 // unanswered for a week, the second choice (usually letting it go) is taken for you.
+import { earn, spend } from "./ledger";
 import { bringBack, losePeople, sendAway } from "./people";
 import { ITEMS, type ItemId } from "./research";
 import { RANKS, holdingCapacity, log, retire, trainerWhy, type Campaign, type Operative } from "./campaign";
@@ -47,7 +48,7 @@ export const STAFF_EVENTS: Record<StaffEventId, EventDef> = {
     when: c => c.engineers >= 1,
     text: () => "A support beam slipped during work on the lower levels and crushed an engineer's legs. The infirmary can't do much; a specialist in Baltimore can.",
     choices: [
-      { label: "Pay for the specialist ($20k)", why: c => c.funds < 20 ? "Needs $20k." : null, run: c => { c.funds -= 20; return "The engineer will walk again, and is back on shift within the week."; } },
+      { label: "Pay for the specialist ($20k)", why: c => c.funds < 20 ? "Needs $20k." : null, run: c => { spend(c, 20, "staff", "Specialist surgeon"); return "The engineer will walk again, and is back on shift within the week."; } },
       { label: "Pension them off (one fewer engineer)", run: c => { losePeople(c, "engineer", 1, "pensioned off"); return "The engineer is pensioned off with an amnestic and a story about a car accident."; } },
     ],
   },
@@ -70,7 +71,7 @@ export const STAFF_EVENTS: Record<StaffEventId, EventDef> = {
     choices: [
       { label: "Put it into the current research (+10 researcher-days)", why: c => busiest(c) ? null : "No research under way.", run: c => {
         const id = busiest(c)!; c.research.progress[id] = (c.research.progress[id] || 0) + 10; return "The finding goes straight into the lab's current work."; } },
-      { label: "Circulate it to other sites (+$30k)", run: c => { c.funds += 30; return "Site-17 and Site-23 both want copies. The O5 Council approves a small grant."; } },
+      { label: "Circulate it to other sites (+$30k)", run: c => { earn(c, 30, "grants", "Paper circulated to other sites"); return "Site-17 and Site-23 both want copies. The O5 Council approves a small grant."; } },
     ],
   },
   letter: {
@@ -89,7 +90,7 @@ export const STAFF_EVENTS: Record<StaffEventId, EventDef> = {
     setup: (c, e) => { e.item = pick((Object.keys(c.inventory) as ItemId[]).filter(k => (c.inventory[k] ?? 0) > 0)); },
     text: (c, e) => `The quartermaster reports this month's supply run came in short, and stores are pulling from what we have. We'll be down one ${ITEMS[e.item!]?.name.toLowerCase() ?? "item"}.`,
     choices: [
-      { label: "Buy replacements ($15k)", why: c => c.funds < 15 ? "Needs $15k." : null, run: c => { c.funds -= 15; return "Stores are made up from a civilian supplier."; } },
+      { label: "Buy replacements ($15k)", why: c => c.funds < 15 ? "Needs $15k." : null, run: c => { spend(c, 15, "staff", "Replacement stores"); return "Stores are made up from a civilian supplier."; } },
       { label: "Make do (lose the item)", run: (c, e) => { if (e.item && c.inventory[e.item]) c.inventory[e.item]!--; return `One ${ITEMS[e.item!]?.name.toLowerCase() ?? "item"} is gone from stores.`; } },
     ],
   },
@@ -111,7 +112,7 @@ export const STAFF_EVENTS: Record<StaffEventId, EventDef> = {
     setup: (c, e) => { e.who = pick(c.scps.filter(s => s.status === "contained")).id; },
     text: (c, e) => `A researcher from Site-17 asks to study ${c.scps.find(s => s.id === e.who)?.name ?? "one of our anomalies"} in its cell for a week. Their site will pay, but the extra traffic wears the cell down.`,
     choices: [
-      { label: "Allow it (+$25k; that cell's maintenance −20)", run: (c, e) => { const s = c.scps.find(s => s.id === e.who); c.funds += 25; if (s) s.maintenance = Math.max(0, s.maintenance - 20); return "The visitor gets their week, and Site-17 pays for it."; } },
+      { label: "Allow it (+$25k; that cell's maintenance −20)", run: (c, e) => { const s = c.scps.find(s => s.id === e.who); earn(c, 25, "income", "Site-17's visiting researcher"); if (s) s.maintenance = Math.max(0, s.maintenance - 20); return "The visitor gets their week, and Site-17 pays for it."; } },
       { label: "Refuse", run: () => "Site-17 is told the cell is closed to visitors." },
     ],
   },

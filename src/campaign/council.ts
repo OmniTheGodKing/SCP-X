@@ -1,6 +1,7 @@
 // The O5 Council: Site-19's standing with it, its monthly orders, what it can be asked for, and the transfers of
 // anomalies it arranges between sites. Standing is separate from exposure: exposure is what the public knows,
 // standing is what the Council thinks of Site-19's command.
+import { earn, spend } from "./ledger";
 import { diffOf } from "./difficulty";
 import { addRel, siteOf } from "./taskforces";
 import { planActive } from "./chaos";
@@ -10,7 +11,7 @@ import { UNITS, rollCandidate } from "../data/units";
 import { dateText, gainIntel, giveNick, log, monthName, operativeFrom, yearOf, type Campaign, type Incident } from "./campaign";
 import { engineerCapacity, dclassCapacity } from "./base";
 import { PROJECTS, has, projectVisible, researcherCapacity, type ItemId } from "./research";
-import { SCP_DEFS, freeWings, scpName, type ScpClass } from "./containment";
+import { SCP_DEFS, freeWings, isInert, scpName, type ScpClass } from "./containment";
 import { familyOf } from "../data/names";
 import { addExposure, spawnCoverup, locateCellFor, newRetaliation, travelDays } from "./world";
 import type { ScpId } from "../game/types";
@@ -33,6 +34,8 @@ export interface CouncilState {
   requests: Partial<Record<RequestId, number>>;
   /** Extra monthly grant won by request. */
   grantBonus: number;
+  /** Emergency funding being paid back: this much comes off each of the next `left` grants. */
+  repay?: { n: number; left: number };
   /** An audit is coming: the next inspection is a harsher one. */
   audit?: boolean;
   offers: TransferOffer[];
@@ -69,7 +72,18 @@ export function addStanding(c: Campaign, n: number, why: string) {
 }
 
 /** The Council's own monthly grant to Site-19, on top of what the fronts pass on. */
-export const councilGrant = (c: Campaign) => Math.max(20, 60 + c.council.standing + c.council.grantBonus + diffOf(c).grant);
+/** What the next monthly grant is made of. Council funding is Site-19's main income: it rises with standing, with
+ *  each anomaly held that could breach (up to four), and with each full year Site-19 has been running. */
+export const GRANT = { base: 100, perStanding: 1.5, perAnomaly: 15, maxAnomalies: 4, perYear: 10, maxYears: 5, floor: 40 };
+export function grantParts(c: Campaign) {
+  const held = Math.min(GRANT.maxAnomalies, c.scps.filter(s => (s.status === "contained" || s.status === "breach") && !isInert(s)).length);
+  const years = Math.min(GRANT.maxYears, Math.floor((c.day - 1) / 365));
+  const parts = { base: GRANT.base, standing: Math.round(GRANT.perStanding * c.council.standing), anomalies: held * GRANT.perAnomaly, years: years * GRANT.perYear,
+    raised: c.council.grantBonus, difficulty: diffOf(c).grant, repay: -(c.council.repay?.n ?? 0) };
+  const total = Math.max(GRANT.floor, Object.values(parts).reduce((a, n) => a + n, 0));
+  return { ...parts, held, yearsRun: years, total };
+}
+export const councilGrant = (c: Campaign) => grantParts(c).total;
 
 /** An incident went unanswered: it counts against Site-19 everywhere. */
 export function noteMissed(c: Campaign, what: string) {
@@ -112,7 +126,7 @@ export function rollReward(c: Campaign): Reward {
 }
 export function grantReward(c: Campaign, r: Reward): string {
   switch (r.kind) {
-    case "funds": c.funds += r.n; break;
+    case "funds": earn(c, r.n, "income", "O5 Council reward"); break;
     case "engineer": c.engineers = Math.min(engineerCapacity(c), c.engineers + r.n); break;
     case "researcher": c.researchers = Math.min(Math.max(researcherCapacity(c), c.researchers), c.researchers + r.n); break;
     case "dclass": c.dclass = Math.min(dclassCapacity(c), c.dclass + r.n); break;
@@ -221,8 +235,9 @@ export function issueDirectives(c: Campaign, pause = true) {
 // ---------- requests ----------
 
 export type RequestId = "funding" | "engineers" | "veteran" | "object" | "keter" | "grant";
+export const EMERGENCY = { funds: 120, repay: 30, months: 2 };
 export const REQUESTS: Record<RequestId, { name: string; min: number; cost: number; every: number; desc: string }> = {
-  funding: { name: "Emergency appropriation", min: 35, cost: 10, every: 60, desc: "$100k at once." },
+  funding: { name: "Emergency appropriation", min: 15, cost: 10, every: 60, desc: "$120k at once; the next two Council grants are each $30k smaller." },
   engineers: { name: "Engineering detail", min: 50, cost: 8, every: 60, desc: "2 engineers join the site staff." },
   veteran: { name: "Veteran transfer", min: 60, cost: 10, every: 90, desc: "A Corporal from one of the special forces units joins Epsilon-11." },
   object: { name: "Request an object for study", min: 60, cost: 6, every: 120, desc: "Another site sends Site-19 a Safe-class object it doesn't hold. Needs a free containment wing." },
@@ -251,7 +266,7 @@ export function makeRequest(c: Campaign, id: RequestId) {
   chronicle(c, "council", `Site-19 asked the O5 Council for: ${q.name.toLowerCase()}.`);
   if (q.cost) addStanding(c, -q.cost, `request granted: ${q.name.toLowerCase()}`);
   switch (id) {
-    case "funding": c.funds += 100; log(c, "The O5 Council approves an emergency appropriation: $100k.", "good"); break;
+    case "funding": earn(c, EMERGENCY.funds, "emergency", "Emergency appropriation"); k.repay = { n: (k.repay?.left ? k.repay.n : 0) + EMERGENCY.repay, left: EMERGENCY.months }; log(c, `The O5 Council approves an emergency appropriation: $${EMERGENCY.funds}k now, repaid from the next ${EMERGENCY.months} grants ($${EMERGENCY.repay}k each).`, "good"); break;
     case "engineers": c.engineers += 2; log(c, "The O5 Council sends an engineering detail: 2 engineers join the site staff.", "good"); break;
     case "veteran": log(c, `Veteran transfer: ${veteranJoins(c, "joins Epsilon-11")}.`, "good"); break;
     case "object": { const scp = pick(objectsAvailable(c)); startTransit(c, scp, "in", pick(PARTNERS), 0, 0, "requested"); break; }
@@ -298,7 +313,7 @@ export function answerOffer(c: Campaign, id: string, yes: boolean) {
     log(c, o.kind === "order" ? `Site-19 refuses to take ${scpName(o.get!)}. The Council won't forget it.` : `Site-19 declines ${o.from}'s offer.`, o.kind === "order" ? "bad" : "");
     return;
   }
-  if (o.funds < 0) c.funds += o.funds;
+  if (o.funds < 0) spend(c, -o.funds, "spent", `Trade with ${o.from}`);
   if (o.give) startTransit(c, o.give, "out", o.from, o.kind === "sale" ? o.funds : 0, o.kind === "sale" ? 2 : 0, "");
   if (o.get) startTransit(c, o.get, "in", o.from, o.kind === "order" ? o.funds : 0, o.standing, o.kind === "order" ? "on the Council's order" : `traded by ${o.from}`);
 }
@@ -346,7 +361,7 @@ function arrive(c: Campaign, t: Transit) {
     c.scps = c.scps.filter(s => s.id !== t.scp);
     siteOf(c, t.site).holds.push(t.scp);
     addRel(c, t.site, 5, `took ${d.name} from Site-19`);
-    c.funds += t.funds;
+    earn(c, t.funds, "sales", `${scpName(t.scp)} sold to ${t.site}`);
     addStanding(c, t.standing, `${d.name} handed to ${t.site}`);
     chronicle(c, "anomaly", `${d.name} was transferred to ${t.site} for good.`);
     log(c, `${d.name} is now held at ${t.site}${t.funds ? ` (+$${t.funds}k)` : ""}. Site-19 no longer studies it.`, "key", "site");
@@ -369,10 +384,10 @@ function arrive(c: Campaign, t: Transit) {
 /** An anomaly arriving by transfer is put in a cell. */
 export function receive(c: Campaign, t: Transit) {
   const d = SCP_DEFS[t.scp], wing = freeWings(c, d.cls)[0];
-  if (!wing) { c.funds += PAY_FOR[d.cls]; log(c, `${d.name} arrived with no free wing to hold it and went on to another site (+$${PAY_FOR[d.cls]}k).`, "key", "site"); return; }
+  if (!wing) { earn(c, PAY_FOR[d.cls], "sales", `${d.name} passed on to another site`); log(c, `${d.name} arrived with no free wing to hold it and went on to another site (+$${PAY_FOR[d.cls]}k).`, "key", "site"); return; }
   c.scps.push({ id: t.scp, name: d.name, title: d.title, cls: d.cls, status: "contained", wingId: wing.id, maintenance: 100, lastCleaned: c.day });
   if (t.scp === "500") c.pills = (c.pills ?? 0) + 5;
-  c.funds += t.funds;
+  earn(c, t.funds, "income", `Payment with ${d.name}`);
   chronicle(c, "anomaly", `${d.name}, "${d.title}", arrived from ${t.site} and was contained at Site-19.`);
   addStanding(c, t.standing, `took ${d.name} from ${t.site}`);
   log(c, `${d.name}, "${d.title}", arrives from ${t.site}${t.funds ? ` (+$${t.funds}k)` : ""}. ${d.use ?? "New research is open."}`, "good", "site");

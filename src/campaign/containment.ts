@@ -1,4 +1,5 @@
 // Anomalies held at Site-19: daily breach risk, cell cleaning, breaches, and escapes.
+import { earn, spend } from "./ledger";
 import { diffOf } from "./difficulty";
 import { losePeople } from "./people";
 import { openInquiry, rivalTakes } from "./chaos";
@@ -177,7 +178,7 @@ export function canEvacuate(c: Campaign, s: ScpRecord): string | null {
 /** Rush it into a free wing: $10k, and twice the danger of a normal move. */
 export function evacuate(c: Campaign, s: ScpRecord, to: Facility, watchers: Guard[]) {
   if (canEvacuate(c, s) || !freeWings(c, s.cls).includes(to) || c.funds < EVAC.cost) return;
-  c.funds -= EVAC.cost;
+  spend(c, EVAC.cost, "operations", `Evacuating ${s.name}`);
   if (cellWork(c, s, watchers, `the emergency evacuation of ${s.name}`, EVAC.mult) && s.status === "contained") {
     s.wingId = to.id;
     log(c, `${s.name} was rushed into the ${nameInText(to.type)} on level ${to.level + 1}.`, "key");
@@ -186,7 +187,7 @@ export function evacuate(c: Campaign, s: ScpRecord, to: Facility, watchers: Guar
 /** Nowhere free: another site holds it for 30 days, for $50k. */
 export function transferOut(c: Campaign, s: ScpRecord) {
   if (canEvacuate(c, s) || c.funds < EVAC.transferCost) return;
-  c.funds -= EVAC.transferCost;
+  spend(c, EVAC.transferCost, "operations", `Emergency transfer of ${s.name}`);
   s.status = "away"; s.returnDay = c.day + EVAC.transferDays;
   log(c, `${s.name} is on its way to Site-17 for safekeeping. It comes back in ${EVAC.transferDays} days.`, "key");
 }
@@ -280,7 +281,7 @@ function clean(c: Campaign, s: ScpRecord, what: string) {
   const r = routineOf(s);
   s.lastCleaned = c.day; s.maintenance = 100;
   if (!r) return;
-  c.funds -= r.cost;
+  spend(c, r.cost, "upkeep", `${r.name}: ${s.name}`);
   if (r.crew === "dclass" && !has(c, "auto_cleaning") && Math.random() < CLEAN_RISK) { c.dclass--; dclassDied(c, 1); log(c, `${what} of ${s.name}'s cell went wrong: both watchers blinked at once and the D-Class cleaning was killed.`, "bad"); }
   if (r.crew === "researcher" && Math.random() < 0.03) { const [who] = losePeople(c, "researcher", 1, `"cured" by ${s.name} during an interview`); log(c, `During ${s.name}'s interview it decided ${who ?? "the researcher"} was ill, and cured them. They are dead. It apologised.`, "bad", "site"); }
 }
@@ -319,7 +320,7 @@ export function canMove(c: Campaign, s: ScpRecord, to: Facility): string | null 
 
 export function moveScp(c: Campaign, s: ScpRecord, to: Facility, watchers: Guard[]) {
   if (canMove(c, s, to)) return;
-  c.funds -= MOVE_COST;
+  spend(c, MOVE_COST, "operations", `Moving ${s.name}`);
   if (cellWork(c, s, watchers, `the transfer of ${s.name}`) && s.status === "contained") {
     s.wingId = to.id;
     log(c, `${s.name} now held in the ${nameInText(to.type)} on level ${to.level + 1}.`, "key");
@@ -378,7 +379,7 @@ function firstContact(c: Campaign, inc: Incident, caught: boolean) {
       chronicle(c, "anomaly", `${d.name}, "${d.title}" (${d.cls}), was recovered for the first time and contained at Site-19.`);
       log(c, `${d.name}, "${d.title}", is now held at Site-19 in the ${nameInText(wing.type)} on level ${wing.level + 1}. New research is open.`, "good");
     } else {
-      c.funds += transferBonus(d.cls);
+      earn(c, transferBonus(d.cls), "income", `Transfer of ${d.name}`);
       chronicle(c, "anomaly", `${d.name} was recovered but handed to another site: Site-19 had no free ${d.cls}-grade wing.`);
       log(c, `Site-19 has no free ${d.cls}-grade wing, so ${d.name} was handed to another site (+$${transferBonus(d.cls)}k). The chance to study it is gone.`, "key");
     }
