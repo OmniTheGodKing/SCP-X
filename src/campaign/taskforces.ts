@@ -29,7 +29,17 @@ export const TF_DESC: Record<TaskForce, string> = {
   e11: "Site-19's recontainment and combat force: +5 aim.",
   eta10: "Video goggles: staring, they blink half as often and lose half the sanity to what they see, at −10 aim.",
 };
-export const TF_PREFIX: Record<TaskForce, string> = { e11: "E11", eta10: "H10" };
+export const TF_PREFIX: Record<TaskForce, string> = { e11: "E11", eta10: "E10" };
+/** Eta-10's next callsign: E10-1, E10-2 and on, numbered within Eta-10. */
+export const eta10Call = (roster: { tf?: TaskForce; call: string }[]) => {
+  const used = new Set(roster.filter(o => o.tf === "eta10").map(o => o.call));
+  let n = 1; while (used.has(`${TF_PREFIX.eta10}-${n}`)) n++;
+  return `${TF_PREFIX.eta10}-${n}`;
+};
+/** Eta-10 operatives carrying another task force's callsign (from older saves) get Eta-10 numbers. */
+export function fixEta10Calls(roster: { tf?: TaskForce; call: string }[]) {
+  for (const o of roster) if (o.tf === "eta10" && !/^E10-\d+$/.test(o.call)) o.call = eta10Call(roster);
+}
 
 export interface SiteRelation { rel: number; holds: ScpId[] }
 export interface TfState {

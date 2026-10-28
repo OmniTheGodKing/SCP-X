@@ -13,7 +13,7 @@ export interface Look {
 }
 
 // ---------- animation state ----------
-interface Anim { x: number; y: number; fromX: number; fromY: number; toX: number; toY: number; t0: number; dur: number; ang: number; fired: number; hit: number; tx: number; ty: number }
+interface Anim { x: number; y: number; fromX: number; fromY: number; toX: number; toY: number; t0: number; dur: number; ang: number; fired: number; hit: number; tx: number; ty: number; flinch: number; reload: number }
 const anims = new Map<string, Anim>();
 let seenEffects = new WeakSet<object>();
 export function resetAnims() { anims.clear(); seenEffects = new WeakSet(); }
@@ -23,7 +23,7 @@ const MOVE_MS = 70;
 export function placeOf(u: Unit, now: number): { x: number; y: number; ang: number; moving: boolean; a: Anim } {
   const tx = u.x * TS + TS / 2, ty = u.y * TS + TS / 2;
   let a = anims.get(u.id);
-  if (!a) { a = { x: tx, y: ty, fromX: tx, fromY: ty, toX: tx, toY: ty, t0: 0, dur: 0, ang: defaultFacing(u), fired: -1e9, hit: -1e9, tx, ty }; anims.set(u.id, a); }
+  if (!a) { a = { x: tx, y: ty, fromX: tx, fromY: ty, toX: tx, toY: ty, t0: 0, dur: 0, ang: defaultFacing(u), fired: -1e9, hit: -1e9, tx, ty, flinch: -1e9, reload: -1e9 }; anims.set(u.id, a); }
   if (a.tx !== tx || a.ty !== ty) {
     const dist = Math.hypot(tx - a.x, ty - a.y);
     a.ang = Math.atan2(ty - a.ty, tx - a.tx);
@@ -44,11 +44,12 @@ export function placeOf(u: Unit, now: number): { x: number; y: number; ang: numb
 }
 const defaultFacing = (u: Unit) => u.side === "raider" ? Math.PI : u.side === "mtf" ? 0 : Math.PI / 2;
 
-/** Read new tracer and damage effects: the shooter turns to face the target and flashes; whoever was hit flinches. */
-type Fx = { type: string; t0: number; x0?: number; y0?: number; x1?: number; y1?: number; x?: number; y?: number; text?: string };
-export function noteEffects(effects: readonly Fx[], units: Unit[], onNew?: (e: Fx, by?: Unit) => void) {
+/** Read new tracer and damage effects: the shooter turns to face the target and flashes; whoever was hit flinches.
+ *  An effect set to start later (a hit landing when its tracer arrives) is read when its moment comes. */
+type Fx = { type: string; t0: number; x0?: number; y0?: number; x1?: number; y1?: number; x?: number; y?: number; text?: string; cue?: string };
+export function noteEffects(effects: readonly Fx[], units: Unit[], onNew?: (e: Fx, by?: Unit) => void, now = performance.now()) {
   for (const e of effects) {
-    if (seenEffects.has(e)) continue;
+    if (seenEffects.has(e) || e.t0 > now) continue;
     seenEffects.add(e);
     if (e.type === "line") {
       const s = nearest(units, e.x0!, e.y0!, TS * 0.8);
@@ -57,6 +58,13 @@ export function noteEffects(effects: readonly Fx[], units: Unit[], onNew?: (e: F
     } else if (e.type === "text" && e.text && /^\d/.test(e.text)) {
       const v = nearest(units, e.x!, e.y! + 14, TS * 0.8);
       if (v) { const a = anims.get(v.id); if (a) a.hit = e.t0; }
+    } else if (e.type === "text" && (e.text === "MISS" || e.text === "COVER")) {
+      // a near miss: the target ducks
+      const v = nearest(units, e.x!, e.y! + 14, TS * 0.8);
+      if (v) { const a = anims.get(v.id); if (a) a.flinch = e.t0; }
+    } else if (e.type === "cue" && e.cue === "reload") {
+      const v = nearest(units, e.x!, e.y!, TS * 0.6);
+      if (v) { const a = anims.get(v.id); if (a) a.reload = e.t0; }
     }
     onNew?.(e);
   }
@@ -113,11 +121,17 @@ const GUN: Record<WeaponType | "pistol", { len: number; w: number; stock?: boole
   mg: { len: 16, w: 3.4, bipod: true }, carbine: { len: 12, w: 2.2, stock: true }, smg: { len: 9, w: 2.8 }, pistol: { len: 5, w: 2 },
 };
 
-/** A person seen from above, facing `ang` (0 = east). `hurt` (0..1) tints and shakes them; `flash` is a muzzle flash. */
-export function drawPerson(ctx: CanvasRenderingContext2D, cx: number, cy: number, ang: number, look: Look, o: { hurt?: number; flash?: boolean; bob?: number; alpha?: number } = {}) {
+/** A person seen from above, facing `ang` (0 = east). `hurt` (0..1) tints and shakes them; `flash` is a muzzle flash.
+ *  Phase 4G: `kick` pushes them back along their aim (recoil), `flinch` (0..1) ducks them aside, `raised` holds the
+ *  weapon up and pushed forward (overwatch), `reloading` swaps the barrel for a magazine in the off hand, and
+ *  `bloodied` marks the uniform of anyone under half health. */
+export function drawPerson(ctx: CanvasRenderingContext2D, cx: number, cy: number, ang: number, look: Look,
+  o: { hurt?: number; flash?: boolean; bob?: number; alpha?: number; kick?: number; flinch?: number; raised?: boolean; reloading?: boolean; bloodied?: boolean; seed?: number } = {}) {
   ctx.save();
   ctx.globalAlpha = o.alpha ?? 1;
   const shake = o.hurt ? (Math.sin(performance.now() / 18) * 1.6 * o.hurt) : 0;
+  if (o.kick) { cx -= Math.cos(ang) * o.kick; cy -= Math.sin(ang) * o.kick; }
+  if (o.flinch) { const d = Math.sin(o.flinch * Math.PI) * 2.6; cx += Math.cos(ang + Math.PI / 2) * d; cy += Math.sin(ang + Math.PI / 2) * d; }
   ctx.fillStyle = "rgba(0,0,0,0.38)"; ctx.beginPath(); ctx.ellipse(cx + 2, cy + 3, 9.5, 8, 0, 0, Math.PI * 2); ctx.fill();
   ctx.translate(cx + shake, cy + (o.bob ?? 0)); ctx.rotate(ang); ctx.scale(1.12, 1.12);
   const sw = look.bulky ? 10.5 : 9, sd = look.bulky ? 6.5 : 5.5;
@@ -136,9 +150,25 @@ export function drawPerson(ctx: CanvasRenderingContext2D, cx: number, cy: number
   if (look.coat) { ctx.strokeStyle = look.trim; ctx.beginPath(); ctx.moveTo(-sd + 1, 0); ctx.lineTo(sd - 1, 0); ctx.stroke(); }
   if (look.bulky) { ctx.fillStyle = "rgba(0,0,0,0.22)"; ctx.fillRect(-2, -sw + 2, 4, sw * 2 - 4); }
   if (look.armband) { ctx.fillStyle = look.armband; ctx.fillRect(-1.5, sw - 3.2, 3.5, 2.4); }
+  if (o.bloodied) {
+    const s = o.seed ?? 0;
+    ctx.fillStyle = "rgba(120,20,22,0.85)";
+    ctx.beginPath(); ctx.ellipse(-1 + (s % 3) - 1, -sw * 0.35 + (s % 5) * 0.6, 2.4, 2, 0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(1, sw * 0.4 - (s % 4) * 0.5, 1.6, 1.3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(150,28,30,0.7)"; ctx.fillRect(-sd + 1, -1 + (s % 3), 2.4, 1.6);
+  }
   // the weapon, held in both hands out in front
-  if (look.weapon) {
+  if (look.weapon && o.reloading) {
+    // weapon dipped, the old magazine out and a fresh one in the other hand
     const g = GUN[look.weapon];
+    ctx.save(); ctx.rotate(0.5);
+    ctx.fillStyle = "#1e1f21"; ctx.fillRect(2, 1.8, g.len * 0.75, g.w * 0.8);
+    ctx.restore();
+    ctx.fillStyle = look.skin; ctx.beginPath(); ctx.arc(3, 4.5, 1.8, 0, Math.PI * 2); ctx.arc(5, -4.5, 1.8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#3a3d40"; ctx.fillRect(4, -7.5, 2.6, 4.5);
+  } else if (look.weapon) {
+    const g = GUN[look.weapon];
+    if (o.raised) ctx.translate(2.5, -0.6);
     ctx.fillStyle = look.skin; ctx.beginPath(); ctx.arc(3.5, 3.2, 1.8, 0, Math.PI * 2); ctx.arc(7.5, 2.4, 1.8, 0, Math.PI * 2); ctx.fill();
     if (g.stock) { ctx.fillStyle = "#6b4a2a"; ctx.fillRect(-1, 1.6, 6, g.w); }
     ctx.fillStyle = "#1e1f21"; ctx.fillRect(3, 1.8, g.len, g.w * 0.8);
@@ -150,6 +180,7 @@ export function drawPerson(ctx: CanvasRenderingContext2D, cx: number, cy: number
       ctx.moveTo(tip, 2.2); ctx.lineTo(tip + 7, 0); ctx.lineTo(tip + 3, 2.2); ctx.lineTo(tip + 7, 4.6); ctx.closePath(); ctx.fill();
       ctx.fillStyle = "rgba(255,170,60,0.6)"; ctx.beginPath(); ctx.arc(tip + 1, 2.2, 3, 0, Math.PI * 2); ctx.fill();
     }
+    if (o.raised) ctx.translate(-2.5, 0.6);
   }
   // head
   head(ctx, look);

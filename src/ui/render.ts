@@ -7,7 +7,10 @@ import { blastArea, dragOptions, moveCost, reachFor, throwOptions } from "../gam
 import { abilityTargets } from "../game/abilities";
 import type { Unit } from "../game/types";
 import { mapLayer, noise } from "./tiles";
-import { sfx, transition } from "./audio";
+import { audioSettings, sfx, transition } from "./audio";
+import { createFx } from "./fxdraw";
+import { bubbles, createLiving, mist } from "./living";
+import type { Effect } from "../game/types";
 import { animOf, badge, drawBase, drawFallen, drawPerson, drawRadio, drawRecords, lookFor, noteEffects, placeOf, resetAnims } from "./sprites";
 import { escaping } from "../game/scp173";
 import { detectRange } from "../game/insurgency";
@@ -27,6 +30,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   cv.width = L.W * TS * dpr; cv.height = L.H * TS * dpr;
   resetAnims();
+  const fxr = createFx(), living = createLiving();
 
   function drawTiles() {
     ctx.drawImage(mapLayer(dpr), 0, 0, L.W * TS, L.H * TS);
@@ -90,6 +94,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
 
   // SCP-049 from above: a dark robe and hood, the pale beak of its mask pointing the way it faces
   function drawDoctor(cx: number, cy: number, ang: number) {
+    mist(ctx, cx, cy, performance.now());
     drawBase(ctx, cx, cy, "circle", isCalm() ? C.ok : isStaggered() ? C.manila : C.alert);
     ctx.save(); ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.beginPath(); ctx.ellipse(cx + 2, cy + 3, 11, 9, 0, 0, Math.PI * 2); ctx.fill();
     ctx.translate(cx, cy); ctx.rotate(ang);
@@ -112,6 +117,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
     // the black puddle it comes and goes through
     const pr = S.submerged ? 12 * (1 - k * 0.6) : 12 * Math.max(0.4, 1 - k * 0.4);
     ctx.fillStyle = "rgba(14,10,6,0.85)"; ctx.beginPath(); ctx.ellipse(cx, cy + 3, pr, pr * 0.75, 0, 0, Math.PI * 2); ctx.fill();
+    if (S.submerged) bubbles(ctx, cx, cy, now);
     if (scale <= 0.02) return;
     ctx.save(); ctx.translate(cx, cy + (1 - scale) * 6); ctx.scale(scale, scale); ctx.rotate(ang);
     ctx.fillStyle = "#2a2118"; ctx.strokeStyle = isFeeding() ? C.manila : C.alert; ctx.lineWidth = 2 / Math.max(0.3, scale);
@@ -145,6 +151,9 @@ export function createRenderer(cv: HTMLCanvasElement) {
   function drawUnit(u: Unit, now: number) {
     const p = placeOf(u, now), cx = p.x, cy = p.y;
     const hurt = Math.max(0, 1 - (now - p.a.hit) / 280), flash = now - p.a.fired < 110, bob = p.moving ? Math.sin(now / 35) * 0.8 : 0;
+    // Phase 4G: recoil after firing, a duck aside from a near miss, the weapon down while reloading, blood when badly hurt
+    const kick = Math.max(0, 1 - (now - p.a.fired) / 140) * 2.6, fl = now - p.a.flinch < 260 ? (now - p.a.flinch) / 260 : 0;
+    const pose = { kick, flinch: fl, reloading: now - p.a.reload < 650, bloodied: u.hp > 0 && u.hp < u.maxHp / 2, seed: u.id.length + u.name.length };
     if (u.side === "anomaly" && S.has049) { drawDoctor(cx, cy, p.ang); return; }
     if (u.side === "anomaly" && S.has106) { drawOldMan(cx, cy, p.ang, now); return; }
     if (u.side === "anomaly") {
@@ -183,8 +192,10 @@ export function createRenderer(cv: HTMLCanvasElement) {
     if (u.side === "mtf") {
       const pan = isPanicked(u), col = pan ? "#55636f" : u.guard ? "#9fb3c4" : C.mtf;
       drawBase(ctx, cx, cy, u.guard ? "rsquare" : "circle", col);
-      drawPerson(ctx, cx, cy, p.ang, look, { hurt, flash, bob });
+      drawPerson(ctx, cx, cy, p.ang, look, { hurt, flash, bob, ...pose, raised: !!u.overwatch });
       badge(ctx, cx + 10, cy + 10, pan ? "!!" : u.guard ? "S" : String(u.slot ?? ""), col);
+      shieldBadge(u, cx - 12, cy - 11);
+      if (S.phase === "player" && !u.downed) apPips(u, cx, cy - 24);
       if (S.concealed) { ctx.strokeStyle = C.ok; ctx.lineWidth = 1.5; ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.arc(cx, cy, 16, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); }
       if (u.overwatch) { ctx.strokeStyle = C.manila; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, 16, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke(); }
     } else if (u.side === "raider") {
@@ -192,7 +203,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
       if (u.downed) { drawFallen(ctx, cx, cy, p.ang, look, false); drawBase(ctx, cx, cy, "diamond", col); }
       else {
         drawBase(ctx, cx, cy, "diamond", u.role === "commander" ? C.manila : col);
-        drawPerson(ctx, cx, cy, p.ang, look, { hurt, flash, bob });
+        drawPerson(ctx, cx, cy, p.ang, look, { hurt, flash, bob, ...pose, raised: !!u.overwatch });
         // specialists carry a letter: S sniper, X sapper, O officer, ★ the commander
         const mark = { sniper: "S", demo: "X", officer: "O", commander: "★" }[u.role as string];
         if (mark) badge(ctx, cx + 10, cy + 10, mark, u.role === "commander" ? C.manila : col);
@@ -211,14 +222,44 @@ export function createRenderer(cv: HTMLCanvasElement) {
     } else {
       // D-Class: the work detail gets a solid ring, loose ones a broken one
       drawBase(ctx, cx, cy, "circle", u.side === "dclass" ? "#f2e6c9" : C.subject, u.side !== "dclass");
-      drawPerson(ctx, cx, cy, p.ang, look, { hurt, bob });
+      drawPerson(ctx, cx, cy, p.ang, look, { hurt, bob, flinch: fl, bloodied: pose.bloodied, seed: pose.seed });
       badge(ctx, cx + 10, cy + 10, "D", C.subject);
+      if (u.side === "dclass" && S.phase === "player") apPips(u, cx, cy - 24);
     }
     if (u.staring) drawEye(cx + 10, cy - 10);
     if (u.restrained) tag("CUFFED", cx, cy - 18, C.manila);
     if (u.carrying) tag("CARRYING", cx, cy + 20, C.manila);
     if ((u.hunkerUntil ?? -1) >= S.turn) tag("HUNKERED", cx, cy + 20, C.ok);
     if (u.side !== "subject") hpBar(u, cx, cy);
+  }
+
+  /** XCOM-style cover shield: full (blue), half (amber) or flanked (red), against the threats in sight right now;
+   *  with no threat in sight, the best cover beside them. */
+  function shieldBadge(u: Unit, x: number, y: number) {
+    const threats = S.units.filter(r => (r.side === "raider" || r.side === "zombie") && r.alive && !r.downed && seen(r.x, r.y) && sightFrom(r.x, r.y, u.x, u.y));
+    let c: number;
+    if (threats.length) c = Math.min(...threats.map(r => coverAgainst(u.x, u.y, r.x, r.y)));
+    else { c = 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const t = tileAt(u.x + dx, u.y + dy); c = Math.max(c, t === WALL || t === FULL || t === STEEL ? 40 : t === HALF || t === DRUM ? 20 : 0); } }
+    if (!c && !threats.length) return;
+    const col = c >= 40 ? C.mtf : c > 0 ? C.manila : C.alert;
+    ctx.save(); ctx.translate(x, y);
+    ctx.fillStyle = "#0f1317"; ctx.strokeStyle = col; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(0, -5.5); ctx.lineTo(4.8, -3.5); ctx.lineTo(4.2, 1.5); ctx.quadraticCurveTo(2.6, 4.6, 0, 6); ctx.quadraticCurveTo(-2.6, 4.6, -4.2, 1.5); ctx.lineTo(-4.8, -3.5); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = col;
+    if (c >= 40) { ctx.beginPath(); ctx.moveTo(0, -3.6); ctx.lineTo(3, -2.3); ctx.lineTo(2.6, 1.2); ctx.quadraticCurveTo(1.6, 3.2, 0, 4); ctx.quadraticCurveTo(-1.6, 3.2, -2.6, 1.2); ctx.lineTo(-3, -2.3); ctx.closePath(); ctx.fill(); }
+    else if (c > 0) { ctx.beginPath(); ctx.moveTo(0, -3.6); ctx.lineTo(3, -2.3); ctx.lineTo(2.6, 1.2); ctx.quadraticCurveTo(1.6, 3.2, 0, 4); ctx.closePath(); ctx.fill(); }
+    else { ctx.font = "700 8px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("!", 0, 0.5); }
+    ctx.restore();
+  }
+  /** Action points left, as pips over the figure. */
+  function apPips(u: Unit, cx: number, y: number) {
+    const cap = u.staring ? 1 : 2;
+    for (let i = 0; i < cap; i++) {
+      const x = cx - (cap - 1) * 4 + i * 8;
+      ctx.fillStyle = "#0f1317"; ctx.fillRect(x - 3, y - 2.5, 6, 5);
+      ctx.fillStyle = i < u.ap ? "#f2e6c9" : "rgba(242,230,201,0.18)"; ctx.fillRect(x - 2, y - 1.5, 4, 3);
+    }
   }
 
   function tag(text: string, x: number, y: number, color: string) {
@@ -290,16 +331,30 @@ export function createRenderer(cv: HTMLCanvasElement) {
   }
 
   return function draw(now: number) {
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, L.W * TS, L.H * TS);
-    noteEffects(S.effects, S.units, (e, by) => {
-      if (e.type === "line") sfx.shot(by?.gun?.type);
-      else if (e.type === "text") { if (/^\d/.test(e.text ?? "")) sfx.hit(); else if (/miss|graze/.test(e.text ?? "")) sfx.miss(); }
-      else if (e.type === "flash") sfx.explosion();
+    const hl = audioSettings().highlights;
+    noteEffects(S.effects, S.units, (f, by) => {
+      const e = f as Effect;
+      fxr.noted(e);
+      if (e.type === "line") {
+        sfx.shot(by?.gun?.type);
+        const travel = e.dur - 360 - ((e.rounds ?? 1) - 1) * (e.gap ?? 0);
+        if (e.impact === "cover" || e.impact === "spark") setTimeout(() => sfx.ricochet(), travel);
+      } else if (e.type === "text") { if (/^\d/.test(e.text)) sfx.hit(); else if (/MISS|COVER|GRAZE/.test(e.text)) sfx.miss(); }
+      else if (e.type === "flash") { if (!e.color) sfx.explosion(); else if (e.color === "#ff9a50") sfx.flame(); else sfx.corrode(); }
+      else if (e.type === "blast") sfx.explosion();
       else if (e.type === "ghost") sfx.scrape();
-    });
+      else if (e.type === "banner") sfx.sting(e.color === "#86c193");
+      else if (e.type === "cue") ({ reload: sfx.reload, crack: sfx.crack, rise: sfx.rumble, raise: sfx.raise, blink: () => {} })[e.cue]();
+    }, now);
+    // Phase 4G: a short shake on a big moment (only with Action highlights on)
+    const [ox, oy] = fxr.offset(now, hl);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = "#0b0e11"; ctx.fillRect(0, 0, L.W * TS, L.H * TS);
+    ctx.setTransform(dpr, 0, 0, dpr, ox * dpr, oy * dpr);
     stateSounds();
     drawTiles();
+    fxr.under(ctx);
+    living.floor(ctx, now);
     drawFog();
     // night: the map is dark except where flares burn
     if (S.setup.night) {
@@ -310,6 +365,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
         ctx.fillStyle = g; ctx.fillRect((f.x - 3) * TS, (f.y - 3) * TS, TS * 7, TS * 7);
       }
     }
+    living.lights(ctx, now);
     drawHatch();
     const sel = S.selected, playing = canAct();
     const st = S.statue;
@@ -332,19 +388,13 @@ export function createRenderer(cv: HTMLCanvasElement) {
       }
     }
     // SCP-610's flesh, its core, and fire
-    if (S.flesh.size) {
-      ctx.fillStyle = "rgba(120,24,32,0.55)";
-      for (const i of S.flesh) if (S.explored[i]) { const x = i % L.W, y = (i / L.W) | 0; ctx.beginPath(); ctx.ellipse(x * TS + TS / 2, y * TS + TS / 2, 15, 13, (i % 5) / 2, 0, Math.PI * 2); ctx.fill(); }
-    }
+    living.flesh(ctx, now);
     if (S.core && S.core.hp > 0 && S.explored[S.core.y * L.W + S.core.x]) {
       const cx = S.core.x * TS + TS / 2, cy = S.core.y * TS + TS / 2, pulse = 0.5 + 0.5 * Math.sin(now / 300);
       ctx.fillStyle = `rgba(170,30,40,${0.7 + pulse * 0.3})`; ctx.beginPath(); ctx.arc(cx, cy, 11 + pulse * 2, 0, Math.PI * 2); ctx.fill();
       tag(`CORE ${S.core.hp}`, cx, cy - 20, C.alert);
     }
-    for (const [i, until] of S.fires) if (until >= S.turn) {
-      const x = i % L.W, y = (i / L.W) | 0, f = 0.5 + 0.5 * Math.sin(now / 90 + i);
-      ctx.fillStyle = `rgba(255,${110 + f * 60},40,${0.35 + f * 0.25})`; ctx.fillRect(x * TS + 2, y * TS + 2, TS - 4, TS - 4);
-    }
+    living.fire(ctx, now);
     // floor rotted by SCP-106
     if (S.has106) {
       ctx.fillStyle = "rgba(28,22,14,0.55)";
@@ -416,11 +466,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
     }
 
     // smoke
-    for (const s of S.smoke) {
-      const cx = s.x * TS + TS / 2, cy = s.y * TS + TS / 2;
-      ctx.fillStyle = "rgba(170,178,186,0.55)";
-      for (const [ox, oy, r] of [[-6, -4, 11], [6, -2, 10], [0, 6, 12]]) { ctx.beginPath(); ctx.arc(cx + ox, cy + oy, r, 0, Math.PI * 2); ctx.fill(); }
-    }
+    living.smoke(ctx, now);
 
     // motion trackers: anything within 6 tiles of a carrier shows as a blip, walls or not
     const carriers = team().filter(u => u.side === "mtf" && (u.items?.some(i => i.id === "tracker") || u.perks?.includes("scanner")));
@@ -560,20 +606,6 @@ export function createRenderer(cv: HTMLCanvasElement) {
     drawWeather(now);
 
     S.effects = S.effects.filter(e => now - e.t0 < e.dur);
-    for (const e of S.effects) {
-      const k = (now - e.t0) / e.dur;
-      if (e.type === "line") {
-        ctx.globalAlpha = 1 - k; ctx.strokeStyle = e.color; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(e.x0, e.y0); ctx.lineTo(e.x1, e.y1); ctx.stroke(); ctx.globalAlpha = 1;
-      } else if (e.type === "text") {
-        ctx.globalAlpha = 1 - k; ctx.fillStyle = e.color; ctx.font = "600 13px IBM Plex Mono, monospace"; ctx.textAlign = "center";
-        ctx.fillText(e.text, e.x, e.y - k * 14); ctx.globalAlpha = 1;
-      } else if (e.type === "ghost") {
-        drawStatue(e.x, e.y, 0.5 * (1 - k));
-      } else {
-        ctx.globalAlpha = 1 - k; ctx.fillStyle = "#fff8e0";
-        ctx.beginPath(); ctx.arc(e.x, e.y, TS * (0.6 + k * 1.2), 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
-      }
-    }
+    fxr.over(ctx, now, S.effects, L.W * TS, L.H * TS, hl, drawStatue);
   };
 }

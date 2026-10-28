@@ -17,7 +17,7 @@ import { leadOptions, leadTo, plaguePhase, zombiePhase } from "./scp049";
 import { oldManPhase } from "./scp106";
 import { CORE_BURN, firePhase, fleshContact, ignite, spreadFlesh, turnInfected } from "./fire";
 import {
-  S, alive, breakConcealment, canAct, canSee, computeVis, full, fx, hooks, humans, isPanicked, isTeam, label, log, loseSanity,
+  S, alive, banner, breakConcealment, canAct, canSee, computeVis, full, fx, highlight, hooks, humans, isPanicked, isTeam, label, log, loseSanity,
   occupied, reveal, seen, sleep, starers, team, unitAt,
 } from "./state";
 import { RAID_TURNS, THROWN, type Unit } from "./types";
@@ -66,6 +66,7 @@ export function doReload(flash: (t: string) => void) {
   const why = reloadCheck(u);
   if (why) { flash(why); return; }
   u.gun!.ammo = u.gun!.mag; u.ap--;
+  fx({ type: "cue", cue: "reload", x: u.x * TS + TS / 2, y: u.y * TS + TS / 2, dur: 700 });
   log(`${full(u)} reloads the ${u.gun!.name}.`);
   afterAction();
 }
@@ -177,6 +178,7 @@ function arrivals(first: boolean) {
       S.units.push(spawnMember(m, t[0], t[1], S.setup.mods));
       came.push(m.name);
     }
+    if (came.length) banner(r.members[0].guard ? "SITE SECURITY ARRIVES" : "EPSILON-11 ON SCENE", "#86c193");
     if (came.length) log(r.members[0].guard ? `More Site Security arrives: ${came.join(", ")}.` : `Epsilon-11 is on the scene: ${came.join(", ")}.`, "good");
   }
 }
@@ -385,6 +387,7 @@ export function doSeal(flash: (t: string) => void) {
   log(`${full(u)} swings the container door shut and locks it. ${st173name()} is sealed.`, "good");
   const [cx, cy] = L.contTiles[1] || L.contTiles[0];
   fx({ type: "text", x: cx * TS + 16, y: cy * TS - 4, text: "SEALED", color: "#86c193", dur: 1600 });
+  banner("CONTAINED", "#86c193");
   afterAction();
 }
 
@@ -461,7 +464,8 @@ function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y
   const inArea = (v: Unit) => area.some(([a, b]) => a === v.x && b === v.y);
   if (item.id === "frag" || item.id === "bazooka" || item.id === "law") {
     const power = item.id === "bazooka" ? 5 : item.id === "law" ? 4 : 3;
-    fx({ type: "flash", x: x * TS + TS / 2, y: y * TS + TS / 2, dur: 500 });
+    fx({ type: "blast", x: x * TS + TS / 2, y: y * TS + TS / 2, r: power >= 4 ? 2 : 1.5, dur: 700 });
+    highlight(power >= 4 ? 6 : 5, "#ff9a50");
     emitNoise(x, y, "explosion", u);
     log(item.id === "frag" ? `${full(u)} throws a frag grenade.` : `${full(u)} fires the ${item.id === "bazooka" ? "bazooka" : "LAW"}.`, "key");
     for (const v of S.units.filter(v => v.alive && !v.saved && v.side !== "anomaly").filter(inArea)) {
@@ -544,6 +548,7 @@ function recoverSanity() {
 export async function endTurn() {
   if (!canAct()) return;
   S.busy = true; S.pending = null; S.mode = null;
+  S.enemyTurn = { shots: 0, hits: 0, hurt: {}, lost: [], start: Object.fromEntries(S.units.filter(u => !isTeam(u) && u.alive).map(u => [u.id, `${u.x},${u.y}`])) };
   S.phase = "anomaly"; hooks.update();
   await anomalyPhase();
   if (checkEnd()) { S.busy = false; return; }
@@ -560,9 +565,25 @@ export async function endTurn() {
   fleshContact();
   recoverSanity();
   reinforcementsTick();
+  S.enemySummary = enemySummary();
   S.turn++;
   S.busy = false;
   startPlayerTurn(false);
+}
+
+/** One line for the action bar: what the other side did while the player waited. Only what the team could see counts. */
+function enemySummary() {
+  const e = S.enemyTurn;
+  if (!e) return undefined;
+  const moved = S.units.filter(u => !isTeam(u) && u.alive && e.start[u.id] && e.start[u.id] !== `${u.x},${u.y}` && seen(u.x, u.y)).length;
+  const parts: string[] = [];
+  if (e.shots) parts.push(`${e.shots} shot${e.shots > 1 ? "s" : ""} fired at the team, ${e.hits} hit${e.hits === 1 ? "" : "s"}`);
+  const hurt = Object.entries(e.hurt).filter(([n]) => !e.lost.includes(n));
+  if (hurt.length) parts.push(hurt.map(([n, d]) => `${n} −${d}`).join(", "));
+  if (e.lost.length) parts.push(`lost: ${e.lost.join(", ")}`);
+  if (moved) parts.push(`${moved} hostile${moved > 1 ? "s" : ""} moved in sight`);
+  S.enemyTurn = undefined;
+  return parts.length ? `Enemy turn: ${parts.join("; ")}.` : "Enemy turn: nothing seen.";
 }
 
 async function anomalyPhase() {
@@ -574,6 +595,8 @@ async function anomalyPhase() {
   insurgentsStare();
   computeVis();
   const blinked = rollBlinks();
+  // Phase 4G: someone near SCP-173 blinking darkens the edge of the screen for an instant
+  if ([...blinked].some(m => cheb(m.x, m.y, S.statue.x, S.statue.y) <= 6)) fx({ type: "cue", cue: "blink", x: 0, y: 0, dur: 260 });
   const ss = starers(), holders = ss.filter(m => !blinked.has(m));
   for (const m of ss) { m.streak = blinked.has(m) ? 0 : (m.streak ?? 0) + 1; m.bestStreak = Math.max(m.bestStreak ?? 0, m.streak); }
   if (ss.length && !holders.length) {
