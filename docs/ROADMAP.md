@@ -1348,6 +1348,158 @@ default); enemy turns have a Normal/Fast setting. Both settings sit in the Sound
 - What exact funding amounts, upkeep targets, and event frequency produce healthy campaign pacing? Determine through campaign testing.
 - Which additional SCPs, mission types, and progression systems belong in the final Phase 4 scope beyond the existing 4B–4D proposals?
 
+### 4J: XCOM-style tactical combat foundation (proposed; awaiting approval)
+
+Requested after the 4C playtests: stop fixing sightlines, doorways, range, cover and accuracy one bug at a time, audit
+the whole tactical layer, and rebuild it as one coherent XCOM-style system. References studied: OpenXcom's
+Battlescape (TileEngine, AIModule; GPL, read for its approach only, no code taken), Tactical Revolt (a Unity XCOM 2
+style project: grid, action system, cover by raycast, scored AI actions), and Red Blob Games' visibility article (the
+angle-sweep visibility polygon; the page itself was blocked by this session's network, so from prior knowledge).
+
+#### How the tactical layer works now (audit)
+
+- **Map:** a character grid (src/core/grid.ts). Each tile is one kind: wall, floor, half cover, full cover, steel,
+  drum, window, partition, container, exit. Doors and glass carry state in side tables. Floors of a building are
+  stacked rows of one grid joined by link tiles. There is no height anywhere.
+- **Sight (src/core/sight.ts):** an exact grid walk from tile centres. A pair of tiles is visible if at least 3 of 10
+  rays (centre to four corners and centre, both ways) get through. A wall tile in a one-tile wall line is "thin" and
+  blocks only along its centre line. Leaning: `viewSpots` adds side tiles as extra eye positions, with rules about
+  cover facing the target. Smoke is a hard block. Range is a single number per unit (`rangeOf`): the whole map in
+  daylight, 9 at night, 8 to 18 in weather; flares make tiles within 2 visible from 30.
+- **Fire:** `fireLine` is one centre-to-centre ray with a different blocking test (`stopsShot`: reinforced glass).
+  `lineOfFire` combines the lean spots, `visFrac` and `fireLine`.
+- **Cover (src/game/combat.ts `coverAgainst`):** looks only at the 8 neighbouring tiles of the target and an angle cone
+  per neighbour (60 degrees for a side, about 23 for a corner). Walls, full cover and steel give 40, half cover and drums
+  20. It never looks at the line of fire, and ignores windows, partitions and shut doors.
+- **Hit chance (`shotInfo`):** additive modifiers clamped to 5 to 95: aim, weapon, cover or "Flanked +10", leaning or
+  partly hidden −15, a per-weapon-type range step table, reaction −15, suppression −30, perks and items. Crits: +40
+  when flanked and fully visible. Damage is a flat roll minus armor; no falloff.
+- **Actions:** 2 actions; a move costs 1 within `moveOf` tiles, 2 beyond (a dash). Overwatch: team members shoot any
+  Insurgent that steps into their line of fire; among the enemy only snipers use overwatch. Suppression is an ability
+  that sets −30 aim on the target's next shots and nothing else.
+- **Detection:** none as a separate step. A unit is either seen or not (`S.vis`, one bit per tile). Concealment is a
+  flat rule: unalerted Insurgents notice the team within 4 tiles. Hearing (src/game/noise.ts) is the only "rough
+  knowledge" and works well.
+- **Destruction:** explosions remove half cover, doors, partitions, glass and (outside Site-19) walls. Gunfire only
+  breaks glass. Full cover can't be destroyed at all.
+- **Enemy AI (src/game/insurgency.ts):** `bestSpot` scores every tile within a fixed 5 steps by: can it see a known
+  team member (`sightFrom`), its cover (`coverAgainst`), whether it flanks, distance near 6, plus mission goals and a
+  random term. Then shoot if the chance is good. It never weighs how exposed a spot is to the team's guns or
+  overwatch, ignores its own move allowance, and has no flanker, suppressor or grenade behaviour.
+- **Testing:** e2e scripts and throwaway probe scripts. There is no place to set up a situation and watch the rules.
+
+#### Root causes
+
+1. **No single geometry model.** Sight, fire, cover, the AI's spot scoring, noise, the miss animation's "cover tile"
+   and SCP-173's raw sight each ask a different question with different code: 10-ray fractions, one centre ray,
+   neighbour cones, wall counting. 58 call sites use the sight helpers in four different ways. So the game can say "can
+   see but has no line of fire", give cover from a wall that isn't between the two units, or give none from a window
+   sill that is.
+2. **Tiles are all-or-nothing obstacles.** A tile is a whole block or nothing. Thin walls are a special case bolted onto
+   the ray walk; half-height objects are just "not opaque"; there are no edges, heights or materials. Every new case
+   (doorways, windows, corners, leaning) has needed another exception.
+3. **Peeking is bolted on.** Leaning is a set of extra eye tiles chosen by rules, then filtered by a stricter threshold
+   to keep the shadows looking right. It isn't derived from where cover is relative to the line.
+4. **Visibility and perception are the same bit.** Seeing a tile means knowing exactly who is on it. Distance, light,
+   movement and concealment can only act by shrinking one range number, which is why night and fog felt like
+   arbitrary short limits.
+5. **Cover is not directional in the XCOM sense.** It is a neighbour cone test, not "is there an obstacle on the
+   target's side of the line of fire", so flanking is approximate.
+6. **Reactions and suppression are thin.** Overwatch ignores detection and is one-sided; suppression doesn't pin.
+7. **The AI reasons with its own shortcuts** (fixed 5-tile reach, cover by neighbour cones, no threat map), so it
+   can't use cover, flanking and exposure the way the player has to.
+8. **No test bench,** so rules can only be checked by playing or by writing a script.
+
+#### Plan (phased; each phase ships on its own, keeps every existing mission and SCP rule working, and ends with tests)
+
+- **J0, the tactical lab (first, so everything after is measurable).** A debug screen (from the debug panel) with a
+  blank or chosen map. You can:
+  - **Build:** paint walls, half and full cover, windows, door states, partitions, smoke and light.
+  - **Place:** put team members, Insurgents and civilians down and drag them around.
+  - **Inspect:** pick a viewer and see, per tile, visible / detected (silhouette) / identified. Also the lines of fire
+    and peek points it would use, cover shields for each direction, and hovering any enemy shows the full hit chance
+    breakdown.
+  - **Save:** scenarios save as JSON. A fixed set of named scenarios (long hallway, open room, diagonal room, corners,
+    doorway, window wall, partial cover, long range, three crates, single crate) becomes an automated test suite with
+    expected answers, run against the current rules first to record where they are wrong.
+- **J1, one geometry kernel.** Replace the per-system checks with one model and one trace:
+  - **Obstacles:** every tile and edge becomes an obstacle with a shape (full tile, thin segment on the tile's centre
+    line or edge, or nothing), a height class (low = waist, high = head and up, structural = wall), and flags for blocks
+    sight, blocks bullets and destructible.
+  - **Trace:** `trace(a, b)` walks a segment in continuous coordinates (the DDA we have, generalised) and returns every
+    obstacle it crosses, with its height and where.
+  - **Who uses it:** sight, line of fire, cover, AI scoring, explosions, ricochets and noise all use this one trace.
+    `canSee`, `sightFrom`, `lineOfFire` and `rawSight` keep their names, so SCP code is untouched, but become thin
+    wrappers.
+  - **Peeking:** derived from geometry, as XCOM does. A unit adjacent to a high obstacle gets a step-out point at each
+    end of it that lies in open ground, and nowhere else.
+  - **Visibility:** the fraction of sample points on the target's body visible from the best eye point, as OpenXcom's
+    voxel exposure does but in 2D.
+  - **Symmetric and cached** per map version, so A sees B exactly when B sees A.
+- **J2, cover from the line of fire.** A target's cover against a shooter is the tallest obstacle the shot's trace
+  crosses within the target's own tile edge band: high gives full cover, low gives half.
+  - **Flanking falls out of it:** no obstacle on that stretch means flanked.
+  - **It covers every obstacle type:** windows count as half cover (the sill), and thin walls, partitions, doors and
+    pillars count by height.
+  - **Shared everywhere:** hunker down doubles cover as now. Cover shields on the map use the same function, so what the
+    UI shows is what the dice use.
+- **J3, perception separate from sight.** Geometry says a line exists; perception says what the viewer makes of it.
+  - **Inputs:** distance, light on the target's tile, target movement this turn, concealment (in cover, still,
+    smoke density along the line), and the viewer's traits and gear (Keen eyes, binoculars, research).
+  - **Three states:**
+    - *Unseen.*
+    - *Detected:* a silhouette, position only, shown as a contact marker.
+    - *Identified:* side, weapon and type, with the full info panel.
+  - **Lighting:** a light map (map lights, flares, fire, muzzle flashes, the site's lights while the power is on)
+    replaces night's flat 9 tiles. In the dark you still see a lit corridor end to end.
+  - **Range:** clear sight reaches a maximum range of about 30 tiles, covering every current map. Smoke attenuates by
+    density instead of being a wall.
+  - **Concealment and AI:** concealment and the Insurgents' "notice the team within 4 tiles" become cases of this
+    model, and the AI only acts on what it has detected.
+  - **Proposed rule:** you can fire at a detected but unidentified contact with a penalty, at the risk that it's a
+    civilian or a D-Class.
+- **J4, accuracy and damage.**
+  - **Range:** each weapon gets a smooth accuracy-by-distance curve, as XCOM 2's range tables do, instead of steps.
+  - **Damage:** optional damage falloff for shotguns and SMGs at range.
+  - **Grazes:** a graze band near the hit threshold.
+  - **Unchanged:** the 5 to 95 clamp and the breakdown.
+  - **Stray rounds:** a miss travels on along its trace and can strike cover (damaging it), glass or another unit in
+    the line.
+  - **Consistency:** the "can see but no line of fire" case disappears except where it is real (reinforced glass).
+- **J5, actions and reactions.**
+  - **Moves:** move and dash as now, with blue and amber reach shown from the same pathing.
+  - **Overwatch:** fires only on movement the watcher perceives, works for every side and for guards, and keeps
+    reaction penalties, Covering fire and the facing turn.
+  - **Enemy overwatch:** every Insurgent can use it, not just snipers.
+  - **Suppression (XCOM):** the target takes −aim. If it moves, it draws a reaction shot. It stays pinned until the
+    suppressor moves or is hit. Firing costs 2 rounds.
+  - **Status effects:** bleeding, stunned, burning, blinded and panicked get one shared timeline.
+- **J6, destructible cover and environment.**
+  - **Damage:** cover objects get hit points. Stray rounds and explosions wear them down: full cover becomes half,
+    then rubble.
+  - **Updates:** every change bumps the map version, so sight, cover and the AI see it at once.
+  - **Hazards:** fire and fuel drums keep their rules, now through the same structure model.
+- **J7, enemy AI on the shared model.**
+  - **Utility AI:** each enemy scores candidate tiles within its real move and dash range, and actions (shoot,
+    overwatch, grenade to flush or destroy cover, suppress, reload, hunker, fall back).
+  - **What it weighs:** cover against every detected threat, flank chances, its own exposure (expected incoming fire
+    from units that could see the spot, and overwatch lanes), distance to its objective, and role weights. The sniper
+    keeps range; the 4H flanker seeks flanks; the officer stays back.
+  - **Fair play:** it uses only what it perceives and remembers.
+  - **Testable:** decisions are seeded and deterministic in the lab, so AI behaviour can be tested.
+- **J8, elevation (last, built on J1's height classes).**
+  - **Model:** tile elevation levels on maps that have them (roofs, catwalks, the truck bed, gantries), traced in
+    2.5D.
+  - **XCOM rules:** height advantage gives aim, low cover doesn't protect against a shooter above it, and higher
+    ground sees over low obstacles.
+  - **Phase 5 (3D)** reuses the same model.
+
+**Order and relation to 4H:** J0 → J1 → J2 → J3 → J4 → J5 → J6 → J7 → J8. 4H's new enemy roles (medic, flanker) and
+gear (breaching charge, ballistic shield) are built on J5 to J7, so 4J goes before 4H. 4D stays last.
+
+**Kept as decided earlier:** vision is all round, as in XCOM 2 (facing affects reaction shots, not sight). Hearing
+stays as built.
+
 ## Phase 4 order
 
 Priority by priority; each part is finished and verified before the next starts. Decided by the user (4F moved ahead
@@ -1357,8 +1509,9 @@ of 4I and 4G after 4E):
 3. 4F dynamic World Map activity (done).
 4. 4I tactical map geometry, visibility, facing, firing and sound (done; the foundation 4G builds on).
 5. 4G tactical combat life and presentation (done).
-6. 4B more anomalies (done), 4C maps and mission variety (done); next 4H combat variety and progression.
-7. 4D campaign story and endgame last.
+6. 4B more anomalies (done), 4C maps and mission variety (done).
+7. 4J XCOM-style tactical combat foundation (proposed), then 4H combat variety and progression on top of it.
+8. 4D campaign story and endgame last.
 
 ## Phase 5: 3D, XCOM style
 
