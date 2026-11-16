@@ -92,7 +92,7 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
 | S-D1 | Persistent staff identities in tactical missions | none | Named researchers in breach missions; deaths propagate; tested | [x] |
 | S-D2 | Research and engineering depth (assignments, specialties, experiments) | S-B1 | See notes | [~] |
 | S-D3 | Economy transparency and Council tradeoffs | S-B1 | Ledger and upcoming obligations visible; tested | [x] |
-| S-D4 | Goal-driven Chaos Insurgency and GOC | none | Plans chosen from Site-19's weaknesses and their own resources; tested | [ ] |
+| S-D4 | Goal-driven Chaos Insurgency and GOC | none | Plans chosen from Site-19's weaknesses and their own resources; tested | [x] |
 | S-E1 | Screen redesigns: Command, World, Research, Engineering, Personnel, History, Credits | S-C2 | Browser workflow tests | [ ] |
 | S-E2 | Onboarding with Krista Carter | S-E1 | Persisted steps; skippable; tested | [ ] |
 | S-E3 | Strategic inspector (developer tools) | S-L1 | Debug panel shows state, risks, faction plans, invariants | [ ] |
@@ -162,6 +162,17 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
 - Bug found by a 1,050-run seed sweep: losing an engineer mid-job left more engineers busy than on staff, and the
   header showed a negative count. Now short-handed work slows (it moves on a day with the chance of engineers there
   over engineers needed), nothing new can start, the header shows "short N", and the briefing explains it.
+- D4 done:
+  - The Insurgency's monthly operations are chosen by `planScores(c)` (pure): each operation is scored from
+    Site-19's weaknesses and the Insurgency's strength, with a reason. For example:
+    - a raid scores higher with few guards posted, Epsilon-11 away, normal alert or a high agenda;
+    - sabotage scores higher with occupied wings, a power shortage or moles inside;
+    - agitation scores higher with low D-Class morale;
+    - infiltration goes after the richest front.
+  - The top three are taken after a random weighting, so the choice is not certain.
+  - Known operations show the analysts' reading of why they were chosen.
+  - The GOC's chance of turning up for an anomaly (`gocInterest`) follows the region's exposure, 10% to 40%.
+  - `tests/unit/factions.test.ts`.
 
 ## Known issues
 

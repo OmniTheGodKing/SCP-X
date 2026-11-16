@@ -464,10 +464,14 @@ function firstContact(c: Campaign, inc: Incident, caught: boolean) {
   }
 }
 
-/** Phase 4C: from 1953 a sighting has a 1 in 5 chance that the Global Occult Coalition is there for it instead (not for
+/** Strategic overhaul D4: how likely the Global Occult Coalition is to go after an anomaly in a region. The GOC destroys
+ *  what threatens to expose the anomalous, so its interest follows the region's exposure. */
+export const gocInterest = (c: Campaign, r: RegionId) => Math.min(0.4, 0.1 + (c.regions[r]?.exposure ?? 0) / 200);
+/** Phase 4C: from 1953 a sighting has a chance that the Global Occult Coalition is there for it instead (not for
  *  SCP-939's pack, which has nothing for them to blow up in one place). */
 function gocMaybe(c: Campaign, inc: Incident) {
-  if (dateOf(c.day).getUTCFullYear() < 1953 || inc.scpId === "939" || rnd() >= 0.2) return;
+  // Strategic overhaul D4: the GOC goes where the public is closest to seeing something; 10% at no exposure, up to 40%
+  if (dateOf(c.day).getUTCFullYear() < 1953 || inc.scpId === "939" || rnd() >= gocInterest(c, inc.region)) return;
   inc.goc = true; inc.gru = false; inc.insurgents = rand(3, 4);
   inc.title = `${inc.title} (GOC present)`;
 }
