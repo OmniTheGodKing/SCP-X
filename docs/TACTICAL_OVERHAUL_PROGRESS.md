@@ -53,8 +53,8 @@ Status: `[x]` done and tested, `[~]` partly done (see notes), `[ ]` not started.
 | T4.5 | One reaction system: all sides, perceived movement only [6.2] | T3.2, T2.3 | Reaction matrix tests | [x] |
 | T4.6 | XCOM 2 suppression [6.3] | T4.5 | Moving while suppressed draws a shot; ends overwatch | [x] |
 | T4.7 | Destructible cover with hit points [7.1] | T1.1, T4.3 | Crate degrades by hits; grenade drops full to half | [x] |
-| T5.1 | Utility AI on shared rules [7.3] | T2.1, T2.2, T3.2, T4.5, T4.6 | Seeded AI scenarios: takes cover, flanks, avoids overwatch, grenades clusters | [ ] |
-| T5.2 | Squad coordination and roles | T5.1 | Suppress-and-advance, sniper positions, objective defence | [ ] |
+| T5.1 | Utility AI on shared rules [7.3] | T2.1, T2.2, T3.2, T4.5, T4.6 | Seeded AI scenarios: takes cover, flanks, avoids overwatch, grenades clusters | [x] |
+| T5.2 | Squad coordination and roles | T5.1 | Suppress-and-advance, sniper positions, objective defence | [x] |
 | T6.1 | Presentation hooks: rules can run headless [7.2, partial] | T0 | Combat and enemy turns run with no animation waits in tests | [x] `pace.headless`; sandbox missions |
 | T6.2 | Tactical lab screen on production rules [1.1] | T1.5, T2.1 | Build scenarios and inspect sight, peeks, fire, cover, hit chance, AI; save and load | [ ] |
 | T6.3 | Move preview: shields, flanks, overwatch risk; contact markers; suppression indicators [3.2] | T2.1, T3.2 | Preview equals the dice | [ ] |
@@ -167,6 +167,27 @@ Status: `[x]` done and tested, `[~]` partly done (see notes), `[ ]` not started.
     peek. The spawn rule accounts for it.
 - **Sandbox missions** (`src/game/sandbox.ts`): a real mission state from a drawn map and a unit list, used by the
   headless tests (`tests/unit/combat.test.ts`, 12 tests) and by the lab (T6.2).
+
+- **T5 done.** `src/game/ai.ts` is a utility AI on the shared rules.
+  - **Position scoring:** each Insurgent scores every tile within its real move (or dash) using the real rules
+    (`shotInfo`, `canShoot`, `coverOn`, perception) with itself placed there. The score weighs offense (expected
+    damage), risk (expected hits from team members who could shoot that spot), cover against remembered threats,
+    flanking the pod's focus, the role's preferred range, clumping, overwatch lanes, staying clear of SCP-173, and the
+    mission goal. Weights live in `AI_WEIGHTS` and `ROLE_RANGE`.
+  - **Action choice:** reload (moving first if badly exposed), grenade a cluster (one frag per fire team), suppress
+    if the pod assigned it, shoot if the shot is good (or move first for a much better one), move, dash when nothing
+    is known, overwatch, hunker. Suppressed units don't move.
+  - **Pod coordinator** (`planPod`): the focus is the best-covered visible team member; a machine gunner or officer
+    suppresses it; the others flank.
+  - **Knowledge:** threats are only what Insurgents have made out: seen now, remembered for 2 turns, or heard.
+  - **Shared code:** grenades use the shared `blast()` in `src/game/explosive.ts`; suppression uses the shared
+    `suppress()`. Scamper on alert uses the same scoring.
+  - **Kept:** the mission-goal branches (lift, containment control, truck, GOC and GRU-P).
+  - **Tests:**
+    - `tests/unit/ai.test.ts` (5 seeded scenarios: takes cover or a flank, suppress and flank, grenades a pair, avoids
+      an overwatch lane, knows only what it has made out).
+    - `tests/ai.e2e.cjs` (real maps: 100% of Insurgents in contact ended in cover or on a flank in the test run;
+      enemy turns about 0.1 s).
 
 ## Unresolved issues
 

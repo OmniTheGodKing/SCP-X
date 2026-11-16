@@ -21,16 +21,25 @@ export function assignRoles(units: Unit[], setup: MissionSetup) {
   if (setup.goc) {
     for (const r of rs) Object.assign(r, { name: "GOC operative", aim: 70 + (setup.enemyAim ?? 0), hp: 5, maxHp: 5, armor: (r.armor ?? 0) + 1,
       gun: { name: "M1 Garand", type: "rifle", dmg: [3, 5], mag: 8, ammo: 8, aim: 5 } });
+    giveGrenades(rs);
     return;
   }
   const roles = setup.ciRoles;
   const free = () => rs.find(r => r.role === "rifleman");
   if (setup.commander && !gru) { const r = free()!; Object.assign(r, { role: "commander", name: setup.commander, hp: 8, maxHp: 8, aim: 72, armor: (r.armor ?? 0) + 1 }); }
-  if (!roles) return;
+  if (!roles) { giveGrenades(rs); return; }
   if (roles.officer && rs.length >= 3 && free()) Object.assign(free()!, { role: "officer", name: gru ? "GRU-P officer" : ROLE_NAMES.officer, hp: 5, maxHp: 5 });
   if (!gru && roles.sniper && rs.length >= 3 && free()) { const r = free()!; Object.assign(r, { role: "sniper", name: ROLE_NAMES.sniper, aim: 70, gun: { name: "Scoped Mosin-Nagant", type: "rifle", dmg: [4, 6], mag: 3, ammo: 3, aim: 10 } }); }
   if (!gru && roles.demo && rs.length >= 4 && free()) Object.assign(free()!, { role: "demo", name: ROLE_NAMES.demo, charges: 1 });
   if (roles.charm) { const r = rs[Math.floor(rnd() * rs.length)]; r.charm = true; r.hadCharm = true; }
+  giveGrenades(rs);
+}
+/** Tactical overhaul T5: one frag grenade per fire team, carried by its first member who isn't a sniper. */
+function giveGrenades(rs: Unit[]) {
+  for (const pod of new Set(rs.map(r => r.pod ?? 0))) {
+    const r = rs.find(x => (x.pod ?? 0) === pod && x.role !== "sniper");
+    if (r && !r.items?.some(i => i.id === "frag")) r.items = [...(r.items ?? []), { id: "frag", uses: 1 }];
+  }
 }
 
 /** Officers and the commander steady every Insurgent within 4 tiles of them (not themselves). */

@@ -272,6 +272,16 @@ export function kill(u: Unit, by173 = false) {
   if (S.selected === u) S.selected = null;
 }
 
+/** XCOM 2 suppression (Tactical overhaul T4.6), for the team's ability and the enemy AI alike: 2 rounds, and each
+ *  target is pinned through its next turn (−30 aim, no overwatch); if it moves, the suppressor gets a shot at it. */
+export function suppress(by: Unit, targets: Unit[]) {
+  if (by.gun) by.gun.ammo = Math.max(0, by.gun.ammo - 2);
+  by.firedTurn = S.turn;
+  for (const r of targets) { r.suppressedUntil = S.turn + 1; r.suppressedBy = by.id; r.overwatch = false; }
+  emitNoise(by.x, by.y, "gunfire", by);
+  if (by.side === "mtf" && S.setup.weather !== "storm") breakConcealment("suppressing fire");
+}
+
 // ---------- reaction fire (Tactical overhaul T4.5) ----------
 /** Whom a unit on overwatch will fire at: the team at Insurgents, SCP-049-2 and other hostile instances, rioters and a
  *  fighting SCP-682; Insurgents at the team. Nobody reacts to what they can't make out (perception), or through a

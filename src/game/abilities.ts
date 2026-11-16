@@ -1,4 +1,5 @@
 // Class abilities used during a mission. Each has a target rule, a cost and an effect.
+import { suppress } from "./combat";
 import { emitNoise } from "./noise";
 import { payAbility } from "./actions";
 import { coverSides } from "../core/geom";
@@ -173,9 +174,7 @@ export function useAbility(u: Unit, p: AbilityId, t: Unit) {
       const hit = [t, ...(hasPerk(u, "wall_of_fire") ? alive("raider").filter(r => r !== t && cheb(r.x, r.y, t.x, t.y) <= 2) : [])];
       // Tactical overhaul T4.6: XCOM 2 suppression. Pinned through their next turn: −30 aim, no overwatch, and if
       // they move, the suppressor gets a shot at them. It ends if the suppressor moves. Costs 2 rounds.
-      if (u.gun) u.gun.ammo = Math.max(0, u.gun.ammo - 2);
-      for (const r of hit) { r.suppressedUntil = S.turn + 1; r.suppressedBy = u.id; r.overwatch = false; }
-      emitNoise(u.x, u.y, "gunfire", u);
+      suppress(u, hit);
       log(`${full(u)} lays down suppressing fire: ${hit.length} Insurgent${hit.length > 1 ? "s" : ""} pinned (−30 aim, no overwatch; moving draws ${u.call || u.name}'s fire).`, "good");
       break;
     }

@@ -18,8 +18,8 @@ import { mountHub, openTab } from "./ui/hubView";
 import { L } from "./core/grid";
 import { fireLine, sightFrom } from "./core/sight";
 import { blastStructure, openDoor, opaque, passable } from "./core/grid";
-import { canShoot, fire, lineOfFire, moveUnit } from "./game/combat";
-import { canSee, computeVis } from "./game/state";
+import { canShoot, coverAgainst, fire, lineOfFire, moveUnit, shotInfo } from "./game/combat";
+import { canSee, computeVis, pace } from "./game/state";
 import { emitNoise, settleFacing } from "./game/noise";
 import { endTurn, reachFor } from "./game/turn";
 import * as scp4b from "./game/scp4b";
@@ -144,6 +144,8 @@ function showHub() {
   rng: { force: forceRng },
   // Tactical overhaul T1: the geometry kernel itself
   geom,
+  // T5/T6: pacing (headless skips animation waits) and the cover rule
+  pace, coverAgainst, shotInfo,
 };
 
 mountDebug({ campaign: () => campaign, screen: () => screen, refresh: () => { saveCampaign(campaign); if (screen === "hub") showHub(); } });
