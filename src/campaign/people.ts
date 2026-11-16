@@ -4,7 +4,7 @@
 import { rnd } from "../core/rng";
 import { CULTURES, fullName, type Culture } from "../data/names";
 import { rollLook, type Look } from "../data/looks";
-import type { Branch } from "./research";
+import { fitAssignments, type Branch } from "./research";
 import { log, type Campaign } from "./campaign";
 
 export type StaffKind = "researcher" | "engineer";
@@ -106,7 +106,7 @@ export function losePeople(c: Campaign, kind: StaffKind, n: number, how: string,
     if (!here.length) break;
     const p = here.find(x => x.name === who) ?? here[Math.floor(rnd() * here.length)];
     c.people = c.people!.filter(x => x !== p);
-    if (kind === "researcher") c.researchers = Math.max(0, c.researchers - 1); else c.engineers = Math.max(0, c.engineers - 1);
+    if (kind === "researcher") { c.researchers = Math.max(0, c.researchers - 1); fitAssignments(c); } else c.engineers = Math.max(0, c.engineers - 1);
     (c.staffLost ??= []).unshift({ name: p.name, kind, day: c.day, how, field: p.field, trade: p.trade });
     out.push(p.name);
   }
@@ -118,7 +118,7 @@ export function sendAway(c: Campaign, kind: StaffKind, id?: string): Person | nu
   const p = (id ? present(c, kind).find(x => x.id === id) : undefined) ?? present(c, kind)[0];
   if (!p) return null;
   p.away = true;
-  if (kind === "researcher") c.researchers--; else c.engineers--;
+  if (kind === "researcher") { c.researchers--; fitAssignments(c); } else c.engineers--;
   return p;
 }
 export function bringBack(c: Campaign, kind: StaffKind, id?: string) {

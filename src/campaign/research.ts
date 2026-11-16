@@ -378,14 +378,20 @@ export function hireResearcher(c: Campaign) {
 }
 
 /** One day of research and workshop production. */
+/** Researchers beyond those on staff or beyond lab space (a lab was damaged, someone left) stop working on the newest
+ *  assignments. Called whenever staff or labs are lost, as well as each day. */
+export function fitAssignments(c: Campaign) {
+  const r = c.research;
+  while (researchersAssigned(c) > Math.min(c.researchers, researcherCapacity(c))) {
+    const k = Object.keys(r.assigned).reverse().find(k => r.assigned[k] > 0);
+    if (!k) break;
+    r.assigned[k]--;
+  }
+}
 export function tickResearch(c: Campaign) {
   const r = c.research;
   announceResearch(c);
-  // researchers beyond lab space (a lab was damaged) stop working on the newest assignments
-  while (researchersAssigned(c) > Math.min(c.researchers, researcherCapacity(c))) {
-    const k = Object.keys(r.assigned).reverse().find(k => r.assigned[k] > 0)!;
-    r.assigned[k]--;
-  }
+  fitAssignments(c);
   for (const [id, n] of Object.entries(r.assigned)) {
     if (!n) continue;
     r.progress[id] = (r.progress[id] || 0) + n * (testOf(id) ? 1 : fieldBoost(c, PROJECTS[id].branch));
