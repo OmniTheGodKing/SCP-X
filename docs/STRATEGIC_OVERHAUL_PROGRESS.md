@@ -96,7 +96,7 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
 | S-E1 | Screen redesigns: Command, World, Research, Engineering, Personnel, History, Credits | S-C2 | Browser workflow tests | [ ] |
 | S-E2 | Onboarding with Krista Carter | S-E1 | Persisted steps; skippable; tested | [x] |
 | S-E3 | Strategic inspector (developer tools) | S-L1 | Debug panel shows state, risks, faction plans, invariants | [x] |
-| S-E4 | End-to-end campaign test | all | The 17-step sequence in the brief | [ ] |
+| S-E4 | End-to-end campaign test | all | The 17-step sequence in the brief | [x] |
 | S-K | Balance and pacing from simulations | S-A4 | Documented changes and re-run results | [ ] |
 
 ## Architectural decisions
@@ -208,6 +208,18 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
   each held anomaly's breach risk per day and over 30 days with the reasons, what each Insurgency operation is worth
   to it now and why (`planScores`), the planned operations, and the invariant results. Looking does not mark the
   save as a debug save; `strategic.e2e.cjs` checks that.
+- E4 done: `tests/campaign.e2e.cjs` plays the brief's 17-step sequence through the hub's own controls on a fresh
+  campaign:
+  - review Site-19, post a guard, assign a researcher;
+  - build a generator then a workshop, with time advanced on the World clock at 4x until each stands;
+  - place a workshop order (unlocking research through the debug menu if nothing is orderable yet), clean
+    SCP-173's cell;
+  - run time until an incident reaches the Director's Briefing, follow the briefing item to it, open its deployment
+    screen and deploy (landing a flight with the debug control when it is far);
+  - end the tactical mission with the debug "Win now" (the fight itself is covered by the tactical suites), return;
+  - check the record, the service records of everyone who went, and the invariants;
+  - reload and compare the campaign, then run three more days and check the invariants again.
+  It takes about 70 seconds. Six of seven runs passed and one produced no output; that one was not reproduced.
 
 ## Known issues
 
