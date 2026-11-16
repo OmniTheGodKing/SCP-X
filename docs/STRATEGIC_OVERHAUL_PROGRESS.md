@@ -84,11 +84,11 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
 | S-A2 | Baseline tests and screens | none | Recorded above | [x] |
 | S-A4 | Headless strategy simulations, 30/90/180 days, 7 strategies | none | Run in `npm test`; invariants clean | [x] |
 | S-L1 | Campaign invariants | none | Checked daily in the simulations | [x] |
-| S-B1 | Command layer with validation and gameplay events | none | Hub actions go through `dispatch()`; rejected commands change nothing; tested headless | [ ] |
-| S-H1 | Notification severity (routine, important, critical) with what, why, what changed, where | S-B1 | Critical events pause; tested | [ ] |
-| S-H2 | Director's Briefing: decision queue derived from state | S-B1 | Items by urgency, each opening its screen; no stale entries; tested | [ ] |
-| S-C1 | Visual style guide and design tokens | none | `docs/UI_STYLE_GUIDE.md`; tokens in CSS | [ ] |
-| S-C2 | Representative screen: Site-19 cross-section centrepiece | S-C1 | Functional build, repair, staff and containment from the screen; browser test | [ ] |
+| S-B1 | Command layer with validation and gameplay events | none | Hub actions go through `dispatch()`; rejected commands change nothing; tested headless | [x] |
+| S-H1 | Notification severity (routine, important, critical) with what, why, what changed, where | S-B1 | Critical events pause; tested | [x] |
+| S-H2 | Director's Briefing: decision queue derived from state | S-B1 | Items by urgency, each opening its screen; no stale entries; tested | [x] |
+| S-C1 | Visual style guide and design tokens | none | `docs/UI_STYLE_GUIDE.md`; tokens in CSS | [x] |
+| S-C2 | Representative screen: Site-19 cross-section centrepiece | S-C1 | Functional build, repair, staff and containment from the screen; browser test | [x] |
 | S-D1 | Persistent staff identities in tactical missions | none | Named researchers in breach missions; deaths propagate; tested | [ ] |
 | S-D2 | Research and engineering depth (assignments, specialties, experiments) | S-B1 | See notes | [ ] |
 | S-D3 | Economy transparency and Council tradeoffs | S-B1 | Ledger and upcoming obligations visible; tested | [ ] |
@@ -114,6 +114,25 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
   - `tests/unit/sim.test.ts`
   - `fitAssignments` in `research.ts`, called from `people.ts`
 
+- B1, H1 and H2 done (commit "Strategic overhaul B"):
+  - `src/campaign/commands.ts`: `dispatch()` validates with the existing `can*` checks; a rejected command changes nothing.
+  - `src/campaign/briefing.ts`: the Director's Briefing, derived from state each time it is shown.
+  - Log entries carry a severity (routine, important, critical) and the screen they belong to.
+- C1 and C2 done:
+  - `docs/UI_STYLE_GUIDE.md` and `src/ui/hub.css` (tokens, panels, readouts, lamps, meters, briefing items).
+  - Header: one readout strip; campaigns, saves, sound and credits moved into a System menu.
+  - Site-19: the cross-section takes about two-thirds of the width; with nothing selected the side panel shows site
+    operations, containment risk over 30 days per wing, and work in progress.
+  - Command: the Director's Briefing leads; each item opens its screen. Situation, Council, finances and a
+    severity-marked site log sit beside it.
+  - Credits and licences screen (`src/ui/credits.ts`): SCP authors where confirmed, the rest marked "to be confirmed".
+  - `tests/strategic.e2e.cjs`: header, briefing order and navigation, site overview, build and repair from the
+    screen, a rejected command leaving the campaign unchanged, credits, no horizontal scroll at 1280 and 1920.
+  - The test hook (`window.__site19`) exposes `dispatch`, `briefing` and `invariants`.
+
 ## Known issues
 
 - The accept4c GRU-P flake (pre-existing).
+- accept4b fails intermittently (SCP-035 possession, SCP-012, a crash reading a spawn point): 3 of 6 runs failed on
+  the tactical-overhaul commit d1145d0 too, so it predates this work. The tests place units on generated maps that
+  differ between runs.

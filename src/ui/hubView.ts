@@ -1,4 +1,7 @@
 // Site-19 Command: incidents and time, the base and its containment, and Epsilon-11's roster.
+import { creditsHtml } from "./credits";
+import "./hub.css";
+import { directorsBriefing } from "../campaign/briefing";
 import { dispatch, type Command } from "../campaign/commands";
 import { HUB_TIPS } from "./tutorial";
 import { SLOTS as SAVE_SLOTS, activeSlot, clearSlot, slotSummary, type Slot } from "../campaign/save";
@@ -133,6 +136,8 @@ let fundsNow = () => 0;
 let landD: string | null = null;
 /** Facility names short enough for a slot in the cross-section. */
 const SHORT_NAME: Partial<Record<FacilityType, string>> = { cont_safe: "Safe wing", cont_euclid: "Euclid wing", cont_keter: "Keter wing", psych: "Psych services", security: "Security", barracks: "D-Class barracks", training: "Range" };
+/** One header readout: a small label over a value, coloured only when it matters. */
+const ro = (k: string, v: string, tone: string, title: string) => `<div class="ro ${tone}" title="${esc(title)}"><span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></div>`;
 export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let planning: string | null = null;
   const chosen = new Set<string>();
@@ -162,6 +167,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let lookOpen = false;   // keep the appearance editor open while clicking through parts
   let dCount = 2;
   let sel: { level: number; slot: number } | null = null;
+  let creditsOpen = false;
   let resetArmed = 0;
   let regionSel: RegionId = pendingMapSel?.startsWith("reg:") ? pendingMapSel.slice(4) as RegionId : HOME;
   /** What's selected on the World Map ("inc:<id>" or "fac:<id>"), and which kinds of marker are shown. */
@@ -236,39 +242,42 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
 <main class="wrap hub">
   <header class="top">
     <div class="brand">${siteSeal(48)}<div>
-      <div class="eyebrow">SCP Foundation · Site-19 Command · Mobile Task Force Epsilon-11</div>
+      <div class="eyebrow">SCP Foundation · Site-19 Command${c.debug ? `<span class="debugtag" title="This campaign has been changed with the debug menu.">DEBUG SAVE</span>` : ""}</div>
       <h1>Site-19 <small>${dateText(c.day)} · <span id="clockHour">${hourText()}</span> · ${speed ? `${speed}×` : "paused"}</small></h1>
     </div></div>
-    <div class="turnbox">
-      <span class="pill">${icon("funds", 14)}Funds $${c.funds}k</span>
-      <span class="pill">${icon("dclass", 14)}D-Class ${c.dclass}/${dclassCapacity(c)}</span>
-      <span class="pill">${icon("intel", 14)}Intel ${c.intel}</span>
-      <span class="pill ${c.council.standing < AUDIT_BELOW ? "hot" : c.council.standing < 40 ? "warm" : ""}" title="Standing with the O5 Council: ${esc(tierOf(c.council.standing).name)}. It sets the Council's monthly grant ($${councilGrant(c)}k now) and what Site-19 can ask for. See the Command tab.">${icon("standing", 14)}Standing ${c.council.standing}</span>
-      <span class="pill" title="Guards alive / posts at working Security stations">${icon("guards", 14)}Guards ${guardsAlive(c).length}/${guardCapacity(c)}${unposted(c).length ? ` · ${unposted(c).length} unposted` : ""}</span>
-      <span class="pill">${icon("amnestics", 14)}Amnestics ${c.amnestics}/${amnesticsCapacity(c)}</span>
-      <span class="pill ${c.exposure >= 60 || collapsedCount(c) ? "hot" : ""}">${icon("exposure", 14)}Exposure ${c.exposure}${collapsedCount(c) ? ` · ${collapsedCount(c)} lost` : ""}</span>
-      <span class="pill ${c.engineers && engineersFree(c) <= 0 ? "warm" : ""}" title="Engineers not assigned to building, repairs, upgrades, excavation or orders, out of everyone on staff.${c.engineers && engineersFree(c) <= 0 ? " All of them are busy: new work has to wait." : ""}">${icon("engineers", 14)}Engineers ${engineersFree(c)}/${c.engineers} free</span>
-      <span class="pill ${c.researchers && researchersFree(c) <= 0 ? "warm" : ""}" title="Researchers not assigned to a project, out of everyone on staff.${c.researchers && researchersFree(c) <= 0 ? " All of them are busy: new research has to wait." : ""}">${icon("researchers", 14)}Researchers ${researchersFree(c)}/${c.researchers} free</span>
-      <span class="pill ${pw ? "hot" : ""}">${icon("power", 14)}Power ${powerUse(c)}/${powerSupply(c)}</span>
-      ${c.debug ? `<span class="pill hot">Debug save</span>` : ""}
-      <button class="act" id="campaignsBtn" type="button">Campaigns${c.ironman ? " · Ironman" : ""}</button>
+    <div class="readouts" role="group" aria-label="Site-19 resources">
+      ${ro("Funds", `$${c.funds}k`, c.funds < 0 ? "danger" : c.funds < monthlyUpkeep(c) ? "caution" : "", "Money in hand. The Finances panel on Command has what comes in and goes out each month.")}
+      ${ro("Standing", `${c.council.standing}`, c.council.standing < AUDIT_BELOW ? "danger" : c.council.standing < 40 ? "caution" : "", `Standing with the O5 Council: ${tierOf(c.council.standing).name}. It sets the monthly grant ($${councilGrant(c)}k now).`)}
+      ${ro("Exposure", `${c.exposure}${collapsedCount(c) ? ` · ${collapsedCount(c)} lost` : ""}`, c.exposure >= 60 || collapsedCount(c) ? "danger" : c.exposure >= 35 ? "caution" : "", "How much of the anomalous the public has seen. Cover-ups and amnestics bring it down.")}
+      ${ro("Power", `${powerUse(c)}/${powerSupply(c)}`, pw ? "danger" : "", "Power used out of power supplied. Short of power, wings breach more often.")}
+      ${ro("Research", `${researchersFree(c)}/${c.researchers}`, c.researchers && researchersFree(c) > 0 ? "caution" : "", "Researchers free (not on a project) / on staff.")}
+      ${ro("Engineers", `${engineersFree(c)}/${c.engineers}`, c.engineers && engineersFree(c) <= 0 ? "caution" : "", "Engineers free / on staff. Busy ones are building, repairing, digging or on workshop orders.")}
+      ${ro("Guards", `${guardsAlive(c).length}/${guardCapacity(c)}${unposted(c).length ? ` · ${unposted(c).length} unposted` : ""}`, "", "Guards alive / posts at working Security stations.")}
+      ${ro("D-Class", `${c.dclass}/${dclassCapacity(c)}`, "", "D-Class held / beds.")}
+      ${ro("Intel", `${c.intel}`, "", "Intelligence on the Insurgency, spent on locating and weakening cells.")}
+      ${ro("Amnestics", `${c.amnestics}/${amnesticsCapacity(c)}`, "", "Class-A amnestics in stock / storage.")}
+    </div>
+    <details class="sysmenu"><summary class="act">System${c.ironman ? " · Ironman" : ""}</summary><div class="menu">
+      <button class="act" id="campaignsBtn" type="button">Campaigns</button>
       <button class="act" id="exportBtn" type="button" title="Download this campaign as a file, to keep or move to another browser">Export save</button>
       ${c.ironman ? `<span class="act disabled" title="Ironman: this campaign can't be replaced by loading a save over it.">Import save</span>` : `<label class="act" for="importFile" title="Load a campaign from an exported file. It replaces the current one.">Import save</label>`}
       <input type="file" id="importFile" accept=".json,application/json" hidden>
+      <button class="act" id="creditsBtn" type="button">Credits and licences</button>
       ${soundControl()}
-    </div>
+    </div></details>
   </header>
   <nav class="tabs" aria-label="Site-19 sections">
-    ${tabBtn("command", `Command${c.incidents.length ? ` · ${c.incidents.length} open` : ""}`)}
+    ${tabBtn("command", "Command", directorsBriefing(c).filter(b => b.sev !== "routine").length, directorsBriefing(c).some(b => b.sev === "critical"))}
     ${tabBtn("world", "World")}
     ${tabBtn("site", "Site-19")}
-    ${tabBtn("research", `Research${researchersFree(c) > 0 && c.researchers ? ` · ${researchersFree(c)} idle` : ""}`)}
+    ${tabBtn("research", "Research", researchersFree(c) > 0 && c.researchers ? researchersFree(c) : 0)}
     ${tabBtn("personnel", "Personnel")}
     ${tabBtn("history", "History")}
   </nav>
   ${flashMsg ? `<p class="warn-box" role="status">${esc(flashMsg)}</p>` : ""}
   ${coachCard()}
   ${tab === "command" ? commandTab() : tab === "world" ? worldTab() : tab === "site" ? siteTab() : tab === "research" ? researchTab() : tab === "history" ? historyTab() : personnelTab()}
+  ${creditsOpen ? `<div class="overlay fixed"><div class="sheet" role="dialog" aria-label="Credits">${creditsHtml()}<div class="row"><button class="act primary" type="button" id="creditsClose">Close</button></div></div></div>` : ""}
   ${!c.over && c.notices?.length ? `<div class="overlay fixed"><div class="sheet notice" role="dialog" aria-label="Time paused">
     <div class="label">${dateText(c.day)} · time paused</div>
     <ul class="debrief">${c.notices.slice(0, 8).map(n => `<li class="${n.kind}">${esc(n.text)}</li>`).join("")}${c.notices.length > 8 ? `<li>…and ${c.notices.length - 8} more in the site log.</li>` : ""}</ul>
@@ -343,7 +352,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       <div class="row"><button class="act primary" type="button" id="dlgStart">Start</button><button class="act" type="button" id="dlgClose">Cancel</button></div></div></div>`;
   }
 
-  const tabBtn = (t: Tab, label: string) => `<button type="button" class="tab ${tab === t ? "on" : ""}" data-tab="${t}" aria-pressed="${tab === t}">${icon(t, 15)}${label}</button>`;
+  const tabBtn = (t: Tab, label: string, count = 0, urgent = false) => `<button type="button" class="tab ${tab === t ? "on" : ""}" data-tab="${t}" aria-pressed="${tab === t}">${icon(t, 15)}${label}${count ? `<span class="cnt ${urgent ? "danger" : ""}">${count}</span>` : ""}</button>`;
 
   // ---------- Command ----------
   function reportFile(r: Report) {
@@ -503,47 +512,44 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   }
 
   function commandTab() {
-    const inc = c.incidents.find(i => i.id === planning) || null;
-    return `<div class="hubgrid">
+    // Strategic overhaul C/H: the Director's Briefing leads; the situation, the Council and the money sit beside it
+    const brief = directorsBriefing(c);
+    const sevCount = (k: string) => brief.filter(b => b.sev === k).length;
+    return `<div class="screen-command">
     <section class="col">
-      ${c.roster.some(promotionDue) ? `<div class="card plan"><div class="label">Promotions</div>
-        <p>${c.roster.filter(promotionDue).map(o => `<b>${esc(o.call)} ${esc(o.name)}</b>`).join(", ")} ${c.roster.filter(promotionDue).length > 1 ? "are" : "is"} waiting to choose ${c.roster.filter(promotionDue).some(o => !o.cls) ? "a class or perk" : "a perk"}.</p>
-        <button class="act" type="button" data-goto="personnel">Open Personnel</button></div>` : ""}
-      ${staffCard()}
-      ${councilCard()}
-      ${contractsCard()}
-      ${chaosCard()}
-      ${inspectionSoon(c) ? `<div class="card plan"><div class="label">O5 inspection · ${dateText(c.inspectionDay!)}</div>
-        <p>If the inspector came today: $${INSPECTION.perCheck}k for each check passed${inspectionChecks(c).filter(k => !k.ok).length >= INSPECTION.failAt ? `, and <span class="warn">$${INSPECTION.penalty}k docked</span> for failing ${INSPECTION.failAt} or more` : ""}.</p>
-        <ul class="why">${inspectionChecks(c).map(k => `<li class="${k.ok ? "" : "warn"}">${k.ok ? "✓" : "✗"} ${esc(k.label)}</li>`).join("")}</ul></div>` : ""}
-      ${c.scps.map(scpSummary).join("")}
+      <div class="panel"><div class="panel-h"><b>Director's briefing</b><span class="meta">${sevCount("critical")} critical · ${sevCount("important")} important · ${dateText(c.day)}</span></div>
+        <div class="panel-b"><div class="brief">${brief.length ? brief.map(b => `<div class="brief-item ${b.sev}"><div><b>${esc(b.title)}</b><div class="d">${esc(b.detail)}</div></div>
+          <button class="act ${b.sev === "critical" ? "danger" : ""}" type="button" data-brief="${esc(b.tab)}|${esc(b.focus ?? "")}">${b.tab === "command" && b.focus ? "Respond" : "Go"}</button></div>`).join("")
+          : `<p class="brief-empty">Nothing needs a decision right now. Let time run on the World map.</p>`}</div></div></div>
       <div class="card">
-        <div class="label">${icon("anomaly", 13)}Active incidents</div>
+        <div class="label">${icon("anomaly", 13)}Active incidents · ${c.incidents.length}</div>
         ${c.incidents.length ? c.incidents.map(incidentCard).join("") : `<p class="muted">No open incidents. Let time run to see what happens next.</p>`}
       </div>
-      <div class="card">
-        <div class="label">${icon("exposure", 13)}Global exposure</div>
-        <div class="exposure"><div class="exp-bar"><span style="width:${c.exposure}%"></span></div><b>${c.exposure} / 100</b></div>
-        <p class="muted">The average of the six regions, with a collapsed front counting as 100. A region at 100 collapses: its front stops funding Site-19 for good. If ${COLLAPSE_LIMIT} collapse, the O5 Council relieves Site-19's command. See the World tab.</p>
-        <button class="act" type="button" data-goto="world">Open the world map</button>
-      </div>
+      ${staffCard()}
+      ${inspectionSoon(c) ? `<div class="card plan"><div class="label">O5 inspection · ${dateText(c.inspectionDay!)}</div>
+        <p>If the inspector came today: $${INSPECTION.perCheck}k for each check passed${inspectionChecks(c).filter(k => !k.ok).length >= INSPECTION.failAt ? `, and <span class="warn">$${INSPECTION.penalty}k docked</span>` : ""}.</p>
+        <ul class="why">${inspectionChecks(c).map(k => `<li class="${k.ok ? "" : "warn"}">${k.ok ? "✓" : "✗"} ${esc(k.label)}</li>`).join("")}</ul></div>` : ""}
+      ${contractsCard()}
+      ${chaosCard()}
+      ${c.scps.map(scpSummary).join("")}
     </section>
     <section class="col">
+      <div class="panel"><div class="panel-h"><b>Situation</b><span class="meta">${speed ? `time running ${speed}×` : "time paused"}</span></div><div class="panel-b">
+        <div class="ovgrid">
+          <div>${ro("Global exposure", `${c.exposure} / 100`, c.exposure >= 60 ? "danger" : c.exposure >= 35 ? "caution" : "", "The average of the six regions; a collapsed front counts as 100.")}<div class="meter ${c.exposure >= 60 ? "danger" : c.exposure >= 35 ? "caution" : ""}"><span style="width:${c.exposure}%"></span></div></div>
+          <div>${ro("O5 standing", `${c.council.standing} / 100`, c.council.standing < AUDIT_BELOW ? "danger" : c.council.standing < 40 ? "caution" : "", tierOf(c.council.standing).name)}<div class="meter ${c.council.standing < AUDIT_BELOW ? "danger" : ""}"><span style="width:${c.council.standing}%"></span></div></div>
+          <div>${ro("Insurgency threat", `${c.chaos.threat}`, c.chaos.threat >= 55 ? "danger" : c.chaos.threat >= 30 ? "caution" : "", "How far the Insurgency's agenda has come.")}<div class="meter ${c.chaos.threat >= 55 ? "danger" : c.chaos.threat >= 30 ? "caution" : ""}"><span style="width:${Math.min(100, c.chaos.threat)}%"></span></div></div>
+          <div>${ro("Record", `${c.stats.won} won · ${c.stats.lost} lost · ${c.stats.missed} missed`, "", "Incidents closed, failed and left unanswered.")}</div>
+        </div>
+        <div class="label" style="margin-top:12px">Alert level · Epsilon-11 reaches a breach on turn ${mtfArrival(c)}</div>
+        <div class="row" style="margin-top:4px">${(Object.keys(ALERTS) as Alert[]).map(a => `<button class="act ${c.alert === a ? "on primary" : ""}" type="button" data-alert="${a}" aria-pressed="${c.alert === a}">${ALERTS[a].name}</button>`).join("")}</div>
+        <p class="muted">${esc(ALERTS[c.alert].desc)} Time only passes on the World map.</p>
+        <div class="row"><button class="act primary" type="button" data-goto="world">Open the world map</button></div>
+      </div></div>
+      ${councilCard()}
       ${financesCard()}
-      <div class="card">
-        <div class="label">${icon("time", 13)}Time · ${speed ? `running at ${speed}×` : "paused"}</div>
-        <p class="muted">Time only passes while the World tab is open. Leaving it pauses the clock.</p>
-        <button class="act" type="button" data-goto="world">Open the world map</button>
-      </div>
-      <div class="card">
-        <div class="label">${icon("breach", 13)}Alert level · Epsilon-11 reaches a breach on turn ${mtfArrival(c)}, +1 per level below the top</div>
-        <div class="row">${(Object.keys(ALERTS) as Alert[]).map(a => `<button class="act ${c.alert === a ? "on" : ""}" type="button" data-alert="${a}" aria-pressed="${c.alert === a}">${ALERTS[a].name}</button>`).join("")}</div>
-        <p class="muted">${esc(ALERTS[c.alert].desc)}</p>
-      </div>
-      <div class="card">
-        <div class="label">${icon("history", 13)}Site log · ${c.stats.won} recontained · ${c.stats.lost} failed · ${c.stats.missed} unanswered</div>
-        <div class="log">${c.log.map(l => `<p class="${l.kind}"><span>D${l.day}</span>${esc(l.text)}</p>`).join("")}</div>
-      </div>
+      <div class="panel"><div class="panel-h"><b>Site log</b><span class="meta">newest first</span></div>
+        <div class="panel-b"><div class="log sevlog">${c.log.map(l => `<p class="${l.kind} sev-${l.sev ?? "routine"}"><span>D${l.day}</span>${esc(l.text)}</p>`).join("")}</div></div></div>
     </section>
   </div>`;
   }
@@ -1027,25 +1033,55 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       rows.push(`<div class="level"><div class="lvl">Level ${level + 1}${level === 0 ? "<span>surface</span>" : ""}</div>${slots.join("")}</div>`);
     }
     const exWhy = canExcavate(c);
-    return `<div class="hubgrid site">
+    // Strategic overhaul C2: the cross-section is the centrepiece; the context panel shows the selected room, or with
+    // nothing selected an operational overview of the whole site
+    return `<div class="screen-site">
     <section class="col">
-      <div class="card">
-        <div class="label">Site-19 cross-section</div>
-        ${powerShort(c) ? `<p class="warn-box">Power shortage: medical bay and psychological services are offline${unpowered(c) ? ", every containment wing is twice as likely to breach, and each cell has a 10% chance a day of failing outright" : ". Backup generators keep the containment wings running"}. Repair or build a generator, or evacuate anomalies from their wings.</p>` : ""}
-        <div class="xsection">${surfaceSvg(c.hour ?? 12, c.scps.some(x => x.status === "breach") || c.incidents.some(i => i.kind === "raid"))}<div class="basegrid">${rows.join("")}</div></div>
-        <div class="row">
+      ${powerShort(c) ? `<p class="warn-box">Power shortage: medical bay and psychological services are offline${unpowered(c) ? ", every containment wing is twice as likely to breach, and each cell has a 10% chance a day of failing outright" : ". Backup generators keep the containment wings running"}. Repair or build a generator.</p>` : ""}
+      <div class="xsection">${surfaceSvg(c.hour ?? 12, c.scps.some(x => x.status === "breach") || c.incidents.some(i => i.kind === "raid"))}<div class="basegrid">${rows.join("")}</div>
+        <div class="xs-foot">
+          <div class="legendline"><span><i class="lamp ok"></i>operational</span><span><i class="lamp caution"></i>building or repairing</span><span><i class="lamp danger"></i>damaged or breached</span><span>Select a room to manage it; an empty slot to build.</span></div>
           ${c.base.excavation > 0 ? `<span class="muted">Excavating level ${c.base.levels + 1}: ${plural(c.base.excavation, "day")} left.</span>`
-            : c.base.levels < MAX_LEVELS ? `<button class="act" id="digBtn" type="button" ${exWhy ? `disabled title="${esc(exWhy)}"` : ""}>Excavate level ${c.base.levels + 1} · $${EXCAVATE.cost}k · ${EXCAVATE.days} days · ${EXCAVATE.engineers} engineers</button>${exWhy ? `<span class="muted">${esc(exWhy)}</span>` : ""}` : ""}
+            : c.base.levels < MAX_LEVELS ? `<button class="act" id="digBtn" type="button" ${exWhy ? `disabled title="${esc(exWhy)}"` : ""}>Excavate level ${c.base.levels + 1} · $${EXCAVATE.cost}k · ${EXCAVATE.days} days · ${EXCAVATE.engineers} engineers</button>` : ""}
         </div>
-        <p class="muted">Facilities share walls with the ones beside, above and below them. Security stations protect every containment wing on their level; breaches wreck neighbours, and a wrecked containment wing can crack open too.</p>
       </div>
       ${damageReport()}
     </section>
-    <section class="col">
-      ${sel ? slotDetail(sel.level, sel.slot) : `<div class="card"><div class="label">Facility</div><p class="muted">Select a slot to build, repair or inspect it.</p>
-        ${c.scps.length ? `<ul class="memorial">${c.scps.map(s => { const w = wingOf(c, s); return `<li><b>${esc(s.name)}</b>: ${s.status === "contained" || s.status === "breach" ? (w ? `${esc(nameInText(w.type))}, level ${w.level + 1}. Select its wing to manage it.` : "") : s.status === "loose" ? "escaped, whereabouts unknown" : s.status === "away" ? `held at Site-17 until ${dateText(s.returnDay ?? c.day)}` : "on the road to another site"}</li>`; }).join("")}</ul>` : ""}</div>`}
-    </section>
+    <aside class="ctx">
+      ${sel ? `<div class="row" style="margin:0"><button class="act" type="button" id="siteOverview">← Site overview</button></div>${slotDetail(sel.level, sel.slot)}` : siteOverview()}
+    </aside>
   </div>`;
+  }
+
+  /** The whole site at a glance: capacity, containment risk per wing, and work in progress. */
+  function siteOverview() {
+    const held = c.scps.filter(x => x.status === "contained" || x.status === "breach");
+    const month = (p: number) => 1 - Math.pow(1 - p, 30);
+    const work: string[] = [];
+    for (const f of c.base.facilities) {
+      const n = FACILITIES[f.type].name;
+      if (f.daysLeft > 0) work.push(`<div class="r"><span><i class="lamp caution"></i>Building: ${esc(n)}</span><span class="v">${plural(f.daysLeft, "day")}</span></div>`);
+      if (f.repairDays > 0) work.push(`<div class="r"><span><i class="lamp caution"></i>${f.wrecked ? "Rebuilding" : "Repairing"}: ${esc(n)}</span><span class="v">${plural(f.repairDays, "day")}</span></div>`);
+      if (f.upgradeDays) work.push(`<div class="r"><span><i class="lamp caution"></i>Upgrading: ${esc(n)}</span><span class="v">${plural(f.upgradeDays, "day")}</span></div>`);
+      if (f.demolishDays) work.push(`<div class="r"><span><i class="lamp"></i>Tearing down: ${esc(n)}</span><span class="v">${plural(f.demolishDays, "day")}</span></div>`);
+    }
+    if (c.base.excavation > 0) work.push(`<div class="r"><span><i class="lamp caution"></i>Excavating level ${c.base.levels + 1}</span><span class="v">${plural(c.base.excavation, "day")}</span></div>`);
+    for (const o of c.orders) work.push(`<div class="r"><span><i class="lamp caution"></i>Workshop: ${esc(o.item ? ITEMS[o.item].name : o.attachment ? ATTACHMENTS[o.attachment].name : o.ammo ? AMMO[o.ammo].name : "refit")}</span><span class="v">${plural(o.daysLeft, "day")}</span></div>`);
+    const pu = powerUse(c), ps = powerSupply(c);
+    return `<div class="panel"><div class="panel-h"><b>Site operations</b><span class="meta">${c.base.facilities.length} facilities · ${c.base.levels} levels</span></div>
+      <div class="panel-b"><div class="ovgrid">
+        <div>${ro("Power", `${pu} / ${ps}`, pu > ps ? "danger" : "", "Used / supplied")}<div class="meter ${pu > ps ? "danger" : pu > ps * 0.85 ? "caution" : ""}"><span style="width:${Math.min(100, ps ? pu / ps * 100 : 100)}%"></span></div></div>
+        <div>${ro("Engineers busy", `${engineersBusy(c)} / ${c.engineers}`, "", "Building, repairing, digging, workshop orders")}<div class="meter"><span style="width:${c.engineers ? Math.min(100, engineersBusy(c) / c.engineers * 100) : 0}%"></span></div></div>
+        <div>${ro("Researchers at work", `${c.researchers - researchersFree(c)} / ${c.researchers}`, researchersFree(c) > 0 ? "caution" : "", "Researchers on projects")}<div class="meter"><span style="width:${c.researchers ? (c.researchers - researchersFree(c)) / c.researchers * 100 : 0}%"></span></div></div>
+        <div>${ro("Guards posted", `${guardsAlive(c).length - unposted(c).length} / ${guardCapacity(c)}`, unposted(c).length ? "caution" : "", "Guards at working Security stations / posts")}<div class="meter"><span style="width:${guardCapacity(c) ? Math.min(100, (guardsAlive(c).length - unposted(c).length) / guardCapacity(c) * 100) : 0}%"></span></div></div>
+      </div></div></div>
+    <div class="panel"><div class="panel-h"><b>Containment</b><span class="meta">${held.length} held · risk over the next 30 days</span></div>
+      <div class="panel-b"><div class="rows">${held.length ? held.map(x => { const w = wingOf(c, x), r = breachRisk(c, x), m = month(r.p), tone = x.status === "breach" ? "danger" : m >= 0.25 ? "danger" : m >= 0.1 ? "caution" : "";
+        return `<div class="r ${tone}"><span><i class="lamp ${x.status === "breach" ? "danger" : m >= 0.1 ? "caution" : "ok"}"></i><b>${esc(x.name)}</b> · ${esc(x.cls)}${w ? ` · level ${w.level + 1}` : ""}</span><span class="v">${x.status === "breach" ? "BREACH" : `${Math.round(m * 100)}%`}</span>
+          ${w ? `<span class="sub">Maintenance ${x.maintenance}% · ${esc(r.why.slice(0, 2).join("; "))}</span>` : ""}</div>`; }).join("") : `<p class="muted">Nothing held yet.</p>`}</div>
+        ${held.some(x => wingOf(c, x)) ? `<p class="muted">Select an anomaly's wing in the cross-section for its procedures, routine work and staff.</p>` : ""}</div></div>
+    <div class="panel"><div class="panel-h"><b>Work in progress</b><span class="meta">${work.length || "nothing"}</span></div>
+      <div class="panel-b">${work.length ? `<div class="rows">${work.join("")}</div>` : `<p class="muted">No construction, repairs or orders under way. ${engineersFree(c) ? `${engineersFree(c)} engineers are free.` : ""}</p>`}</div></div>`;
   }
 
   function slotCell(level: number, slot: number) {
@@ -1701,6 +1737,21 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       extras.researcher = extras.amnestics = extras.nu7 = false;
     });
     on("campaignsBtn", () => { dlg = { view: "slots" }; render(); });
+    on("siteOverview", () => { sel = null; render(); });
+    root.querySelectorAll<HTMLElement>("[data-brief]").forEach(b => b.onclick = () => {
+      const [t, focus] = b.dataset.brief!.split("|");
+      tab = (t === "history" ? "history" : t) as Tab;
+      if (tab !== "world") speed = 0;
+      if (focus) {
+        if (tab === "world") pendingMapSel = "inc:" + focus;
+        else if (tab === "command" && c.incidents.some(i => i.id === focus)) planning = focus;
+        else if (tab === "site") { const f = c.base.facilities.find(x => x.id === focus); if (f) sel = { level: f.level, slot: f.slot }; }
+        else if (tab === "personnel") opSel = focus;
+      }
+      render();
+    });
+    on("creditsBtn", () => { creditsOpen = true; render(); });
+    on("creditsClose", () => { creditsOpen = false; render(); });
     root.querySelectorAll<HTMLElement>("[data-coach]").forEach(b => b.onclick = () => change(() => { c.tutorial?.seen.push(b.dataset.coach!); }));
     on("coachOff", () => change(() => { if (c.tutorial) c.tutorial.on = false; }));
     on("overBtn", () => { dlg = { view: "slots" }; render(); });

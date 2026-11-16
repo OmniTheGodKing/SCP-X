@@ -27,6 +27,9 @@ import { generateTown } from "./data/towngen";
 import { mountMission } from "./ui/missionView";
 import { esc } from "./ui/util";
 import { mountDebug } from "./ui/debug";
+import { dispatch, type Command } from "./campaign/commands";
+import { directorsBriefing } from "./campaign/briefing";
+import { checkInvariants } from "./campaign/invariants";
 import { openLab } from "./ui/lab";
 import { movePreview } from "./game/preview";
 import { transition } from "./ui/audio";
@@ -149,6 +152,8 @@ function showHub() {
   // T5/T6: pacing (headless skips animation waits) and the cover rule
   pace, coverAgainst, shotInfo,
   movePreview,
+  // Strategic overhaul: the validated command layer, the briefing and the invariants, for the strategy tests
+  dispatch: (cmd: Command) => dispatch(campaign, cmd), briefing: () => directorsBriefing(campaign), invariants: () => checkInvariants(campaign),
 };
 
 function showLab() { screen = "mission"; openLab(root, () => { endMission(); showHub(); }); }
