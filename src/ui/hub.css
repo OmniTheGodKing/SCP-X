@@ -135,12 +135,24 @@ body:has(.hub) { background: var(--s-bg); }
 .upcoming .hday { font-family: var(--font-mono); font-size: 11px; color: var(--s-dim); margin-right: 6px; }
 .upcoming .v.ok { color: var(--s-ok); }
 .upcoming .v.neg { color: var(--s-text); }
-.proj { display: flex; gap: 8px; margin: 10px 0 6px; }
-.proj .pt { flex: 1; display: grid; grid-template-rows: auto 64px auto; gap: 3px; text-align: center; }
-.proj .bar { display: flex; flex-direction: column; justify-content: flex-end; border-bottom: 1px solid var(--s-line-2); }
-.proj .bar > span { display: block; background: var(--s-info); opacity: .75; }
-.proj .pt.neg .bar > span { background: var(--s-danger); }
-.proj .pt b { font-family: var(--font-mono); font-size: 10.5px; font-weight: 400; color: var(--s-text); }
-.proj .pt.neg b { color: var(--s-danger); }
-.proj .pt em { font-style: normal; font-family: var(--font-mono); font-size: 10px; color: var(--s-dim); white-space: nowrap; }
+.balbars { display: flex; gap: 8px; margin: 10px 0 6px; }
+.balbars .pt { flex: 1; display: grid; grid-template-rows: auto 64px auto; gap: 3px; text-align: center; }
+.balbars .bar { display: flex; flex-direction: column; justify-content: flex-end; border-bottom: 1px solid var(--s-line-2); }
+.balbars .bar > span { display: block; background: var(--s-info); opacity: .75; }
+.balbars .pt.neg .bar > span { background: var(--s-danger); }
+.balbars .pt b { font-family: var(--font-mono); font-size: 10.5px; font-weight: 400; color: var(--s-text); }
+.balbars .pt.neg b { color: var(--s-danger); }
+.balbars .pt em { font-style: normal; font-family: var(--font-mono); font-size: 10px; color: var(--s-dim); white-space: nowrap; }
 .upcoming p { margin-top: 4px; font-size: 12.5px; }
+
+/* ---- World: the map takes the width; the incident list is a narrow column (Strategic overhaul E1) ---- */
+.hub .geo { grid-template-columns: minmax(0, 1fr) 340px; }
+@media (max-width: 1100px) { .hub .geo { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---- Personnel: a compact roster, the selected operative large beside it ---- */
+.screen-personnel { grid-template-columns: minmax(340px, 0.85fr) minmax(0, 1.35fr); }
+@media (max-width: 900px) { .screen-personnel { grid-template-columns: minmax(0, 1fr); } }
+.screen-personnel .oprow.sel { outline: 1px solid var(--s-info); outline-offset: -1px; }
+
+/* ---- Site-19: who is on which job ---- */
+.crew .r .who { font-size: 12px; color: var(--s-dim); }

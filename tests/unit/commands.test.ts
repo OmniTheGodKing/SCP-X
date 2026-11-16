@@ -70,3 +70,21 @@ test("engineers: losing one mid-job leaves the work short-handed; it slows, fini
   eq(at(c, l, s)?.daysLeft, 0, "the job still finishes");
   eq(checkInvariants(c), [], "consistent");
 });
+
+test("crews: every busy engineer is a named person on a job, the right trade first, nobody twice", async () => {
+  const { crews } = await import("../../src/campaign/crews");
+  const { engineersBusy } = await import("../../src/campaign/base");
+  const { syncStaff } = await import("../../src/campaign/people");
+  const c = fresh(); c.funds = 5000;
+  const [l, s] = emptySlot(c)!;
+  ok(dispatch(c, { type: "build", facility: "generator", level: l, slot: s }).ok, "a job");
+  syncStaff(c);
+  const { crews: list, idle } = crews(c);
+  const names = [...list.flatMap(j => j.crew.map(p => p.name)), ...idle.map(p => p.name)];
+  eq(new Set(names).size, names.length, "nobody on two jobs");
+  eq(list.reduce((a, j) => a + j.crew.length, 0), Math.min(engineersBusy(c), c.engineers), "crew size matches the work");
+  const mason = list[0].crew.find(p => p.trade === "mason");
+  const anyMason = [...list[0].crew, ...idle].some(p => p.trade === "mason");
+  ok(!anyMason || !!mason, "a mason on staff goes to the building job");
+  const before = JSON.stringify(c); crews(c); eq(JSON.stringify(c), before, "pure");
+});

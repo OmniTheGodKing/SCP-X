@@ -22,5 +22,6 @@ export function creditsHtml() {
   return `<div class="label">Credits and licences</div>
     <p>The SCP Foundation and its anomalies, Site-19, the O5 Council, Mobile Task Force Epsilon-11, D-Class personnel, the Chaos Insurgency, the Global Occult Coalition and the object classes come from the <a href="https://scpwiki.com" target="_blank" rel="noopener">SCP Wiki</a>, licensed under <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA 3.0</a>. This game is shared under the same licence.</p>
     <ul class="why">${SCP_CREDITS.map(([scp, who, url]) => `<li><b>${esc(scp)}</b>: <a href="${esc(url)}" target="_blank" rel="noopener">${esc(url.replace("https://", ""))}</a>, by ${esc(who)}</li>`).join("")}</ul>
-    <p class="muted">The SCP-173 figure is an original placeholder drawing; the original sculpture photograph is not covered by the wiki's licence and is not used. All other art is drawn in code for this game.</p>`;
+    <p class="muted">The SCP-173 figure is an original placeholder drawing; the original sculpture photograph is not covered by the wiki's licence and is not used. All other art is drawn in code for this game.</p>
+    <p class="muted">World map coastlines: <a href="https://www.naturalearthdata.com" target="_blank" rel="noopener">Natural Earth</a> (public domain), via the world-atlas package (ISC licence, Mike Bostock). All sound is synthesized in code for this game.</p>`;
 }

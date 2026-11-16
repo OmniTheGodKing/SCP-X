@@ -43,7 +43,7 @@ const { check, done } = reporter();
   await p.click('[data-tab="site"]'); await p.waitForTimeout(100);
   if (await p.$('#siteOverview')) { await p.click('#siteOverview'); await p.waitForTimeout(100); }
   const ov = await E(() => ({ panels: [...document.querySelectorAll('.screen-site .ctx .panel-h b')].map(e => e.textContent), risk: [...document.querySelectorAll('.screen-site .ctx .rows .r .v')].map(e => e.textContent).slice(0, 6) }));
-  check('site: with nothing selected the side panel shows the site overview', ['Site operations', 'Containment', 'Work in progress'].every(k => ov.panels.includes(k)), ov.panels);
+  check('site: with nothing selected the side panel shows the site overview', ['Site operations', 'Containment', 'Work and crews'].every(k => ov.panels.includes(k)), ov.panels);
   check('site: containment rows give a 30-day risk', ov.risk.some(v => /^\d+%$|BREACH/.test(v)), ov.risk);
   const xs = await E(() => { const x = document.querySelector('.screen-site .xsection').getBoundingClientRect(), w = document.querySelector('.screen-site').getBoundingClientRect(); return x.width / w.width; });
   check('site: the cross-section takes most of the width', xs > 0.55, xs);
@@ -82,6 +82,22 @@ const { check, done } = reporter();
   // a rejected command changes nothing: excavate with no money
   const rej = await E(() => { const c = window.__site19.campaign; const snap = JSON.stringify(c); const keep = c.funds; c.funds = -500; const pre = JSON.stringify(c); const r = window.__site19.dispatch ? window.__site19.dispatch({ type: 'excavate' }) : null; const same = JSON.stringify(c) === pre; c.funds = keep; return { has: !!r, ok: r?.ok, same, snapOk: !!snap }; });
   if (rej.has) check('commands: a rejected command leaves the campaign unchanged', rej.ok === false && rej.same, rej);
+
+  // research: the tab opens on a category with projects, and project rows keep their layout (a stray .proj rule once
+  // broke them)
+  await p.click('[data-tab="research"]'); await p.waitForTimeout(100);
+  const rs = await E(() => { const rows = [...document.querySelectorAll('.projects .proj')]; return { n: rows.length, tall: rows.slice(0, 3).map(r => Math.round(r.getBoundingClientRect().height)) }; });
+  check('research: opens on a category with projects', rs.n > 0, rs);
+  check('research: project rows are compact', rs.tall.every(h => h < 180), rs.tall);
+  // personnel: an operative is shown without having to pick one
+  await p.click('[data-tab="personnel"]'); await p.waitForTimeout(100);
+  const op = await E(() => ({ sel: !!document.querySelector('.oprow.sel'), detail: !!document.querySelector('.screen-personnel .col:nth-child(2) .card') }));
+  check('personnel: the first operative is selected and shown large', op.sel && op.detail, op);
+  // site: work and crews name the engineers
+  await p.click('[data-tab="site"]'); await p.waitForTimeout(100);
+  if (await p.$('#siteOverview')) { await p.click('#siteOverview'); await p.waitForTimeout(100); }
+  const crew = await E(() => document.querySelector('.panel.crew')?.innerText ?? '');
+  check('site: the work and crews panel names engineers', /\b[A-Z][a-z]+ [A-Z][a-z]+/.test(crew), crew.slice(0, 200));
 
   // credits
   await p.click('.sysmenu > summary'); await p.click('#creditsBtn'); await p.waitForTimeout(100);

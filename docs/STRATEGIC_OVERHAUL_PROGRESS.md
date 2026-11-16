@@ -184,6 +184,16 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
   - `simulate` takes an optional per-day observer, for tests and the developer inspector.
 - Centralized difficulty: already satisfied. `difficulty.ts` holds one table of levers (funds, grant, Insurgent
   count and aim, breach and agenda multipliers) read through `diffOf`; no scattered difficulty checks were found.
+- E1 (screen redesigns), first pass:
+  - Footer: the long attribution paragraph under every screen is now two lines (licence, SCP-173's author, and a
+    pointer to System, Credits and licences, which now also credits the Natural Earth map data).
+  - Research opens on the first category with projects instead of an empty one.
+  - Personnel: the first operative is selected by default and shown large beside a narrower roster.
+  - World: the incident column is narrower, so the map takes more width.
+  - Site-19: "Work and crews" (`src/campaign/crews.ts`, pure) names the engineers on each job, the right trade
+    first, and marks a short-handed job. This is the engineering view: it lives on Site-19 rather than a new tab.
+  - Fix: the D3 forecast chart used a `.proj` class that collided with the research project rows and scrambled
+    them; renamed `.balbars`. `strategic.e2e.cjs` now checks the project rows' layout.
 
 ## Known issues
 
