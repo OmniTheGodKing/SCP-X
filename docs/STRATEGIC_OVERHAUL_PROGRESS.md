@@ -90,10 +90,10 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
 | S-C1 | Visual style guide and design tokens | none | `docs/UI_STYLE_GUIDE.md`; tokens in CSS | [x] |
 | S-C2 | Representative screen: Site-19 cross-section centrepiece | S-C1 | Functional build, repair, staff and containment from the screen; browser test | [x] |
 | S-D1 | Persistent staff identities in tactical missions | none | Named researchers in breach missions; deaths propagate; tested | [x] |
-| S-D2 | Research and engineering depth (assignments, specialties, experiments) | S-B1 | See notes | [~] |
+| S-D2 | Research and engineering depth (assignments, specialties, experiments) | S-B1 | See notes | [x] (engineering view in E1) |
 | S-D3 | Economy transparency and Council tradeoffs | S-B1 | Ledger and upcoming obligations visible; tested | [x] |
 | S-D4 | Goal-driven Chaos Insurgency and GOC | none | Plans chosen from Site-19's weaknesses and their own resources; tested | [x] |
-| S-E1 | Screen redesigns: Command, World, Research, Engineering, Personnel, History, Credits | S-C2 | Browser workflow tests | [ ] |
+| S-E1 | Screen redesigns: Command, World, Research, Engineering, Personnel, History, Credits | S-C2 | Browser workflow tests | [~] History not redesigned |
 | S-E2 | Onboarding with Krista Carter | S-E1 | Persisted steps; skippable; tested | [x] |
 | S-E3 | Strategic inspector (developer tools) | S-L1 | Debug panel shows state, risks, faction plans, invariants | [x] |
 | S-E4 | End-to-end campaign test | all | The 17-step sequence in the brief | [x] |
@@ -246,10 +246,25 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
     - incident frequency, for the quiet days;
     - project cost against the grant, for idle researchers;
     - a ceiling or decay on hoarded funds, for the economy strategy.
+- Final verification: `npm run build && npm test` passes all 20 suites (112 headless tests and 19 browser suites).
+
+## Remaining work
+
+- E1: the History screen keeps its previous layout (a filterable chronicle with an archive beside it); no archive
+  redesign was done.
+- Balance: findings only (S-K); tuning needs playtesting.
+- Art: rooms, portraits and the map remain code-drawn and provisional.
+- Not in scope, per the brief: a 3D renderer and a campaign ending.
 
 ## Known issues
 
 - The accept4c GRU-P flake (pre-existing).
+- objecttheft failed once under a full parallel run, on SCP-500 being carried out. It passed 4 of 4 runs alone, and
+  then in the next full run. The strategic overhaul's only tactical change is the D1 researcher naming and civilian
+  count in `mission.ts`.
+- campaign.e2e runs the World clock in real time; under a full parallel run that is slower, so its waits are generous
+  (up to 150 seconds for the workshop). Six of seven early runs passed, and one produced no output and was not
+  reproduced.
 - accept4b fails intermittently (SCP-035 possession, SCP-012, a crash reading a spawn point): 3 of 6 runs failed on
   the tactical-overhaul commit d1145d0 too, so it predates this work. The tests place units on generated maps that
   differ between runs.

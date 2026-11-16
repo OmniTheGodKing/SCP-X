@@ -3,6 +3,29 @@
 Work runs in phases. Nothing in a phase is built until it has been laid out and agreed.
 Order and contents are open to change.
 
+## Strategic overhaul (in progress; see docs/STRATEGIC_OVERHAUL_PROGRESS.md)
+
+Done:
+- A validated command layer.
+- Log severity, and the Director's Briefing as a decision queue.
+- A strategic design system (`docs/UI_STYLE_GUIDE.md`), with the Site-19 and Command screens rebuilt on it.
+- Site-19's named researchers in breach missions, with deaths carried back into the campaign.
+- Experiments on every held anomaly.
+- A 90-day money forecast.
+- An Insurgency that picks operations from Site-19's weaknesses, and a GOC drawn by exposure.
+- Work and crews naming engineers on jobs.
+- Onboarding with Chief of Operations Krista Carter.
+- A strategic inspector.
+- Deterministic simulations with invariants over four simulated years.
+- An end-to-end campaign browser test.
+
+Remaining:
+- Balance tuning confirmed by playtesting (the simulation findings are in the progress record).
+- Painted room interiors and portraits.
+- A fuller History archive.
+- Any 3D renderer (the layout is ready for one: facilities have stable ids and level and slot positions).
+- A campaign ending.
+
 ## Done
 
 - Tactical layer: SCP-173 AI, staring and blinking, dragging, sealing, cover and sight, classes, perks, traits, weapons, armor, grenades, Insurgency AI.
