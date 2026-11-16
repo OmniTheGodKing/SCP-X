@@ -27,6 +27,8 @@ export interface SceneExtras {
   racks?: string[];
   /** A highlighted person by key. */
   focus?: string;
+  /** One person brought forward, large, with the room still behind them (the quarters' selected operative). */
+  hero?: { spec: FigureSpec; key: string; x?: number };
   /** The stretch of the scene, in scene units, people stand across (clear of a side panel). */
   span?: [number, number];
 }
@@ -111,7 +113,7 @@ function pipes(L: RoomLayout) {
   return out.join("");
 }
 function signage(L: RoomLayout) {
-  const label = `${L.designation} · ${L.name.toUpperCase()}`, w = Math.round(label.length * 12.4 + 34), x = L.features.signage % 2 ? BX0 + 40 : BX1 - 40 - w;
+  const label = `${L.level < 0 ? `B${L.slot}` : L.designation} · ${L.name.toUpperCase()}`, w = Math.round(label.length * 12.4 + 34), x = L.features.signage % 2 ? BX0 + 40 : BX1 - 40 - w;
   return `<rect x="${x}" y="${BY0 + 90}" width="${w}" height="44" fill="#1f2326" opacity=".85"/><text x="${x + 16}" y="${BY0 + 120}" font-family="IBM Plex Mono,monospace" font-size="20" font-weight="600" letter-spacing="1" fill="${C.paper}">${esc(label)}</text>
     ${L.features.signage >= 2 ? `<text x="${BX0 + (BX1 - BX0) / 2}" y="${BY0 + 80}" font-family="IBM Plex Mono,monospace" font-size="15" letter-spacing="3" fill="#2a2a24" opacity=".6" text-anchor="middle">SECURE · CONTAIN · PROTECT</text>` : ""}`;
 }
@@ -255,6 +257,14 @@ function chamber(L: RoomLayout) {
 
 // ---------- people ----------
 function people(L: RoomLayout, x: SceneExtras) {
+  if (x.hero) {
+    // the rest of the squad steps back into the room's shadow; the selected operative stands forward, full height
+    const hx = x.hero.x ?? 560, back = (x.people ?? []).filter(p => p.key !== x.hero!.key).slice(0, 6);
+    const behind = back.map((p, i) => figureSvg(p.spec, 260 + i * 190 + (i >= 2 ? 520 : 0), BY1 + 40, 0.6)).join("");
+    return `<g opacity=".55">${behind}</g><rect width="${W}" height="${H}" fill="#05080b" opacity=".38" pointer-events="none"/>
+      <ellipse cx="${hx}" cy="${H - 34}" rx="190" ry="26" fill="${C.lamp}" opacity=".08"/>
+      <g class="hero" data-person="${esc(x.hero.key)}">${figureSvg(x.hero.spec, hx, H - 28, 1.72)}</g>`;
+  }
   if (x.people?.length) {
     const n = x.people.length, slots = x.people.map((p, i) => {
       const [s0, s1] = x.span ?? [260, W - 260], t = n === 1 ? 0.5 : i / (n - 1), px = s0 + t * (s1 - s0), back = i % 2 === 1;

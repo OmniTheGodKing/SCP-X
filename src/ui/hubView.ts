@@ -35,7 +35,7 @@ import { PROCEDURES, PROCEDURE_610 } from "../data/procedures";
 import { reportOf, TERRITORY, TOWN_POS, localHour, missionWeather, weatherAt, weatherLine, nightAt, nightPolygon, AMNESTIC_TEAM, BURY, FACILITIES_WORLD, FIELD_OPS, INVESTIGATE, buryCost, buryStory, canBury, canSendTeam, incidentName, sendAmnesticsTeam, briefing, canFieldOp, canInvestigate, groupOf, incidentPlace, incidentState, investigate, startFieldOp, type FieldOpKind, type MarkerGroup } from "../campaign/geo";
 import { MEDALS } from "../data/bios";
 import { LEANS, QUALITY, UNITS, nationalityOf } from "../data/units";
-import { FACIAL, HAIR_BY_SEX, HAIR_COLORS, HAIR_STYLES, HEADGEAR, LOOK_PARTS, SEX_NAMES, SKIN, fitLook, rollLook } from "../data/looks";
+import { ACCESSORIES, COATS, FACES, FACIAL, HAIR_BY_SEX, HAIR_COLORS, HAIR_STYLES, HEADGEAR, LOOK_PARTS, SEX_NAMES, SKIN, fitLook, rollLook } from "../data/looks";
 import { portraitSvg } from "./portrait";
 import { INSPECTION, inspectionChecks, inspectionSoon } from "../campaign/inspection";
 import {
@@ -176,6 +176,8 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   // Presentation overhaul P2: the room the Director is standing in (a facility id or a fixed surface location), and
   // where the overview was scrolled to on the way in
   let room: string | null = null, roomScroll = 0, rvPanel = true;
+  type OpSection = "appearance" | "loadout" | "abilities" | "record" | "bio";
+  let opSection: OpSection = "appearance";
   let creditsOpen = false;
   let resetArmed = 0;
   let regionSel: RegionId = pendingMapSel?.startsWith("reg:") ? pendingMapSel.slice(4) as RegionId : HOME;
@@ -1117,11 +1119,15 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       const ops = c.roster.filter(o => o.alive && !(o.busy && (o.busy.kind === "travel" || o.busy.kind === "contract"))).slice(0, 8);
       extras.people = ops.map(o => ({ key: o.id, label: o.name.split(" ").slice(-1)[0], spec: operativeFigure(c, o) }));
       extras.focus = opSel ?? undefined;
+      const hero = opSel ? c.roster.find(o => o.id === opSel && o.alive) : undefined;
+      if (hero) extras.hero = { key: hero.id, spec: operativeFigure(c, hero), x: rvPanel ? 520 : 800 };
       extras.span = rvPanel ? [200, 1000] : [240, 1360];
     }
     if (L.kind === "armory") extras.racks = [...new Set(Object.values(c.models))];
     const stateText: Record<string, string> = { operational: L.powered ? "Operational" : "No power", building: "Under construction", damaged: "Damaged", wrecked: "Wrecked", repairing: "Under repair", demolishing: "Being torn down", upgrading: "Being refitted" };
-    const ctx = L.kind === "quarters" ? `${opDetail() || `<div class="card"><p class="muted">Select an operative.</p></div>`}`
+    const heroOp = L.kind === "quarters" && opSel ? c.roster.find(o => o.id === opSel && o.alive) : undefined;
+    const ctx = L.kind === "quarters" ? (heroOp ? opFocusPanel(heroOp) : `<div class="card"><div class="label">Epsilon-11 · ${c.roster.filter(o => o.alive).length} operatives</div>
+        <div class="roster">${c.roster.filter(o => o.alive).map(opRow).join("")}</div><p class="muted">Select an operative in the room or in this list.</p></div>`)
       : L.kind === "armory" ? `<div class="card"><div class="label">Armory · weapons in service</div><ul class="why">${(Object.entries(c.models) as [string, string][]).map(([t, m]) => `<li>${esc(t)}: ${esc(m)}</li>`).join("")}</ul>
           <p class="muted">Attachments in stores: ${Object.entries(c.attachments).filter(([, n]) => n).map(([a, n]) => `${esc(a)} × ${n}`).join(", ") || "none"}.</p></div>`
       : slotDetail(L.level, L.slot);
@@ -1535,37 +1541,37 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       <div class="eqdetail">${detail}</div>`;
   }
 
-  function opDetail() {
-    const o = c.roster.find(x => x.id === opSel && x.alive);
-    if (!o) return "";
+  /** The operative file in parts, so the quarters can show one part at a time beside the figure (Presentation
+   *  overhaul P3) while the Personnel tab shows all of them. */
+  function opParts(o: Operative) {
     const pair = perkChoices(o), tw = canTherapy(c, o), rw = canRetrain(c, o);
+    void rw;
     const bad = o.traits.filter(t => TRAITS[t].bad);
-    return `<div class="card plan">
-      <div class="label">${esc(o.call)} · ${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}</div>
+    return {
+      head: `      <div class="label">${esc(o.call)} · ${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}</div>
       <div class="row" style="align-items:center">${portraitSvg(lookOf(o), o.unit, 88)}<h3 class="fac">${esc(fieldName(o))}</h3></div>
-      ${o.busy ? `<p class="warn">${o.busy.kind === "therapy" ? "In therapy" : o.busy.kind === "travel" ? "Flying home" : "Retraining"}: ${plural(o.busy.daysLeft, "day")} left. Can't deploy until then.</p>` : ""}
-      ${o.unit ? `<div class="specs">Recruited from the ${esc(UNITS[o.unit].name)} (${esc(UNITS[o.unit].country)}) · ${LEANS[UNITS[o.unit].lean]}${o.bio ? ` · nationality ${esc(nationalityOf(o.bio.home))}` : ""}</div>` : ""}
+      ${o.busy ? `<p class="warn">${o.busy.kind === "therapy" ? "In therapy" : o.busy.kind === "travel" ? "Flying home" : "Retraining"}: ${plural(o.busy.daysLeft, "day")} left. Can't deploy until then.</p>` : ""}`,
+      bio: `      ${o.unit ? `<div class="specs">Recruited from the ${esc(UNITS[o.unit].name)} (${esc(UNITS[o.unit].country)}) · ${LEANS[UNITS[o.unit].lean]}${o.bio ? ` · nationality ${esc(nationalityOf(o.bio.home))}` : ""}</div>` : ""}
       <div class="specs">Sex: ${SEX_NAMES[o.sex ?? "m"]}</div>
       ${o.bio ? `<p class="muted">Age ${o.bio.age + Math.floor((c.day - 1) / 365)}, from ${esc(o.bio.home)}. ${esc(o.bio.story)}</p>` : ""}
-      <div class="specs">Service: ${plural(o.missions, "mission")} · ${plural(o.kills, "kill")} · wounded ${o.wounds ?? 0}× · ${(o.seals ?? 0) === 1 ? "1 anomaly" : `${o.seals ?? 0} anomalies`} sealed${o.faced?.length ? ` · faced ${esc(o.faced.join(", "))}` : ""}</div>
-      ${o.medals?.length ? `<ul class="traits">${o.medals.map(m => `<li class="good"><b>${MEDALS[m].name}</b>: ${esc(MEDALS[m].bonus)} <span class="muted">${esc(MEDALS[m].how)}</span></li>`).join("")}</ul>` : ""}
-      ${o.busy ? "" : (() => { const tw = trainerWhy(c, o); return `<details class="archived"><summary>Retire</summary>
-        <p class="muted">${tw ? `${esc(tw)} They can still leave with an honourable discharge.` : "As a trainer at the range, new recruits arrive as Privates First Class while they're there."}</p>
-        <div class="row"><button class="act" type="button" data-retire="${o.id}">${tw ? "Honourable discharge" : "Retire as a trainer"}</button></div></details>`; })()}
-      <details class="archived" ${lookOpen ? "open" : ""}><summary>Appearance</summary>
-        ${(() => { const l = lookOf(o), part = (key: string, label: string, value: string) => `<div class="row"><span class="specs" style="min-width:90px">${label}</span><button class="act" type="button" data-look="${key}" data-d="-1" aria-label="Previous ${label.toLowerCase()}">‹</button><span style="min-width:110px">${esc(value)}</span><button class="act" type="button" data-look="${key}" data-d="1" aria-label="Next ${label.toLowerCase()}">›</button></div>`;
-          return part("sex", "Sex", SEX_NAMES[o.sex ?? "m"]) + part("skin", "Skin tone", `${l.skin + 1} of ${SKIN.length}`) + part("hair", "Hair", HAIR_STYLES[l.hair]) + part("hairColor", "Hair colour", `${l.hairColor + 1} of ${HAIR_COLORS.length}`)
-            + (o.sex === "f" ? "" : part("facial", "Facial hair", FACIAL[l.facial])) + part("scar", "Scar", l.scar ? "Yes" : "No") + (o.unit && HEADGEAR[o.unit] ? part("headgear", "Headgear", l.headgear ? HEADGEAR[o.unit]![0] : "None") : ""); })()}
-      </details>
-      <p class="specs">Fatigue ${o.fatigue ?? 0}/100 (${tiredness(o)}; tired at ${FATIGUE.tired}, can't deploy at ${FATIGUE.exhausted}; −${FATIGUE.restPerDay} a day at Site-19${countOperational(c, "psych") ? `, −${FATIGUE.restPsych} more with psychological services` : ""})${o.injury && o.injury.until > c.day ? ` · <span class="warn">${esc(o.injury.name)} until ${dateText(o.injury.until)}</span>` : ""}</p>
-      ${bondsOf(o).length || o.lostBonds?.length ? `<p class="specs">Bonds: ${bondsOf(o).map(b => { const m = c.roster.find(x => x.id === b.id); return m ? `${BOND_NAMES[b.level]} with <b>${esc(m.name)}</b>${m.alive ? "" : " (fallen)"} (${b.n} missions together)` : ""; }).filter(Boolean).join("; ")}${o.lostBonds?.length ? `${bondsOf(o).length ? "; " : ""}lost: ${o.lostBonds.map(esc).join(", ")}` : ""}</p>` : ""}
-      <p class="specs">Task force: <b>${esc(TF_NAMES[tfOf(o)])}</b> (for good, from hiring). ${esc(TF_DESC[tfOf(o)])}</p>
       <details class="archived"><summary>Rename</summary><div class="row">
         <label class="specs" for="renameName">Full name</label><input id="renameName" maxlength="40" value="${esc(o.name)}">
         <label class="specs" for="renameNick">Nickname</label><input id="renameNick" maxlength="16" value="${esc(o.nick ?? "")}" placeholder="${o.rank >= NICK_RANK ? "none" : "given at Corporal"}">
         <label class="specs" for="renameCall">Callsign</label><input id="renameCall" maxlength="12" value="${esc(o.call)}">
-        <button class="act" type="button" id="renameBtn">Save</button></div></details>
-      ${promotionDue(o) && !o.cls ? `<p><b>Choose a class.</b> It decides the abilities they learn from here on.</p>
+        <button class="act" type="button" id="renameBtn">Save</button></div></details>`,
+      record: `      <div class="specs">Service: ${plural(o.missions, "mission")} · ${plural(o.kills, "kill")} · wounded ${o.wounds ?? 0}× · ${(o.seals ?? 0) === 1 ? "1 anomaly" : `${o.seals ?? 0} anomalies`} sealed${o.faced?.length ? ` · faced ${esc(o.faced.join(", "))}` : ""}</div>
+      ${o.medals?.length ? `<ul class="traits">${o.medals.map(m => `<li class="good"><b>${MEDALS[m].name}</b>: ${esc(MEDALS[m].bonus)} <span class="muted">${esc(MEDALS[m].how)}</span></li>`).join("")}</ul>` : ""}
+      <p class="specs">Fatigue ${o.fatigue ?? 0}/100 (${tiredness(o)}; tired at ${FATIGUE.tired}, can't deploy at ${FATIGUE.exhausted}; −${FATIGUE.restPerDay} a day at Site-19${countOperational(c, "psych") ? `, −${FATIGUE.restPsych} more with psychological services` : ""})${o.injury && o.injury.until > c.day ? ` · <span class="warn">${esc(o.injury.name)} until ${dateText(o.injury.until)}</span>` : ""}</p>
+      ${bondsOf(o).length || o.lostBonds?.length ? `<p class="specs">Bonds: ${bondsOf(o).map(b => { const m = c.roster.find(x => x.id === b.id); return m ? `${BOND_NAMES[b.level]} with <b>${esc(m.name)}</b>${m.alive ? "" : " (fallen)"} (${b.n} missions together)` : ""; }).filter(Boolean).join("; ")}${o.lostBonds?.length ? `${bondsOf(o).length ? "; " : ""}lost: ${o.lostBonds.map(esc).join(", ")}` : ""}</p>` : ""}
+      <p class="specs">Task force: <b>${esc(TF_NAMES[tfOf(o)])}</b> (for good, from hiring). ${esc(TF_DESC[tfOf(o)])}</p>`,
+      retire: `      ${o.busy ? "" : (() => { const tw = trainerWhy(c, o); return `<details class="archived"><summary>Retire</summary>
+        <p class="muted">${tw ? `${esc(tw)} They can still leave with an honourable discharge.` : "As a trainer at the range, new recruits arrive as Privates First Class while they're there."}</p>
+        <div class="row"><button class="act" type="button" data-retire="${o.id}">${tw ? "Honourable discharge" : "Retire as a trainer"}</button></div></details>`; })()}`,
+      appearance: `        ${(() => { const l = lookOf(o), part = (key: string, label: string, value: string) => `<div class="row"><span class="specs" style="min-width:90px">${label}</span><button class="act" type="button" data-look="${key}" data-d="-1" aria-label="Previous ${label.toLowerCase()}">‹</button><span style="min-width:110px">${esc(value)}</span><button class="act" type="button" data-look="${key}" data-d="1" aria-label="Next ${label.toLowerCase()}">›</button></div>`;
+          return part("sex", "Sex", SEX_NAMES[o.sex ?? "m"]) + part("skin", "Skin tone", `${l.skin + 1} of ${SKIN.length}`) + part("hair", "Hair", HAIR_STYLES[l.hair]) + part("hairColor", "Hair colour", `${l.hairColor + 1} of ${HAIR_COLORS.length}`)
+            + (o.sex === "f" ? "" : part("facial", "Facial hair", FACIAL[l.facial])) + part("scar", "Scar", l.scar ? "Yes" : "No") + (o.unit && HEADGEAR[o.unit] ? part("headgear", "Headgear", l.headgear ? HEADGEAR[o.unit]![0] : "None") : "")
+            + part("face", "Face", FACES[l.face ?? 0]) + part("coat", "Jacket", COATS[l.coat ?? 0]) + part("accessory", "Accessory", ACCESSORIES[l.accessory ?? 0]); })()}`,
+      abilities: `      ${promotionDue(o) && !o.cls ? `<p><b>Choose a class.</b> It decides the abilities they learn from here on.</p>
         <div class="classpick">${(Object.keys(CLASSES) as ClassId[]).map(k => `<button type="button" class="classopt" data-class="${k}">
           <b>${CLASSES[k].name}</b><span class="muted">${CLASSES[k].role}</span>
           <span class="specs">Starts with ${PERKS[CLASSES[k].base].name}: ${esc(PERKS[CLASSES[k].base].desc)}</span>
@@ -1585,9 +1591,27 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       ${o.traits.length ? `<ul class="traits">${o.traits.map(t => `<li class="${TRAITS[t].bad ? "bad" : "good"}"><b>${TRAITS[t].name}</b>: ${esc(TRAITS[t].desc)} <span class="muted">${esc(TRAITS[t].how)}</span>
         ${TRAITS[t].bad && !o.busy ? `<span class="muted">Treatable at Psychological services.</span>` : ""}</li>`).join("")}</ul>
         ${bad.length && tw ? `<p class="muted">${esc(tw)}</p>` : ""}` : `<p class="muted">None yet. Traits come from what happens to them on missions.</p>`}
-      ${equipment(o)}
-      ${o.cls && !o.busy ? `<p class="muted">Retraining (a new class, keeping their rank) is arranged at the training range.</p>` : ""}
-    </div>`;
+      ${o.cls && !o.busy ? `<p class="muted">Retraining (a new class, keeping their rank) is arranged at the training range.</p>` : ""}`,
+      loadout: equipment(o),
+    };
+  }
+  function opDetail() {
+    const o = c.roster.find(x => x.id === opSel && x.alive);
+    if (!o) return "";
+    const p = opParts(o);
+    return `<div class="card plan">${p.head}${p.bio}${p.record}${p.retire}
+      <details class="archived" ${lookOpen ? "open" : ""}><summary>Appearance</summary>${p.appearance}</details>
+      ${p.abilities}${p.loadout}</div>`;
+  }
+  /** The quarters' focused view: one section of the file at a time. */
+  function opFocusPanel(o: Operative) {
+    const p = opParts(o);
+    const secs: [OpSection, string][] = [["appearance", "Appearance"], ["loadout", "Loadout"], ["abilities", promotionDue(o) || perkChoices(o) ? "Abilities ●" : "Abilities"], ["record", "Service record"], ["bio", "Biography"]];
+    const body = opSection === "appearance" ? p.appearance : opSection === "loadout" ? p.loadout : opSection === "abilities" ? p.abilities : opSection === "record" ? p.record + p.retire : p.bio;
+    return `<div class="card plan opfocus">${p.head}
+      <div class="row opsecs" role="tablist">${secs.map(([k, n]) => `<button class="act ${opSection === k ? "on" : ""}" type="button" role="tab" data-opsec="${k}" aria-selected="${opSection === k}">${n}</button>`).join("")}</div>
+      <div class="opsec">${body}</div>
+      <div class="row"><button class="act" type="button" id="squadBtn">← The squad</button><button class="act" type="button" data-enter="surface:armory">Armory →</button></div></div>`;
   }
 
   function opRow(o: Operative) {
@@ -1742,7 +1766,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       }
       if (k === "scar" || k === "headgear") l[k] = !l[k];
       else if (k === "hair") { const ok = HAIR_BY_SEX[o.sex ?? "m"] as readonly number[], i = ok.indexOf(l.hair); l.hair = ok[(Math.max(0, i) + d + ok.length) % ok.length]; }
-      else { const n = LOOK_PARTS[k]; l[k] = (l[k] + d + n) % n; }
+      else { const kk = k as keyof typeof LOOK_PARTS, n = LOOK_PARTS[kk]; (l as unknown as Record<string, unknown>)[kk] = (((l as unknown as Record<string, number | undefined>)[kk] ?? 0) + d + n) % n; }
       change(() => { o.look = l; });
     });
     on("renameBtn", () => {
@@ -1774,6 +1798,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     root.querySelectorAll<HTMLElement>("[data-roomstep]").forEach(b => b.onclick = () => stepRoom(b.dataset.roomstep!));
     root.querySelectorAll<HTMLElement>("[data-person]").forEach(b => { const pick = () => { opSel = b.dataset.person!; render(); }; b.onclick = pick; b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } }; });
     on("fxToggle", () => { setTransitions(!transitionsSetting()); render(); });
+    root.querySelectorAll<HTMLElement>("[data-opsec]").forEach(b => b.onclick = () => { opSection = b.dataset.opsec as OpSection; render(); });
+    on("squadBtn", () => { opSel = null; render(); });
     root.querySelectorAll<HTMLElement>("[data-build]").forEach(b => b.onclick = () => {
       if (!sel) return;
       const { level, slot } = sel;

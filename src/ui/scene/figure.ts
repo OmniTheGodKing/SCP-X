@@ -102,6 +102,7 @@ export function figureSvg(s: FigureSpec, x: number, y: number, scale = 1, face: 
   // neck and head
   if (!sealed) {
     L.push(`<rect x="-11" y="-282" width="22" height="20" fill="${sh}"/>`);
+    if (s.look.accessory === 3) L.push(`<path d="M-20 -272 Q0 -258 20 -272 L22 -262 Q0 -246 -22 -262Z" fill="#6b6a4a"/><path d="M8 -260 l6 30 l-10 -4z" fill="#5c5b3f"/>`);
     L.push(head(s.look, skin, sh, hair, female));
     const hg = s.headgear;
     if (hg === "helmet") L.push(`<path d="M-30 -306 Q-30 -344 0 -344 Q30 -344 30 -306 Q16 -312 0 -312 Q-16 -312 -30 -306Z" fill="#4f5638"/><path d="M-34 -304 Q0 -314 34 -304 L34 -300 Q0 -309 -34 -300Z" fill="#3e442c"/><path d="M-20 -336 Q0 -340 20 -336" stroke="#5f6745" stroke-width="2" fill="none"/>`);
@@ -154,10 +155,10 @@ function head(l: Look, skin: string, sh: string, hair: string, female: boolean) 
     `<path d="M-22 -300 Q-21 -268 0 -266 Q21 -268 22 -300 Q18 -276 0 -276 Q-18 -276 -22 -300Z" fill="${hair}"/>`,
     `<path d="M-20 -296 Q-18 -270 0 -268 Q18 -270 20 -296 Q16 -276 0 -275 Q-16 -276 -20 -296Z" fill="${hair}" opacity=".3"/>`,
   ][l.facial] ?? "";
-  const jaw = female ? 21 : 23;
+  const shape = l.face ?? 0, jaw = (female ? 21 : 23) + (shape === 1 ? 3 : shape === 2 ? -2 : 0), chin = shape === 2 ? -264 : shape === 1 ? -274 : -270;
   return `${l.hair === 5 ? hairShape : ""}
     <ellipse cx="-24" cy="-302" rx="4" ry="7" fill="${sh}"/><ellipse cx="24" cy="-302" rx="4" ry="7" fill="${sh}"/>
-    <path d="M${-jaw} -312 Q${-jaw} -336 0 -336 Q${jaw} -336 ${jaw} -312 Q${jaw} -284 0 -270 Q${-jaw} -284 ${-jaw} -312Z" fill="${skin}"/>
+    <path d="M${-jaw} -312 Q${-jaw} -336 0 -336 Q${jaw} -336 ${jaw} -312 Q${jaw} ${shape === 1 ? -276 : -284} ${shape === 1 ? 8 : 0} ${chin} ${shape === 1 ? "L-8 " + chin + " " : ""}Q${-jaw} ${shape === 1 ? -276 : -284} ${-jaw} -312Z" fill="${skin}"/>
     <path d="M12 -330 Q${jaw + 2} -312 14 -284 Q8 -276 0 -272 Q12 -282 14 -300 Q16 -318 12 -330Z" fill="${sh}" opacity=".5"/>
     <ellipse cx="-8" cy="-322" rx="9" ry="5" fill="${lit}" opacity=".35"/>
     ${l.hair === 5 ? "" : hairShape}
@@ -166,7 +167,9 @@ function head(l: Look, skin: string, sh: string, hair: string, female: boolean) 
     <path d="M-15 -312 Q-9 -315 -3 -312 M3 -312 Q9 -315 15 -312" stroke="${hair}" stroke-width="2.6" stroke-linecap="round" fill="none"/>
     <path d="M0 -304 L-3 -293 Q0 -291 3 -293" stroke="${sh}" stroke-width="1.6" fill="none" stroke-linecap="round"/>
     <path d="M-7 -284 Q0 -281 7 -284" stroke="#6a3f30" stroke-width="2" fill="none" stroke-linecap="round" opacity=".85"/>
-    ${facial}${l.scar ? `<path d="M10 -316 L17 -296" stroke="#b5675a" stroke-width="2.2" opacity=".85"/>` : ""}`;
+    ${facial}${l.scar ? `<path d="M10 -316 L17 -296" stroke="#b5675a" stroke-width="2.2" opacity=".85"/>` : ""}
+    ${l.accessory === 1 ? `<circle cx="-9" cy="-306" r="7.5" fill="#cfe0e8" fill-opacity=".18" stroke="#2a2a2a" stroke-width="2"/><circle cx="9" cy="-306" r="7.5" fill="#cfe0e8" fill-opacity=".18" stroke="#2a2a2a" stroke-width="2"/><path d="M-1.5 -307 h3 M-16.5 -307 l-6 -2 M16.5 -307 l6 -2" stroke="#2a2a2a" stroke-width="2"/>` : ""}
+    ${l.accessory === 2 ? `<path d="M5 -283 l16 3" stroke="#e8e4d8" stroke-width="3" stroke-linecap="round"/><circle cx="22" cy="-280" r="1.8" fill="#d9783a"/><path d="M23 -282 q4 -8 0 -14 q-4 -6 1 -12" stroke="#c9c9c9" stroke-width="1.4" fill="none" opacity=".6"/>` : ""}`;
 }
 function unitHat([name, col]: [string, string]) {
   const dk = tone(col, 0.78);

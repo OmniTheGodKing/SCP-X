@@ -64,9 +64,32 @@ const { check, done } = reporter();
   check('rooms: Epsilon-11 quarters, with the operatives in them', q.room === 'surface:quarters' && q.people >= 4, q);
   const who = await E(() => document.querySelectorAll('.scene-person')[1].dataset.person);
   await p.click(`.scene-person[data-person="${who}"]`); await p.waitForTimeout(150);
-  const picked = await E(() => ({ sel: document.querySelector('.scene-person.sel')?.dataset.person, panel: document.querySelector('.rv-ctx')?.innerText.slice(0, 60) }));
-  check('rooms: selecting an operative in the quarters brings up their file', picked.sel === who, picked);
+  const picked = await E(() => ({ hero: document.querySelector('.hero')?.dataset.person, panel: document.querySelector('.rv-ctx')?.innerText.slice(0, 60) }));
+  check('quarters: selecting an operative brings them forward, full height, with their file', picked.hero === who, picked);
   await p.screenshot({ path: `${OUT}/room-quarters.png` });
+
+  // live customization: each change redraws the figure at once and is saved with the campaign
+  const fig = () => E(() => document.querySelector('.hero')?.innerHTML ?? '');
+  const f0 = await fig();
+  for (const k of ['skin', 'hair', 'face', 'coat', 'accessory']) {
+    const before = await fig();
+    await p.click(`[data-look="${k}"][data-d="1"]`); await p.waitForTimeout(80);
+    check(`quarters: changing ${k} changes how they look`, (await fig()) !== before);
+  }
+  const look = await E(id => JSON.stringify(window.__site19.campaign.roster.find(o => o.id === id).look), who);
+  await p.reload(); await p.waitForTimeout(400); await close(p);
+  const lookAfter = await E(id => JSON.stringify(window.__site19.campaign.roster.find(o => o.id === id).look), who);
+  check('quarters: their new look is saved', look === lookAfter && f0 !== '', { look, lookAfter });
+  await p.click('[data-tab="site"]'); await p.waitForTimeout(300);
+  await p.click('[data-enter="surface:quarters"]'); await p.waitForTimeout(500);
+  if (!(await p.$('.hero'))) { await p.click(`.scene-person[data-person="${who}"]`); await p.waitForTimeout(150); }
+  for (const sec of ['loadout', 'abilities', 'record', 'bio', 'appearance']) {
+    await p.click(`[data-opsec="${sec}"]`); await p.waitForTimeout(60);
+    check(`quarters: the ${sec} section opens`, await E(s => document.querySelector(`[data-opsec="${s}"]`)?.getAttribute('aria-selected') === 'true', sec));
+  }
+  await p.screenshot({ path: `${OUT}/room-quarters-custom.png` });
+  await p.click('#squadBtn'); await p.waitForTimeout(100);
+  check('quarters: back to the whole squad', await E(() => !document.querySelector('.hero') && document.querySelectorAll('.scene-person').length >= 4));
   await p.keyboard.press('Escape'); await p.waitForTimeout(500);
   await p.click('[data-enter="surface:armory"]'); await p.waitForTimeout(700);
   check('rooms: the armory', await E(() => document.querySelector('.roomview')?.dataset.room === 'surface:armory'));

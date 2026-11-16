@@ -9,8 +9,8 @@ export function operativeFigure(c: Campaign, o: Operative, opts: { armed?: boole
   const look = lookOf(o), hat = o.unit ? HEADGEAR[o.unit] : undefined;
   const armor = (o.kit?.armor ?? "") as ArmorKind;
   return {
-    look, sex: o.sex, dress: "fatigues",
-    armor: armor && (c.inventory[armor] ?? 0) > 0 || armor ? armor : "",
+    look, sex: o.sex, dress: look.coat === 1 ? "field" : "fatigues",
+    armor,
     armorTier: Math.max(1, c.armorTier ?? 1),
     headgear: look.headgear ? (hat ?? "helmet") : "",
     weapon: opts.armed === false ? undefined : c.models[weaponOf(o)],

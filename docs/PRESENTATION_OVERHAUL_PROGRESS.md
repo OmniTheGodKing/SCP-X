@@ -47,7 +47,7 @@ Everything is derived from campaign state, and nothing here changes the rules.
 | P0 | Audit, reference study, art direction (`docs/ART_DIRECTION.md`) | [x] |
 | P1 | Persistent room layouts from campaign state | [x] |
 | P2 | Interior renderer and enter/leave transitions | [x] |
-| P3 | Quarters: full-body operatives and live customization | [ ] |
+| P3 | Quarters: full-body operatives and live customization | [x] |
 | P4 | Armory: weapon inspection, mount points, visible attachments | [ ] |
 | P5 | Lab, containment chambers, workshop, command | [ ] |
 
@@ -91,6 +91,18 @@ Everything is derived from campaign state, and nothing here changes the rules.
   - `tests/rooms.e2e.cjs`: entering, leaving, the same room looking the same, stepping, damage and repair from
     inside, the quarters and armory, selecting an operative, the hideable panel, transitions off.
   - Bug found by that test and fixed: the scene's light and vignette layers took clicks meant for people.
+- P3:
+  - Epsilon-11's quarters show the squad as full figures in their own kit. Selecting one, in the room or the list,
+    brings them forward at full height while the rest of the squad steps back into the room's shadow.
+  - The file beside them is split into Appearance, Loadout, Abilities, Service record and Biography (`opParts`);
+    the Personnel tab still shows the whole file, built from the same parts.
+  - Appearance changes redraw the figure at once and are saved with the campaign. Options: sex, skin, hair, hair
+    colour, facial hair, scar, headgear, plus three new optional `Look` fields (face shape, jacket, accessory:
+    spectacles, cigarette, neck scarf). Older saves read the new fields as their defaults.
+  - Armour from the loadout, the uniform research tier, rank stripes, injuries and the weapon with its attachment
+    all show on the figure.
+  - `tests/rooms.e2e.cjs` covers: bringing an operative forward, five appearance changes each changing the figure,
+    the look surviving a reload, every section opening, and returning to the squad.
 
 ## Known limitations
 

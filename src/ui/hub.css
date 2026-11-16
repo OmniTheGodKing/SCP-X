@@ -202,3 +202,11 @@ body:has(.hub) { background: var(--s-bg); }
 .surfwrap .hotspot:hover, .surfwrap .hotspot:focus-visible { border-color: var(--s-info); color: var(--s-text); background: rgba(5,7,8,.35); }
 .rv-ghost svg { width: 100%; height: 100%; display: block; }
 @media (prefers-reduced-motion: reduce) { .scene-person .fig { transition: none; } }
+
+/* ---- Presentation overhaul P3: the quarters' focused operative ---- */
+.opfocus .opsecs { flex-wrap: wrap; gap: 4px; margin: 6px 0 8px; }
+.opfocus .opsecs .act { padding: 6px 9px; font-size: 11.5px; }
+.opfocus .opsec { display: grid; gap: 4px; }
+.opfocus .opsec .row { margin-top: 4px; }
+.opfocus .portrait { display: none; }
+.roomview .hero .fig { transition: filter .2s; }
