@@ -182,6 +182,8 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let opSection: OpSection = "appearance";
   // Presentation overhaul P4: the operative whose weapon is on the armory bench, the mount selected, the attachment
   // being previewed (not yet fitted), and how close the bench view is
+  // P5: the project on the lab's chalkboard, and the research completion to stamp on it
+  let resFocus: string | null = null, doneSeen = c.research.done.length, justDone: string | null = null;
   let armOp: string | null = null, armMount: MountId | null = null, armPreview: AttachmentId | "" | null = null, armZoom = 1;
   let creditsOpen = false;
   let resetArmed = 0;
@@ -595,7 +597,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     // Strategic overhaul C/H: the Director's Briefing leads; the situation, the Council and the money sit beside it
     const brief = directorsBriefing(c);
     const sevCount = (k: string) => brief.filter(b => b.sev === k).length;
-    return `<div class="screen-command">
+    return `${roomBanner("command", "Into Command")}<div class="screen-command">
     <section class="col">
       <div class="panel"><div class="panel-h"><b>Director's briefing</b><span class="meta">${sevCount("critical")} critical · ${sevCount("important")} important · ${dateText(c.day)}</span></div>
         <div class="panel-b"><div class="brief">${brief.length ? brief.map(b => `<div class="brief-item ${b.sev}"><div><b>${esc(b.title)}</b><div class="d">${esc(b.detail)}</div></div>
@@ -975,6 +977,56 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     ${selInc && planning === selInc.id ? planPanel(selInc) : ""}`;
   }
 
+  /** P5: what a room is doing right now, for its scene: the lab's board, a test in a wing, the workshop's bench,
+   *  Command's map, alarms and teletype. Read from the campaign; nothing here is stored. */
+  function liveExtras(L: NonNullable<ReturnType<typeof roomLayout>>): SceneExtras {
+    const x: SceneExtras = {};
+    if (L.kind === "lab") {
+      if (c.research.done.length > doneSeen) { justDone = c.research.done[c.research.done.length - 1]; doneSeen = c.research.done.length; }
+      const id = justDone && !resFocus ? justDone : resFocus ?? Object.keys(c.research.assigned).find(k => c.research.assigned[k] && PROJECTS[k]) ?? null;
+      if (id && PROJECTS[id]) {
+        const p = PROJECTS[id], prog = c.research.progress[id] ?? 0, days = projectDays(c, id), n = c.research.assigned[id] ?? 0;
+        x.board = { title: p.name, lines: [p.branch, has(c, id) ? "Complete" : `${prog} of ${days} researcher-days`, `${n} on it`, p.desc], progress: has(c, id) ? 1 : prog / days, stamp: has(c, id) && id === justDone ? "COMPLETE" : undefined };
+      } else x.board = { title: "No project", lines: ["Assign researchers", "to a project"] };
+    }
+    if (L.kind.startsWith("cont_") && L.occupant && c.research.testing && testScp(c.research.testing.id) === L.occupant.scpId) {
+      const d = TESTS[c.research.testing.id];
+      x.test = { name: d.name, dclass: d.dclass, researcher: true };
+    }
+    if (L.kind === "workshop" && c.orders.length) {
+      const o = c.orders[0];
+      const total = o.item ? ITEMS[o.item].days : o.refit ? REFIT.days : ATTACHMENT_COST.days;
+      x.making = { kind: o.attachment ? "attachment" : o.ammo ? "ammo" : o.item ? "item" : "refit", id: o.attachment ?? o.ammo ?? o.item ?? "refit",
+        label: o.item ? ITEMS[o.item].name : o.attachment ? ATTACHMENTS[o.attachment].name : o.ammo ? AMMO[o.ammo].name : "Armor refit", progress: Math.max(0, 1 - o.daysLeft / Math.max(1, total)) };
+    }
+    if (L.kind === "command") {
+      const brief = directorsBriefing(c), crit = c.log.find(l => l.sev === "critical") ?? c.log.find(l => l.sev === "important");
+      x.ops = {
+        pins: c.incidents.map(i => ({ x: Math.min(.97, Math.max(.03, (REGIONS[i.region].lon + 180) / 360)), y: Math.min(.95, Math.max(.05, (90 - REGIONS[i.region].lat) / 180)), urgent: i.expires - c.day <= 1 || i.kind === "breach" || i.kind === "raid" })),
+        alarms: Math.min(12, brief.filter(b => b.sev === "critical").length), teletype: (brief.find(b => b.sev === "critical")?.title ?? crit?.text ?? "Nothing further").toUpperCase(), clock: `${dateText(c.day)} · ${String(Math.floor(c.hour ?? 0)).padStart(2, "0")}:00`,
+      };
+    }
+    return x;
+  }
+  /** P5: a room as the head of its screen: the Research tab opens on the lab, Command on the operations room. */
+  function roomBanner(type: FacilityType, label: string) {
+    const f = c.base.facilities.filter(x => x.type === type).sort((a, b) => Number(!operational(a)) - Number(!operational(b)))[0];
+    const L = f ? roomLayout(c, f.id) : null;
+    if (!L) return "";
+    const extras = liveExtras(L);
+    // framed on the room's working height: from the top of the back wall to just past the floor line
+    return `<div class="stagebanner"><div class="sb-stage">${interiorSvg(L, extras).replace(`viewBox="0 0 1600 900"`, `viewBox="0 96 1600 700"`).replace(`xMidYMid slice`, `xMidYMin slice`)}</div>
+      <div class="sb-bar"><span class="rv-des">${esc(L.designation)}</span><b>${esc(L.name)}</b>${L.staff.length ? `<span class="muted">${esc(L.staff.slice(0, 4).map(s => s.name).join(", "))}</span>` : ""}
+        <button class="act" type="button" data-enter="${esc(L.id)}">${esc(label)} →</button></div></div>`;
+  }
+  /** P5: the lab's panel inside the lab: the projects under way, each one put on the board when selected. */
+  function labPanel() {
+    const running = Object.keys(c.research.assigned).filter(id => c.research.assigned[id] && PROJECTS[id]);
+    return `<div class="card"><div class="label">On the board</div>
+      <div class="row">${running.map(id => `<button class="act ${resFocus === id ? "on" : ""}" type="button" data-resfocus="${id}">${esc(PROJECTS[id].name)}</button>`).join("") || `<span class="muted">Nothing under way. The Research tab assigns researchers.</span>`}</div>
+      ${justDone ? `<p class="specs">Last completed: ${esc(PROJECTS[justDone]?.name ?? justDone)}.</p>` : ""}</div>`;
+  }
+
   function researchTab() {
     const branches: Branch[] = ["SCP-173", ...(["049", "106", "096", "012", "939", "035", "682"] as const).filter(id => c.scps.some(s => s.id === id)).map(id => `SCP-${id}` as Branch),
       ...(c.scps.some(isInert) ? ["Objects" as Branch] : []),
@@ -982,7 +1034,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     const offer = c.research.offer, insp = c.research.inspired;
     const bt = Object.keys(PROJECTS).filter(id => PROJECTS[id].breakthrough && !has(c, id) && offered(c, id));
     const s = scp173();
-    return `<div class="hubgrid">
+    return `${roomBanner("lab", "Into the lab")}<div class="hubgrid">
     <section class="col">
       <div class="card">
         <div class="label">Research · ${c.researchers} researchers, ${researchersFree(c)} unassigned · lab space for ${researcherCapacity(c)}</div>
@@ -1029,7 +1081,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     const status = done ? `<span class="flag">Done</span>` : lock ? `<span class="flag bad">Locked</span>`
       : n ? `<span class="flag stare">${plural(n, "researcher")} · ${plural(eta!, "day")} left</span>` : prog ? `<span class="flag">Paused</span>` : "";
     return `<div class="proj ${done ? "done" : ""} ${lock ? "locked" : ""}">
-      <div class="ptop"><span class="projico">${icon(RESEARCH_ICON[researchCat(id)], 18)}</span><b>${esc(p.name)}</b>${inspired && !done ? `<span class="flag stare">Inspired</span>` : ""}${status}</div>
+      <div class="ptop"><span class="projico">${icon(RESEARCH_ICON[researchCat(id)], 18)}</span><b><button class="linkbtn" type="button" data-resfocus="${id}" title="Put it on the lab's board">${esc(p.name)}</button></b>${inspired && !done ? `<span class="flag stare">Inspired</span>` : ""}${status}</div>
       <div class="muted">${esc(p.desc)}</div>
       ${done ? "" : `<div class="pbar"><div class="exp-bar"><span style="width:${Math.min(100, (prog / days) * 100)}%"></span></div><span class="specs">${prog}/${days} researcher-days${r.paid.includes(id) ? "" : ` · $${projectCost(c, id)}k to start`}</span></div>`}
       ${lock ? `<div class="why">${esc(lock)}</div>` : done ? "" : `<div class="row assign">
@@ -1128,6 +1180,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       if (hero) extras.hero = { key: hero.id, spec: operativeFigure(c, hero), x: rvPanel ? 520 : 800 };
       extras.span = rvPanel ? [200, 1000] : [240, 1360];
     }
+    Object.assign(extras, liveExtras(L));
     if (L.kind === "armory") {
       extras.racks = [...new Set(Object.values(c.models))];
       const ao = armOp ? c.roster.find(o => o.id === armOp && o.alive) : undefined;
@@ -1138,6 +1191,9 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     const ctx = L.kind === "quarters" ? (heroOp ? opFocusPanel(heroOp) : `<div class="card"><div class="label">Epsilon-11 · ${c.roster.filter(o => o.alive).length} operatives</div>
         <div class="roster">${c.roster.filter(o => o.alive).map(opRow).join("")}</div><p class="muted">Select an operative in the room or in this list.</p></div>`)
       : L.kind === "armory" ? armoryPanel()
+      : L.kind === "lab" ? `${slotDetail(L.level, L.slot)}${labPanel()}`
+      : L.kind.startsWith("cont_") && L.occupant ? `${slotDetail(L.level, L.slot)}${(() => { const ts = (Object.keys(TESTS) as TestId[]).filter(t => testScp(t) === L.occupant!.scpId);
+          return ts.length ? `<div class="file"><div class="label">Experiments on SCP-${esc(L.occupant!.scpId)}</div>${ts.map(t => testRow(t)).join("")}${watcherPicker()}</div>` : ""; })()}`
       : slotDetail(L.level, L.slot);
     return `<div class="roomview ${rvPanel ? "" : "nopanel"}" data-room="${esc(L.id)}">
       <div class="rv-stage">${interiorSvg(L, extras)}</div>
@@ -1843,6 +1899,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     on("fxToggle", () => { setTransitions(!transitionsSetting()); render(); });
     root.querySelectorAll<HTMLElement>("[data-opsec]").forEach(b => b.onclick = () => { opSection = b.dataset.opsec as OpSection; render(); });
     on("squadBtn", () => { opSel = null; render(); });
+    root.querySelectorAll<HTMLElement>("[data-resfocus]").forEach(b => b.onclick = () => { resFocus = b.dataset.resfocus!; justDone = null; render(); });
     // the armory bench
     root.querySelectorAll<HTMLElement>("[data-armop]").forEach(b => b.onclick = () => { armOp = b.dataset.armop!; armMount = null; armPreview = null; armZoom = 1; render(); });
     root.querySelectorAll<HTMLElement>("[data-mount]").forEach(b => { const pick = () => { armMount = b.dataset.mount as MountId; armPreview = null; render(); }; b.onclick = pick; b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } }; });

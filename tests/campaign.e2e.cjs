@@ -24,7 +24,8 @@ const { check, done } = reporter();
       await close(p);
       if (await E(cond)) break;
       const btn = await p.$('[data-speed="4"]:not([disabled])');
-      if (btn) await btn.click().catch(() => {});
+      // an incident that must be answered stops the clock: step the day with the debug control instead
+      if (btn) await btn.click().catch(() => {}); else await dbg(p, 'd1');
       await p.waitForTimeout(400);
       if (await p.$('#returnBtn')) break;
     }

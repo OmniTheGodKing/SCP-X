@@ -31,6 +31,14 @@ export interface SceneExtras {
   focus?: string;
   /** The armory's bench: a weapon laid out large, its mounts marked, an attachment previewed on it. */
   bench?: { model: string; attachment?: string; ghost?: string; highlight?: string; mounts: string[]; zoom: number; owner?: FigureSpec; narrow?: boolean };
+  /** P5, the lab: what the chalkboard shows (the selected project), its progress, and a stamp when it's done. */
+  board?: { title: string; lines: string[]; progress?: number; stamp?: string };
+  /** P5, a containment wing: an experiment under way in the cell. */
+  test?: { name: string; dclass: number; researcher: boolean };
+  /** P5, the workshop: what is on the bench. */
+  making?: { kind: "attachment" | "ammo" | "item" | "refit"; id: string; label: string; progress: number };
+  /** P5, Command: the incidents on the operations map (x, y as 0..1 of the map), alarms lit, the teletype's line. */
+  ops?: { pins: { x: number; y: number; urgent: boolean }[]; alarms: number; teletype: string; clock: string };
   /** One person brought forward, large, with the room still behind them (the quarters' selected operative). */
   hero?: { spec: FigureSpec; key: string; x?: number };
   /** The stretch of the scene, in scene units, people stand across (clear of a side panel). */
@@ -45,7 +53,7 @@ export function interiorSvg(L: RoomLayout, x: SceneExtras = {}) {
   parts.push(door(L.doors.left, -1, L), door(L.doors.right, 1, L));
   if (built || L.state === "repairing") parts.push(pipes(L), signage(L));
   parts.push(lights(L, dark));
-  if (built) parts.push(FURNISH[L.kind]?.(L, x) ?? "");
+  if (built) parts.push(FURNISH[L.kind]?.(L, x) ?? "", activity(L, x));
   parts.push(x.bench ? benchScene(x.bench) : people(L, x));
   parts.push(overlay(L, dark));
   return `<svg class="interior" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" role="img" aria-label="${esc(L.name)} ${esc(L.designation)}">${parts.join("")}</svg>`;
@@ -144,7 +152,7 @@ const FURNISH: Partial<Record<RoomLayout["kind"], (L: RoomLayout, x: SceneExtras
   command: () => `
     <rect x="${BX0 + 60}" y="${BY0 + 150}" width="560" height="270" fill="#2f3d48" stroke="${C.steelDk}" stroke-width="8"/>
     <path d="M${BX0 + 110} ${BY0 + 230}c40-30 90-20 120 10s70 10 90-10 60 20 50 60-60 40-90 30-70 30-110 10-70-60-60-100z M${BX0 + 380} ${BY0 + 190}c30-10 80 0 120 20s30 60 0 80-80 0-100-30-40-60-20-70z M${BX0 + 280} ${BY0 + 330}c30-10 60 0 70 30s-30 40-50 30-40-50-20-60z" fill="#4b5f52"/>
-    ${[[230, 250], [460, 220], [330, 360], [520, 300], [390, 250]].map(([px, py]) => `<circle cx="${BX0 + px}" cy="${BY0 + py}" r="7" fill="${C.red}"/>`).join("")}
+    <!-- the operations map's pins are the real incidents, drawn by activity() -->
     <text x="${BX0 + 340}" y="${BY0 + 180}" font-family="IBM Plex Mono,monospace" font-size="16" fill="${C.paper}" text-anchor="middle" opacity=".7">OPERATIONS · WORLD</text>
     ${["WASHINGTON", "LONDON", "MOSCOW", "TOKYO"].map((t, i) => `<circle cx="${BX0 + 720 + i * 150}" cy="${BY0 + 190}" r="46" fill="#14181c" stroke="${C.amber}" stroke-width="4"/><line x1="${BX0 + 720 + i * 150}" y1="${BY0 + 190}" x2="${BX0 + 730 + i * 150}" y2="${BY0 + 160}" stroke="${C.amber}" stroke-width="4"/><line x1="${BX0 + 720 + i * 150}" y1="${BY0 + 190}" x2="${BX0 + 745 + i * 150}" y2="${BY0 + 198}" stroke="${C.paper}" stroke-width="3"/><text x="${BX0 + 720 + i * 150}" y="${BY0 + 262}" font-family="IBM Plex Mono,monospace" font-size="13" fill="${C.paper}" text-anchor="middle">${t}</text>`).join("")}
     <rect x="${BX0 + 680}" y="${BY1 - 190}" width="420" height="190" fill="#2a3138"/><rect x="${BX0 + 680}" y="${BY1 - 200}" width="420" height="16" fill="${C.steel}"/>
@@ -289,6 +297,45 @@ function people(L: RoomLayout, x: SceneExtras) {
   if (L.kind === "barracks") for (let i = 0; i < Math.min(4, L.headcount); i++) out.push(figureSvg({ look: rollLook(`${L.id}-d${i}`), dress: "dclass", pose: "rest" }, BX0 + 180 + i * 260, BY1 + 60 + (i % 2) * 40, 0.72));
   if (L.kind === "command") out.push(figureSvg({ look: rollLook("duty-officer-1"), dress: "officer" }, BX0 + 300, BY1 + 90, 0.78), figureSvg({ look: rollLook("duty-officer-2", "f"), sex: "f", dress: "officer" }, BX0 + 960, BY1 + 70, 0.74));
   return out.join("");
+}
+
+// ---------- P5: what a room is doing, drawn into it ----------
+function activity(L: RoomLayout, x: SceneExtras) {
+  const o: string[] = [];
+  if (x.board && L.kind === "lab") {
+    // the chalkboard, rewritten for the selected project
+    const b = x.board;
+    o.push(`<rect x="${BX0 + 66}" y="${BY0 + 136}" width="408" height="208" fill="#1f2a24"/>
+      <text x="${BX0 + 84}" y="${BY0 + 176}" font-family="Special Elite,monospace" font-size="24" fill="#e8e6dc">${esc(b.title.slice(0, 28))}</text>
+      ${b.lines.slice(0, 4).map((t, i) => `<text x="${BX0 + 84}" y="${BY0 + 212 + i * 28}" font-family="Special Elite,monospace" font-size="17" fill="#d8d8d0" opacity=".75">${esc(t.slice(0, 40))}</text>`).join("")}
+      ${b.progress !== undefined ? `<rect x="${BX0 + 84}" y="${BY0 + 318}" width="300" height="10" fill="none" stroke="#d8d8d0" stroke-opacity=".6"/><rect x="${BX0 + 84}" y="${BY0 + 318}" width="${300 * Math.min(1, b.progress)}" height="10" fill="#d8d8d0" opacity=".7"/>` : ""}
+      ${b.stamp ? `<g transform="rotate(-8 ${BX0 + 330} ${BY0 + 250})"><rect x="${BX0 + 220}" y="${BY0 + 222}" width="230" height="56" fill="none" stroke="${C.red}" stroke-width="6"/><text x="${BX0 + 335}" y="${BY0 + 262}" font-family="IBM Plex Mono,monospace" font-size="28" font-weight="700" fill="${C.red}" text-anchor="middle">${esc(b.stamp)}</text></g>` : ""}`);
+  }
+  if (x.test && L.kind.startsWith("cont_")) {
+    // inside the cell: the D-Class at their marks; at the window, the researcher with a clipboard
+    const wx = BX0 + 60, wy = BY0 + 150, ww = 720, wh = 380;
+    for (let i = 0; i < x.test.dclass; i++) o.push(`<g clip-path="url(#sc-win)">${figureSvg({ look: rollLook(`${L.id}-test${i}`), dress: "dclass" }, wx + 140 + i * 420, wy + wh - 8, 0.75)}</g>`);
+    if (x.test.researcher) o.push(figureSvg({ look: rollLook(`${L.id}-tester`), dress: "labcoat", pose: "work" }, BX0 + 860, BY1 + 120, 0.8));
+    o.push(`<rect x="${wx + 8}" y="${wy + 8}" width="${ww - 16}" height="40" fill="${C.amber}"/><text x="${wx + ww / 2}" y="${wy + 36}" font-family="IBM Plex Mono,monospace" font-size="20" font-weight="700" fill="${C.ink}" text-anchor="middle">TEST IN PROGRESS · ${esc(x.test.name.toUpperCase().slice(0, 34))}</text>`);
+  }
+  if (x.making && L.kind === "workshop") {
+    // on the bench: what's being made, half-built
+    const m = x.making, bx = BX0 + 830, by = BY1 - 150;
+    if (m.kind === "attachment") o.push(`<g transform="translate(${bx} ${by - 30}) scale(.3)">${weaponSide("m1_garand", undefined, { ghost: m.id as AttachmentId })}</g>`);
+    else if (m.kind === "ammo") o.push([0, 1, 2].map(i => `<rect x="${bx + 30 + i * 70}" y="${by - 50}" width="56" height="44" fill="#4a5038" stroke="#2c3020" stroke-width="3"/><text x="${bx + 58 + i * 70}" y="${by - 22}" font-family="IBM Plex Mono,monospace" font-size="11" fill="#e2d4b1" text-anchor="middle">.30</text>`).join(""));
+    else o.push(crate(bx + 60, by, 150, 70, m.kind === "refit" ? "REFIT" : "ITEM"));
+    o.push(`<rect x="${bx}" y="${by + 6}" width="280" height="10" fill="#1a1a1a"/><rect x="${bx}" y="${by + 6}" width="${280 * Math.min(1, m.progress)}" height="10" fill="${C.amber}"/>
+      <text x="${bx + 140}" y="${by + 40}" font-family="IBM Plex Mono,monospace" font-size="16" fill="${C.paper}" text-anchor="middle">${esc(m.label.slice(0, 26))}</text>`);
+  }
+  if (x.ops && L.kind === "command") {
+    // the operations map's pins are the real incidents; the alarm board lights one lamp per critical item
+    const mx = BX0 + 60, my = BY0 + 150, mw = 560, mh = 270;
+    for (const p of x.ops.pins) o.push(`<circle cx="${mx + p.x * mw}" cy="${my + p.y * mh}" r="${p.urgent ? 11 : 8}" fill="${p.urgent ? C.red : C.amber}" stroke="#14181c" stroke-width="3"${p.urgent ? ` class="blinkdot"` : ""}/>`);
+    o.push(Array.from({ length: 12 }, (_, i) => `<rect x="${BX0 + 700 + (i % 6) * 66}" y="${BY1 - 170 + Math.floor(i / 6) * 50}" width="40" height="22" fill="${i < x.ops!.alarms ? C.red : C.green}" opacity=".85"/>`).join(""));
+    o.push(`<rect x="${BX0 + 680}" y="${BY1 - 260}" width="420" height="50" fill="#e9e4d4"/><text x="${BX0 + 692}" y="${BY1 - 228}" font-family="IBM Plex Mono,monospace" font-size="15" fill="#2a241a">${esc(x.ops.teletype.slice(0, 46))}</text>
+      <text x="${BX0 + 945}" y="${BY0 + 310}" font-family="IBM Plex Mono,monospace" font-size="18" fill="${C.paper}" text-anchor="middle">${esc(x.ops.clock)}</text>`);
+  }
+  return o.join("");
 }
 
 // ---------- the armory's bench ----------

@@ -49,7 +49,7 @@ Everything is derived from campaign state, and nothing here changes the rules.
 | P2 | Interior renderer and enter/leave transitions | [x] |
 | P3 | Quarters: full-body operatives and live customization | [x] |
 | P4 | Armory: weapon inspection, mount points, visible attachments | [x] |
-| P5 | Lab, containment chambers, workshop, command | [ ] |
+| P5 | Lab, containment chambers, workshop, command | [x] |
 
 ## Log
 
@@ -126,6 +126,39 @@ Everything is derived from campaign state, and nothing here changes the rules.
     returning to stores, figures matching combat, reissue and old-save returns) and `tests/armory.e2e.cjs` (the
     bench, the Garand's missing magazine mount, mount selection, preview, figures, zoom, cancel, fit, refusal,
     persistence, removal).
+- P5:
+  - Each room's activity is drawn from the campaign (`liveExtras` in the hub, `activity()` in the scene):
+    - **Lab:** the chalkboard carries the selected project (its branch, researcher-days, who's on it and a
+      progress bar) and a COMPLETE stamp when a project finishes.
+    - **Containment wing:** with an experiment under way on its occupant, the D-Class stand at their marks in the
+      cell, a researcher watches from the window, and the placard names the test. The wing's panel offers its
+      occupant's experiments, with the watcher picker.
+    - **Workshop:** the bench carries the first order (an attachment drawn on a rifle, ammunition boxes, or a
+      crate) with its progress.
+    - **Command:** the operations map's pins are the open incidents, placed by their region's coordinates (red
+      and blinking when urgent). The alarm board lights one lamp per critical briefing item; the teletype prints
+      the most urgent item; the clock shows the date and hour. The decorative pins the room used to draw are
+      gone, since they looked like real incidents.
+  - The Research tab opens on the lab and the Command tab on the operations room, each a banner with "Into ..."
+    going into that room. Inside the lab, the panel's "On the board" puts any project under way on the board.
+  - `tests/scenes.e2e.cjs` covers each of these.
+  - campaign.e2e: an incident that must be answered stops the World clock. On this test's fresh random seed that
+    can happen early, so the wait now steps the day with the debug control when the clock is blocked.
+
+## Remaining work
+
+- The directive arrived cut off in its section 13 (Command center); sections after it were not received.
+- Command center: the room heads the Command screen and shows live state; the Director's Briefing, situation,
+  Council and finances panels below it are unchanged.
+- Not done:
+  - the History screen as an archive room;
+  - the Geoscape;
+  - a dedicated engineering room beyond the workshop;
+  - medical and psychological interactions beyond their interiors.
+- Art: everything is code-drawn and provisional; `docs/ART_DIRECTION.md` specifies the finished look. Characters are
+  front-on only, and weapons side-on only, with no rotation.
+- Tactical: the tactical renderer still draws operatives as its own tokens; the full figure's look is not carried
+  into missions.
 
 ## Known limitations
 
