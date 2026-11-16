@@ -58,9 +58,9 @@ Status: `[x]` done and tested, `[~]` partly done (see notes), `[ ]` not started.
 | T6.1 | Presentation hooks: rules can run headless [7.2, partial] | T0 | Combat and enemy turns run with no animation waits in tests | [x] `pace.headless`; sandbox missions |
 | T6.2 | Tactical lab screen on production rules [1.1] | T1.5, T2.1 | Build scenarios and inspect sight, peeks, fire, cover, hit chance, AI; save and load | [x] |
 | T6.3 | Move preview: shields, flanks, overwatch risk; contact markers; suppression indicators [3.2] | T2.1, T3.2 | Preview equals the dice | [x] |
-| T7.1 | Golden scenario suite and consistency test [1.2, 1.3] | T1.5 | Hallway, rooms, diagonals, corners, doors, windows, crates, long range, smoke | [x] |
-| T7.2 | SCP integration checks | all | 173, 049, 610, 096, 939 suites pass; exceptions documented | [ ] |
-| T7.3 | Strategic compatibility | all | Deployment, results, saves unchanged | [ ] |
+| T7.1 | Golden scenario suite and consistency test [1.2, 1.3] | T1.5 | Hallway, rooms, diagonals, corners, doors, windows, crates, long range, smoke | [x] headless scenarios in `tests/unit/geom`, `perception` and `combat` tests; lab presets; `consistency.e2e` |
+| T7.2 | SCP integration checks | all | 173, 049, 610, 096, 939 suites pass; exceptions documented | [x] `scp.e2e`, `accept4b` |
+| T7.3 | Strategic compatibility | all | Deployment, results, saves unchanged | [x] `scp.e2e` (win recorded, reload), save fixtures, accept4c, objecttheft |
 
 ## Architectural decisions
 
@@ -216,6 +216,53 @@ Status: `[x]` done and tested, `[~]` partly done (see notes), `[ ]` not started.
   - `tests/unit/preview.test.ts` checks the preview against the rules, including that a flagged overwatch lane really
     draws the shot.
 
-## Unresolved issues
+- **T7.2 and T7.3 done.** `tests/scp.e2e.cjs` runs real missions:
+  - SCP-173 stays frozen while watched and moves when nobody can see it;
+  - SCP-049 raises a fresh body;
+  - SCP-106 sinks when hit;
+  - SCP-610's flesh spreads;
+  - a won strike is recorded in the campaign with XP, and the campaign reloads with its random stream.
+  
+  Together with accept4b (096, 012, 939, 035, 682), accept4c (GOC, GRU-P, convoy, generated towns), objecttheft,
+  floors, raidarrival and the save fixtures, every anomaly and the main strategic hand-offs are covered.
 
-- (none yet)
+## Anomaly exceptions to the standard rules (explicit, and tested)
+
+- **SCP-173 doesn't step out to look** (`rawSight`). It stays frozen when anyone can at least make it out (detected).
+  So in the dark beyond the detection range it moves, which is the intended horror.
+- **SCP-939** is hidden beyond 5 tiles unless lit by a flare (`hidden939`). This stays a special rule on top of
+  perception.
+- **Anomalies, objects and the downed don't peek** (they don't show themselves at step-outs).
+- **What overwatch reacts to:** the team reacts to Insurgents, hostile instances (SCP-049-2, SCP-610 instances,
+  rioters) and a fighting SCP-682; Insurgents react to the team.
+
+## Unresolved issues and known limitations
+
+- **J8 elevation:** not built (the last 4J phase, and Phase 5's prerequisite).
+- **Rules and presentation are only partly separated.** Rules can run headless (`pace.headless`, sandbox missions),
+  but `fire()`, `moveUnit()` and the anomaly phases still call `fx`, `log` and `sleep` directly. The full split
+  (rules emit events; the UI plays them) is roadmap task 7.2.
+- **Mid-mission save** (roadmap 0.3) and **save migration fixtures for versions before 24** (0.4) were not part of this
+  assignment. The v24 fixtures and round-trip tests are.
+- **Attribution** for SCP-005, 012, 035, 096, 500, 682, 914 and 939 (roadmap 0.5) is still missing. The author names
+  need checking on the SCP Wiki, which this session can't reach.
+- **Fallbacks:** `setup.scp ?? "173"` remains in `mission.ts` (roadmap 0.6).
+- **Stray rounds** hit cover (and wear it) but never other units in the line.
+- **Balance is untested by play.** The AI weights, range curves, light and perception numbers and grazes are
+  reasoned and tested for behaviour, not tuned against real campaigns.
+- **Firing at unknown contacts** (−10, might be a civilian) is a proposal the owner hasn't confirmed (D5).
+- **Rare flakes in the e2e suites**, all pre-existing in kind and caused by random placement: accept4b (096 and 035
+  setups) and accept4c (a GRU-P carrier stall). Not reproduced in the last runs.
+
+## Remaining checklist (next session)
+
+1. J8 elevation: per-tile height on maps that have roofs, catwalks or truck beds; height advantage; low cover not
+   protecting from above.
+2. Rules and presentation split (roadmap 7.2): move `fx`, `log` and `sleep` out of `fire`, `moveUnit` and the anomaly
+   phases into an event queue the UI plays.
+3. Phase 0 leftovers: mid-mission save (0.3), older save fixtures (0.4), attribution (0.5), no SCP-173 fallback
+   (0.6).
+4. Data-driven anomalies and missions (roadmap 8.1, 8.2), before 4H.
+5. Playtest and tune: AI weights (`AI_WEIGHTS`, `ROLE_RANGE`), range curves (`RANGE_CURVES`), perception
+   (`detectBase`, `identifyBase`, `LIGHT`, `WEATHER_CLARITY`), visibility thresholds (`VIS_MIN`, `STEP_OUT`).
+6. Then 4H (combat variety and progression) on the new foundation, and 4D.

@@ -14,14 +14,35 @@ npm run build      # type-check, then build dist/index.html (one self-contained 
 
 `npm run build` also writes `dist/artifact.html`, the same page without its `<html>`/`<head>`/`<body>` wrapper, for hosts that add their own.
 
+## Testing
+
+```sh
+npm run build && npm test     # everything
+npm run test:unit             # headless rule tests (Node, no browser)
+npm run test:e2e              # browser suites against dist/index.html
+node tests/run.cjs e2e lab    # one suite by name
+```
+
+The headless tests (`tests/unit/*.test.ts`) are bundled with the esbuild that comes with Vite and run in Node. The browser suites (`tests/*.e2e.cjs`) use Playwright, which isn't a project dependency: install it globally, or have it on `NODE_PATH`. Gameplay randomness is seeded (`src/core/rng.ts`), so scenarios are reproducible.
+
+## The tactical lab
+
+A developer screen for building a tactical situation and watching every rule: sight and what each unit makes out, step-out peeks, lines of fire and what they cross, cover, hit chances, overwatch lanes, suppression, light, and how the enemy AI scores its moves. Open it from the debug panel (press the backtick key, then "Open the tactical lab") or go to `index.html#lab`. It runs on the game's own rules; see `docs/TACTICAL_OVERHAUL_PROGRESS.md`.
+
 ## Layout
 
 | Path | What it holds |
 |---|---|
-| `src/core/grid.ts` | Tiles, movement, pathfinding |
-| `src/core/sight.ts` | Line of sight: strict corners, partial visibility, leaning |
+| `src/core/grid.ts` | Tiles, doors, glass, pathfinding |
+| `src/core/geom.ts` | The geometry kernel: obstacles, the one trace, step-out eye points, exposure, cover off the line of fire |
+| `src/core/sight.ts` | Sight and line-of-fire helpers over the kernel |
+| `src/core/rng.ts` | Seeded gameplay randomness (campaign and mission streams) |
+| `src/game/perception.ts` | Light and perception: unseen, detected, identified |
+| `src/game/combat.ts`, `actions.ts`, `movement.ts`, `status.ts` | Shots, reactions, suppression; action costs; movement; statuses |
+| `src/game/ai.ts` | The enemy's utility AI and pod coordination |
+| `src/game/sandbox.ts`, `src/ui/lab.ts` | Sandbox missions and the tactical lab |
 | `src/data/maps.ts` | Mission maps and spawn areas |
-| `src/game/` | One tactical mission: state, combat, turn cycle, and each faction's AI (`scp173.ts`, `insurgency.ts`, `dclass.ts`) |
+| `src/game/` | The rest of a tactical mission: state, turn cycle, missions, and each anomaly's and faction's rules (`scp173.ts`, `insurgency.ts`, `dclass.ts`) |
 | `src/campaign/` | Site-19 between missions: roster, ranks, days, funding, exposure, incidents, saving |
 | `src/ui/` | The command hub, the mission screen and the map renderer |
 
