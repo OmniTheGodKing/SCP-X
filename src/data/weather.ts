@@ -1,5 +1,6 @@
 // Weather: each region's sky changes every day or two, by season and climate. Outdoors it costs sight (and more),
 // adding to the night penalty; indoor maps are unaffected. Storms can hold a flight back a day.
+import { rnd } from "../core/rng";
 import type { RegionId } from "./regions";
 
 export type Weather = "clear" | "rain" | "storm" | "fog" | "snow";
@@ -29,7 +30,7 @@ function climate(r: RegionId, month: number): Odds {
   }
 }
 export function rollWeather(r: RegionId, month: number): Weather {
-  let x = Math.random();
+  let x = rnd();
   for (const [w, p] of Object.entries(climate(r, month)) as [Weather, number][]) { if ((x -= p) < 0) return w; }
   return "clear";
 }

@@ -1,4 +1,5 @@
 // Building a mission from what Site-19 sends, and turning its outcome into a result.
+import { beginMission, freshSeed, rnd } from "../core/rng";
 import { assignRoles } from "./ciTactics";
 import { FLOOR, L, Level, bfs, cheb, floorTiles, nearContainer, tileAt, useLevel, type Pt } from "../core/grid";
 import { MAPS } from "../data/maps";
@@ -18,8 +19,8 @@ function mk(o: Partial<Unit> & Pick<Unit, "id" | "side" | "name" | "x" | "y" | "
   return { aim: 0, alive: true, saved: false, ap: 0, overwatch: false, panicUntil: -1, staring: false, hadLos: false, seen173: false, fled: false, kills: 0, ...o };
 }
 
-const shuffle = <T>(a: T[]) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+const shuffle = <T>(a: T[]) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const pick = <T>(a: T[]) => a[Math.floor(rnd() * a.length)];
 
 const RESEARCHERS = ["Dr. Halloran", "Dr. Ibsen", "Dr. Achebe", "Dr. Moreau", "Dr. Szilard", "Dr. Whitcombe", "Dr. Okonkwo", "Dr. Lindgren"];
 const CIVILIANS = ["Mr. Delaney", "Mrs. Kowalczyk", "Earl Pruitt", "Dot Hennessey", "Rev. Abernathy", "Lou Marchetti", "Frank Osgood", "June Whitley", "Carl Bjornstad", "Hattie Mae Cole", "Walt Simmons", "Ida Ferraro", "Gus Lindgren", "Peggy Sue Hart"];
@@ -46,10 +47,11 @@ export function entryTiles(via?: "road" | "station"): Pt[] {
 }
 
 export function createMission(setup: MissionSetup) {
+  beginMission(setup.seed ?? freshSeed());
   nextSlot = 1;
   // a fresh layout every time: rooms refurnished, field maps mirrored half the time
   // Phase 4C: half the town missions are played in a town built from pieces (if one passes its checks)
-  const built = setup.map === "town" && (setup.convoy || Math.random() < 0.5) ? generateTown(!setup.convoy && (setup.kind === "manhunt" || setup.kind === "escort")) : null;
+  const built = setup.map === "town" && (setup.convoy || rnd() < 0.5) ? generateTown(!setup.convoy && (setup.kind === "manhunt" || setup.kind === "escort")) : null;
   const def = built ?? varyMap(MAPS[setup.map], setup.map !== "wingC");
   useLevel(new Level(def));
   const taken = new Set<string>();
@@ -119,7 +121,7 @@ export function createMission(setup: MissionSetup) {
   const strayRooms = shuffle(def.strayRooms.filter(r => r !== ciRoom));
   if (setup.kind === "breach") for (let i = 0; i < Math.min(setup.mods.strays, setup.strayPool ?? 4); i++) {
     const [x, y] = claim(floorTiles(strayRooms[i % strayRooms.length]));
-    const name = "D-" + (4400 + Math.floor(Math.random() * 600));
+    const name = "D-" + (4400 + Math.floor(rnd() * 600));
     units.push(mk({ id: "t" + (i + 1), side: "subject", call: name, name, x, y, hp: 5, maxHp: 5, san: PROFILE.dclass.maxSan, blinkMod: setup.mods.blinkBonus, stray: true }));
   }
   // researchers caught in the wing hide where they were working; a lost team's survivors hide the same way
@@ -197,8 +199,8 @@ export function createMission(setup: MissionSetup) {
       const room = def.insurgentRooms[i % def.insurgentRooms.length];
       const free = floorTiles(room).filter(([x, y]) => !S.units.some(u => u.alive && u.x === x && u.y === y));
       if (!free.length) continue;
-      const [x, y] = free[Math.floor(Math.random() * free.length)];
-      const name = "D-" + (4000 + Math.floor(Math.random() * 1000));
+      const [x, y] = free[Math.floor(rnd() * free.length)];
+      const name = "D-" + (4000 + Math.floor(rnd() * 1000));
       S.units.push(mk({ id: "q" + i, side: "zombie", call: name, name, x, y, hp: 5, maxHp: 5, san: 50, rioter: true }));
     }
   }
@@ -225,7 +227,7 @@ const NEW_BRIEF: Record<string, string> = {
 /** Phase 4B: the anomaly unit for a new SCP, and anything that comes with it (SCP-939's pack, SCP-035's host). */
 function newAnomaly(id: string, x: number, y: number, room: [number, number, number, number], claim: (t: Pt[]) => Pt, kind: MissionKind, units: Unit[]): Unit {
   switch (id) {
-    case "096": return mk({ id: "scp096", side: "anomaly", name: "SCP-096", x, y, hp: 1, maxHp: 1, san: 0, facing: Math.floor(Math.random() * 8) });
+    case "096": return mk({ id: "scp096", side: "anomaly", name: "SCP-096", x, y, hp: 1, maxHp: 1, san: 0, facing: Math.floor(rnd() * 8) });
     case "012": return mk({ id: "scp012", side: "anomaly", name: "SCP-012", x, y, hp: 1, maxHp: 1, san: 0 });
     case "682": return mk({ id: "scp682", side: "anomaly", name: "SCP-682", x, y, hp: 30, maxHp: 30, san: 0, armor: 2 });
     case "939": {
@@ -268,7 +270,7 @@ function seedOutbreak(setup: MissionSetup, rooms: [number, number, number, numbe
   for (let i = 0; i < reach.dist.length; i++) if (reach.dist[i] >= 0) S.flesh.add(i);
   const on = [...S.flesh].filter(i => i !== cy * L.W + cx && !S.units.some(u => u.alive && u.y * L.W + u.x === i));
   for (let k = 0; k < sev + 1 && on.length; k++) {
-    const i = on.splice(Math.floor(Math.random() * on.length), 1)[0];
+    const i = on.splice(Math.floor(rnd() * on.length), 1)[0];
     S.units.push(mk({ id: "f" + k, side: "zombie", name: "SCP-610 instance", x: i % L.W, y: (i / L.W) | 0, hp: 6, maxHp: 6, san: 0, flesh: true }));
   }
 }
@@ -324,7 +326,7 @@ const survives = (u: Unit, win: boolean, evacuated: boolean) => u.alive && u.inf
 export function missionResult(win: boolean, evacuated: boolean): MissionResult {
   let pocketReturned = 0;
   for (const u of S.units) if (u.taken && !u.alive && u.saved === false && u.side !== "raider") {
-    if (Math.random() < S.setup.mods.pocketReturn) {
+    if (rnd() < S.setup.mods.pocketReturn) {
       pocketReturned++;
       u.returned = true;
       u.alive = true; u.taken = false; u.downed = false; u.hp = Math.max(1, u.hp); u.san = Math.max(0, u.san - 40);

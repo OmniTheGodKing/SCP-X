@@ -1,5 +1,6 @@
 // Campaign saves live in this browser only. Storage can be unavailable (private windows,
 // blocked site data), so every access is guarded and the game still runs without it.
+import { campaignState, freshSeed, inMission, rnd, setCampaignSeed } from "../core/rng";
 import { fixEta10Calls, newTf } from "./taskforces";
 import { newChaos } from "./chaos";
 import { NICK_RANK, giveNick, lookOf, newBio, type Campaign } from "./campaign";
@@ -75,14 +76,14 @@ export function parseCampaign(raw: string): Campaign | null {
       const old = c as unknown as Campaign;
       const s = firstSightings();
       // a campaign already past 1952 sees SCP-049 soon instead
-      if (s["049"]! <= old.day) s["049"] = old.day + 20 + Math.floor(Math.random() * 60);
+      if (s["049"]! <= old.day) s["049"] = old.day + 20 + Math.floor(rnd() * 60);
       Object.assign(c, { version: 8, sightings: s });
     }
     if (c.version === 8) {
       const old = c as unknown as Campaign;
       if (!old.scps.some(s => s.id === "106")) {
         const d = firstSightings()["106"]!;
-        old.sightings["106"] = d > old.day ? d : old.day + 30 + Math.floor(Math.random() * 90);
+        old.sightings["106"] = d > old.day ? d : old.day + 30 + Math.floor(rnd() * 90);
       }
       Object.assign(c, { version: 9 });
     }
@@ -99,8 +100,8 @@ export function parseCampaign(raw: string): Campaign | null {
     }
     if (c.version === 13) {
       const old = c as unknown as Campaign;
-      if (old.day < 1310) old.outbreakDay = Math.max(old.day + 30, 945 + Math.floor(Math.random() * 365));
-      else old.outbreakDay = old.day + 30 + Math.floor(Math.random() * 90);
+      if (old.day < 1310) old.outbreakDay = Math.max(old.day + 30, 945 + Math.floor(rnd() * 365));
+      else old.outbreakDay = old.day + 30 + Math.floor(rnd() * 90);
       Object.assign(c, { version: 14 });
     }
     if (c.version === 14) Object.assign(c, { version: 15, morale: 60, dPolicy: "terminate" });
@@ -165,13 +166,19 @@ export function parseCampaign(raw: string): Campaign | null {
       Object.assign(c, { version: 24 });
     }
     if (c.version === 24) fixEta10Calls((c as unknown as Campaign).roster);
-    return c.version === 24 ? (c as unknown as Campaign) : null;
+    if (c.version !== 24) return null;
+    // Tactical overhaul T0: the campaign's random stream carries on from where it was saved (older saves get a new seed)
+    const cc = c as unknown as Campaign;
+    if (typeof cc.rng !== "number") cc.rng = freshSeed();
+    setCampaignSeed(cc.rng);
+    return cc;
   } catch {
     return null;
   }
 }
 
 export function saveCampaign(c: Campaign) {
+  if (!inMission()) c.rng = campaignState();
   try { localStorage.setItem(KEY, JSON.stringify(c)); } catch { /* unsaved is fine */ }
 }
 

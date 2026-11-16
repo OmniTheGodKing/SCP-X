@@ -1,6 +1,7 @@
 // Phase 4I acceptance tests, run on the real Site-19 wing C map in a live mission.
 const { chromium } = require('playwright');
-const SP = '/tmp/claude-0/-home-user-scp-x/54b8bb60-76e9-5ac7-87cb-a04ccc4cc055/scratchpad/';
+const { GAME_URL, OUT } = require('./lib.cjs');
+const SP = OUT + '/';
 const close = async p => { while (await p.$('#noticeOk')) await p.click('#noticeOk').catch(() => {}); };
 const dbg = async (p, k) => { await p.evaluate(() => document.activeElement?.blur?.()); await p.keyboard.press('`'); await p.click(`[data-dbg="${k}"]`); await p.click('[data-dbg="close"]').catch(() => {}); await close(p); };
 const results = [];
@@ -8,7 +9,7 @@ const check = (n, name, ok, detail) => { results.push(`${ok ? 'PASS' : 'FAIL'} $
 (async () => {
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1300, height: 900 } });
   const errs = []; p.on('pageerror', e => errs.push(e.message + ' ' + e.stack.split('\n')[1]));
-  await p.goto('file:///home/user/scp-x/dist/index.html'); await p.evaluate(() => localStorage.clear()); await p.reload();
+  await p.goto(GAME_URL); await p.evaluate(() => localStorage.clear()); await p.reload();
   await p.evaluate(() => { const c = window.__site19.campaign; c.tutorial = false; c.day = 400; });
   await dbg(p, 'strike');
   await p.click('[data-tab="command"]');

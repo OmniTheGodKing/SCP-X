@@ -1,4 +1,5 @@
 // Research projects, SCP-173 tests and the equipment they unlock.
+import { rnd } from "../core/rng";
 import { earn, spend } from "./ledger";
 import { announceHire, fieldBoost, hasTrade, hirePerson, TRADE_CHANCE } from "./people";
 import { countOperational, engineersFree } from "./base";
@@ -405,7 +406,7 @@ export function tickResearch(c: Campaign) {
   }
   const working = countOperational(c, "workshop") > 0;
   for (const o of [...c.orders]) {
-    if (o.daysLeft > 1 && hasTrade(c, "machinist") && Math.random() < TRADE_CHANCE) o.daysLeft--;
+    if (o.daysLeft > 1 && hasTrade(c, "machinist") && rnd() < TRADE_CHANCE) o.daysLeft--;
     if (!working) break;
     if (--o.daysLeft <= 0) {
       c.orders = c.orders.filter(x => x !== o);
@@ -514,13 +515,13 @@ export function order(c: Campaign, item: ItemId) {
 }
 
 // ---------- breakthroughs and inspirations (War of the Chosen) ----------
-const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
+const rand = (a: number, b: number) => a + Math.floor(rnd() * (b - a + 1));
 /** On the first of each month: maybe offer a breakthrough, maybe inspire a project; and expire old ones. */
 export function monthlyResearch(c: Campaign) {
   const r = c.research;
   if (r.offer && r.offer.until < c.day && !r.paid.includes(r.offer.id)) { log(c, `${PROJECTS[r.offer.id].name} is no longer on offer.`); r.offer = undefined; }
   if (r.inspired && r.inspired.until < c.day && !r.paid.includes(r.inspired.id)) r.inspired = undefined;
-  if (!r.offer && Math.random() < 0.5) {
+  if (!r.offer && rnd() < 0.5) {
     const pool = Object.keys(PROJECTS).filter(id => PROJECTS[id].breakthrough && !has(c, id));
     if (pool.length) {
       const id = pool[rand(0, pool.length - 1)];
@@ -528,7 +529,7 @@ export function monthlyResearch(c: Campaign) {
       log(c, `${PROJECTS[id].name} is on offer for 30 days: ${PROJECTS[id].desc}`, "good", "research");
     }
   }
-  if (!r.inspired && Math.random() < 0.4) {
+  if (!r.inspired && rnd() < 0.4) {
     const pool = Object.keys(PROJECTS).filter(id => !PROJECTS[id].breakthrough && !has(c, id) && !projectLock(c, id) && !r.paid.includes(id));
     if (pool.length) {
       const id = pool[rand(0, pool.length - 1)];

@@ -1,3 +1,4 @@
+import { rnd } from "../core/rng";
 import { fieldMap } from "../data/maps";
 // Leads (Phase 4F): opportunities that turn up on the World Map by themselves as time passes, most of them heard by
 // the fronts. Not all of them are fights: agents, money and a decision are often enough. Each has a deadline; a
@@ -56,9 +57,9 @@ export const LEADS: Record<LeadKind, { name: string; icon: string; titles: strin
 export const leadPrice = (c: Campaign, l: Lead) => l.offer === "researcher" ? 25 : l.offer === "engineers" ? 60 : (l.items ?? []).reduce((a, i) => a + Math.ceil(itemCost(c, i) / 2), 0);
 export const offerText = (c: Campaign, l: Lead) => l.offer === "researcher" ? "Hire one of its researchers" : l.offer === "engineers" ? "Hire two of its engineers" : `Buy ${(l.items ?? []).map(i => ITEMS[i].name).join(" and ")} at half price`;
 
-const pick = <T>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
-const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
-function weighted<T>(xs: [T, number][]) { const t = xs.reduce((a, [, w]) => a + w, 0); let r = Math.random() * t; for (const [x, w] of xs) { if ((r -= w) < 0) return x; } return xs[0][0]; }
+const pick = <T>(xs: T[]) => xs[Math.floor(rnd() * xs.length)];
+const rand = (a: number, b: number) => a + Math.floor(rnd() * (b - a + 1));
+function weighted<T>(xs: [T, number][]) { const t = xs.reduce((a, [, w]) => a + w, 0); let r = rnd() * t; for (const [x, w] of xs) { if ((r -= w) < 0) return x; } return xs[0][0]; }
 
 /** A new lead, shaped by the campaign: the fronts hear most things, a strong Insurgency is busier, standing brings
  *  the Council's attention. */
@@ -146,7 +147,7 @@ export function leadAction(c: Campaign, id: string, a: LeadAction): Incident | n
   if (a === "front") {
     spend(c, d!.cost!, "operations", `Front disruption near ${l.town}`);
     drop();
-    if (Math.random() < (d!.chance ?? 0.6)) log(c, `${REGIONS[l.region].front} broke up the Insurgents gathering near ${l.town} before they could move.`, "good");
+    if (rnd() < (d!.chance ?? 0.6)) log(c, `${REGIONS[l.region].front} broke up the Insurgents gathering near ${l.town} before they could move.`, "good");
     else { (c.retaliations ??= []).push({ region: l.region, day: l.until }); log(c, `${REGIONS[l.region].front} couldn't stop the Insurgents near ${l.town}. Expect an attack there by ${dateText(l.until)}.`, "bad"); }
     return null;
   }
@@ -158,7 +159,7 @@ function resolve(c: Campaign, l: Lead) {
   let text = "";
   switch (l.kind) {
     case "supply": {
-      if (Math.random() < 0.75) {
+      if (rnd() < 0.75) {
         const items = unlockedItems(c);
         if (items.length) { const got = [pick(items), pick(items)]; for (const i of got) c.inventory[i] = (c.inventory[i] ?? 0) + 1; text = `the agent brought back ${got.map(i => ITEMS[i].name).join(" and ")}.`; }
         else { c.materials.ciWeapons = (c.materials.ciWeapons ?? 0) + 3; text = "the agent brought back 3 Insurgency weapons for research."; }
@@ -185,5 +186,5 @@ export function tickLeads(c: Campaign) {
   }
   // about one every five days, never two days running, and always one after ten quiet days
   const gap = c.day - k.lastSpawn;
-  if (k.list.length < LEAD.max && gap >= 3 && (gap >= LEAD.quiet || Math.random() < 1 / LEAD.everyDays)) { if (spawnLead(c)) k.lastSpawn = c.day; }
+  if (k.list.length < LEAD.max && gap >= 3 && (gap >= LEAD.quiet || rnd() < 1 / LEAD.everyDays)) { if (spawnLead(c)) k.lastSpawn = c.day; }
 }

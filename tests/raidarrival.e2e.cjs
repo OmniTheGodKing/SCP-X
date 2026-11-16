@@ -2,13 +2,14 @@
 // the lift. Heightened: half up the lift, half drive in through the motor pool gate on the breach timing. Normal: all
 // off duty, all by the gate on the breach timing (playtest change after 4G).
 const { chromium } = require('playwright');
+const { GAME_URL, OUT } = require('./lib.cjs');
 const close = async p => { while (await p.$('#noticeOk')) await p.click('#noticeOk').catch(() => {}); };
 (async () => {
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1300, height: 1500 } });
   const errs = []; p.on('pageerror', e => errs.push(e.message));
   const out = {};
   for (const alert of ['full', 'heightened', 'normal']) {
-    await p.goto('file:///home/user/scp-x/dist/index.html'); await p.evaluate(() => localStorage.clear()); await p.reload();
+    await p.goto(GAME_URL); await p.evaluate(() => localStorage.clear()); await p.reload();
     await p.evaluate(a => { const c = window.__site19.campaign; c.day = 400; c.tutorial = false; c.alert = a; }, alert);
     await p.evaluate(() => document.activeElement?.blur?.()); await p.keyboard.press('`'); await p.click('[data-dbg="raid"]'); await p.click('[data-dbg="close"]'); await close(p);
     await p.click('[data-tab="command"]');

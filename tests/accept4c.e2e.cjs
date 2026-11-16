@@ -3,6 +3,7 @@
 // (and dropping it when a carrier is shot), a convoy getting through (and being taken), and a site gone quiet (what
 // happened there stays hidden until it is seen). Base defence across floors is in tests/floors.e2e.cjs.
 const { chromium } = require('playwright');
+const { GAME_URL, OUT } = require('./lib.cjs');
 const close = async p => { while (await p.$('#noticeOk')) await p.click('#noticeOk').catch(() => {}); };
 const dbg = async (p, k) => { await p.evaluate(() => document.activeElement?.blur?.()); await p.keyboard.press('`'); await p.click(`[data-dbg="${k}"]`); await p.click('[data-dbg="close"]').catch(() => {}); await close(p); };
 const results = [];
@@ -11,7 +12,7 @@ const check = (name, ok, detail) => results.push(`${ok ? 'PASS' : 'FAIL'} ${name
 async function page(b) {
   const p = await b.newPage({ viewport: { width: 1300, height: 950 } });
   const errs = []; p.on('pageerror', e => errs.push(e.message + ' ' + (e.stack || '').split('\n')[1]));
-  await p.goto('file:///home/user/scp-x/dist/index.html'); await p.evaluate(() => localStorage.clear()); await p.reload();
+  await p.goto(GAME_URL); await p.evaluate(() => localStorage.clear()); await p.reload();
   await p.evaluate(() => { const c = window.__site19.campaign; c.tutorial = false; c.day = 900; });
   return { p, errs, E: (f, a) => p.evaluate(f, a) };
 }
@@ -135,7 +136,7 @@ async function rivalMission(b, who) {
     const r = await E(async o => { const A = window.__site19, S = A.mission, t = S.units.find(u => u.vehicle);
       const out = { convoy: S.setup.convoy, truck: t && [t.x, t.y] };
       const g = S.units.filter(u => u.side === 'raider');
-      if (o === 'through') { for (const u of g) u.alive = false; const keep = g[0]; keep.alive = true; keep.x = 26; keep.y = 2; keep.hp = keep.maxHp = 99; keep.panicUntil = 999; S.activePods = []; for (let k = 0; k < 12 && !S.over; k++) await A.endTurn(); out.end = { out: S.convoyOut, over: S.over, win: S.result?.win, x: t.x }; }
+      if (o === 'through') { for (const u of g) u.alive = false; const keep = g[0]; keep.alive = true; keep.x = 0; keep.y = 0; keep.hp = keep.maxHp = 99; keep.panicUntil = 999; S.activePods = []; for (let k = 0; k < 12 && !S.over; k++) await A.endTurn(); out.end = { out: S.convoyOut, over: S.over, win: S.result?.win, x: t.x }; }
       else { for (const u of g) u.alive = false; const r = g[0]; r.alive = true; r.hp = r.maxHp = 99; r.x = t.x; r.y = t.y - 1; if (!A.passable(r.x, r.y)) r.y = t.y + 1; for (const m of S.units.filter(u => u.side === 'mtf')) { m.x = 1; m.y = 1; } await A.endTurn(); await A.endTurn(); out.end = { stolen: S.stolen, over: S.over, win: S.result?.win, moved: t.x }; }
       return out; }, outcome);
     if (outcome === 'through') check('convoy: the truck drives east and getting it out the far end wins', r.convoy && r.end.out && r.end.win === true, r);
@@ -175,7 +176,7 @@ async function rivalMission(b, who) {
     const { p, errs, E } = await page(b);
     const out = [];
     for (const map of ['rail', 'church', 'lab', 'ship', 'gate']) {
-      await p.goto('file:///home/user/scp-x/dist/index.html'); await E(() => localStorage.clear()); await p.reload();
+      await p.goto(GAME_URL); await E(() => localStorage.clear()); await p.reload();
       await E(() => { const c = window.__site19.campaign; c.tutorial = false; c.day = 900; });
       await dbg(p, 'strike');
       const id = await E(m => { const i = window.__site19.campaign.incidents.find(i => i.kind === 'strike'); i.map = m; return i.id; }, map);

@@ -1,5 +1,6 @@
 // Chaos Insurgency AI: hold SCP-173 with their eyes when they see it, fight from cover,
 // and push toward the Foundation team.
+import { rnd } from "../core/rng";
 import { commanderFlees, demoBreach } from "./ciTactics";
 import { L, area, bfs, cheb, floorOf, nearContainer, passable, pathTo } from "../core/grid";
 import { sightFrom } from "../core/sight";
@@ -95,11 +96,11 @@ export async function raiderPhase(checkEnd: () => boolean) {
         if (best >= 0 && toward[best] < toward[r.y * L.W + r.x]) await moveUnit(r, pathTo(res, best % L.W, (best / L.W) | 0) || []);
       }
       if (seen(heard.x, heard.y) || members.some(r => seen(r.x, r.y))) log("Insurgents move to check on a noise.", "bad");
-    } else for (const r of members) if (Math.random() < 0.4) {
+    } else for (const r of members) if (rnd() < 0.4) {
       const res = bfs([[r.x, r.y]], 2, (x, y) => occupied(x, y, r));
       const opts: number[] = [];
       for (let i = 0; i < L.W * L.H; i++) if (res.dist[i] > 0 && area(i % L.W, (i / L.W) | 0) === area(r.x, r.y)) opts.push(i);
-      if (opts.length) { const i = opts[Math.floor(Math.random() * opts.length)]; await moveUnit(r, pathTo(res, i % L.W, (i / L.W) | 0) || []); }
+      if (opts.length) { const i = opts[Math.floor(rnd() * opts.length)]; await moveUnit(r, pathTo(res, i % L.W, (i / L.W) | 0) || []); }
     }
     // a patrol that walks into the team's sight gives itself away next turn; one that sees the team now raises the alarm
     const late = alarm(S.units.filter(u => u.side === "raider" && podOf(u) === pod));
@@ -167,7 +168,7 @@ function bestSpot(r: Unit, t: Spot[]) {
     if (S.setup.kind === "raid" && S.liftOpen && L.def.control) sc -= Math.min(...controlTiles().map(([cx, cy]) => cheb(cx, cy, x, y) + (floorOf(cy) !== floorOf(y) ? 30 : 0))) * 7;
     else if (S.setup.convoy && truck()) sc -= cheb(truck()!.x, truck()!.y, x, y) * 7;
     else if (S.setup.kind === "escort" || S.setup.kind === "raid") sc -= Math.min(...L.contTiles.filter(([, cy]) => floorOf(cy) === 0).map(([cx, cy]) => cheb(cx, cy, x, y))) * 7;
-    sc -= res.dist[i] * 0.5 + Math.random() * 3;
+    sc -= res.dist[i] * 0.5 + rnd() * 3;
     if (sc > bestScore) { bestScore = sc; bestT = [x, y]; }
   }
   if (!bestT || (bestT[0] === r.x && bestT[1] === r.y)) return null;

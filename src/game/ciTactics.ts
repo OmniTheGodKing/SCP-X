@@ -1,6 +1,7 @@
 // Insurgent specialists and their tricks (Phase 3I): snipers who hold long-range overwatch, demolition specialists who
 // blow through walls, officers (and the named commander) who steady the troops around them, anomalous charms, and
 // reinforcements that land in long fights with a turn's warning.
+import { rnd } from "../core/rng";
 import { emitNoise } from "./noise";
 import { PART, blastStructure, doorShut, L, FLOOR, WALL, bfs, cheb, pathTo, passable } from "../core/grid";
 import { S, alive, banner, computeVis, fx, highlight, log, occupied, seen, team } from "./state";
@@ -29,7 +30,7 @@ export function assignRoles(units: Unit[], setup: MissionSetup) {
   if (roles.officer && rs.length >= 3 && free()) Object.assign(free()!, { role: "officer", name: gru ? "GRU-P officer" : ROLE_NAMES.officer, hp: 5, maxHp: 5 });
   if (!gru && roles.sniper && rs.length >= 3 && free()) { const r = free()!; Object.assign(r, { role: "sniper", name: ROLE_NAMES.sniper, aim: 70, gun: { name: "Scoped Mosin-Nagant", type: "rifle", dmg: [4, 6], mag: 3, ammo: 3, aim: 10 } }); }
   if (!gru && roles.demo && rs.length >= 4 && free()) Object.assign(free()!, { role: "demo", name: ROLE_NAMES.demo, charges: 1 });
-  if (roles.charm) { const r = rs[Math.floor(Math.random() * rs.length)]; r.charm = true; r.hadCharm = true; }
+  if (roles.charm) { const r = rs[Math.floor(rnd() * rs.length)]; r.charm = true; r.hadCharm = true; }
 }
 
 /** Officers and the commander steady every Insurgent within 4 tiles of them (not themselves). */

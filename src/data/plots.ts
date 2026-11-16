@@ -1,11 +1,12 @@
 // Map variety: every mission keeps a map's walls, doors, container and exits, but refurnishes each
 // room from a random plot (office rows, a lab with pillars, a storeroom, a sparse room), and field
 // maps are mirrored half the time. A layout is only used if every floor tile can still be reached.
+import { rnd } from "../core/rng";
 import type { MapDef, Pt } from "../core/grid";
 
 type Rect = [number, number, number, number];
-const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
-const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
+const pick = <T>(a: T[]) => a[Math.floor(rnd() * a.length)];
+const rand = (a: number, b: number) => a + Math.floor(rnd() * (b - a + 1));
 const WALKABLE = new Set([".", "+", "E", "C"]);
 
 /** Flip a map left to right, with every coordinate it carries. */
@@ -63,8 +64,8 @@ function furnish(grid: string[][], r: Rect, keep: Set<number>) {
     for (let i = rand(2, 3); i > 0; i--) put(rand(x0 + 1, x1 - 1), rand(y0, y1), "h");
   } else if (plot === "storage") {
     // crates stacked along one wall, with gaps to squeeze between
-    const top = Math.random() < 0.5;
-    for (let x = x0 + rand(0, 1); x <= x1; x += 2) put(x, top ? y0 : y1, Math.random() < 0.15 ? "D" : Math.random() < 0.6 ? "H" : "h");
+    const top = rnd() < 0.5;
+    for (let x = x0 + rand(0, 1); x <= x1; x += 2) put(x, top ? y0 : y1, rnd() < 0.15 ? "D" : rnd() < 0.6 ? "H" : "h");
   } else {
     for (let i = rand(2, 3); i > 0; i--) put(rand(x0, x1), rand(y0, y1), "h");
   }
@@ -72,7 +73,7 @@ function furnish(grid: string[][], r: Rect, keep: Set<number>) {
 
 /** A freshly laid-out copy of a map for one mission. */
 export function varyMap(base: MapDef, canMirror: boolean): MapDef {
-  const def = canMirror && Math.random() < 0.5 ? mirror(base) : base;
+  const def = canMirror && rnd() < 0.5 ? mirror(base) : base;
   const W = def.rows[0].length;
   const rooms: Rect[] = [];
   for (const r of [...def.scpRooms, ...def.insurgentRooms, ...def.strayRooms]) if (!rooms.some(o => o.join() === r.join())) rooms.push(r);

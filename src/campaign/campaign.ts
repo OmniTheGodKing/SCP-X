@@ -1,3 +1,4 @@
+import { freshSeed, rnd, setCampaignSeed } from "../core/rng";
 import { fieldMap } from "../data/maps";
 // Site-19 between missions: the roster, time passing, funding, public exposure and incidents.
 import { earn, spend, type Ledger } from "./ledger";
@@ -185,6 +186,8 @@ export interface SiteLogEntry { day: number; text: string; kind: string; }
 export interface Loadout { opId: string; armor: ItemId | ""; items: ItemId[]; }
 
 export interface Campaign {
+  /** The campaign's random stream state, saved with it (Tactical overhaul T0). */
+  rng?: number;
   version: 24;
   /** A squad in the air on its way to an incident: the mission waits for it to land (times are days, hours as
    *  fractions). */
@@ -382,7 +385,7 @@ export function startRetrain(c: Campaign, o: Operative) {
 
 const NAMES = ["Okafor", "Lindqvist", "Reyes", "Haddad", "Novak", "Tanaka", "Mbeki", "Sorensen", "Ortiz", "Kowalski", "Achterberg", "Nwosu", "Petrov", "Duarte", "Iqbal", "Varga", "Castellanos", "Whitlock", "Abara", "Morozova"];
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 || w.endsWith("Class") ? "" : "s"}`;
-const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
+const rand = (a: number, b: number) => a + Math.floor(rnd() * (b - a + 1));
 
 export type HubTab = "command" | "world" | "site" | "research" | "personnel";
 /** Log an entry. Passing a tab also pauses the running clock and shows it as a notice. */
@@ -419,12 +422,13 @@ export function makeOperative(c: Campaign, given?: string): Operative {
   const used = new Set([...c.roster.map(o => familyOf(o.name)), ...(c.retired ?? []).map(r => familyOf(r.name))]);
   const name = given ?? fullName(cultureOfFamily(NAMES.find(n => !used.has(n)) ?? "Callahan"), "m", used);
   const n = c.nextOp++;
-  const steady = has(c, "psych_screening") && Math.random() < 0.25;
+  const steady = has(c, "psych_screening") && rnd() < 0.25;
   const trained = trainersActive(c) > 0;
   return { sanBonus: has(c, "psych_screening") ? 10 : 0, id: "op" + n, name, call: `E11-${String(n).padStart(2, "0")}`, rank: trained ? 1 : 0, xp: trained ? RANK_XP[1] : 0, hp: 7, maxHp: 7, san: 100, aimBase: rand(64, 74), missions: 0, kills: 0, alive: true, perks: [], traits: steady ? ["steady"] : [], breakdowns: 0, bio: newBio(), medals: [], wounds: 0, seals: 0, faced: [] };
 }
 
 export function newCampaign(opts: NewCampaignOptions = { difficulty: "agent", ironman: false, tutorial: false }): Campaign {
+  setCampaignSeed(freshSeed());
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
@@ -573,7 +577,7 @@ function tickMorale(c: Campaign) {
   const rec = c.base.facilities.some(f => f.type === "barracks" && f.recreation && operational(f));
   c.morale = Math.max(0, Math.min(100, (c.morale ?? MORALE.start) + (full > 0.8 ? -2 : full < 0.6 ? 1 : 0) + (rec ? 1 : 0)));
   // below 30 the block can riot: up to 5% a day at 0
-  if (c.morale < MORALE.riotBelow && c.dclass >= 3 && !c.incidents.some(i => i.kind === "riot") && Math.random() < (MORALE.riotBelow - c.morale) / 600) startRiot(c);
+  if (c.morale < MORALE.riotBelow && c.dclass >= 3 && !c.incidents.some(i => i.kind === "riot") && rnd() < (MORALE.riotBelow - c.morale) / 600) startRiot(c);
 }
 export function startRiot(c: Campaign) {
   const inc: Incident = { id: "inc" + c.nextIncident, kind: "riot", scpId: "", region: HOME, map: "dblock", appeared: c.day, expires: c.day, insurgents: 0,
@@ -732,7 +736,7 @@ export function hireEngineer(c: Campaign) {
 }
 
 /** Extra people sent along: a field researcher, an amnestics specialist, Nu-7 on call. */
-const pickName = (xs: string[]) => xs[Math.floor(Math.random() * xs.length)];
+const pickName = (xs: string[]) => xs[Math.floor(rnd() * xs.length)];
 export interface Extras { researcher?: boolean; amnestics?: boolean; nu7?: boolean }
 export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCount: number, extras: Extras = {}): MissionSetup {
   // the armoury mole's leak: the next Insurgents met know what our rounds can get through
@@ -787,7 +791,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     hp: 6, maxHp: 6, san: 70, maxSan: 70, aim: 55, blinkFull: 0.12, armor: 0, hasArmor: false, items: [], perks: [], traits: [],
     gun: { name: "M1 Carbine", type: "carbine" as const, dmg: [2, 4] as [number, number], mag: 5, ammo: 5, aim: 0 }, armorHp: 0 })) : [];
   return {
-    kind, scp: (inc.scpId || "173") as ScpId, map: inc.map, amnestics,
+    kind, scp: (inc.scpId || "173") as ScpId, map: inc.map, amnestics, seed: (rnd() * 4294967296) >>> 0,
     night: away ? true : nightAt(c, inc), weather: missionWeather(c, inc),
     site: inc.site, records: away ? 2 : undefined, survivors: inc.kind === "rescue" ? inc.survivors : undefined,
     survivorName: inc.kind === "rescue" ? `${(inc.team ?? "Lost team").split(" ")[0]} operative` : undefined, hazard: inc.hazard,
@@ -893,7 +897,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     if (r.aftercare) o.aftercareUntil = c.day + 7;
     // what happened to them may leave a mark: each trigger sticks half the time
     const earned: TraitId[] = [];
-    const roll = (t: TraitId, hit: boolean) => { if (hit && !o.traits.includes(t) && Math.random() < 0.5) { o.traits.push(t); earned.push(t); } };
+    const roll = (t: TraitId, hit: boolean) => { if (hit && !o.traits.includes(t) && rnd() < 0.5) { o.traits.push(t); earned.push(t); } };
     roll("nightmares", s.witnessed >= 2 || !!o.refusedRetire);
     roll("twitchy", s.panics > 0);
     roll("gunshy", s.minHp <= 2);
@@ -994,7 +998,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   }
   // a capture far from home has to get back: the convoy may be ambushed on the way (XCOM-style follow-up)
   const capture = r.win && inc && inc.kind === "recovery" && inc.scpId;
-  const ambush = capture && travelDays(c, inc!.region) > 0 && r.squad.some(s => s.alive && !s.absent) && Math.random() < (planActive(c, "hijack") ? 1 : 0.3);
+  const ambush = capture && travelDays(c, inc!.region) > 0 && r.squad.some(s => s.alive && !s.absent) && rnd() < (planActive(c, "hijack") ? 1 : 0.3);
   // the squad flies home from abroad
   const away = inc ? travelDays(c, inc.region) : 0;
   if (away && r.squad.some(s => s.alive) && !ambush) {
@@ -1031,7 +1035,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     lines.push(msg); log(c, msg, "bad", "command");
   }
   // the Insurgency punishes towns that helped the Foundation
-  if (capture && Math.random() < 0.25) (c.retaliations ??= []).push({ region: inc!.region, day: c.day + rand(3, 10) });
+  if (capture && rnd() < 0.25) (c.retaliations ??= []).push({ region: inc!.region, day: c.day + rand(3, 10) });
   const report = buildReport(c, inc, r);
   (c.archive ??= []).unshift(report);
   chronicle(c, "deployment", `${name}, ${report.title}: ${r.win ? "closed" : "failed"} at ${report.location}. ${report.personnel.length ? `Sent: ${report.personnel.join(", ")}.` : ""}${inc?.briefed ? ` Briefed beforehand: ${inc.briefed}` : ""}${r.insurgentsTotal ? ` Found: ${r.insurgentsTotal} Insurgents.` : ""}`, { report: report.number });

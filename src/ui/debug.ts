@@ -1,5 +1,6 @@
 // Debug menu for testing. Opens with the backtick key, or a button when the page URL has ?debug.
 // Anything it does to a campaign marks that save as a debug save.
+import { forceRng, rnd } from "../core/rng";
 import { NICK_RANK, giveNick, RANK_XP, RANKS, advanceDay, dateText, gainIntel, log, maxSanOf, pendingBreach, startRiot, type Campaign } from "../campaign/campaign";
 import { tickConstruction } from "../campaign/base";
 import { PROJECTS, projectDays, tickResearch } from "../campaign/research";
@@ -133,7 +134,7 @@ export function mountDebug(host: DebugHost) {
       case "materials": for (const m of ["ciWeapons", "prisoners", "intelTotal", "tissue", "survivors"] as const) c.materials[m] = (c.materials[m] ?? 0) + 5; break;
       case "offer": {
         const pool = Object.keys(PROJECTS).filter(p => PROJECTS[p].breakthrough && !c.research.done.includes(p));
-        if (pool.length) c.research.offer = { id: pool[Math.floor(Math.random() * pool.length)], until: c.day + 30 }; else note = "Every breakthrough is done.";
+        if (pool.length) c.research.offer = { id: pool[Math.floor(rnd() * pool.length)], until: c.day + 30 }; else note = "Every breakthrough is done.";
         break;
       }
       case "unlockall":
@@ -169,7 +170,7 @@ export function mountDebug(host: DebugHost) {
       case "nu7": c.tf.nu7 = true; break;
       case "lostteam": lostTeam(c); break;
       case "emerg": siteEmergency(c); break;
-      case "emerg-scp": { const s = siteOf(c, "Site-17"); if (!s.holds.includes("049")) s.holds.push("049"); const r = Math.random; Math.random = () => 0.1; try { siteEmergency(c); } finally { Math.random = r; } break; }
+      case "emerg-scp": { const s = siteOf(c, "Site-17"); if (!s.holds.includes("049")) s.holds.push("049"); forceRng(0.1); try { siteEmergency(c); } finally { forceRng(null); } break; }
       case "agents": c.tf.agents += 2; break;
       case "land": if (c.outbound) c.outbound.arrive = c.day + (c.hour ?? 0) / 24; break;
       case "th-20": addThreat(c, -20, "debug"); break;

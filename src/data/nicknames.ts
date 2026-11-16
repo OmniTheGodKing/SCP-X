@@ -1,5 +1,6 @@
 // Nicknames, as a unit hands them out: handed over when an operative makes Corporal, owing nothing to their job and
 // usually a little stupid. Changeable on their personnel file.
+import { rnd } from "../core/rng";
 export const NICKS = [
   "Biscuit", "Tadpole", "Sunshine", "Mumbles", "Lefty", "Noodles", "Taters", "Toast", "Hambone", "Goose",
   "Peaches", "Spuds", "Gravy", "Pickles", "Muffin", "Scooter", "Cupcake", "Wrong Way", "Two Socks", "Cornbread",
@@ -13,7 +14,7 @@ export const NICKS = [
 export function pickNick(taken: Set<string>): string {
   const pool = NICKS.filter(n => !taken.has(n));
   const from = pool.length ? pool : NICKS;
-  return from[Math.floor(Math.random() * from.length)];
+  return from[Math.floor(rnd() * from.length)];
 }
 /** Given name, nickname in quotes, family name: Robert "Biscuit" Bishop. */
 export function withNick(name: string, nick?: string) {

@@ -2,6 +2,7 @@
 // map with exits at both ends; two to four buildings stand on each side, each from a set of pieces (house, shop, diner,
 // garage, chapel) with a street door and windows on the street side; alleys run between some of them; and when the
 // mission needs the truck's container, one south lot is the truck lot. Every layout is checked before it's used.
+import { rnd as seededRnd } from "../core/rng";
 import type { MapDef, Pt } from "../core/grid";
 
 type Rect = [number, number, number, number];
@@ -131,7 +132,7 @@ function attempt(truck: boolean, rnd: () => number): MapDef | null {
 }
 
 /** A generated town, or null if 20 tries all fail the checks (then the hand-made Main Street is used). */
-export function generateTown(truck: boolean, rnd: () => number = Math.random): MapDef | null {
+export function generateTown(truck: boolean, rnd: () => number = seededRnd): MapDef | null {
   for (let k = 0; k < 20; k++) { const m = attempt(truck, rnd); if (m) return m; }
   return null;
 }

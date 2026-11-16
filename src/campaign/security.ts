@@ -1,5 +1,6 @@
 // Site Security: the guards who are actually at Site-19 when a cell fails, the alert level that
 // decides how quickly Epsilon-11 can get there, and breaches left to the guards alone.
+import { rnd } from "../core/rng";
 import { earn, spend } from "./ledger";
 import { chronicle } from "./history";
 import { TRAITS, type TraitId } from "../data/classes";
@@ -50,7 +51,7 @@ export const ALERTS: Record<Alert, { name: string; turn: number; sanity: number;
 export const mtfArrival = (c: Campaign, inc?: Incident) => (inc ? DEPTH.turns * wingLevel(c, inc.scpId) : 0) + Math.max(5, ALERTS[c.alert].turn - (has(c, "rapid_response") ? 5 : 0) - (has(c, "field_radios") ? 3 : 0) - (has(c, "prc25") ? 2 : 0));
 
 const NAMES = ["Brennan", "Kowalczyk", "Delgado", "Fairweather", "Haskins", "Lundgren", "Mabry", "Ostrowski", "Pruett", "Quinlan", "Raskin", "Szabo", "Tolliver", "Upshaw", "Vance", "Wexler", "Yeager", "Zielinski", "Ambrose", "Battaglia", "Corcoran", "Dunleavy", "Esposito", "Gallo"];
-const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
+const rand = (a: number, b: number) => a + Math.floor(rnd() * (b - a + 1));
 
 export const guardCapacity = (c: Campaign) => countOperational(c, "security") * GUARD.perStation;
 export const stations = (c: Campaign) => c.base.facilities.filter(f => f.type === "security" && operational(f));
@@ -66,7 +67,7 @@ export const guardsReady = (c: Campaign) => guardsAlive(c).filter(g => g.trainin
 export function newGuard(c: Campaign): Guard {
   const used = new Set(c.guards.map(g => familyOf(g.name)));
   const family = NAMES.find(n => !used.has(n)) ?? NAMES[c.nextGuard % NAMES.length];
-  const sex: "m" | "f" = Math.random() < 0.25 ? "f" : "m";
+  const sex: "m" | "f" = rnd() < 0.25 ? "f" : "m";
   return { id: "gd" + c.nextGuard, name: withGivenName(family, sex, "gd" + c.nextGuard++), sex, hp: GUARD.hp, maxHp: GUARD.hp, san: GUARD.maxSan, aim: rand(52, 60), alive: true, breaches: 0, kills: 0, traits: [] };
 }
 
@@ -173,7 +174,7 @@ export function letGuardsHandleRiot(c: Campaign, inc: Incident) {
   const g = guardsReady(c), dead = Math.max(1, rand(1, 3) - Math.floor(g.length / 4));
   c.dclass = Math.max(0, c.dclass - dead); c.morale = 40;
   const hurt = g.length ? g[rand(0, g.length - 1)] : null;
-  if (hurt && Math.random() < 0.5) hurt.hp = Math.max(1, hurt.hp - 2);
+  if (hurt && rnd() < 0.5) hurt.hp = Math.max(1, hurt.hp - 2);
   log(c, `Site Security put the riot down with clubs and gas. ${dead} D-Class ${dead > 1 ? "were" : "was"} killed${hurt && hurt.hp < hurt.maxHp ? `, and guard ${hurt.name} was hurt` : ""}.`, "key");
 }
 
@@ -198,7 +199,7 @@ export function raidArrivalText(c: Campaign, n?: number) {
 export function tickRaids(c: Campaign) {
   if (c.day < RAID.from || c.incidents.some(i => i.kind === "raid") || (c.lastRaid !== undefined && c.day - c.lastRaid < RAID.cooldown)) return;
   const recentStrike = c.lastStrike !== undefined && c.day - c.lastStrike <= 30;
-  if (Math.random() < (RAID.base + RAID.perPrisoner * c.prisoners.length + (recentStrike ? RAID.afterStrike : 0)) * (c.chaos.threat >= 55 ? 2 : 1)) startRaid(c);
+  if (rnd() < (RAID.base + RAID.perPrisoner * c.prisoners.length + (recentStrike ? RAID.afterStrike : 0)) * (c.chaos.threat >= 55 ? 2 : 1)) startRaid(c);
 }
 export function startRaid(c: Campaign) {
   c.lastRaid = c.day;
@@ -241,7 +242,7 @@ export function raidOdds(c: Campaign, inc: Incident) {
 }
 export function letGuardsHandleRaid(c: Campaign, inc: Incident) {
   c.incidents = c.incidents.filter(i => i !== inc);
-  const ready = guardsReady(c), won = Math.random() < raidOdds(c, inc);
+  const ready = guardsReady(c), won = rnd() < raidOdds(c, inc);
   const dead: string[] = [];
   for (let i = won ? rand(0, 1) : rand(1, 3); i > 0; i--) { const pool = ready.filter(g => g.alive); if (!pool.length) break; const g = pool[rand(0, pool.length - 1)]; g.alive = false; g.hp = 0; g.diedDay = c.day; dead.push(g.name); }
   for (const g of ready) if (g.alive) g.breaches++;
@@ -255,7 +256,7 @@ export function letGuardsHandleRaid(c: Campaign, inc: Incident) {
 export function letGuardsHandle(c: Campaign, inc: Incident) {
   const s = c.scps.find(x => x.id === inc.scpId);
   if (!s) return;
-  const p = guardOdds(c, inc), won = Math.random() < p;
+  const p = guardOdds(c, inc), won = rnd() < p;
   const ready = guardsReady(c);
   c.incidents = c.incidents.filter(i => i !== inc);
   const lost: string[] = [];
@@ -269,8 +270,8 @@ export function letGuardsHandle(c: Campaign, inc: Incident) {
   };
   for (const g of ready) g.san = Math.max(0, g.san - 20);
   if (won) {
-    die(ready.filter(() => Math.random() < 0.08).length);
-    for (const g of ready) if (g.alive) { g.breaches++; rollTrait(c, g, "nightmares", Math.random() < 0.15); }
+    die(ready.filter(() => rnd() < 0.08).length);
+    for (const g of ready) if (g.alive) { g.breaches++; rollTrait(c, g, "nightmares", rnd() < 0.15); }
     s.status = "contained"; s.maintenance = Math.max(s.maintenance, 60);
     c.stats.won++;
     log(c, isInert(s) ? `Site Security drove the Insurgents out of ${s.name}'s cell before they could carry it off.${lost.length ? ` ${lost.join(" and ")} didn't make it.` : " Nobody was lost."}` : `Site Security recontained ${s.name} on their own.${lost.length ? ` ${lost.join(" and ")} didn't make it.` : " Nobody was lost."}`, "good");
@@ -290,7 +291,7 @@ export function letGuardsHandle(c: Campaign, inc: Incident) {
     wreckFacility(c, hit[rand(0, hit.length - 1)], `${s.name} tore through the wall next door.`, true);
   }
   const dead = lost.length ? ` ${lost.join(" and ")} ${lost.length > 1 ? "were" : "was"} killed.` : "";
-  if (Math.random() < Math.max(0.1, 0.4 - DEPTH.escape * wingLevel(c, inc.scpId))) {
+  if (rnd() < Math.max(0.1, 0.4 - DEPTH.escape * wingLevel(c, inc.scpId))) {
     addExposure(c, HOME, 10);
     goDark(c, s, `Site Security couldn't hold it.${dead} (+10 exposure.)`);
   } else {
@@ -301,7 +302,7 @@ export function letGuardsHandle(c: Campaign, inc: Incident) {
 }
 
 export function rollTrait(c: Campaign, g: Guard, t: TraitId, hit: boolean) {
-  if (!hit || g.traits.includes(t) || Math.random() >= 0.5) return null;
+  if (!hit || g.traits.includes(t) || rnd() >= 0.5) return null;
   g.traits.push(t);
   return `Guard ${g.name} is now ${TRAITS[t].bad ? "marked by" : "known for"} ${TRAITS[t].name.toLowerCase()}: ${TRAITS[t].desc}`;
 }

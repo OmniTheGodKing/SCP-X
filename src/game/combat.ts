@@ -1,4 +1,5 @@
 // Gunfire, cover, damage and movement.
+import { rnd, fxRnd } from "../core/rng";
 import { BOND_AIM } from "../campaign/condition";
 import { charmTurns, officerNear } from "./ciTactics";
 import { DIRS, DRUM, FULL, HALF, STEEL, TS, WALL, L, bfs, cheb, tileAt, type Pt } from "../core/grid";
@@ -126,7 +127,7 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
   // in a storm the noise covers the shot
   if (sh.side === "mtf" && S.setup.weather !== "storm") breakConcealment("shots fired");
   if (sh.gun && !sidearm) sh.gun.ammo = Math.max(0, sh.gun.ammo - 1);
-  const roll = Math.random() * 100, hit = roll < info.chance;
+  const roll = rnd() * 100, hit = roll < info.chance;
   if (S.enemyTurn && S.phase !== "player" && !isTeam(sh)) { S.enemyTurn.shots++; if (hit) S.enemyTurn.hits++; }
   // leaning out to fire leaves the shooter exposed at that spot through the enemy's reply
   if (info.from.x !== sh.x || info.from.y !== sh.y) sh.exposed = { x: info.from.x, y: info.from.y, turn: S.turn };
@@ -143,7 +144,7 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
   const coverTile = byCover ? coverTileFacing(tg.x, tg.y, info.from.x, info.from.y) : null;
   let ox = 0, oy = 0;
   if (coverTile) { ox = (coverTile[0] - tg.x) * TS * 0.55; oy = (coverTile[1] - tg.y) * TS * 0.55; }
-  else if (!hit) { const a = Math.random() * Math.PI * 2; ox = Math.cos(a) * (11 + Math.random() * 8); oy = Math.sin(a) * (11 + Math.random() * 8); }
+  else if (!hit) { const a = fxRnd() * Math.PI * 2; ox = Math.cos(a) * (11 + fxRnd() * 8); oy = Math.sin(a) * (11 + fxRnd() * 8); }
   const armored = hit && (tg.armor ?? 0) > (gun?.pierce ?? 0);
   const impact: Impact = !hit ? (coverTile ? "cover" : "dust") : tg.side === "anomaly" ? "spark" : tg.side === "zombie" && !tg.rioter ? "ichor" : armored ? "spark" : "blood";
   const burst = sidearm ? null : gun?.type === "mg" ? [4, 75] : gun?.type === "smg" ? [3, 60] : null;
@@ -153,13 +154,13 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
   if (!hasPerk(sh, "quiet_steps") && gun?.attachment !== "suppressor") {   // SCP-173 hears the shot, but only roughly where it came from
     const near = bfs([[sh.x, sh.y]], 3).dist, spots: number[] = [];
     for (let i = 0; i < L.W * L.H; i++) if (near[i] >= 0) spots.push(i);
-    const i = spots[Math.floor(Math.random() * spots.length)];
+    const i = spots[Math.floor(rnd() * spots.length)];
     S.mem.set("shot-" + sh.id, { x: i % L.W, y: (i / L.W) | 0, turn: S.turn });
   }
   if (sh.side === "mtf") reveal("hear");
   if (hit && charmTurns(tg)) { hooks.update(); await sleep(380); return; }
   if (hit) {
-    const crit = Math.random() * 100 < info.crit;
+    const crit = rnd() * 100 < info.crit;
     let dmg = gun ? rand(gun.dmg[0], gun.dmg[1]) : rand(3, 4);
     if (crit) dmg += gun?.ammoType === "hollow" ? 3 : 2;
     if (hasPerk(sh, "shotgun_drills") && Math.hypot(tg.x - info.from.x, tg.y - info.from.y) <= 3) dmg += 2;
@@ -222,7 +223,7 @@ export function damage(u: Unit, dmg: number, by?: Unit) {
     else log(`${u.name} goes down, sedated but alive.`, "key");
     return;
   }
-  if (u.hp <= 0 && u.side === "raider" && !u.downed && Math.random() < 0.15) {
+  if (u.hp <= 0 && u.side === "raider" && !u.downed && rnd() < 0.15) {
     // sometimes an Insurgent is left alive but out of the fight: a possible prisoner
     u.hp = 0; u.downed = true; S.stats.raidersDown++; if (by) by.kills++;
     log("An Insurgent goes down wounded but alive. Secure them to take a prisoner.", "good");

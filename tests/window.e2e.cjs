@@ -2,12 +2,13 @@
 // a unit standing diagonally beside a window sees into the room beyond in a cone, and still can't see through the
 // solid wall beside it. Built on wing C's corridor in a live mission.
 const { chromium } = require('playwright');
+const { GAME_URL, OUT } = require('./lib.cjs');
 const close = async p => { while (await p.$('#noticeOk')) await p.click('#noticeOk').catch(() => {}); };
 const dbg = async (p, k) => { await p.evaluate(() => document.activeElement?.blur?.()); await p.keyboard.press('`'); await p.click(`[data-dbg="${k}"]`); await p.click('[data-dbg="close"]').catch(() => {}); await close(p); };
 (async () => {
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1300, height: 900 } });
   const errs = []; p.on('pageerror', e => errs.push(e.message));
-  await p.goto('file:///home/user/scp-x/dist/index.html'); await p.evaluate(() => localStorage.clear()); await p.reload();
+  await p.goto(GAME_URL); await p.evaluate(() => localStorage.clear()); await p.reload();
   await p.evaluate(() => { const c = window.__site19.campaign; c.tutorial = false; c.day = 400; });
   await dbg(p, 'strike'); await p.click('[data-tab="command"]');
   const id = await p.evaluate(() => { const c = window.__site19.campaign; const i = c.incidents.find(i => i.kind === 'strike'); i.map = 'wingC'; return i.id; });

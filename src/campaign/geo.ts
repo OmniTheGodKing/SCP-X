@@ -1,6 +1,7 @@
 // The Geoscape: where everything on the World Map sits, what state it's in, and what the player knows about it.
 // Incidents are placed at the town they happened in (or at Site-19 for anything inside the site); independent
 // Foundation facilities are shown too, but Site-19 is the only one the player runs.
+import { rnd } from "../core/rng";
 import { resolveTeam } from "./autoteam";
 import { earn, spend } from "./ledger";
 import { bringBack, sendAway } from "./people";
@@ -64,7 +65,7 @@ export function incidentState(c: Campaign, inc: Incident): "active" | "urgent" |
  *  Kept on the incident so it reads the same every time; a cell that grows later makes it out of date. */
 export function reportOf(inc: Incident) {
   if (!inc.report) {
-    const x = Math.random(), off = x < 0.7 ? 0 : x < 0.9 ? (Math.random() < 0.5 ? -1 : 1) : (Math.random() < 0.5 ? -1 : 1) * (2 + Math.floor(Math.random() * 2));
+    const x = rnd(), off = x < 0.7 ? 0 : x < 0.9 ? (rnd() < 0.5 ? -1 : 1) : (rnd() < 0.5 ? -1 : 1) * (2 + Math.floor(rnd() * 2));
     inc.report = { ins: Math.max(0, inc.insurgents + off), day: inc.appeared };
   }
   return inc.report;
@@ -180,15 +181,15 @@ export function startFieldOp(c: Campaign, r: RegionId, k: FieldOpKind) {
   log(c, `${FIELD_OPS[k].name} begins in ${REGIONS[r].name}. Results ${dateText(c.day + FIELD_OPS[k].days)}.`);
 }
 function finishOp(c: Campaign, op: FieldOp) {
-  const where = REGIONS[op.region].name, roll = Math.random();
+  const where = REGIONS[op.region].name, roll = rnd();
   // either kind of field work uncovers a hidden Insurgency operation aimed at this region
   if (scanReveals(c, op.region)) log(c, `Field work in ${where} uncovered an Insurgency operation aimed there.`, "key", "world");
   const risk = op.kind === "infiltrate" ? agentRisk(c, 0.2, 0.05, where) : agentRisk(c, op.kind === "procure" ? 0.03 : 0.06, 0.01, where);
   if (risk) log(c, `Field work in ${where}:${risk}`, "bad", "world");
   if (op.kind === "procure") {
-    if (roll < 0.4) { const items = ["frag", "medkit", "smoke", "flashbang", "eyedrops"] as const; const it = items[Math.floor(Math.random() * items.length)]; c.inventory[it] = (c.inventory[it] ?? 0) + 3; log(c, `Procurement in ${where} brought in 3 × ${it === "eyedrops" ? "eye drops" : it}.`, "good", "world"); }
+    if (roll < 0.4) { const items = ["frag", "medkit", "smoke", "flashbang", "eyedrops"] as const; const it = items[Math.floor(rnd() * items.length)]; c.inventory[it] = (c.inventory[it] ?? 0) + 3; log(c, `Procurement in ${where} brought in 3 × ${it === "eyedrops" ? "eye drops" : it}.`, "good", "world"); }
     else if (roll < 0.7) { c.amnestics += 2; log(c, `Procurement in ${where} brought in amnestic precursors (+2 doses).`, "good", "world"); }
-    else { const k = 30 + Math.floor(Math.random() * 3) * 10; earn(c, k, "income", `Procurement in ${where}`); log(c, `Procurement in ${where} closed a profitable deal (+$${k}k).`, "good", "world"); }
+    else { const k = 30 + Math.floor(rnd() * 3) * 10; earn(c, k, "income", `Procurement in ${where}`); log(c, `Procurement in ${where} closed a profitable deal (+$${k}k).`, "good", "world"); }
     return;
   }
   if (op.kind === "infiltrate") {
@@ -202,8 +203,8 @@ function finishOp(c: Campaign, op: FieldOp) {
     if (roll < 0.7 && !c.incidents.some(i => i.kind === "strike" && i.region === op.region)) { locateCell(c, op.region, true); return; }
     gainIntel(c, 2); log(c, `Surveillance in ${where} found no cell, but picked up their radio traffic (+2 Intel).`, "key", "world"); return;
   }
-  if (roll < 0.35) { gainIntel(c, 1 + Math.floor(Math.random() * 2)); log(c, `The scan in ${where} turned up a source inside the Insurgency (+Intel).`, "key", "world"); }
-  else if (roll < 0.65) { const k = 20 + Math.floor(Math.random() * 3) * 10; earn(c, k, "income", `Funds found in ${where}`); log(c, `The scan in ${where} found a cache of misappropriated funds (+$${k}k).`, "good", "world"); }
+  if (roll < 0.35) { gainIntel(c, 1 + Math.floor(rnd() * 2)); log(c, `The scan in ${where} turned up a source inside the Insurgency (+Intel).`, "key", "world"); }
+  else if (roll < 0.65) { const k = 20 + Math.floor(rnd() * 3) * 10; earn(c, k, "income", `Funds found in ${where}`); log(c, `The scan in ${where} found a cache of misappropriated funds (+$${k}k).`, "good", "world"); }
   else if (roll < 0.85) {
     const used = new Set<string>(), cand = rollCandidate(`lead${c.day}`, yearOf(c.day), used, false, true);
     cand.quality = Math.max(1, cand.quality); (c.recruits ??= []).push(cand);
@@ -220,7 +221,7 @@ export const missionWeather = (c: Campaign, inc: Incident): Weather => inc.map =
 function tickWeather(c: Campaign) {
   const month = new Date(Date.UTC(1951, 5, 1) + (c.day - 1) * 864e5).getUTCMonth();
   for (const [r, st] of Object.entries(c.regions) as [RegionId, Campaign["regions"][RegionId]][])
-    if (!st.weather || c.day >= (st.weatherUntil ?? 0)) { st.weather = rollWeather(r, month); st.weatherUntil = c.day + 1 + Math.floor(Math.random() * 3); }
+    if (!st.weather || c.day >= (st.weatherUntil ?? 0)) { st.weather = rollWeather(r, month); st.weatherUntil = c.day + 1 + Math.floor(rnd() * 3); }
 }
 /** A line on the weather for briefings: what it is, how long it should last, and what it does. */
 export function weatherLine(c: Campaign, inc: Incident) {
@@ -296,7 +297,7 @@ function resolveDispatch(c: Campaign, inc: Incident) {
     c.stats.won++; addExposure(c, inc.region, -10);
     bringBack(c, "researcher");   // the researcher who went with the doses comes home
     log(c, `The amnestics team dosed all ${d.doses} witnesses near ${incidentPlace(inc).name}. Nobody remembers anything worth repeating (−10 exposure in ${where}).`, "good", "world");
-  } else if (Math.random() < BURY.chance) {
+  } else if (rnd() < BURY.chance) {
     c.stats.won++; addExposure(c, inc.region, -5);
     log(c, `The story near ${incidentPlace(inc).name} is buried: retractions, a lost roll of film, a quiet payment (−5 exposure in ${where}).`, "good", "world");
   } else {

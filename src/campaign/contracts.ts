@@ -1,6 +1,7 @@
 // Council contracts (Phase 4E): paid, noncombat work other parts of the Foundation need done, offered two at a time.
 // Taking one sends Site-19's own people away for a while; they come back with the pay. It gives Site-19 something
 // useful to do while squads recover, without being a source of unlimited money.
+import { rnd } from "../core/rng";
 import { RANKS, log, type Campaign, type Operative } from "./campaign";
 import { earn } from "./ledger";
 import { FIELDS, TRADES, bringBack, present, sendAway, syncStaff } from "./people";
@@ -23,7 +24,7 @@ export interface Contract { id: string; kind: ContractKind; client: string; pay:
 export interface ContractState { offers: Contract[]; active: Contract[]; next: number }
 export const newContracts = (): ContractState => ({ offers: [], active: [], next: 1 });
 
-const pick = <T>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
+const pick = <T>(xs: T[]) => xs[Math.floor(rnd() * xs.length)];
 const fitOps = (c: Campaign) => c.roster.filter(o => o.alive && o.hp >= o.maxHp && !o.busy && !(o.injury && o.injury.until > c.day) && (o.fatigue ?? 0) < 40);
 /** The operative a contract would take: the least experienced fit one, so the veterans stay home. */
 export const contractOperative = (c: Campaign): Operative | null => fitOps(c).sort((a, b) => a.xp - b.xp)[0] ?? null;
@@ -97,7 +98,7 @@ export function tickContracts(c: Campaign) {
       if (o) {
         if (o.busy?.kind === "contract") o.busy = undefined;
         if (x.kind === "cadre" && o.alive) o.xp += 1;
-        if (d.risk && o.alive && Math.random() < d.risk) note = ` ${o.name} came back hurt: ${injure(c, o)}.`;
+        if (d.risk && o.alive && rnd() < d.risk) note = ` ${o.name} came back hurt: ${injure(c, o)}.`;
       }
     }
     earn(c, x.pay, "contracts", `${d.name} for ${x.client}`);

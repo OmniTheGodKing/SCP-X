@@ -1,3 +1,4 @@
+import { rnd } from "../core/rng";
 import { fieldMap } from "../data/maps";
 // The O5 Council: Site-19's standing with it, its monthly orders, what it can be asked for, and the transfers of
 // anomalies it arranges between sites. Standing is separate from exposure: exposure is what the public knows,
@@ -17,8 +18,8 @@ import { familyOf } from "../data/names";
 import { addExposure, spawnCoverup, locateCellFor, newRetaliation, travelDays } from "./world";
 import type { ScpId } from "../game/types";
 
-const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
-const pick = <T>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
+const rand = (a: number, b: number) => a + Math.floor(rnd() * (b - a + 1));
+const pick = <T>(xs: T[]) => xs[Math.floor(rnd() * xs.length)];
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 || w.endsWith("Class") ? "" : "s"}`;
 
 // ---------- standing ----------
@@ -222,7 +223,7 @@ export function issueDirectives(c: Campaign, pause = true) {
   const kinds: DirectiveKind[] = ["win_region", "exposure", "prisoners", "research", "contact", "no_missed", "clean"];
   const wanted = 2 - k.directives.length;
   const made: Directive[] = [];
-  for (const kind of kinds.sort(() => Math.random() - 0.5)) {
+  for (const kind of kinds.sort(() => rnd() - 0.5)) {
     if (made.length >= wanted) break;
     if (k.directives.some(d => d.kind === kind)) continue;
     if (kind === "prisoners" && c.stats.won < 2) continue;
@@ -336,7 +337,7 @@ export function newOffer(c: Campaign) {
   const held = transferable(c).filter(s => !k.transit.some(t => t.scp === s.id));
   // the Council only orders or trades objects in when there's a free wing to put them in
   const free = freeWings(c, "Safe").length ? objectsAvailable(c) : [];
-  const roll = Math.random();
+  const roll = rnd();
   if (free.length && (roll < 0.5 || !held.length)) {
     const get = pick(free), d = SCP_DEFS[get];
     k.offers.push({ id, from, until, kind: "order", get, funds: 80, standing: 4,
@@ -369,14 +370,14 @@ function arrive(c: Campaign, t: Transit) {
     return;
   }
   // the Insurgency watches the roads into Site-19 once it's active
-  if ((yearOf(c.day) >= 1952 || planActive(c, "hijack")) && Math.random() < (planActive(c, "hijack") ? 1 : d.cls === "Safe" ? 0.15 : 0.3)) {
+  if ((yearOf(c.day) >= 1952 || planActive(c, "hijack")) && rnd() < (planActive(c, "hijack") ? 1 : d.cls === "Safe" ? 0.15 : 0.3)) {
     const inc: Incident = {
       id: "inc" + c.nextIncident, kind: "escort", scpId: t.scp, region: HOME, map: fieldMap("escort"),
       title: `Incident ${String(c.nextIncident).padStart(3, "0")}: Transfer convoy ambushed carrying ${d.name}`,
       appeared: c.day, expires: c.day, insurgents: Math.min(6, 3 + Math.floor((yearOf(c.day) - 1951) / 3)), transfer: t,
     };
     // Phase 4C: half the time it's a convoy that has to drive through a town the Insurgency is waiting in
-    if (Math.random() < 0.5) { inc.convoy = true; inc.map = "town"; inc.title = `Incident ${String(c.nextIncident).padStart(3, "0")}: Convoy carrying ${d.name} through a hostile town`; }
+    if (rnd() < 0.5) { inc.convoy = true; inc.map = "town"; inc.title = `Incident ${String(c.nextIncident).padStart(3, "0")}: Convoy carrying ${d.name} through a hostile town`; }
     c.nextIncident++;
     c.incidents.push(inc);
     log(c, `The convoy bringing ${d.name} from ${t.site} is ambushed an hour from Site-19. Epsilon-11 has to hold the truck.`, "bad", "command");
@@ -410,7 +411,7 @@ export function transferFought(c: Campaign, t: Transit, win: boolean): string {
 /** Several incidents at once, each with its own reward, and only one squad: answer one and the rest go unanswered. */
 export function crisis(c: Campaign) {
   const open = REGION_IDS.filter(r => !c.regions[r].collapsed);
-  const regions = open.sort(() => Math.random() - 0.5).slice(0, rand(2, 3));
+  const regions = open.sort(() => rnd() - 0.5).slice(0, rand(2, 3));
   if (regions.length < 2) return;
   const group = "g" + c.day;
   const made: Incident[] = [];

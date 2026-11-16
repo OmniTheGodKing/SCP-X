@@ -2,6 +2,7 @@
 // crates and flesh, and sets off fuel drums. SCP-610's flesh spreads every turn from its core;
 // anyone left standing on it without an intact containment suit is infected, and anyone infected
 // turns into one of its instances 5 turns later, for good. Only fire can kill the core.
+import { rnd } from "../core/rng";
 import { DIRS, DRUM, FLOOR, HALF, L, STEEL, TS, WALL, area, cheb, passable, tileAt } from "../core/grid";
 import { damage } from "./combat";
 import { S, computeVis, full, fx, highlight, hooks, isTeam, log, rand, seen, sleep } from "./state";
@@ -59,7 +60,7 @@ export async function firePhase() {
     for (const [dx, dy] of DIRS) {
       const nx = x + dx, ny = y + dy, t = tileAt(nx, ny);
       const damp = wet() ? 0.5 : 1;   // rain slows the spread
-      if (t === DRUM || (onFlesh(nx, ny) && Math.random() < 0.6 * damp) || (t === HALF && Math.random() < 0.35 * damp)) spread.push([nx, ny]);
+      if (t === DRUM || (onFlesh(nx, ny) && rnd() < 0.6 * damp) || (t === HALF && rnd() < 0.35 * damp)) spread.push([nx, ny]);
     }
     // furniture that was burning is gone when the fire is
     if (until === S.turn && tileAt(x, y) === HALF) L.grid[y][x] = FLOOR;
@@ -96,7 +97,7 @@ export function fleshContact() {
 /** A melee hit from an instance: always infects without a suit, and tears a suit 60% of the time. */
 export function fleshBite(v: Unit) {
   if (sealedSuit(v)) {
-    if (Math.random() >= SUIT_TEAR) { log(`${full(v)}'s containment suit holds.`, "good"); return; }
+    if (rnd() >= SUIT_TEAR) { log(`${full(v)}'s containment suit holds.`, "good"); return; }
     v.suitTorn = true;
     log(`The blow tears ${full(v)}'s containment suit open.`, "bad");
   }

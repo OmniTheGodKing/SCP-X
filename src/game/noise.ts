@@ -3,6 +3,7 @@
 // operative glances toward it and, if nothing is there, turns back to the direction the player set. Insurgents hear
 // by the same rules and go to look. Facing is attention and animation, not a blind cone: anyone can still see an
 // enemy behind them.
+import { rnd } from "../core/rng";
 import { L, opaque, doorShut, cheb } from "../core/grid";
 import { S, alive, canSee, isTeam, log, seen, team } from "./state";
 import type { Unit } from "./types";
@@ -51,7 +52,7 @@ export function emitNoise(x: number, y: number, kind: NoiseKind, src?: Unit) {
       if (left <= 0) continue;
       const conf = Math.min(1, left / loud * 1.6);
       // the less of it reaches them, the rougher their sense of where it came from
-      const jitter = (Math.random() - 0.5) * (1 - conf) * Math.PI / 2;
+      const jitter = (rnd() - 0.5) * (1 - conf) * Math.PI / 2;
       const ang = Math.atan2(y - m.y, x - m.x) + jitter;
       const dir = facingTo(Math.cos(ang), Math.sin(ang));
       S.heard = (S.heard ?? []).filter(h => !(h.listener === m.id && h.src === (src?.id ?? kind)));
@@ -80,8 +81,8 @@ export function emitNoise(x: number, y: number, kind: NoiseKind, src?: Unit) {
       const left = heardAt(r.x, r.y, x, y, loud);
       if (left <= 0) continue;
       const spread = Math.round((1 - Math.min(1, left / loud * 1.6)) * 3);
-      const ex = Math.max(0, Math.min(L.W - 1, x + Math.round((Math.random() - 0.5) * 2 * spread)));
-      const ey = Math.max(0, Math.min(L.H - 1, y + Math.round((Math.random() - 0.5) * 2 * spread)));
+      const ex = Math.max(0, Math.min(L.W - 1, x + Math.round((rnd() - 0.5) * 2 * spread)));
+      const ey = Math.max(0, Math.min(L.H - 1, y + Math.round((rnd() - 0.5) * 2 * spread)));
       S.mem.set("heard-" + r.id, { x: ex, y: ey, turn: S.turn });
       r.facing = facingTo(x - r.x, y - r.y);
     }

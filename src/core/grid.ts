@@ -1,4 +1,5 @@
 // Tile grid, movement rules and pathfinding for the current mission map.
+import { rnd } from "./rng";
 
 export const TS = 32;           // tile size in pixels
 export const R = 9;             // the old sight radius; now only a reference for short-range checks (Phase 4I)
@@ -83,7 +84,7 @@ export class Level {
       const x = i % this.W, y = (i / this.W) | 0;
       const near = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => def.area(x + dx, y + dy));
       const kind: DoorKind = near.some(a => /containment cell/.test(a)) ? "containment" : def.reinforced ? "security" : "standard";
-      const r = Math.random();
+      const r = rnd();
       const state: DoorState = kind === "containment" ? "closed" : r < 0.06 ? "breached" : r < 0.53 ? "open" : "closed";
       this.door.set(i, { kind, state });
     }

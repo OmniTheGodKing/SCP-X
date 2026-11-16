@@ -1,3 +1,4 @@
+import { rnd } from "../core/rng";
 import { fieldMap } from "../data/maps";
 // Phase 3J: Site-19's other task forces (Eta-10 "See No Evil", Nu-7 "Hammer Down"), field agents for covert work,
 // and the independent Foundation sites Site-19 works alongside: their standing with Site-19, what they can lend or
@@ -17,8 +18,8 @@ import { engineerCapacity } from "./base";
 import { scpName } from "./containment";
 import type { ScpId } from "../game/types";
 
-const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
-const pick = <T>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
+const rand = (a: number, b: number) => a + Math.floor(rnd() * (b - a + 1));
+const pick = <T>(xs: T[]) => xs[Math.floor(rnd() * xs.length)];
 
 export type TaskForce = "e11" | "eta10";
 export const TF_NAMES: Record<TaskForce, string> = { e11: "Epsilon-11 \"Nine-Tailed Fox\"", eta10: "Eta-10 \"See No Evil\"" };
@@ -138,7 +139,7 @@ export function canHireAgent(c: Campaign) { return c.tf.agents >= AGENT.max ? `S
 export function hireAgent(c: Campaign) { if (canHireAgent(c)) return; spend(c, AGENT.cost, "hiring", "Field agent hired"); c.tf.agents++; log(c, "A field agent joins Site-19's covert staff.", "good"); }
 /** After covert work: the agent may come back hurt, or not at all. */
 export function agentRisk(c: Campaign, hurt: number, killed: number, where: string): string {
-  const x = Math.random();
+  const x = rnd();
   if (x < killed) { c.tf.agents = Math.max(0, c.tf.agents - 1); chronicle(c, "casualty", `A Foundation field agent was killed in ${where}.`); return " The agent didn't come back."; }
   if (x < killed + hurt) { c.tf.hurt.push({ back: c.day + 14 }); return " The agent came back hurt: out for two weeks."; }
   return "";
@@ -214,7 +215,7 @@ export function lostTeam(c: Campaign) {
 export function siteEmergency(c: Campaign, quiet = false) {
   const f = pick(FACILITIES_WORLD), s = siteOf(c, f.name), cause = pick(CAUSES);
   const held = s.holds.filter(id => id === "173" || id === "049" || id === "106");
-  const hazard: Incident["hazard"] = held.length && Math.random() < 0.7 ? "scp" : cause.insurgency ? "insurgents" : "instances";
+  const hazard: Incident["hazard"] = held.length && rnd() < 0.7 ? "scp" : cause.insurgency ? "insurgents" : "instances";
   const scp = hazard === "scp" ? pick(held) : "";
   const inc = newSiteIncident(c, { kind: "emergency", region: f.region, map: "lab", scpId: scp, expires: c.day + travelDays(c, f.region) + 2,
     insurgents: hazard === "insurgents" ? rand(3, 5) : 0, witnesses: 0, civilians: 0, site: f.name, hazard, cause: cause.insurgency ? "sabotage" : undefined, report: undefined,
@@ -251,7 +252,7 @@ export function otherSiteOutcome(c: Campaign, inc: Incident, r: MissionResult): 
     addRel(c, name, saved * 5 - (total - saved) * 2, `Site-19 went after ${inc.team}`);
     addStanding(c, saved ? 2 + saved : -3, saved ? `brought home ${saved} of ${inc.team}` : `couldn't save ${inc.team}`);
     out.push(saved ? `${saved} of ${total} survivors of ${inc.team} ${saved === 1 ? "is" : "are"} on their way back to ${name}.` : `None of ${inc.team} came home.`);
-    if (saved && Math.random() < 0.35) {
+    if (saved && rnd() < 0.35) {
       out.push(`One of them, grateful and out of a unit, asks to transfer to Site-19: look for them in next month's recruits.`);
       c.tf.transferIn = (c.tf.transferIn ?? 0) + 1;
     }

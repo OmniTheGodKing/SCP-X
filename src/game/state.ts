@@ -1,4 +1,5 @@
 // The running mission and the helpers everything else uses to read it.
+import { rnd } from "../core/rng";
 import { noteContacts } from "./noise";
 import { L, R } from "../core/grid";
 import { sightFrom } from "../core/sight";
@@ -67,7 +68,7 @@ export const banner = (text: string, color = "#d8bf86") => fx({ type: "banner", 
 /** Enemy-turn pacing, set from the viewer's settings: Fast cuts every pause outside the player's turn to a third. */
 export const pace = { fast: false };
 export const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, pace.fast && S && S.phase !== "player" ? ms / 3 : ms));
-export const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
+export const rand = (a: number, b: number) => a + Math.floor(rnd() * (b - a + 1));
 
 export function computeVis() {
   const { W, H } = L;

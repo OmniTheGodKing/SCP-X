@@ -226,6 +226,8 @@ export interface MissionMods {
   alarms?: boolean; }
 
 export interface MissionSetup {
+  /** Seed for the mission's own random stream (Tactical overhaul T0): the same seed and orders replay the same fight. */
+  seed?: number;
   kind: MissionKind;
   /** Which anomaly a breach or manhunt is about (SCP-173 if not set). */
   scp?: ScpId;

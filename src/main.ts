@@ -10,6 +10,7 @@ import { letGuardsHandle } from "./campaign/security";
 import { scpName } from "./campaign/containment";
 import { pendingBreach } from "./campaign/campaign";
 import { createMission } from "./game/mission";
+import { endMission, forceRng } from "./core/rng";
 import { S } from "./game/state";
 import type { MissionKind, MissionResult, MissionSetup } from "./game/types";
 import { mountHub, openTab } from "./ui/hubView";
@@ -67,7 +68,8 @@ function launch(setup: MissionSetup, inc: Incident) {
   saveCampaign(campaign);
   createMission(setup);
   screen = "mission";
-  mountMission(root, () => { transition.returnHome(); openTab("world", "reg:" + inc.region); showHub(); }, result => {
+  mountMission(root, () => { endMission(); transition.returnHome(); openTab("world", "reg:" + inc.region); showHub(); }, result => {
+    endMission();
     const d = applyResult(campaign, result);
     saveCampaign(campaign);
     return debriefHtml(result, d, setup.kind, scpName(setup.scp ?? "173"));
@@ -137,6 +139,8 @@ function showHub() {
   scp4b,
   // Phase 4C
   generateTown,
+  // Tactical overhaul T0: force every gameplay roll to one value (null to stop), for tests
+  rng: { force: forceRng },
 };
 
 mountDebug({ campaign: () => campaign, screen: () => screen, refresh: () => { saveCampaign(campaign); if (screen === "hub") showHub(); } });

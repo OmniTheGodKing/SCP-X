@@ -4,6 +4,7 @@
 // SCP-035's host falls, the mask takes someone and is cased; SCP-682 adapts, collapses, and is sealed while down.
 // Then the campaign side: capture into a wing, research branches, routines and a breach.
 const { chromium } = require('playwright');
+const { GAME_URL, OUT } = require('./lib.cjs');
 const close = async p => { while (await p.$('#noticeOk')) await p.click('#noticeOk').catch(() => {}); };
 const dbg = async (p, k) => { await p.evaluate(() => document.activeElement?.blur?.()); await p.keyboard.press('`'); await p.click(`[data-dbg="${k}"]`); await p.click('[data-dbg="close"]').catch(() => {}); await close(p); };
 const results = [];
@@ -12,7 +13,7 @@ const check = (name, ok, detail) => results.push(`${ok ? 'PASS' : 'FAIL'} ${name
 async function start(b, id) {
   const p = await b.newPage({ viewport: { width: 1300, height: 950 } });
   const errs = []; p.on('pageerror', e => errs.push(e.message + ' ' + (e.stack || '').split('\n')[1]));
-  await p.goto('file:///home/user/scp-x/dist/index.html'); await p.evaluate(() => localStorage.clear()); await p.reload();
+  await p.goto(GAME_URL); await p.evaluate(() => localStorage.clear()); await p.reload();
   await p.evaluate(() => { const c = window.__site19.campaign; c.tutorial = false; c.day = 500; });
   await dbg(p, 'see' + id);
   await p.click('[data-tab="command"]');
@@ -73,7 +74,7 @@ const FREE = `(x, y, n) => { const A = window.__site19, S = A.mission, G = A.gri
     check('096: no hood while enraged; it calms once its target is dead, and can be hooded', r.hoodWhileEnraged === 0 && !r.after3.rage && r.hooded, r);
     check('096: the hood is issued to the first operative', r.kit.includes('hood'), r.kit);
     check('096 mission ran without errors', !errs.length, errs);
-    await p.screenshot({ path: '/tmp/claude-0/-home-user-scp-x/54b8bb60-76e9-5ac7-87cb-a04ccc4cc055/scratchpad/4b-096.png' });
+    await p.screenshot({ path: OUT + '/4b-096.png' });
     await p.close();
   }
 
@@ -88,7 +89,7 @@ const FREE = `(x, y, n) => { const A = window.__site19, S = A.mission, G = A.gri
       n.x = near3[0]; n.y = near3[1]; n.san = 10; n.eyesDown = false;
       m.x = spots[0][0]; m.y = spots[0][1]; m.eyesDown = true;
       A.computeVis();
-      const rnd = Math.random; Math.random = () => 0.01; X.endOfEnemyPhase(); Math.random = rnd;
+      A.rng.force(0.01); X.endOfEnemyPhase(); A.rng.force(null);
       const out = { compelled: n.compelled !== undefined, eyesDownSafe: m.compelled === undefined };
       const mAt = [m.x, m.y]; m.x = 1; m.y = 1;   // out of the way while they walk to it
       const hp0 = n.hp; await X.newAnomalyPhase(); out.walked = Math.max(Math.abs(n.x - d.x), Math.abs(n.y - d.y)) <= 1; out.bled = n.hp < hp0;
@@ -125,7 +126,7 @@ const FREE = `(x, y, n) => { const A = window.__site19, S = A.mission, G = A.gri
       for (const o of ops) { o.x = v[0].x > 13 ? 1 : 26; o.y = v[0].y > 8 ? 1 : 16; }
       out.hiddenFar = X.hidden939(v[0]);
       // a voice: force the mimic roll
-      const before = S.log.length; const rnd = Math.random; Math.random = () => 0.01; await X.newAnomalyPhase(); Math.random = rnd;
+      const before = S.log.length; A.rng.force(0.01); await X.newAnomalyPhase(); A.rng.force(null);
       out.voiceLine = S.log.slice(0, S.log.length - before + 3).map(l => l.text).find(t => /: "/.test(t));
       // put one in the container and seal it
       const G = A.grid, cont = G.contTiles[0], door = G.contTiles.length ? (() => { for (const [cx, cy] of G.contTiles) for (const [dx, dy] of [[0,-1],[0,1],[1,0],[-1,0],[1,1],[-1,-1],[1,-1],[-1,1]]) { const x = cx + dx, y = cy + dy; if (A.passable(x, y) && G.grid[y][x] !== 5) return [x, y]; } })() : null;
@@ -182,7 +183,7 @@ const FREE = `(x, y, n) => { const A = window.__site19, S = A.mission, G = A.gri
       const back = free(h.x, h.y, 60).find(([x, y]) => Math.max(Math.abs(x - h.x), Math.abs(y - h.y)) >= 3); t.x = back[0]; t.y = back[1];
       for (const u of S.units) if (u !== m && u !== h && u.alive && u.side !== 'anomaly' && Math.max(Math.abs(u.x - h.x), Math.abs(u.y - h.y)) <= 2) u.alive = false;
       if (!out.onFloor) { X.dropMask(h); out.onFloor = X.maskOnFloor(); }
-      const rnd = Math.random; Math.random = () => 0.01; X.endOfEnemyPhase(); Math.random = rnd;
+      A.rng.force(0.01); X.endOfEnemyPhase(); A.rng.force(null);
       out.possessed = m.host === true && m.side === 'zombie';
       // knock them down: they go down, the mask drops, and they're one of ours again
       m.hp = 1; X; window.__site19.mission.hitKind = 'rifle';
@@ -238,7 +239,7 @@ const FREE = `(x, y, n) => { const A = window.__site19, S = A.mission, G = A.gri
   {
     const p = await b.newPage({ viewport: { width: 1300, height: 950 } });
     const errs = []; p.on('pageerror', e => errs.push(e.message));
-    await p.goto('file:///home/user/scp-x/dist/index.html'); await p.evaluate(() => localStorage.clear()); await p.reload();
+    await p.goto(GAME_URL); await p.evaluate(() => localStorage.clear()); await p.reload();
     await p.evaluate(() => { const c = window.__site19.campaign; c.tutorial = false; c.day = 500; c.funds = 3000; });
     const sight = await p.evaluate(() => { const c = window.__site19.campaign; return Object.fromEntries(Object.entries(c.sightings)); });
     // free wings for them: copy an existing containment wing to empty slots (the debug capture hands off if none)

@@ -1,5 +1,6 @@
 // O5 inspections: about every six months, with two weeks' warning, the Council sends someone to
 // look the site over. Each of five checks passed is worth $20k; failing three or more costs $50k.
+import { rnd } from "../core/rng";
 import { earn, spend } from "./ledger";
 import { chronicle } from "./history";
 import { powerShort } from "./base";
@@ -8,7 +9,7 @@ import { log, type Campaign } from "./campaign";
 import { addStanding } from "./council";
 
 export const INSPECTION = { min: 170, max: 190, warn: 14, perCheck: 20, failAt: 3, penalty: 50 };
-const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
+const rand = (a: number, b: number) => a + Math.floor(rnd() * (b - a + 1));
 
 export function inspectionChecks(c: Campaign) {
   return [
