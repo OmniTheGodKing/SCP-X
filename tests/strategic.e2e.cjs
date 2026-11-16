@@ -118,13 +118,13 @@ const { check, done } = reporter();
 
   // 1920 layout: no horizontal scroll
   await p.setViewportSize({ width: 1920, height: 1080 });
-  for (const t of ['command', 'site']) {
+  for (const t of ['command', 'world', 'site', 'research', 'personnel', 'history']) {
     await p.click(`[data-tab="${t}"]`); await p.waitForTimeout(100);
     const sc = await E(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
     check(`layout: ${t} has no horizontal scroll at 1920px`, sc);
   }
   await p.setViewportSize({ width: 1280, height: 800 });
-  for (const t of ['command', 'site']) {
+  for (const t of ['command', 'world', 'site', 'research', 'personnel', 'history']) {
     await p.click(`[data-tab="${t}"]`); await p.waitForTimeout(100);
     const sc = await E(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
     check(`layout: ${t} has no horizontal scroll at 1280px`, sc);
