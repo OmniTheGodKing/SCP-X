@@ -63,6 +63,7 @@ export function simulate(strategy: StrategyId, days: number, seed = 1, difficult
   const c = newCampaign({ difficulty, ironman: false, tutorial: false, seed });
   setCampaignSeed(seed);
   const s = PLANS[strategy];
+  c.cleaningOrder = s.clean;   // the standing order for routine cleaning follows the strategy (a careless site turns it off)
   let lcg = seed * 2654435761 >>> 0;
   const rnd = () => ((lcg = (lcg * 1664525 + 1013904223) >>> 0) / 4294967296);
   const daily: DayStat[] = [];

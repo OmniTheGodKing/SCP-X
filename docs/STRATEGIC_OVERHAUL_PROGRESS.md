@@ -97,7 +97,7 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
 | S-E2 | Onboarding with Krista Carter | S-E1 | Persisted steps; skippable; tested | [x] |
 | S-E3 | Strategic inspector (developer tools) | S-L1 | Debug panel shows state, risks, faction plans, invariants | [x] |
 | S-E4 | End-to-end campaign test | all | The 17-step sequence in the brief | [x] |
-| S-K | Balance and pacing from simulations | S-A4 | Documented changes and re-run results | [ ] |
+| S-K | Balance and pacing from simulations | S-A4 | Documented changes and re-run results | [~] findings, no tuning |
 
 ## Architectural decisions
 
@@ -220,6 +220,32 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
   - check the record, the service records of everyone who went, and the invariants;
   - reload and compare the campaign, then run three more days and check the invariants again.
   It takes about 70 seconds. Six of seven runs passed and one produced no output; that one was not reproduced.
+- S-K (balance and pacing from the simulations): findings recorded; no game numbers changed.
+  - The simulations are deterministic now (see D2), so these figures reproduce. The simulator's careless strategy
+    now actually turns off the routine-cleaning standing order; before, "poor" and "minimal" were identical runs.
+  - Over 180 days and 20 seeds each, the average outcomes were:
+
+    | Strategy | Breaches | Missed incidents | Final standing |
+    |---|---|---|---|
+    | balanced | 2.4 | 0.4 | 90 |
+    | security | 2.6 | 0.5 | 91 |
+    | minimal (cleans, nothing else) | 2.8 | 11.0 | 1 |
+    | poor (no cleaning) | 3.5 | 10.4 | 0 |
+
+    No campaign ended in those runs. A single seed had suggested that cleaning caused breaches; across seeds it
+    doesn't.
+  - Single-seed 180-day runs (seed 1):
+    - The research-first strategy runs out of money, loses Epsilon-11 and ends the campaign. It spends everything
+      on projects and cannot rebuild after losses.
+    - The economy strategy hoards $1,400k.
+    - Researchers stand idle for 30% to 60% of their days, mostly because projects must be paid for and the
+      strategies keep a reserve.
+    - About 80% of days have no new incident.
+  - Not changed, deliberately: the brief asks for no claim of balance without real playtesting, and these runs come
+    from scripted strategies, not players. Candidate levers, for a playtest to confirm, all in data tables:
+    - incident frequency, for the quiet days;
+    - project cost against the grant, for idle researchers;
+    - a ceiling or decay on hoarded funds, for the economy strategy.
 
 ## Known issues
 
