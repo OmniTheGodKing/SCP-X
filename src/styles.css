@@ -528,3 +528,10 @@ ul.fin.entries .hday { margin-right: 8px; }
 .worldmap .marker.lead .mlabel { fill: #8fd0c6; }
 .cpick { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; margin: 4px 0 6px; }
 .floorbar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+
+/* Strategic overhaul E3: the strategic inspector in the debug panel */
+.dbg-inspect summary { cursor: pointer; }
+.dbg-table { border-collapse: collapse; font-size: 12px; width: 100%; margin: 6px 0; }
+.dbg-table th { text-align: left; color: var(--dim, #88919a); font-weight: 500; padding: 2px 8px 2px 0; white-space: nowrap; vertical-align: top; }
+.dbg-table td { padding: 2px 12px 2px 0; vertical-align: top; }
+.dbg-list { margin: 2px 0 8px; padding-left: 16px; font-size: 12px; }

@@ -99,6 +99,17 @@ const { check, done } = reporter();
   const crew = await E(() => document.querySelector('.panel.crew')?.innerText ?? '');
   check('site: the work and crews panel names engineers', /\b[A-Z][a-z]+ [A-Z][a-z]+/.test(crew), crew.slice(0, 200));
 
+  // the strategic inspector in the debug panel: read-only, and it doesn't mark the save
+  const dbgBefore = await E(() => !!window.__site19.campaign.debug);
+  await E(() => { window.__site19.campaign.debug = false; document.activeElement?.blur?.(); });
+  await p.keyboard.press('`'); await p.waitForTimeout(150);
+  const insp = await E(() => document.querySelector('.dbg-inspect')?.innerText ?? '');
+  check('inspector: shows funds, breach risk, Insurgency scores and invariants', /funds/i.test(insp) && /breach risk/i.test(insp) && /operation/i.test(insp) && /invariants/i.test(insp), insp.slice(0, 200));
+  check('inspector: invariants hold on the mid-game save', /invariants hold/i.test(insp), insp.slice(0, 80));
+  await p.click('[data-dbg="close"]').catch(() => {}); await p.waitForTimeout(100);
+  check('inspector: looking does not mark the save as a debug save', !(await E(() => !!window.__site19.campaign.debug)));
+  await E(v => { window.__site19.campaign.debug = v || undefined; }, dbgBefore);
+
   // credits
   await p.click('.sysmenu > summary'); await p.click('#creditsBtn'); await p.waitForTimeout(100);
   const cred = await E(() => document.body.innerText.includes('Moto42') && document.body.innerText.includes('CC BY-SA'));

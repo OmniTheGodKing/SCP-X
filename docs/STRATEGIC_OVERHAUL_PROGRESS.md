@@ -95,7 +95,7 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
 | S-D4 | Goal-driven Chaos Insurgency and GOC | none | Plans chosen from Site-19's weaknesses and their own resources; tested | [x] |
 | S-E1 | Screen redesigns: Command, World, Research, Engineering, Personnel, History, Credits | S-C2 | Browser workflow tests | [ ] |
 | S-E2 | Onboarding with Krista Carter | S-E1 | Persisted steps; skippable; tested | [x] |
-| S-E3 | Strategic inspector (developer tools) | S-L1 | Debug panel shows state, risks, faction plans, invariants | [ ] |
+| S-E3 | Strategic inspector (developer tools) | S-L1 | Debug panel shows state, risks, faction plans, invariants | [x] |
 | S-E4 | End-to-end campaign test | all | The 17-step sequence in the brief | [ ] |
 | S-K | Balance and pacing from simulations | S-A4 | Documented changes and re-run results | [ ] |
 
@@ -203,6 +203,11 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
     saved. Steps can be skipped one at a time, or all of them at once.
   - The deployment tip on the planning screen and the in-mission steps are unchanged.
   - `tests/onboarding.e2e.cjs`.
+- E3 done: the debug panel (backtick) opens with a read-only strategic inspector. It shows the day and RNG state,
+  funds with the monthly net and any projected debt, standing, exposure by region, the agenda and moles, staff,
+  each held anomaly's breach risk per day and over 30 days with the reasons, what each Insurgency operation is worth
+  to it now and why (`planScores`), the planned operations, and the invariant results. Looking does not mark the
+  save as a debug save; `strategic.e2e.cjs` checks that.
 
 ## Known issues
 
