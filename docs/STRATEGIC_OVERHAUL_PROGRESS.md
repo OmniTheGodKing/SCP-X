@@ -90,7 +90,7 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
 | S-C1 | Visual style guide and design tokens | none | `docs/UI_STYLE_GUIDE.md`; tokens in CSS | [x] |
 | S-C2 | Representative screen: Site-19 cross-section centrepiece | S-C1 | Functional build, repair, staff and containment from the screen; browser test | [x] |
 | S-D1 | Persistent staff identities in tactical missions | none | Named researchers in breach missions; deaths propagate; tested | [x] |
-| S-D2 | Research and engineering depth (assignments, specialties, experiments) | S-B1 | See notes | [ ] |
+| S-D2 | Research and engineering depth (assignments, specialties, experiments) | S-B1 | See notes | [~] |
 | S-D3 | Economy transparency and Council tradeoffs | S-B1 | Ledger and upcoming obligations visible; tested | [x] |
 | S-D4 | Goal-driven Chaos Insurgency and GOC | none | Plans chosen from Site-19's weaknesses and their own resources; tested | [ ] |
 | S-E1 | Screen redesigns: Command, World, Research, Engineering, Personnel, History, Credits | S-C2 | Browser workflow tests | [ ] |
@@ -148,6 +148,20 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
     shows what an appropriation's repayment does to the next grants.
   - `tests/unit/forecast.test.ts`: agrees with the settlement the books record (within $3k, since standing and
     exposure can drift during the same day), repayments end on schedule, debt is projected, purity, briefing warning.
+- D2 (experiments) done; engineering depth still open:
+  - Experiments are distinct from research: one at a time across Site-19, run on the anomaly's own cell with
+    D-Class and chosen watchers, paid up front. Seven new ones, one for each of SCP-049, 106, 096, 012, 939, 035
+    and 682, each with its own way of going wrong (`TestDef.fail`, passed to `cellWork`).
+  - A finished experiment on an anomaly speeds every project in its research branch by 25% (`studyBoost`),
+    stacking with the field specialist bonus. SCP-173's three tests still open projects instead.
+  - The Research tab's test log lists the experiments for each anomaly held.
+  - `tests/unit/experiments.test.ts`.
+- Determinism fix: `newCampaign` reseeded from `Math.random()`, so "seeded" simulations and tests began from a
+  different campaign every run. It now takes `seed`; the simulator and the tests pass one. `sim.test.ts` checks
+  that the same seed gives the same run, and runs 15 scattered seeds for every strategy.
+- Bug found by a 1,050-run seed sweep: losing an engineer mid-job left more engineers busy than on staff, and the
+  header showed a negative count. Now short-handed work slows (it moves on a day with the chance of engineers there
+  over engineers needed), nothing new can start, the header shows "short N", and the briefing explains it.
 
 ## Known issues
 

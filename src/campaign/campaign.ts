@@ -432,7 +432,7 @@ export function makeOperative(c: Campaign, given?: string): Operative {
 }
 
 export function newCampaign(opts: NewCampaignOptions = { difficulty: "agent", ironman: false, tutorial: false }): Campaign {
-  setCampaignSeed(freshSeed());
+  setCampaignSeed(opts.seed ?? freshSeed());
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {

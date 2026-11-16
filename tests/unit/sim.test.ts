@@ -19,3 +19,19 @@ test("sim: a balanced Site-19 survives 180 days and its money stays bounded", ()
   ok(r.totals.maxFunds < 20000, `no runaway money (max ${r.totals.maxFunds})`);
 });
 test("sim: report", () => { console.log(summarize(results)); });
+
+// Strategic overhaul D: the simulations start from a fixed campaign seed (newCampaign used to reseed from outside the
+// game, so every run began differently). A spread of seeds across every strategy keeps the invariants honest; a
+// 1,050-run sweep is how the short-handed engineers case was found.
+test("sim: invariants hold across 15 scattered seeds for every strategy (120 days)", () => {
+  const bad: string[] = [];
+  for (const st of STRATEGIES) for (let i = 1; i <= 15; i++) {
+    const seed = (i * 2654435761) >>> 0, r = simulate(st, 120, seed);
+    if (r.invariantErrors.length) bad.push(`${st}/${seed}: ${r.invariantErrors[0]}`);
+  }
+  eq(bad, [], "no invariant errors");
+});
+test("sim: the same seed gives the same campaign", () => {
+  const a = simulate("balanced", 60, 99), b = simulate("balanced", 60, 99);
+  eq(JSON.stringify(a.daily), JSON.stringify(b.daily), "identical runs");
+});

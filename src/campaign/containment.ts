@@ -348,14 +348,14 @@ function clean(c: Campaign, s: ScpRecord, what: string) {
 
 /** D-Class work in the cell while operatives watch. `mult` scales the danger; `breach` is an extra
  *  chance the work itself lets it loose. Returns false if it ended in a breach. */
-export function cellWork(c: Campaign, s: ScpRecord, watchers: Guard[], what: string, mult = 1, dclass = 1, breach = 0) {
+export function cellWork(c: Campaign, s: ScpRecord, watchers: Guard[], what: string, mult = 1, dclass = 1, breach = 0, fail?: string) {
   const risk = Math.min(0.95, workRisk(watchers) * mult);
   for (const o of watchers) o.san = Math.max(0, o.san - 8);
   const names = watchers.length ? `two D-Class and guard${watchers.length > 1 ? "s" : ""} ${watchers.map(o => o.name).join(" and ")}` : "the two D-Class watching";
   const crew = dclass > 1 ? `one of the ${dclass} D-Class inside` : "the D-Class inside";
   if (rnd() < risk) {
     c.dclass--; dclassDied(c, 1);
-    log(c, `During ${what}, ${names} blinked at the same moment. SCP-173 killed ${crew}.`, "bad");
+    log(c, fail ? `During ${what}, ${fail}. ${crew[0].toUpperCase() + crew.slice(1)} died.` : `During ${what}, ${names} blinked at the same moment. SCP-173 killed ${crew}.`, "bad");
     if (rnd() < 0.3) { startBreach(c, s, "It got past the door."); return false; }
   } else log(c, `${what[0].toUpperCase() + what.slice(1)}: done, watched by ${names}.`, "good");
   if (breach && rnd() < breach) { startBreach(c, s, `Something went wrong during ${what}.`); return false; }

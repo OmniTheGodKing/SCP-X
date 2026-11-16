@@ -13,7 +13,8 @@ export function checkInvariants(c: Campaign): string[] {
   // staffing
   for (const [id, n] of Object.entries(c.research.assigned)) if (n < 0) out.push(`negative researchers on ${id}`);
   if (researchersAssigned(c) > c.researchers) out.push(`more researchers assigned (${researchersAssigned(c)}) than on staff (${c.researchers})`);
-  if (engineersBusy(c) > c.engineers + c.orders.length) out.push(`more engineers busy (${engineersBusy(c)}) than on staff (${c.engineers})`);
+  // engineers can be fewer than the work needs after a loss mid-job: the work then slows (tickConstruction), and
+  // nothing new can start until engineers are free, so it is not an error here
   if (new Set(c.research.done).size !== c.research.done.length) out.push("a research project completed twice");
   for (const id of c.research.done) if (c.research.assigned[id]) out.push(`researchers still assigned to finished project ${id}`);
   // facilities: unique ids and positions

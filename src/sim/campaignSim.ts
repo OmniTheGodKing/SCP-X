@@ -59,7 +59,7 @@ function answer(c: Campaign, inc: Incident, s: Strategy, rnd: () => number) {
 
 export function simulate(strategy: StrategyId, days: number, seed = 1, difficulty: Difficulty = "agent"): SimResult {
   setCampaignSeed(seed);
-  const c = newCampaign({ difficulty, ironman: false, tutorial: false });
+  const c = newCampaign({ difficulty, ironman: false, tutorial: false, seed });
   setCampaignSeed(seed);
   const s = PLANS[strategy];
   let lcg = seed * 2654435761 >>> 0;

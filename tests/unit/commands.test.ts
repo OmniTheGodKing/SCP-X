@@ -7,7 +7,7 @@ import { facilityAt } from "../../src/campaign/base";
 import { checkInvariants } from "../../src/campaign/invariants";
 import { setCampaignSeed } from "../../src/core/rng";
 
-const fresh = () => { setCampaignSeed(3); return newCampaign({ difficulty: "agent", ironman: false, tutorial: false }); };
+const fresh = () => newCampaign({ difficulty: "agent", ironman: false, tutorial: false, seed: 3 });
 const emptySlot = (c: ReturnType<typeof fresh>) => { for (let l = 0; l < c.base.levels; l++) for (let s = 0; s < 6; s++) if (!facilityAt(c, l, s)) return [l, s] as const; return null; };
 
 test("commands: building takes the money once and puts the facility in the slot", () => {
@@ -49,4 +49,24 @@ test("commands: a successful command returns the log entries it made", () => {
   const r = dispatch(c, { type: "hireEngineer" });
   ok(r.ok, r.reason);
   ok(r.events.length >= 0, "events listed");
+});
+
+test("engineers: losing one mid-job leaves the work short-handed; it slows, finishes, and nothing new starts", async () => {
+  const { engineersFree, facilityAt: at } = await import("../../src/campaign/base");
+  const { losePeople } = await import("../../src/campaign/people");
+  const { advanceDay } = await import("../../src/campaign/campaign");
+  const { directorsBriefing } = await import("../../src/campaign/briefing");
+  const c = fresh(); c.funds = 5000;
+  const [l, s] = emptySlot(c)!;
+  const started = (["cont_keter", "cont_euclid", "workshop", "generator"] as const).some(t => dispatch(c, { type: "build", facility: t, level: l, slot: s }).ok);
+  ok(started, "a job started");
+  // lose engineers until the work needs more than are left
+  while (engineersFree(c) >= 0) losePeople(c, "engineer", 1, "test");
+  ok(engineersFree(c) < 0, "short-handed");
+  ok(directorsBriefing(c).some(b => b.id === "eng-short"), "the briefing says so");
+  const e = emptySlot(c);
+  if (e) ok(!dispatch(c, { type: "build", facility: "generator", level: e[0], slot: e[1] }).ok, "nothing new starts");
+  for (let i = 0; i < 120 && (at(c, l, s)?.daysLeft ?? 0) > 0; i++) advanceDay(c);
+  eq(at(c, l, s)?.daysLeft, 0, "the job still finishes");
+  eq(checkInvariants(c), [], "consistent");
 });

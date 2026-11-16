@@ -10,4 +10,8 @@ export const DIFFICULTIES: Record<Difficulty, DiffDef> = {
   overseer: { name: "Overseer", desc: "For veterans: little money, larger and sharper Insurgent teams, frequent breaches, a relentless Insurgency.", funds: -200, grant: -30, insurgents: 1, aim: 5, breach: 1.6, agenda: 1.6 },
 };
 export const diffOf = (c: { difficulty?: Difficulty }) => DIFFICULTIES[c.difficulty ?? "agent"];
-export interface NewCampaignOptions { difficulty: Difficulty; ironman: boolean; tutorial: boolean }
+export interface NewCampaignOptions {
+  difficulty: Difficulty; ironman: boolean; tutorial: boolean;
+  /** A fixed campaign seed (simulations and tests); a fresh one from outside the game otherwise. */
+  seed?: number;
+}

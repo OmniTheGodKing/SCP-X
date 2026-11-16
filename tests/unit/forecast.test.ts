@@ -5,7 +5,7 @@ import { advanceDay, dayOfMonth, newCampaign } from "../../src/campaign/campaign
 import { obligations, projection, daysToSettlement } from "../../src/campaign/forecast";
 import { setCampaignSeed } from "../../src/core/rng";
 
-const fresh = () => { setCampaignSeed(11); return newCampaign({ difficulty: "agent", ironman: false, tutorial: false }); };
+const fresh = () => newCampaign({ difficulty: "agent", ironman: false, tutorial: false, seed: 11 });
 
 test("forecast: the next settlement is on the first of the month", () => {
   const c = fresh(), d = daysToSettlement(c.day);
@@ -17,6 +17,7 @@ test("forecast: the projected settlement matches what the settlement books", () 
   const c = fresh();
   c.day = c.day + daysToSettlement(c.day) - 1;     // the day before a settlement
   c.incidents = []; c.scheduled = [] as never;
+  c.council.directives = [];                        // orders judged at the same deadline would move standing first
   const next = obligations(c, 1).filter(o => o.kind === "grant" || o.kind === "fronts" || o.kind === "upkeep");
   const predicted = next.reduce((a, o) => a + o.n, 0);
   advanceDay(c);

@@ -7,7 +7,7 @@ import { dispatch } from "../../src/campaign/commands";
 import { startBreach } from "../../src/campaign/containment";
 import { setCampaignSeed } from "../../src/core/rng";
 
-const fresh = () => { setCampaignSeed(5); return newCampaign({ difficulty: "agent", ironman: false, tutorial: false }); };
+const fresh = () => newCampaign({ difficulty: "agent", ironman: false, tutorial: false, seed: 5 });
 test("briefing: a breach is the first, critical item, pointing at Command", () => {
   const c = fresh();
   startBreach(c, c.scps[0], "Test:");

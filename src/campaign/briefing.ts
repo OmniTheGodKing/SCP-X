@@ -54,6 +54,7 @@ export function directorsBriefing(c: Campaign): BriefItem[] {
   const damaged = c.base.facilities.filter(f => f.disabled && f.repairDays <= 0 && !isContainment(f.type));
   if (damaged.length) add({ id: "repairs", sev: "important", title: `${damaged.length} facilit${damaged.length > 1 ? "ies" : "y"} out of action`, detail: damaged.map(f => FACILITIES[f.type].name).join(", ") + ". Engineers can repair them.", tab: "site", focus: damaged[0].id });
   const free = engineersFree(c);
+  if (free < 0) add({ id: "eng-short", sev: "important", title: `Engineers short-handed by ${-free}`, detail: "Work under way needs more engineers than Site-19 has, so it goes more slowly. Hire engineers, or let a job finish before starting another.", tab: "site" });
   if (free >= 2 && !damaged.length && !c.base.facilities.some(f => f.daysLeft > 0) && c.base.excavation <= 0) add({ id: "engineers", sev: "routine", title: `${free} engineers free`, detail: "Nothing is being built or repaired. Build, upgrade, or order equipment in the workshop.", tab: "site" });
   const promo = c.roster.filter(promotionDue);
   if (promo.length) add({ id: "promotions", sev: "important", title: `${promo.length} promotion${promo.length > 1 ? "s" : ""} to confirm`, detail: promo.map(o => `${o.call} ${o.name}`).join(", ") + ": choose their new ability.", tab: "personnel", focus: promo[0].id });

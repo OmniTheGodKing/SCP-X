@@ -259,6 +259,10 @@ export function excavate(c: Campaign) {
 /** One day of construction, repairs and digging. Returns what finished, for the log. */
 export function tickConstruction(c: Campaign): string[] {
   const done: string[] = [];
+  // Strategic overhaul D: short-handed (an engineer lost or sent away mid-job), the work goes on more slowly: on any
+  // day, it moves only with the chance of the engineers there over the engineers it needs
+  const busy = engineersBusy(c);
+  if (busy > c.engineers && rnd() >= c.engineers / busy) return done;
   for (const f of c.base.facilities) {
     // a mason on staff sometimes gets a day ahead on new building; an electrician on repairs and refits
     if (f.daysLeft > 1 && hasTrade(c, "mason") && rnd() < TRADE_CHANCE) f.daysLeft--;

@@ -53,7 +53,7 @@ import {
 import {
   ARMOR_KINDS, ARMOR_TIERS, armorStats, ATTACHMENT_COST, REFIT, canOrderAmmo, orderAmmo, unlockedAmmo, canOrderAttachment, canRefit, orderAttachment, orderRefit, pendingRefits, unlockedAttachments,
   ITEMS, PROJECTS, TESTS, uniformOf, anomalyProgress, assign, projectVisible, canHireResearcher, canOrder, canTest, has, hireResearcher, order, projectLock,
-  researcherCapacity, projectCost, researchersFree, startTest, testKey, offered, projectDays, unlockedItems, type Branch, type ItemId, type TestId,
+  researcherCapacity, projectCost, researchersFree, startTest, testKey, testScp, testBranch, STUDY_BONUS, offered, projectDays, unlockedItems, type Branch, type ItemId, type TestId,
   canSellStore, sellPrice, sellStore, type StoreKind,
 } from "../campaign/research";
 import { HOME, LAND, REGIONS, REGION_IDS, SITE19, project, type RegionId } from "../data/regions";
@@ -252,7 +252,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       ${ro("Exposure", `${c.exposure}${collapsedCount(c) ? ` · ${collapsedCount(c)} lost` : ""}`, c.exposure >= 60 || collapsedCount(c) ? "danger" : c.exposure >= 35 ? "caution" : "", "How much of the anomalous the public has seen. Cover-ups and amnestics bring it down.")}
       ${ro("Power", `${powerUse(c)}/${powerSupply(c)}`, pw ? "danger" : "", "Power used out of power supplied. Short of power, wings breach more often.")}
       ${ro("Research", `${researchersFree(c)}/${c.researchers}`, c.researchers && researchersFree(c) > 0 ? "caution" : "", "Researchers free (not on a project) / on staff.")}
-      ${ro("Engineers", `${engineersFree(c)}/${c.engineers}`, c.engineers && engineersFree(c) <= 0 ? "caution" : "", "Engineers free / on staff. Busy ones are building, repairing, digging or on workshop orders.")}
+      ${ro("Engineers", engineersFree(c) < 0 ? `${c.engineers} · short ${-engineersFree(c)}` : `${engineersFree(c)}/${c.engineers}`, engineersFree(c) < 0 ? "danger" : c.engineers && engineersFree(c) <= 0 ? "caution" : "", "Engineers free / on staff. Busy ones are building, repairing, digging or on workshop orders.")}
       ${ro("Guards", `${guardsAlive(c).length}/${guardCapacity(c)}${unposted(c).length ? ` · ${unposted(c).length} unposted` : ""}`, "", "Guards alive / posts at working Security stations.")}
       ${ro("D-Class", `${c.dclass}/${dclassCapacity(c)}`, "", "D-Class held / beds.")}
       ${ro("Intel", `${c.intel}`, "", "Intelligence on the Insurgency, spent on locating and weakening cells.")}
@@ -943,10 +943,16 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     </section>
     <section class="col">
       <div class="file scrollpanel tall">
-        <div class="dossierwrap">${dossierPhoto(s.id)}</div><div class="label">Tests on ${s.name}</div>
+        <div class="dossierwrap">${dossierPhoto(s.id)}</div><div class="label">Experiments · ${c.research.tests.length} of ${Object.keys(TESTS).length} on file</div>
         <h2>Test log</h2>
-        <p>Tests fill in ${s.name}'s file and open new research. Each is paid for up front and prepared by researchers like any other project; on the last day the D-Class go into the cell while the guards you chose watch. Riskier tests multiply the chance someone dies, and some can end in a breach. One test at a time.</p>
-        ${(Object.keys(TESTS) as TestId[]).map(t => testRow(t)).join("")}
+        <p>Experiments are run on the anomalies in their cells, apart from ordinary research. Each is paid for up front and prepared by researchers like any other project; on the last day the D-Class go into the cell while the guards you chose watch. Riskier tests multiply the chance someone dies, and some can end in a breach. One experiment at a time across Site-19.</p>
+        <p>SCP-173's tests open new research. An experiment on any other anomaly speeds every project in its branch by ${Math.round(STUDY_BONUS * 100)}%.</p>
+        ${(() => {
+          // Strategic overhaul D2: the experiments for each anomaly Site-19 holds, SCP-173's first
+          const held = c.scps.filter(x => (x.status === "contained" || x.status === "breach") && (Object.keys(TESTS) as TestId[]).some(t => testScp(t) === x.id));
+          return held.map(x => `<div class="label" style="margin-top:12px">${esc(x.name)}${x.status !== "contained" ? ` · ${x.status === "breach" ? "breached" : "not in its cell"}` : ""}</div>
+            ${(Object.keys(TESTS) as TestId[]).filter(t => testScp(t) === x.id).map(t => testRow(t)).join("")}`).join("");
+        })()}
         ${watcherPicker()}
       </div>
     </section>
@@ -973,15 +979,15 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   }
 
   function testRow(t: TestId) {
-    const d = TESTS[t], why = canTest(c, scp173(), t), done = c.research.tests.includes(t), r = c.research;
+    const d = TESTS[t], subj = c.scps.find(x => x.id === testScp(t))!, why = canTest(c, subj, t), done = c.research.tests.includes(t), r = c.research;
     const running = r.testing?.id === t, key = testKey(t), n = r.assigned[key] || 0, prog = r.progress[key] || 0;
-    const opens = Object.values(PROJECTS).filter(p => p.needsTest === t).map(p => p.name).join(", ");
+    const opens = d.scp ? `speeds ${testBranch(t)} research by ${Math.round(STUDY_BONUS * 100)}%` : `opens ${Object.values(PROJECTS).filter(p => p.needsTest === t).map(p => p.name).join(", ")}`;
     const w = running ? c.guards.filter(g => g.alive && r.testing!.watchers.includes(g.id)) : watchPool().filter(o => watchers.has(o.id));
     const death = Math.min(0.95, workRisk(w) * d.risk);
     return `<div class="test ${done ? "done" : ""}">
       <div class="ptop"><b>${esc(d.name)}</b>${done ? `<span class="flag">Done</span>` : running ? `<span class="flag stare">${n ? `${plural(n, "researcher")} · ${plural(Math.ceil((d.days - prog) / n), "day")} left` : "Paused"}</span>` : ""}</div>
       <p>${esc(d.desc)}</p>
-      <div class="specs">$${d.cost}k · ${d.days} researcher-days · ${d.dclass} D-Class · death risk ×${d.risk} (${pctText(death)} with ${running ? "the chosen" : "current"} watchers)${d.breach ? ` · ${pctText(d.breach)} chance of a breach` : ""} · opens ${esc(opens)}</div>
+      <div class="specs">$${d.cost}k · ${d.days} researcher-days · ${d.dclass} D-Class · death risk ×${d.risk} (${pctText(death)} with ${running ? "the chosen" : "current"} watchers)${d.breach ? ` · ${pctText(d.breach)} chance of a breach` : ""} · ${esc(opens)}</div>
       ${running ? `<div class="pbar"><div class="exp-bar"><span style="width:${Math.min(100, (prog / d.days) * 100)}%"></span></div><span class="specs">${prog}/${d.days} researcher-days · watching: ${w.length ? w.map(g => esc(g.name)).join(", ") : "two D-Class only"}</span></div>
         <div class="row assign">
           <button class="act" type="button" data-unassign="${key}" ${n ? "" : "disabled"} aria-label="Remove a researcher">−</button>
@@ -1537,7 +1543,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     on("hireResBtn", () => run({ type: "hireResearcher" }));
     root.querySelectorAll<HTMLElement>("[data-assign]").forEach(b => b.onclick = () => run({ type: "assignResearch", project: b.dataset.assign!, delta: 1 }));
     root.querySelectorAll<HTMLElement>("[data-unassign]").forEach(b => b.onclick = () => run({ type: "assignResearch", project: b.dataset.unassign!, delta: -1 }));
-    root.querySelectorAll<HTMLElement>("[data-test]").forEach(b => b.onclick = () => change(() => startTest(c, scp173(), b.dataset.test as TestId, chosenWatchers())));
+    root.querySelectorAll<HTMLElement>("[data-test]").forEach(b => b.onclick = () => change(() => startTest(c, c.scps.find(x => x.id === testScp(b.dataset.test as TestId))!, b.dataset.test as TestId, chosenWatchers())));
     root.querySelectorAll<HTMLElement>("[data-order]").forEach(b => b.onclick = () => run({ type: "order", item: b.dataset.order as ItemId }));
     root.querySelectorAll<HTMLElement>("[data-sellstore]").forEach(b => b.onclick = () => { const [k, id] = b.dataset.sellstore!.split(":"); change(() => sellStore(c, k as StoreKind, id)); });
     root.querySelectorAll<HTMLElement>("[data-contract]").forEach(b => b.onclick = () => { const id = b.dataset.contract!;
