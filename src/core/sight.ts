@@ -28,10 +28,10 @@ export const visFrac = (ax: number, ay: number, bx: number, by: number) => expos
 export const viewSpots = (x: number, y: number, tx = x, ty = y) => eyePoints(x, y, tx, ty);
 
 /** Best view a person at (x, y) gets of a tile, stepping out if that helps. Null means no sight. */
-export const bestView = (x: number, y: number, tx: number, ty: number, range = SIGHT_MAX): View | null => kernelView(x, y, tx, ty, range, SIGHT);
+export const bestView = (x: number, y: number, tx: number, ty: number, range = SIGHT_MAX, targetPeeks = false): View | null => kernelView(x, y, tx, ty, range, SIGHT, true, targetPeeks);
 export const sightFrom = (x: number, y: number, tx: number, ty: number, range = SIGHT_MAX) => !!bestView(x, y, tx, ty, range);
 /** Sight without stepping out, for things that don't peek round corners (SCP-173). */
 export const rawSight = (x: number, y: number, tx: number, ty: number, range = SIGHT_MAX) => !!kernelView(x, y, tx, ty, range, SIGHT, false);
 /** The best spot to fire from at (tx, ty): needs the target in view and a clear line of fire to enough of them. */
-export const fireView = (x: number, y: number, tx: number, ty: number, range = SIGHT_MAX): View | null => kernelView(x, y, tx, ty, range, FIRE);
+export const fireView = (x: number, y: number, tx: number, ty: number, range = SIGHT_MAX, targetPeeks = false): View | null => kernelView(x, y, tx, ty, range, FIRE, true, targetPeeks);
 void BODY; void L;

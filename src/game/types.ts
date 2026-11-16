@@ -154,6 +154,8 @@ export interface Unit {
   bleed?: number;
   stabilized?: boolean;
   suppressedUntil?: number;
+  /** Tactical overhaul T4.6: who is suppressing them (moving draws that unit's shot). */
+  suppressedBy?: string;
   markedUntil?: number;
   overwatchShots?: number;
   /** Per-mission and per-turn ability bookkeeping. */

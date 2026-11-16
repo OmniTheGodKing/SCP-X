@@ -6,7 +6,7 @@ import { MAPS } from "../data/maps";
 import { varyMap } from "../data/plots";
 import { generateTown } from "../data/towngen";
 
-import { setSmoke, sightFrom } from "../core/sight";
+import { SIGHT_MAX, bestView, setSmoke, sightFrom } from "../core/sight";
 import { insurgentGuns } from "../data/weapons";
 import { STARTING_NOTES } from "./notes";
 import { PROFILE } from "./profiles";
@@ -261,7 +261,8 @@ function deployEyes(from: Pt[]): Pt[] {
 /** A room's floor tiles the team can't see from where it starts (all of them if every tile is in view). */
 function hiddenTiles(room: [number, number, number, number], from: Pt[]): Pt[] {
   const eyes = deployEyes(from), all = floorTiles(room);
-  const hid = all.filter(([x, y]) => !eyes.some(([sx, sy]) => sightFrom(sx, sy, x, y)));
+  // whoever stands there may lean out past cover beside them, and show themselves (geom.bestView targetPeeks)
+  const hid = all.filter(([x, y]) => !eyes.some(([sx, sy]) => bestView(sx, sy, x, y, SIGHT_MAX, true)));
   return hid.length ? hid : all;
 }
 function farRooms(rooms: [number, number, number, number][], from: Pt[]) {

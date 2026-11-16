@@ -46,16 +46,16 @@ Status: `[x]` done and tested, `[~]` partly done (see notes), `[ ]` not started.
 | T3.1 | Light map [4.1] | T1.1 | Lit corridor at night visible end to end; unlit field not | [x] |
 | T3.2 | Perception: unseen, detected, identified [4.2] | T1.5, T3.1 | Distance and light ladder tests; concealment still works | [x] |
 | T3.3 | Smoke density [4.4] | T3.2 | Thin smoke reduces detection; thick smoke hides | [x] |
-| T4.1 | Weapon range curves [5.1] | T0 | Hit-chance-by-distance table per weapon | [ ] |
+| T4.1 | Weapon range curves [5.1] | T0 | Hit-chance-by-distance table per weapon | [x] |
 | T4.2 | Exposure term replaces "partly hidden" [5.2] | T1.4 | Hit-chance tests | [x] |
 | T4.3 | Grazes, stray rounds hitting cover [5.3, 5.4] | T1.2 | Seeded statistics | [x] |
-| T4.4 | Status registry [5.5] | T0 | Same durations; statuses listed | [ ] |
-| T4.5 | One reaction system: all sides, perceived movement only [6.2] | T3.2, T2.3 | Reaction matrix tests | [ ] |
-| T4.6 | XCOM 2 suppression [6.3] | T4.5 | Moving while suppressed draws a shot; ends overwatch | [ ] |
-| T4.7 | Destructible cover with hit points [7.1] | T1.1, T4.3 | Crate degrades by hits; grenade drops full to half | [ ] |
+| T4.4 | Status registry [5.5] | T0 | Same durations; statuses listed | [x] |
+| T4.5 | One reaction system: all sides, perceived movement only [6.2] | T3.2, T2.3 | Reaction matrix tests | [x] |
+| T4.6 | XCOM 2 suppression [6.3] | T4.5 | Moving while suppressed draws a shot; ends overwatch | [x] |
+| T4.7 | Destructible cover with hit points [7.1] | T1.1, T4.3 | Crate degrades by hits; grenade drops full to half | [x] |
 | T5.1 | Utility AI on shared rules [7.3] | T2.1, T2.2, T3.2, T4.5, T4.6 | Seeded AI scenarios: takes cover, flanks, avoids overwatch, grenades clusters | [ ] |
 | T5.2 | Squad coordination and roles | T5.1 | Suppress-and-advance, sniper positions, objective defence | [ ] |
-| T6.1 | Presentation hooks: rules can run headless [7.2, partial] | T0 | Combat and enemy turns run with no animation waits in tests | [ ] |
+| T6.1 | Presentation hooks: rules can run headless [7.2, partial] | T0 | Combat and enemy turns run with no animation waits in tests | [x] `pace.headless`; sandbox missions |
 | T6.2 | Tactical lab screen on production rules [1.1] | T1.5, T2.1 | Build scenarios and inspect sight, peeks, fire, cover, hit chance, AI; save and load | [ ] |
 | T6.3 | Move preview: shields, flanks, overwatch risk; contact markers; suppression indicators [3.2] | T2.1, T3.2 | Preview equals the dice | [ ] |
 | T7.1 | Golden scenario suite and consistency test [1.2, 1.3] | T1.5 | Hallway, rooms, diagonals, corners, doors, windows, crates, long range, smoke | [x] |
@@ -143,6 +143,30 @@ Status: `[x]` done and tested, `[~]` partly done (see notes), `[ ]` not started.
   room the team can't see (the farm's open fields made every room visible). Spawns pass 0 bad of 90 starts.
 - **D5 (T3):** firing at an unknown contact is allowed at −10, and it might be a civilian or a D-Class. This was
   proposed to the owner earlier and not yet answered; it is a one-line change to remove (`fireAt` in `turn.ts`).
+
+- **T4 done.**
+  - **Range curves** (`RANGE_CURVES`, `rangeAim`) per weapon class, interpolated: shotgun and SMG close, marksman
+    far, rifle and carbine middle, MG steady.
+  - **Damage falloff:** shotguns past 6 tiles, SMGs past 9.
+  - **Exposure:** the "Leaning out −15" is gone (XCOM doesn't penalise stepping out). "Partly hidden" scales with
+    exposure and applies only without cover.
+  - **Grazes:** a miss within 10 points grazes for half damage.
+  - **Cover hit points** (`damageCover`): misses caught by cover chip it; a crate takes 6 to drop to half cover, half
+    cover 3 to go. Grenades drop full cover to half; rockets clear it.
+  - **Status registry** (`src/game/status.ts`).
+  - **One reaction system** (`reactTo` in `combat.ts`): anyone on overwatch fires at the first hostile movement they
+    can make out and shoot. That means team on Insurgents, SCP-049-2, other hostile instances and fighting SCP-682;
+    Insurgents (any role) on the team.
+  - **XCOM 2 suppression:** pinned through the target's next turn, −30, no overwatch. Moving draws the suppressor's
+    shot. It ends when the suppressor moves and costs 2 rounds.
+- **D6 (T4) XCOM mutual peeking:**
+  - A person standing by cover also shows themselves at its step-outs (`bestView` `targetPeeks`), so a soldier
+    behind a crate can be seen and shot from in front at −40.
+  - Without this, full cover was invisibility from the front.
+  - Tiles and open ground are unaffected, so the crate diagrams still hold. Anomalies, objects and the downed don't
+    peek. The spawn rule accounts for it.
+- **Sandbox missions** (`src/game/sandbox.ts`): a real mission state from a drawn map and a unit list, used by the
+  headless tests (`tests/unit/combat.test.ts`, 12 tests) and by the lab (T6.2).
 
 ## Unresolved issues
 

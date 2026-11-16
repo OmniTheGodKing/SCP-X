@@ -70,8 +70,9 @@ export const highlight = (mag: number, color = "#ffffff") => fx({ type: "jolt", 
 export const banner = (text: string, color = "#d8bf86") => fx({ type: "banner", text, color, dur: 1300 });
 
 /** Enemy-turn pacing, set from the viewer's settings: Fast cuts every pause outside the player's turn to a third. */
-export const pace = { fast: false };
-export const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, pace.fast && S && S.phase !== "player" ? ms / 3 : ms));
+/** headless: rules run with no animation waits at all (tests and the lab's AI preview; Tactical overhaul T6.1). */
+export const pace = { fast: false, headless: false };
+export const sleep = (ms: number) => pace.headless ? Promise.resolve() : new Promise<void>(r => setTimeout(r, pace.fast && S && S.phase !== "player" ? ms / 3 : ms));
 export const rand = (a: number, b: number) => a + Math.floor(rnd() * (b - a + 1));
 
 export function computeVis() {

@@ -4,12 +4,12 @@ import { BOND_AIM } from "../campaign/condition";
 import { charmTurns, officerNear } from "./ciTactics";
 import { DIRS, DRUM, FULL, HALF, STEEL, TS, WALL, L, bfs, cheb, tileAt, type Pt } from "../core/grid";
 import { SIGHT_MAX, fireLine, fireView, type View } from "../core/sight";
-import { DETECTED, perceive } from "./perception";
+import { DETECTED, peeks, perceive } from "./perception";
 import { coverOn } from "../core/geom";
-import { breakGlass, d2, openDoor } from "../core/grid";
+import { breakGlass, d2, damageCover, openDoor } from "../core/grid";
 import { emitNoise, faceThreat, facingTo } from "./noise";
 import { hasPerk, rangeOf } from "./perks";
-import { TYPES, rangeMod } from "../data/weapons";
+import { TYPES, rangeDamage, rangeMod } from "../data/weapons";
 import { prof } from "./profiles";
 import { S, alive, breakConcealment, canSee, full, fx, highlight, hooks, isPanicked, team, isTeam, log, loseSanity, rand, reveal, seen, sleep, computeVis } from "./state";
 import type { Gun, Impact, Unit } from "./types";
@@ -17,7 +17,7 @@ import { SIDEARM } from "../data/weapons";
 import { dropCarried } from "./abilities";
 import { ignite } from "./fire";
 import { shotAt106 } from "./scp106";
-import { hit682, hostFalls } from "./scp4b";
+import { hidden939, hit682, hostFalls } from "./scp4b";
 import { dropTrophy } from "./rivals";
 
 /** Cover a figure on (tx, ty) has against a shot from (sx, sy). Tactical overhaul T2.1: read off the line of fire
@@ -48,7 +48,7 @@ export function lineOfFire(sh: Unit, tg: Unit): (View & { tx: number; ty: number
   // Tactical overhaul T1: the same eye points, trace and body exposure as sight; the shot also needs the bullets'
   // path to enough of the target clear (reinforced glass is the only thing that stops fire but not sight)
   for (const [tx, ty] of aims) {
-    const v = fireView(sh.x, sh.y, tx, ty, range);
+    const v = fireView(sh.x, sh.y, tx, ty, range, tx === tg.x && ty === tg.y && peeks(tg));
     if (v && (!best || v.f > best.f)) best = { ...v, tx, ty };
   }
   return best;
@@ -61,8 +61,9 @@ export function shotInfo(sh: Unit, tg: Unit, reaction = false): ShotInfo {
   const dist = Math.hypot(tg.x - v.x, tg.y - v.y);
   const hunkered = (tg.hunkerUntil ?? -1) >= S.turn;
   const cover = coverAgainst(tg.x, tg.y, v.x, v.y) * (hunkered ? 2 : 1);
-  const leaning = v.x !== sh.x || v.y !== sh.y;
-  const partial = v.f < 0.5 || leaning;
+  // Tactical overhaul T4.2: stepping out costs nothing in itself (as in XCOM); what matters is how much of the
+  // target is exposed to the shot (3, 4 or 5 of 5 points on their figure)
+  const partial = v.f < 1;
   const gun = activeGun(sh);
   const mods: [string, number][] = [["Aim", sh.aim]];
   if (gun?.aim) mods.push([gun.name, gun.aim]);
@@ -72,8 +73,8 @@ export function shotInfo(sh: Unit, tg: Unit, reaction = false): ShotInfo {
   if (cover >= 40) mods.push([hunkered ? (cover === 80 ? "Full cover, hunkered" : "Half cover, hunkered") : "Full cover", -cover]);
   else if (cover === 20) mods.push(["Half cover", -20]);
   else mods.push(["Flanked", 10]);
-  if (leaning) mods.push(["Leaning out", -15]);
-  else if (partial) mods.push(["Partly hidden", -15]);
+  // with cover counted, a figure partly behind it isn't penalised twice
+  if (partial && cover === 0) mods.push(["Partly hidden", -Math.round(25 * (1 - v.f))]);
   const rm = rangeMod(gun?.type ?? "rifle", dist);
   if (rm) mods.push(rm);
   // facing: a reaction shot at someone behind them means turning first
@@ -123,7 +124,7 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
   if (sh.side === "mtf" && S.setup.weather !== "storm") breakConcealment("shots fired");
   if (sh.gun && !sidearm) sh.gun.ammo = Math.max(0, sh.gun.ammo - 1);
   sh.firedTurn = S.turn;
-  const roll = rnd() * 100, hit = roll < info.chance;
+  const roll = rnd() * 100, hit = roll < info.chance, grazed = !hit && info.chance < 95 && roll < info.chance + GRAZE_BAND;
   if (S.enemyTurn && S.phase !== "player" && !isTeam(sh)) { S.enemyTurn.shots++; if (hit) S.enemyTurn.hits++; }
   // leaning out to fire leaves the shooter exposed at that spot through the enemy's reply
   if (info.from.x !== sh.x || info.from.y !== sh.y) sh.exposed = { x: info.from.x, y: info.from.y, turn: S.turn };
@@ -158,6 +159,8 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
   if (hit) {
     const crit = rnd() * 100 < info.crit;
     let dmg = gun ? rand(gun.dmg[0], gun.dmg[1]) : rand(3, 4);
+    // Tactical overhaul T4.3: shotguns and SMGs lose punch at range
+    if (gun) dmg = Math.max(1, dmg + rangeDamage(gun.type, Math.hypot(tg.x - info.from.x, tg.y - info.from.y)));
     if (crit) dmg += gun?.ammoType === "hollow" ? 3 : 2;
     if (hasPerk(sh, "shotgun_drills") && Math.hypot(tg.x - info.from.x, tg.y - info.from.y) <= 3) dmg += 2;
     const soak = Math.min(Math.max(0, (tg.armor ?? 0) - (gun?.pierce ?? 0)), dmg);   // each armor point cuts the hit by 1
@@ -169,11 +172,23 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
     if (hasPerk(sh, "shredder") && (tg.armor ?? 0) > 0) { tg.armor!--; log("The hit shreds a point of armor.", "good"); }
     damage(tg, dmg, sh);
     if (gun?.ammoType === "incendiary" && !sidearm) ignite(tg.x, tg.y, 1);
+  } else if (grazed) {
+    // Tactical overhaul T4.3: a near miss (within GRAZE_BAND of the chance) grazes for half damage, no crit
+    const raw = gun ? Math.ceil(rand(gun.dmg[0], gun.dmg[1]) / 2) : 1;
+    const dmg = Math.max(0, raw - Math.max(0, (tg.armor ?? 0) - (gun?.pierce ?? 0)));
+    fx({ type: "text", x: x1, y: y1 - 14, text: `GRAZE ${dmg}`, color: "#d8bf86", dur: 900 }, travel);
+    if (visibleShot) log(`${reaction ? "Overwatch: " : ""}${full(sh)} grazes ${full(tg)} for ${dmg} (${info.chance}%${why(info, gun?.name)}).`, sh.side === "mtf" ? "good" : "bad");
+    if (dmg) { S.hitKind = sidearm ? "pistol" : gun?.type ?? "pistol"; damage(tg, dmg, sh); }
   } else {
     const graze = gun?.attachment === "stock" ? Math.max(0, 1 - (tg.armor ?? 0)) : 0;
     fx({ type: "text", x: x1, y: y1 - 14, text: graze ? "GRAZE 1" : coverTile ? "COVER" : "MISS", color: graze ? "#d8bf86" : coverTile ? "#9cc4e4" : "#8b939b", dur: 900 }, travel);
     if (visibleShot) log(`${reaction ? "Overwatch: " : ""}${full(sh)} misses ${full(tg)} (${info.chance}%${why(info, gun?.name)})${graze ? ", but the round grazes for 1" : ""}.`);
     if (graze) damage(tg, 1, sh);
+    // Tactical overhaul T4.7: the round that cover caught wears it down
+    if (coverTile) {
+      const what = damageCover(coverTile[0], coverTile[1]);
+      if (what && (visibleShot || seen(coverTile[0], coverTile[1]))) log(what === "half" ? "The cover is shot to pieces: only half cover left." : "The cover is shot away.", "key");
+    }
   }
   hooks.update();
   await sleep(Math.max(380, land + 120));
@@ -182,6 +197,8 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
 /** The cover tile beside (tx, ty) that faces a shooter at (sx, sy): the one a round meant for the target would strike. */
 const coverTileFacing = (tx: number, ty: number, sx: number, sy: number) => coverOn(tx, ty, sx, sy).tile;
 
+/** A miss by less than this many points is a graze (half damage). */
+export const GRAZE_BAND = 10;
 export const BLEED_TURNS = 3;
 
 export function damage(u: Unit, dmg: number, by?: Unit) {
@@ -255,7 +272,42 @@ export function kill(u: Unit, by173 = false) {
   if (S.selected === u) S.selected = null;
 }
 
+// ---------- reaction fire (Tactical overhaul T4.5) ----------
+/** Whom a unit on overwatch will fire at: the team at Insurgents, SCP-049-2 and other hostile instances, rioters and a
+ *  fighting SCP-682; Insurgents at the team. Nobody reacts to what they can't make out (perception), or through a
+ *  line they couldn't fire along. */
+export function hostileTo(w: Unit, u: Unit): boolean {
+  if (!u.alive || u.downed || u.saved || u.carriedBy || u.restrained) return false;
+  if (isTeam(w)) return u.side === "raider" || (u.side === "zombie" && !(u.voice && hidden939(u))) || (u.side === "anomaly" && S.scp === "682");
+  if (w.side === "raider") return isTeam(u);
+  return false;
+}
+/** Everyone watching who can make out the mover and has a line of fire takes their reaction shot(s). A suppressed
+ *  unit that moves draws a shot from whoever is suppressing it, on its first step (XCOM 2). */
+async function reactTo(u: Unit, firstStep: boolean) {
+  if (firstStep && (u.suppressedUntil ?? -1) >= S.turn && u.suppressedBy) {
+    const s = S.units.find(v => v.id === u.suppressedBy);
+    u.suppressedBy = undefined; u.suppressedUntil = undefined;
+    if (s && s.alive && !s.downed && !isPanicked(s) && canSee(s, u.x, u.y) && canShoot(s, u)) {
+      if (seen(s.x, s.y) || isTeam(s)) log(`${full(s)} fires as ${full(u)} breaks from cover under suppression.`, isTeam(s) ? "good" : "bad");
+      await fire(s, u, true);
+    }
+  }
+  for (const w of S.units) {
+    if (!u.alive || u.downed) return;
+    if (w === u || !w.alive || w.downed || !w.overwatch || isPanicked(w) || (w.blindUntil ?? -1) >= S.turn || !hostileTo(w, u)) continue;
+    if (!canSee(w, u.x, u.y) || !canShoot(w, u)) continue;
+    w.overwatchShots = (w.overwatchShots ?? 1) - 1;
+    if (w.overwatchShots <= 0) w.overwatch = false;
+    if (!isTeam(w) && seen(w.x, w.y)) log(`${w.name} fires from overwatch.`, "bad");
+    await fire(w, u, true);
+  }
+}
+
 export async function moveUnit(u: Unit, path: Pt[]) {
+  // a suppressor who moves lets go of whoever they were pinning
+  if (path.length) for (const v of S.units) if (v.suppressedBy === u.id) { v.suppressedBy = undefined; v.suppressedUntil = undefined; }
+  let first = true;
   for (const [x, y] of path) {
     if (!u.alive) return;
     // a shut door opens as someone walks through it, and stays open
@@ -267,21 +319,9 @@ export async function moveUnit(u: Unit, path: Pt[]) {
     // SCP-106's rot eats at anyone who walks through it
     if (S.corroded.has(y * L.W + x) && u.side !== "anomaly" && u.armorKind !== "hazmat") { log(`${full(u)} steps in the black rot (1 damage).`, "bad"); damage(u, 1); }
     if (isTeam(u)) computeVis();
-    // Insurgent snipers on overwatch take their shot at anyone of the team who moves where they can see
-    if (isTeam(u)) for (const r of alive("raider")) {
-      if (!u.alive || u.downed) break;
-      if (r.overwatch && !isPanicked(r) && canShoot(r, u)) { r.overwatch = false; if (seen(r.x, r.y)) log(`${r.name} fires from overwatch.`, "bad"); await fire(r, u, true); }
-    }
-    if (u.side === "raider") {
-      for (const m of alive("mtf")) {
-        if (!u.alive) break;
-        if (m.overwatch && !isPanicked(m) && canShoot(m, u)) {
-          m.overwatchShots = (m.overwatchShots ?? 1) - 1;
-          if (m.overwatchShots <= 0) m.overwatch = false;
-          await fire(m, u, true);
-        }
-      }
-    }
+    // Tactical overhaul T4.5/T4.6: anyone watching reacts to hostile movement they can make out
+    await reactTo(u, first);
+    first = false;
     if (isTeam(u) || seen(x, y)) await sleep(60);
   }
   // having arrived, they turn to face the nearest enemy they can see (otherwise they keep facing the way they walked)

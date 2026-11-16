@@ -62,6 +62,8 @@ export class Level {
   readonly link = new Map<number, number>();
   /** Link ends only the team can use (a lift worked from inside), until something opens them. */
   readonly closedLinks = new Set<number>();
+  /** Damage taken by cover so far (tiles not listed are undamaged). */
+  readonly coverHp = new Map<number, number>();
 
   constructor(readonly def: MapDef) {
     this.W = def.rows[0].length;
@@ -135,12 +137,27 @@ export function breakGlass(x: number, y: number) {
 export function blastStructure(x: number, y: number, power: number): string | null {
   if (x <= 0 || y <= 0 || x >= L.W - 1 || y >= L.H - 1) return null;
   const t = tileAt(x, y), i = y * L.W + x, d = L.door.get(i);
-  if (t === HALF) { L.grid[y][x] = FLOOR; bump(); return "cover"; }
+  if (t === HALF) { L.grid[y][x] = FLOOR; L.coverHp.delete(i); bump(); return "cover"; }
+  // Tactical overhaul T4.7: a grenade knocks a pillar or crate down to half cover; a rocket clears it
+  if (t === FULL) { L.grid[y][x] = power >= 2 ? FLOOR : HALF; L.coverHp.delete(i); bump(); return "cover"; }
   if (d && d.state !== "destroyed") { d.state = "destroyed"; bump(); return "door"; }
   if (t === PART) { L.grid[y][x] = FLOOR; bump(); return "partition"; }
   if (t === WINDOW) { return breakGlass(x, y) ? "window" : null; }
   if (t === WALL && power >= 2 && !L.def.reinforced) { L.grid[y][x] = FLOOR; bump(); return "wall"; }
   return null;
+}
+/** Hit points of cover (Tactical overhaul T4.7): a desk or drum takes 3 rounds, a pillar or crate 6. */
+export const COVER_HP: Record<number, number> = { [HALF]: 3, [FULL]: 6 };
+/** Rounds that strike cover wear it down: a crate shot to pieces becomes half cover, half cover becomes rubble.
+ *  Returns what it became ("half", "gone") when it changes, else null. */
+export function damageCover(x: number, y: number, n = 1): "half" | "gone" | null {
+  const t = tileAt(x, y), i = y * L.W + x;
+  if (!(t in COVER_HP)) return null;
+  const hp = (L.coverHp.get(i) ?? COVER_HP[t]) - n;
+  if (hp > 0) { L.coverHp.set(i, hp); return null; }
+  L.coverHp.delete(i);
+  if (t === FULL) { L.grid[y][x] = HALF; bump(); return "half"; }
+  L.grid[y][x] = FLOOR; bump(); return "gone";
 }
 export const inContainer = (x: number, y: number) => tileAt(x, y) === CONT;
 export const nearContainer = (x: number, y: number) =>

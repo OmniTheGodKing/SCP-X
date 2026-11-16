@@ -77,7 +77,7 @@ export function perceive(o: Unit, x: number, y: number, target?: Unit, from?: [n
     const adj = Math.max(Math.abs(ox - x), Math.abs(oy - y)) <= 1 && !!bestView(ox, oy, x, y, 1.5);
     return adj ? { level: IDENTIFIED, detect: 1.5, identify: 1.5, dist: 1, light: 1, why: ["eyes down: only right beside them"] } : none("eyes down");
   }
-  const v = bestView(ox, oy, x, y, SIGHT_MAX);
+  const v = bestView(ox, oy, x, y, SIGHT_MAX, peeks(target));
   if (!v) return none("no line of sight");
   const dist = Math.hypot(v.x - x, v.y - y);
   // light: what's on the target's tile, or what the observer is lit by if the target is between them and a light
@@ -108,6 +108,8 @@ export function perceive(o: Unit, x: number, y: number, target?: Unit, from?: [n
   const level: Level = dist <= POINT_BLANK || dist <= identify ? IDENTIFIED : dist <= detect ? DETECTED : UNSEEN;
   return { level, detect, identify, dist, light, why };
 }
+/** People by cover lean out to watch, and show themselves doing it (XCOM); anomalies, objects and the downed don't. */
+export const peeks = (t?: Unit) => !!t && t.alive && !t.downed && !t.object && t.side !== "anomaly";
 /** Does tile (hx, hy) lie on the straight line between two tiles' centres (within half a tile)? */
 function onLine(ax: number, ay: number, bx: number, by: number, hx: number, hy: number) {
   const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;

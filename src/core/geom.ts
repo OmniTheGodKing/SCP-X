@@ -144,24 +144,29 @@ function ensureCache() {
   const n = L.W * L.H;
   expCache = new Int8Array(n * n * 10).fill(-1);
   stepCache.clear();
+  peekCache.clear();
 }
 /**
  * Share of a figure on tile (tx, ty) that someone on tile (ax, ay) can see (mask SIGHT) or hit (mask FIRE), looking
  * from the centre of their tile or, with `lean` 1 to 4 (east, west, south, north), leaning out that way by STEP_OUT.
  * Cached per map version unless there is smoke.
  */
-export function exposure(ax: number, ay: number, tx: number, ty: number, mask = SIGHT, lean = 0): number {
+export function exposure(ax: number, ay: number, tx: number, ty: number, mask = SIGHT, lean = 0, tlean = 0): number {
   if (ax === tx && ay === ty) return 1;
   ensureCache();
   const n = L.W * L.H, k = (((ay * L.W + ax) * n + ty * L.W + tx) * 2 + (mask === FIRE ? 1 : 0)) * 5 + lean;
   const useCache = !(mask & SIGHT) || !smoke.size;
-  if (useCache && expCache[k] >= 0) return expCache[k] / BODY.length;
+  // a target leaning out (peeking past its own cover) is rarer: those go in a small map
+  const mk = tlean ? `${k}|${tlean}` : "";
+  if (useCache) { const c = tlean ? peekCache.get(mk) : expCache[k]; if (c !== undefined && c >= 0) return c / BODY.length; }
   const [lx, ly] = LEANS[lean], eyeX = ax + 0.5 + lx * STEP_OUT, eyeY = ay + 0.5 + ly * STEP_OUT;
+  const [bx, by] = LEANS[tlean], offX = bx * STEP_OUT, offY = by * STEP_OUT;
   let clear = 0;
-  for (const [ox, oy] of BODY) if (trace(eyeX, eyeY, tx + ox, ty + oy, mask)) clear++;
-  if (useCache) expCache[k] = clear;
+  for (const [ox, oy] of BODY) if (trace(eyeX, eyeY, tx + ox + offX, ty + oy + offY, mask)) clear++;
+  if (useCache) { if (tlean) peekCache.set(mk, clear); else expCache[k] = clear; }
   return clear / BODY.length;
 }
+const peekCache = new Map<string, number>();
 /** How far someone leans out from the centre of their tile when they step out past cover, in tiles: their head ends
  *  up a quarter of a tile past the edge of their own tile, enough to see round the corner but not as freely as
  *  standing in the open beside it. */
@@ -197,16 +202,24 @@ export function eyePoints(x: number, y: number, tx = x, ty = y, standOn: (x: num
 }
 
 export interface View { f: number; x: number; y: number; }
-/** The best view someone at (x, y) has of tile (tx, ty): from their own tile or a step-out, within range. */
-export function bestView(x: number, y: number, tx: number, ty: number, range: number, mask = SIGHT, peek = true): View | null {
+/**
+ * The best view someone at (x, y) has of tile (tx, ty): from their own tile or a step-out, within range. With
+ * `targetPeeks`, whoever is on (tx, ty) is a person standing by cover and watching: as in XCOM, they show themselves
+ * leaning out past its ends too, so a soldier behind a crate can be seen (and shot, at the crate's cover) from in front.
+ */
+export function bestView(x: number, y: number, tx: number, ty: number, range: number, mask = SIGHT, peek = true, targetPeeks = false): View | null {
   let best: View | null = null;
+  const spots = targetPeeks ? eyePoints(tx, ty, x, y) : [[tx, ty] as [number, number]];
   for (const [ex, ey] of peek ? eyePoints(x, y, tx, ty) : [[x, y] as [number, number]]) {
     if ((ex - tx) ** 2 + (ey - ty) ** 2 > range * range) continue;
     if (ex === tx && ey === ty) return { f: 1, x: ex, y: ey };
     // a step-out is a lean from their own tile toward it
     const lean = leanOf(ex - x, ey - y);
-    const f = mask === FIRE ? Math.min(exposure(x, y, tx, ty, SIGHT, lean), exposure(x, y, tx, ty, FIRE, lean)) : exposure(x, y, tx, ty, SIGHT, lean);
-    if (f >= VIS_MIN && (!best || f > best.f || (f === best.f && ex === x && ey === y))) best = { f, x: ex, y: ey };
+    for (const [sx, sy] of spots) {
+      const tl = leanOf(sx - tx, sy - ty);
+      const f = mask === FIRE ? Math.min(exposure(x, y, tx, ty, SIGHT, lean, tl), exposure(x, y, tx, ty, FIRE, lean, tl)) : exposure(x, y, tx, ty, SIGHT, lean, tl);
+      if (f >= VIS_MIN && (!best || f > best.f || (f === best.f && ex === x && ey === y))) best = { f, x: ex, y: ey };
+    }
   }
   return best;
 }

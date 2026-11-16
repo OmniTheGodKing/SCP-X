@@ -21,7 +21,7 @@ export const PERKS: Record<PerkId, Perk> = {
   rapid_reaction: { name: "Rapid reaction", desc: "Overwatch can fire twice." },
   run_and_gun:    { name: "Run and gun", desc: "Once per mission, a free extra action this turn." },
   grenadier:      { name: "Grenadier", desc: "Throws 3 tiles further and carries one extra of each grenade." },
-  suppression:    { name: "Suppression", desc: "Pins a visible enemy: −30 aim on its next shots. Ends the turn." },
+  suppression:    { name: "Suppression", desc: "Pins a visible enemy through its next turn: −30 aim and no overwatch, and if it moves you get a shot at it. Uses 2 rounds and ends the turn; moving lets it go." },
   plated:         { name: "Plated", desc: "+1 armor point." },
   shotgun_drills: { name: "Shotgun drills", desc: "+20 aim and +2 damage within 3 tiles." },
   shredder:       { name: "Shredder", desc: "Hits strip 1 armor point from the target." },

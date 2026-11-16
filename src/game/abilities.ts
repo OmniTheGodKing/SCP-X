@@ -1,4 +1,5 @@
 // Class abilities used during a mission. Each has a target rule, a cost and an effect.
+import { emitNoise } from "./noise";
 import { payAbility } from "./actions";
 import { coverSides } from "../core/geom";
 import { DIRS, DRUM, FULL, HALF, L, STEEL, WALL, cheb, passable, tileAt } from "../core/grid";
@@ -110,6 +111,7 @@ export function abilityCheck(u: Unit | null, p: AbilityId): string | null {
   const d = def(p);
   if (d.uses && usesLeft(u, p, d.uses(u)) < 1) return "No uses left this mission.";
   if (u.ap < cost(u, p)) return "No actions left this turn.";
+  if (p === "suppression" && u.gun && u.gun.ammo < 2) return "Suppression needs 2 rounds in the magazine.";
   if (!abilityTargets(u, p).length) return d.target === "enemy" ? "No enemy in sight." : d.target === "downed" ? "Nobody downed next to them." : d.target === "panicked" ? "Nobody panicking next to them." : d.target === "ally" ? "Nobody next to them needs it." : null;
   return null;
 }
@@ -169,8 +171,12 @@ export function useAbility(u: Unit, p: AbilityId, t: Unit) {
       break;
     case "suppression": {
       const hit = [t, ...(hasPerk(u, "wall_of_fire") ? alive("raider").filter(r => r !== t && cheb(r.x, r.y, t.x, t.y) <= 2) : [])];
-      for (const r of hit) r.suppressedUntil = S.turn;
-      log(`${full(u)} lays down suppressing fire: ${hit.length} Insurgent${hit.length > 1 ? "s" : ""} pinned (−30 aim on their next shots).`, "good");
+      // Tactical overhaul T4.6: XCOM 2 suppression. Pinned through their next turn: −30 aim, no overwatch, and if
+      // they move, the suppressor gets a shot at them. It ends if the suppressor moves. Costs 2 rounds.
+      if (u.gun) u.gun.ammo = Math.max(0, u.gun.ammo - 2);
+      for (const r of hit) { r.suppressedUntil = S.turn + 1; r.suppressedBy = u.id; r.overwatch = false; }
+      emitNoise(u.x, u.y, "gunfire", u);
+      log(`${full(u)} lays down suppressing fire: ${hit.length} Insurgent${hit.length > 1 ? "s" : ""} pinned (−30 aim, no overwatch; moving draws ${u.call || u.name}'s fire).`, "good");
       break;
     }
     case "mark_target":
