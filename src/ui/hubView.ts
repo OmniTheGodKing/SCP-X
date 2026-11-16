@@ -1,4 +1,5 @@
 // Site-19 Command: incidents and time, the base and its containment, and Epsilon-11's roster.
+import { dispatch, type Command } from "../campaign/commands";
 import { HUB_TIPS } from "./tutorial";
 import { SLOTS as SAVE_SLOTS, activeSlot, clearSlot, slotSummary, type Slot } from "../campaign/save";
 import { DIFFICULTIES, type Difficulty, type NewCampaignOptions } from "../campaign/difficulty";
@@ -1476,11 +1477,13 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       render();
     });
     const tryDo = (f: () => string | null | void) => { const why = f(); flashMsg = why || ""; act.save(); render(); };
-    on("hireResBtn", () => change(() => hireResearcher(c)));
-    root.querySelectorAll<HTMLElement>("[data-assign]").forEach(b => b.onclick = () => tryDo(() => assign(c, b.dataset.assign!, 1)));
-    root.querySelectorAll<HTMLElement>("[data-unassign]").forEach(b => b.onclick = () => tryDo(() => assign(c, b.dataset.unassign!, -1)));
+    // Strategic overhaul B: management actions go through the validated command layer
+    const run = (cmd: Command) => { const r = dispatch(c, cmd); flashMsg = r.ok ? "" : r.reason ?? ""; act.save(); render(); };
+    on("hireResBtn", () => run({ type: "hireResearcher" }));
+    root.querySelectorAll<HTMLElement>("[data-assign]").forEach(b => b.onclick = () => run({ type: "assignResearch", project: b.dataset.assign!, delta: 1 }));
+    root.querySelectorAll<HTMLElement>("[data-unassign]").forEach(b => b.onclick = () => run({ type: "assignResearch", project: b.dataset.unassign!, delta: -1 }));
     root.querySelectorAll<HTMLElement>("[data-test]").forEach(b => b.onclick = () => change(() => startTest(c, scp173(), b.dataset.test as TestId, chosenWatchers())));
-    root.querySelectorAll<HTMLElement>("[data-order]").forEach(b => b.onclick = () => change(() => order(c, b.dataset.order as ItemId)));
+    root.querySelectorAll<HTMLElement>("[data-order]").forEach(b => b.onclick = () => run({ type: "order", item: b.dataset.order as ItemId }));
     root.querySelectorAll<HTMLElement>("[data-sellstore]").forEach(b => b.onclick = () => { const [k, id] = b.dataset.sellstore!.split(":"); change(() => sellStore(c, k as StoreKind, id)); });
     root.querySelectorAll<HTMLElement>("[data-contract]").forEach(b => b.onclick = () => { const id = b.dataset.contract!;
       const pick = [...root.querySelectorAll<HTMLInputElement | HTMLSelectElement>(`[data-cpick="${id}"]`)].filter(e => e instanceof HTMLSelectElement || (e as HTMLInputElement).checked).map(e => e.value);
@@ -1519,8 +1522,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     const opById = (id?: string) => c.roster.find(x => x.id === id);
     root.querySelectorAll<HTMLElement>("[data-therapy]").forEach(b => b.onclick = () => { const o = opById(b.dataset.op); if (o) change(() => startTherapy(c, o, b.dataset.therapy as TraitId)); });
     root.querySelectorAll<HTMLElement>("[data-retrain]").forEach(b => b.onclick = () => { const o = opById(b.dataset.retrain); if (o) change(() => startRetrain(c, o)); });
-    root.querySelectorAll<HTMLElement>("[data-hireguard]").forEach(b => b.onclick = () => change(() => hireGuard(c, b.dataset.hireguard!)));
-    root.querySelectorAll<HTMLElement>("[data-post]").forEach(b => b.onclick = () => { const g = c.guards.find(x => x.id === b.dataset.post); if (g) change(() => postGuard(c, g, b.dataset.station!)); });
+    root.querySelectorAll<HTMLElement>("[data-hireguard]").forEach(b => b.onclick = () => run({ type: "hireGuard", stationId: b.dataset.hireguard! }));
+    root.querySelectorAll<HTMLElement>("[data-post]").forEach(b => b.onclick = () => { const g = c.guards.find(x => x.id === b.dataset.post); if (g) run({ type: "postGuard", guardId: g.id, stationId: b.dataset.station! }); });
     root.querySelectorAll<HTMLElement>("[data-rescat]").forEach(b => b.onclick = () => { resCat = b.dataset.rescat as ResearchCat; render(); });
     root.querySelectorAll<HTMLElement>("[data-eqslot]").forEach(b => b.onclick = () => { eqSlot = eqSlot === b.dataset.eqslot ? null : b.dataset.eqslot!; render(); });
     root.querySelectorAll<HTMLElement>("[data-fitatt]").forEach(b => b.onclick = () => change(() => fitAttachment(c, opNow(), b.dataset.fitatt as AttachmentId | "")));
@@ -1540,16 +1543,16 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       root.querySelectorAll<HTMLElement>("[data-htext]").forEach(li => { const hit = !t || li.dataset.htext!.includes(t); li.hidden = !hit; any ||= hit; });
       root.querySelector<HTMLElement>("#histNone")!.hidden = any;
     }; }
-    root.querySelectorAll<HTMLElement>("[data-repair]").forEach(b => b.onclick = () => { const f = c.base.facilities.find(x => x.id === b.dataset.repair); if (f) change(() => repair(c, f)); });
+    root.querySelectorAll<HTMLElement>("[data-repair]").forEach(b => b.onclick = () => run({ type: "repair", facilityId: b.dataset.repair! }));
     root.querySelectorAll<HTMLElement>("[data-refit]").forEach(b => b.onclick = () => change(() => orderRefit(c, b.dataset.refit!)));
     root.querySelectorAll<HTMLElement>("[data-att]").forEach(b => b.onclick = () => change(() => orderAttachment(c, b.dataset.att as AttachmentId)));
     on("intelBtn", () => { const inc = c.incidents.find(i => i.id === planning); if (inc) change(() => weaken(c, inc)); });
     { const el = $("cleanOrder") as HTMLInputElement | null; if (el) el.onchange = () => change(() => { c.cleaningOrder = el.checked; }); }
     on("dBuyBtn", () => change(() => buyDClass(c)));
-    on("engBtn", () => change(() => hireEngineer(c)));
-    on("digBtn", () => change(() => excavate(c)));
+    on("engBtn", () => run({ type: "hireEngineer" }));
+    on("digBtn", () => run({ type: "excavate" }));
     root.querySelectorAll<HTMLElement>("[data-evac]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.evac), f = c.base.facilities.find(x => x.id === b.dataset.to); if (s && f) change(() => evacuate(c, s, f, chosenWatchers())); });
-    root.querySelectorAll<HTMLElement>("[data-refit]").forEach(b => b.onclick = () => { const f = c.base.facilities.find(x => x.id === b.dataset.refit); if (f) change(() => refitGenerator(c, f)); });
+    root.querySelectorAll<HTMLElement>("[data-refit]").forEach(b => b.onclick = () => run({ type: "refitGenerator", facilityId: b.dataset.refit! }));
     on("eta10Btn", () => change(() => formEta10(c)));
     on("nu7Btn", () => change(() => attachNu7(c)));
     on("agentBtn", () => change(() => hireAgent(c)));
@@ -1570,8 +1573,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     });
     root.querySelectorAll<HTMLElement>("[data-contact]").forEach(b => b.onclick = () => change(() => makeContact(c, b.dataset.contact as RegionId)));
     root.querySelectorAll<HTMLElement>("[data-transfer]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.transfer); if (s) change(() => transferOut(c, s)); });
-    root.querySelectorAll<HTMLElement>("[data-clean]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.clean); if (s) change(() => cleanCell(c, s)); });
-    root.querySelectorAll<HTMLElement>("[data-alert]").forEach(b => b.onclick = () => change(() => { c.alert = b.dataset.alert as Alert; }));
+    root.querySelectorAll<HTMLElement>("[data-clean]").forEach(b => b.onclick = () => run({ type: "cleanCell", scpId: b.dataset.clean! }));
+    root.querySelectorAll<HTMLElement>("[data-alert]").forEach(b => b.onclick = () => run({ type: "setAlert", level: b.dataset.alert as Alert }));
     root.querySelectorAll<HTMLElement>("[data-retire]").forEach(b => b.onclick = () => { const o = c.roster.find(x => x.id === b.dataset.retire); if (o) { opSel = null; change(() => retire(c, o)); } });
     root.querySelectorAll<HTMLElement>("[data-look]").forEach(b => b.onclick = () => {
       const o = c.roster.find(x => x.id === opSel); if (!o) return;
@@ -1596,11 +1599,11 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     root.querySelectorAll<HTMLElement>("[data-guards]").forEach(b => b.onclick = () => { const inc = c.incidents.find(i => i.id === b.dataset.guards); if (inc) change(() => inc.kind === "riot" ? letGuardsHandleRiot(c, inc) : inc.kind === "raid" ? letGuardsHandleRaid(c, inc) : letGuardsHandle(c, inc)); });
     root.querySelectorAll<HTMLElement>("[data-train]").forEach(b => b.onclick = () => change(() => train(c, b.dataset.train!)));
     root.querySelectorAll<HTMLElement>("[data-promote]").forEach(b => b.onclick = () => { const g = c.guards.find(x => x.id === b.dataset.promote); if (g) change(() => promoteGuard(c, g)); });
-    on("recBtn", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) change(() => addRecreation(c, f)); });
+    on("recBtn", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) run({ type: "addRecreation", facilityId: f.id }); });
     { const el = root.querySelector<HTMLSelectElement>("[data-dpolicy]"); if (el) el.onchange = () => change(() => { c.dPolicy = el.value as Campaign["dPolicy"]; }); }
-    on("upgradeBtn", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) change(() => upgradeFacility(c, f)); });
-    on("demolishBtn", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) change(() => demolish(c, f)); });
-    on("repairBtn", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) change(() => repair(c, f)); });
+    on("upgradeBtn", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) run({ type: "upgrade", facilityId: f.id }); });
+    on("demolishBtn", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) run({ type: "demolish", facilityId: f.id }); });
+    on("repairBtn", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) run({ type: "repair", facilityId: f.id }); });
     on("moveBtn", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) change(() => moveScp(c, scp173(), f, chosenWatchers())); });
     root.querySelectorAll<HTMLElement>("[data-slot]").forEach(b => b.onclick = () => {
       const [level, slot] = b.dataset.slot!.split(",").map(Number);
@@ -1610,7 +1613,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     root.querySelectorAll<HTMLElement>("[data-build]").forEach(b => b.onclick = () => {
       if (!sel) return;
       const { level, slot } = sel;
-      change(() => build(c, b.dataset.build as FacilityType, level, slot));
+      run({ type: "build", facility: b.dataset.build as FacilityType, level, slot });
     });
     root.querySelectorAll<HTMLInputElement>("[data-watch]").forEach(b => b.onchange = () => {
       const id = b.dataset.watch!;

@@ -180,7 +180,9 @@ export interface Incident {
 
 export interface Prisoner { name: string; days: number; intel: number; }
 
-export interface SiteLogEntry { day: number; text: string; kind: string; }
+/** One entry in the site log. Strategic overhaul H: each carries a severity (routine, important, critical) and, for
+ *  critical ones, the screen to go to. */
+export interface SiteLogEntry { day: number; text: string; kind: string; sev?: "routine" | "important" | "critical"; tab?: HubTab }
 
 /** Which armor (an armor item id, or "" for none) and items an operative takes. */
 export interface Loadout { opId: string; armor: ItemId | ""; items: ItemId[]; }
@@ -390,7 +392,9 @@ const rand = (a: number, b: number) => a + Math.floor(rnd() * (b - a + 1));
 export type HubTab = "command" | "world" | "site" | "research" | "personnel";
 /** Log an entry. Passing a tab also pauses the running clock and shows it as a notice. */
 export function log(c: Campaign, text: string, kind = "", pause?: HubTab) {
-  c.log.unshift({ day: c.day, text, kind });
+  // critical entries stop the clock and pop up; results and orders are important; the rest is routine
+  const sev = pause ? "critical" : kind === "bad" || kind === "good" || kind === "key" ? "important" : "routine";
+  c.log.unshift({ day: c.day, text, kind, sev, ...(pause ? { tab: pause } : {}) });
   if (pause) (c.notices ??= []).push({ text, tab: pause, kind });
   if (c.log.length > 100) c.log.pop();
 }
