@@ -94,7 +94,7 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
 | S-D3 | Economy transparency and Council tradeoffs | S-B1 | Ledger and upcoming obligations visible; tested | [x] |
 | S-D4 | Goal-driven Chaos Insurgency and GOC | none | Plans chosen from Site-19's weaknesses and their own resources; tested | [x] |
 | S-E1 | Screen redesigns: Command, World, Research, Engineering, Personnel, History, Credits | S-C2 | Browser workflow tests | [ ] |
-| S-E2 | Onboarding with Krista Carter | S-E1 | Persisted steps; skippable; tested | [ ] |
+| S-E2 | Onboarding with Krista Carter | S-E1 | Persisted steps; skippable; tested | [x] |
 | S-E3 | Strategic inspector (developer tools) | S-L1 | Debug panel shows state, risks, faction plans, invariants | [ ] |
 | S-E4 | End-to-end campaign test | all | The 17-step sequence in the brief | [ ] |
 | S-K | Balance and pacing from simulations | S-A4 | Documented changes and re-run results | [ ] |
@@ -194,6 +194,15 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
     first, and marks a short-handed job. This is the engineering view: it lives on Site-19 rather than a new tab.
   - Fix: the D3 forecast chart used a `.proj` class that collided with the research project rows and scrambled
     them; renamed `.balbars`. `strategic.e2e.cjs` now checks the project rows' layout.
+- E2 done:
+  - The hub tutorial's one-off tips are replaced by seven onboarding steps from Chief of Operations Krista Carter
+    (`ONBOARDING` in `src/ui/tutorial.ts`), with a portrait drawn by the game's own portrait code.
+  - Steps with a goal close themselves when it is met: let three days pass, finish an incident, start a building,
+    assign a researcher. The others close with "Got it".
+  - On another tab, a compact card points to where the next step is. Progress lives in `c.tutorial.seen`, so it is
+    saved. Steps can be skipped one at a time, or all of them at once.
+  - The deployment tip on the planning screen and the in-mission steps are unchanged.
+  - `tests/onboarding.e2e.cjs`.
 
 ## Known issues
 

@@ -156,3 +156,12 @@ body:has(.hub) { background: var(--s-bg); }
 
 /* ---- Site-19: who is on which job ---- */
 .crew .r .who { font-size: 12px; color: var(--s-dim); }
+
+/* ---- Strategic overhaul E2: the Chief of Operations' briefings ---- */
+.carter { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 14px; align-items: start; padding: 12px 14px; background: var(--s-surface); border: 1px solid var(--s-line-2); border-left: 3px solid var(--s-info); }
+.carter svg { border: 1px solid var(--s-line-2); background: var(--s-surface-2); }
+.carter h3 { margin: 2px 0 4px; font-size: 16px; }
+.carter p { margin: 4px 0; max-width: 80ch; }
+.carter .goal { font-family: var(--font-mono); font-size: 12px; color: var(--s-info); }
+.carter.compact { grid-template-columns: 32px minmax(0, 1fr) auto auto; align-items: center; padding: 6px 10px; }
+.carter.compact span { font-size: 13px; }

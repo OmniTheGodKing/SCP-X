@@ -5,7 +5,7 @@ import { directorsBriefing } from "../campaign/briefing";
 import { obligations, projection } from "../campaign/forecast";
 import { crews } from "../campaign/crews";
 import { dispatch, type Command } from "../campaign/commands";
-import { HUB_TIPS } from "./tutorial";
+import { CARTER, HUB_TIPS, ONBOARDING, advanceOnboarding, currentStep } from "./tutorial";
 import { SLOTS as SAVE_SLOTS, activeSlot, clearSlot, slotSummary, type Slot } from "../campaign/save";
 import { DIFFICULTIES, type Difficulty, type NewCampaignOptions } from "../campaign/difficulty";
 import { BOND_NAMES, FATIGUE, bondsOf, injured, tiredness } from "../campaign/condition";
@@ -234,6 +234,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   if (!clickSounds.has(root)) { clickSounds.add(root); root.addEventListener("click", e => { const t = (e.target as HTMLElement).closest?.("button,summary,label.act"); if (!t) return; if (t.matches(".tab")) ui.tab(); else if ((t as HTMLButtonElement).disabled) ui.deny(); else ui.click(); }); }
 
   function render() {
+    advanceOnboarding(c);   // Strategic overhaul E2: steps whose goal is met close themselves
     if (planning && !c.incidents.some(i => i.id === planning)) planning = null;
     { const pl = c.incidents.find(i => i.id === planning); for (const id of [...chosen]) if (!(pl ? readyFor(pl) : ready()).some(o => o.id === id)) chosen.delete(id); }
     for (const id of [...watchers]) if (!watchPool().some(o => o.id === id)) watchers.delete(id);
@@ -324,7 +325,19 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     const t = c.tutorial;
     if (!t?.on) return "";
     const where = tab === "world" && planning ? "plan" : tab;
-    const tip = HUB_TIPS.find(x => x.tab === where && !t.seen.includes(x.id));
+    // Strategic overhaul E2: the Chief of Operations' onboarding, one step at a time; on another tab, a pointer to it
+    const step = where === "plan" ? null : currentStep(c);
+    if (step) {
+      const tabName: Record<string, string> = { command: "Command", world: "World", site: "Site-19", research: "Research", personnel: "Personnel" };
+      const n = ONBOARDING.indexOf(step) + 1;
+      if (step.tab !== tab) return `<div class="carter compact" role="note">${portraitSvg(rollLook("krista-carter", "f"), undefined, 32)}<span><b>${esc(CARTER.name)}</b>: next, ${esc(step.title.toLowerCase())} (${tabName[step.tab] ?? step.tab}).</span>
+        <button class="act" type="button" data-goto="${step.tab}">Go</button><button class="act" type="button" id="coachOff">Skip the briefings</button></div>`;
+      return `<div class="carter" role="note">${portraitSvg(rollLook("krista-carter", "f"), undefined, 64)}
+        <div><div class="label">${esc(CARTER.name)} · ${esc(CARTER.title)} · ${n} of ${ONBOARDING.length}</div><h3>${esc(step.title)}</h3><p>${esc(step.text)}</p>
+        ${step.goal ? `<p class="goal">Goal: ${esc(step.goal)}</p>` : ""}
+        <div class="row"><button class="act ${step.goal ? "" : "primary"}" type="button" data-coach="${step.id}">${step.goal ? "Skip this step" : "Got it"}</button><button class="act" type="button" id="coachOff">Skip the briefings</button></div></div></div>`;
+    }
+    const tip = HUB_TIPS.find(x => x.tab === where && x.tab === "plan" && !t.seen.includes(x.id));
     if (!tip) return "";
     return `<div class="card coach" role="note"><div class="label">Tutorial · ${esc(tip.title)}</div><p>${esc(tip.text)}</p>
       <div class="row"><button class="act primary" type="button" data-coach="${tip.id}">Got it</button><button class="act" type="button" id="coachOff">Turn the tutorial off</button></div></div>`;
