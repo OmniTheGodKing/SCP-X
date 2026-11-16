@@ -1,7 +1,7 @@
 // Building a mission from what Site-19 sends, and turning its outcome into a result.
 import { beginMission, freshSeed, rnd } from "../core/rng";
 import { assignRoles } from "./ciTactics";
-import { FLOOR, L, Level, bfs, cheb, floorTiles, nearContainer, tileAt, useLevel, type Pt } from "../core/grid";
+import { FLOOR, WALL, L, Level, bfs, cheb, floorTiles, nearContainer, tileAt, useLevel, type Pt } from "../core/grid";
 import { MAPS } from "../data/maps";
 import { varyMap } from "../data/plots";
 import { generateTown } from "../data/towngen";
@@ -106,14 +106,16 @@ export function createMission(setup: MissionSetup) {
   // the enemy starts well away from where the team comes in, out of its sight: the farther rooms first, and never one the
   // team can see into from its starting tiles (playtest change after 4G)
   setSmoke([]);
-  const ciRooms = farRooms(def.insurgentRooms.filter(r => r !== scpRoom), setup.kind === "escort" && truck.length ? truck : def.squadSpawns);
+  const ciFrom = setup.kind === "escort" && truck.length ? truck : def.squadSpawns;
+  const ciRooms = farRooms(def.insurgentRooms.filter(r => r !== scpRoom), ciFrom);
   const ciRoom = pick(ciRooms);
   const arsenal = insurgentGuns(setup.year);
   for (let i = 0; i < setup.insurgents; i++) {
     // on a strike the cell is spread through the building; elsewhere a team arrives together
     const spread = setup.kind === "strike" || setup.kind === "escort" || setup.kind === "retaliation" || setup.kind === "raid" || setup.kind === "rescue";
     const room = spread ? Math.floor(i / 2) % ciRooms.length : 0;   // fire teams of two
-    const [x, y] = claim(floorTiles(spread ? ciRooms[room] : ciRoom));
+    // out of the team's sight where the room allows it (an open field may not)
+    const [x, y] = claim(hiddenTiles(spread ? ciRooms[room] : ciRoom, ciFrom));
     const g = pick(arsenal);
     units.push(mk({ id: "r" + (i + 1), side: "raider", name: "Insurgent", x, y, pod: room, hp: 4, maxHp: 4, aim: 60, san: PROFILE.raider.maxSan, armor: setup.insurgentArmor,
       gun: { name: g.name, type: g.type, dmg: g.dmg, mag: g.mag, ammo: g.mag, aim: 0 } }));
@@ -247,15 +249,33 @@ function newAnomaly(id: string, x: number, y: number, room: [number, number, num
 
 /** Rooms ordered farthest first from where the team starts (by walking distance), leaving out any room within 10 steps
  *  or 8 tiles in a straight line of it, or that it can see into from there; if none qualify, the farthest one alone. */
+/** Every tile the team could start on: its entry points and the tiles around them. */
+function deployEyes(from: Pt[]): Pt[] {
+  const eyes: Pt[] = [];
+  for (const [fx, fy] of from) for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+    const x = fx + dx, y = fy + dy;
+    if (x >= 0 && y >= 0 && x < L.W && y < L.H && tileAt(x, y) !== WALL && !eyes.some(e => e[0] === x && e[1] === y)) eyes.push([x, y]);
+  }
+  return eyes;
+}
+/** A room's floor tiles the team can't see from where it starts (all of them if every tile is in view). */
+function hiddenTiles(room: [number, number, number, number], from: Pt[]): Pt[] {
+  const eyes = deployEyes(from), all = floorTiles(room);
+  const hid = all.filter(([x, y]) => !eyes.some(([sx, sy]) => sightFrom(sx, sy, x, y)));
+  return hid.length ? hid : all;
+}
 function farRooms(rooms: [number, number, number, number][], from: Pt[]) {
   if (!rooms.length) return rooms;
   const dist = bfs(from.map(p => [p[0], p[1]] as Pt), 999, () => false).dist;
   const near = (r: [number, number, number, number]) => Math.min(...floorTiles(r).map(([x, y]) => { const d = dist[y * L.W + x]; return d < 0 ? 999 : d; }));
-  const seenFrom = (r: [number, number, number, number]) => floorTiles(r).some(([x, y]) => from.some(([sx, sy]) => sightFrom(sx, sy, x, y)));
+  const eyes = deployEyes(from);
+  const seenFrom = (r: [number, number, number, number]) => floorTiles(r).some(([x, y]) => eyes.some(([sx, sy]) => sightFrom(sx, sy, x, y)));
   const straight = (r: [number, number, number, number]) => Math.min(...floorTiles(r).map(([x, y]) => Math.min(...from.map(([sx, sy]) => cheb(x, y, sx, sy)))));
   const ranked = rooms.map(r => ({ r, d: near(r), c: straight(r), s: seenFrom(r) })).sort((a, b) => b.d - a.d);
   const ok = ranked.filter(x => x.d >= 10 && x.c >= 8 && !x.s);
-  return (ok.length ? ok : ranked.slice(0, 1)).map(x => x.r);
+  // failing that, rooms out of sight even if nearer; only if every room can be seen, the farthest
+  const hidden = ranked.filter(x => !x.s && x.c >= 6);
+  return (ok.length ? ok : hidden.length ? hidden : ranked.slice(0, 1)).map(x => x.r);
 }
 
 /** SCP-610: a core of flesh in one of the rooms, flesh spread around it, and its instances on the flesh. */
@@ -308,14 +328,14 @@ export const BRIEFINGS: Record<MissionKind, (s: MissionSetup) => string> = {
   rescue: s => `${s.survivorName ?? "A lost team"}'s survivors are hiding somewhere out here, and the Insurgency is still around. Reach them and they'll follow you; bring them out through an exit.`,
   emergency: s => s.quiet ? `Nobody at ${s.site ?? "the site"} has answered for two days, and the power is out. Find out what happened, restore power at the panel in containment control in the basement, and bring out whatever survivors and records you find. Whatever is in there, nobody has seen it yet.` : `${s.site ?? "The site"} is dark: the power is out and ${s.hazard === "scp" ? `${s.scp ? `SCP-${s.scp}` : "an anomaly"} is loose` : s.hazard === "insurgents" ? "an Insurgency team is inside" : "escaped instances are loose in the wing"}. ${s.researchers ?? 0} researchers are trapped and ${s.records ?? 0} files of records are at risk. Restore power at the panel, get the researchers out, recover the records${s.hazard === "scp" ? ", and seal the anomaly in the container if you can" : ""}. Exfiltrate when you've done what you can.`,
   riot: s => `The D-Class block is rioting: ${s.rioters} prisoners are out of their cells. They have nothing but their fists, but there are a lot of them. Restrain them (next to them, 1 action) or put them down; every one killed is a D-Class you won't have. Only Site Security answers this.`,
-  outbreak: s => `SCP-610 has taken hold here. Flesh spreads from a core somewhere in the area, more every turn. Anyone who ends a turn on it without a sealed containment suit is infected, and turns into one of its instances 5 turns later: nothing saves them, not even leaving. Its instances infect with every blow. Only fire kills the core: incendiaries, a flamethrower, or fuel drums. Burn it out.${s.night ? " It's dark: nobody sees farther than 9 tiles." : ""}`,
+  outbreak: s => `SCP-610 has taken hold here. Flesh spreads from a core somewhere in the area, more every turn. Anyone who ends a turn on it without a sealed containment suit is infected, and turns into one of its instances 5 turns later: nothing saves them, not even leaving. Its instances infect with every blow. Only fire kills the core: incendiaries, a flamethrower, or fuel drums. Burn it out.${s.night ? " It's dark: away from lights you make out only shapes, and who they are only up close. Flares, fires and lit rooms help." : ""}`,
   breach: s => OBJECT_SCPS.includes(s.scp ?? "") ? `Insurgents are inside the wing, after SCP-${s.scp}. It's an object: it can't get out by itself and doesn't need containing, only keeping. Two of them beside it for a whole turn pick it up and carry it toward the way out; shoot either carrier and they drop it. Eliminate or capture every Insurgent before they get it out.${s.squad.length ? ` Epsilon-11 arrives on turn ${s.mtfTurn}.` : " Epsilon-11 isn't coming: nobody is available."}`
     : isNewScp(s.scp) ? `${NEW_BRIEF[s.scp!]}${s.squad.length ? ` Epsilon-11 arrives on turn ${s.mtfTurn} with the capture kit.` : " Epsilon-11 isn't coming: nobody is available."}` : s.scp === "106" ? `SCP-106 is out of its cell. It walks through walls, and anyone it reaches is dragged into its pocket dimension. Shooting it only sends it under the floor for a turn. The only way to recontain it is bait: put a D-Class (or a secured Insurgent) in the transport container in the staging room. It will go straight for them and stay a turn to feed. Seal it in during that turn.${s.squad.length ? ` Epsilon-11 arrives on turn ${s.mtfTurn}.` : ""}` : s.scp === "049" ? `SCP-049 is out of its cell in the north rooms and looking for patients. Its touch kills, and it will raise anyone who dies as SCP-049-2. Gunfire only staggers it. Talk it down (Calm, within ${3} tiles) and lead it into the transport container in the staging room, then seal it.${s.squad.length ? ` Epsilon-11 arrives on turn ${s.mtfTurn}.` : ""}` : `SCP-173 is out of its cell in the north rooms. Site Security is first on the scene${s.lateGuards?.length ? `, with ${s.lateGuards.length} more guard${s.lateGuards.length > 1 ? "s" : ""} arriving next turn` : ""}. ${s.squad.length ? `Epsilon-11 arrives on turn ${s.mtfTurn}.` : "Epsilon-11 isn't coming: nobody is available."} The transport container is open at the dock in the staging room: get it inside and seal it. If it reaches the surface hatch in the east lab, it's gone; the panel at the east end of the corridor locks the hatch down.${s.dclass.length ? ` ${s.dclass.join(" and ")} ${s.dclass.length > 1 ? "are" : "is"} assigned to you.` : ""}`,
   manhunt: s => isNewScp(s.scp) ? NEW_BRIEF[s.scp!] : s.scp === "106" ? "An old man who walks through walls is loose among the locals, and people are disappearing into the floor. That is SCP-106. Shooting only drives it under for a turn. Put a D-Class in the truck's container as bait; it goes straight for them and stays a turn to feed. Seal it in then." : s.scp === "049" ? "A man in a plague doctor's mask is walking among the locals, and some of them have stopped breathing. That is SCP-049. Its touch kills, and the dead get back up. Talk it down (Calm) and lead it into the truck's open container, then seal it. Keep people from dying near it." : "SCP-173 is somewhere nearby, and the locals are out. Every civilian it kills makes the cover story harder. A truck with an open container is waiting: get it inside and seal it.",
   coverup: s => `${s.witnesses} witness${s.witnesses === 1 ? "" : "es"} saw something they shouldn't have. Reach each one and give them amnestics (Dose, 1 action, adjacent) before they get away. Anyone who spots the team will run for the edge of the map. Dose at least half for the job to count.`,
-  raid: s => `The Chaos Insurgency is coming through the wire: ${s.insurgents} of them. They want the lift down into Site-19. One who stays at the lift doors for a turn forces them open. Site Security holds the compound${!s.squad.length ? ", and Epsilon-11 isn't coming" : s.liftCount === undefined || s.liftCount >= s.squad.length ? `; Epsilon-11 comes up the lift on turn ${s.mtfTurn}` : s.liftCount > 0 ? `; ${s.liftCount} of Epsilon-11 ${s.liftCount > 1 ? "are" : "is"} on station and come${s.liftCount > 1 ? "" : "s"} up the lift on turn ${s.mtfTurn}, and the rest are off duty and drive in through the motor pool gate on turn ${s.roadTurn}` : `; Epsilon-11 is off duty in town and drives in through the motor pool gate on turn ${s.roadTurn}${(s.roadTurn ?? 99) > RAID_TURNS ? ", too late unless the fight drags on" : ""}`}. Stop them, or hold until turn ${RAID_TURNS} when they pull back.${s.night ? " It's dark: nobody sees farther than 9 tiles." : ""}`,
-  escort: s => s.convoy ? `The transfer has to get through this town, and the Insurgency is waiting in the buildings. The truck drives east along the main street, 3 tiles at the end of each enemy turn, and stops while anyone hostile is next to it. Get it out the far end. One of them next to it for a whole turn gets it open.` : `The convoy carrying ${s.scp ? `SCP-${s.scp}` : "the anomaly"} to Site-19 has been ambushed. Insurgents are coming for the truck: one who stays next to it for a turn gets it open. Neutralise them, or hold for 8 turns until the convoy can move.${s.night ? " It's dark: nobody sees farther than 9 tiles." : ""}`,
-  retaliation: s => `The Insurgency is attacking the town to punish the locals and draw you out. They will shoot civilians as well as you; every civilian killed adds exposure. Neutralise them.${s.night ? " It's dark: nobody sees farther than 9 tiles." : ""}`,
+  raid: s => `The Chaos Insurgency is coming through the wire: ${s.insurgents} of them. They want the lift down into Site-19. One who stays at the lift doors for a turn forces them open. Site Security holds the compound${!s.squad.length ? ", and Epsilon-11 isn't coming" : s.liftCount === undefined || s.liftCount >= s.squad.length ? `; Epsilon-11 comes up the lift on turn ${s.mtfTurn}` : s.liftCount > 0 ? `; ${s.liftCount} of Epsilon-11 ${s.liftCount > 1 ? "are" : "is"} on station and come${s.liftCount > 1 ? "" : "s"} up the lift on turn ${s.mtfTurn}, and the rest are off duty and drive in through the motor pool gate on turn ${s.roadTurn}` : `; Epsilon-11 is off duty in town and drives in through the motor pool gate on turn ${s.roadTurn}${(s.roadTurn ?? 99) > RAID_TURNS ? ", too late unless the fight drags on" : ""}`}. Stop them, or hold until turn ${RAID_TURNS} when they pull back.${s.night ? " It's dark: away from lights you make out only shapes, and who they are only up close. Flares, fires and lit rooms help." : ""}`,
+  escort: s => s.convoy ? `The transfer has to get through this town, and the Insurgency is waiting in the buildings. The truck drives east along the main street, 3 tiles at the end of each enemy turn, and stops while anyone hostile is next to it. Get it out the far end. One of them next to it for a whole turn gets it open.` : `The convoy carrying ${s.scp ? `SCP-${s.scp}` : "the anomaly"} to Site-19 has been ambushed. Insurgents are coming for the truck: one who stays next to it for a turn gets it open. Neutralise them, or hold for 8 turns until the convoy can move.${s.night ? " It's dark: away from lights you make out only shapes, and who they are only up close. Flares, fires and lit rooms help." : ""}`,
+  retaliation: s => `The Insurgency is attacking the town to punish the locals and draw you out. They will shoot civilians as well as you; every civilian killed adds exposure. Neutralise them.${s.night ? " It's dark: away from lights you make out only shapes, and who they are only up close. Flares, fires and lit rooms help." : ""}`,
   strike: () => "An Insurgency cell is holed up here. Neutralise every Insurgent. Wounded ones can be secured as prisoners.",
 };
 

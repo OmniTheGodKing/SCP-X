@@ -1,4 +1,5 @@
 // The running mission and the helpers everything else uses to read it.
+import { DETECTED, IDENTIFIED, perceive } from "./perception";
 import { rnd } from "../core/rng";
 import { noteContacts } from "./noise";
 import { L, R } from "../core/grid";
@@ -29,8 +30,11 @@ export const occupied = (x: number, y: number, except?: Unit) =>
   S.units.some(u => u !== except && u.alive && !u.saved && !u.carriedBy && u.x === x && u.y === y);
 /** At night anything inside a flare's light can be seen from as far as in daylight. */
 export const lit = (x: number, y: number) => S.flares.some(f => f.until >= S.turn && Math.max(Math.abs(f.x - x), Math.abs(f.y - y)) <= 2);
-export const canSee = (u: Unit, x: number, y: number) => u.eyesDown ? Math.max(Math.abs(u.x - x), Math.abs(u.y - y)) <= 1 && sightFrom(u.x, u.y, x, y, 1.5)
-  : sightFrom(u.x, u.y, x, y, rangeOf(u)) || (!!S.setup.night && lit(x, y) && sightFrom(u.x, u.y, x, y, 30));
+/** Tactical overhaul T3: someone sees a tile (or whoever is on it) if there is a line of sight and they can at least
+ *  make out a shape there: light, distance, weather, smoke and movement decide (perception.ts). */
+export const canSee = (u: Unit, x: number, y: number) => perceive(u, x, y, unitAt(x, y)).level >= DETECTED;
+/** What the team as a whole makes of a unit: the best any member manages (0 unseen, 1 detected, 2 identified). */
+export const teamPerception = (t: Unit) => S.perceived?.get(t.id) ?? 0;
 export const seen = (x: number, y: number) => S.vis[y * L.W + x] === 1;
 export const starers = () => team().filter(m => m.staring);
 export const label = (u: Unit) => u.call || u.name;
@@ -75,10 +79,16 @@ export function computeVis() {
   S.vis.fill(0);
   for (const m of team()) {
     if (isPanicked(m) || isBlind(m)) continue;
-    const r = rangeOf(m) + 1;
-    for (let y = Math.max(0, m.y - r); y <= Math.min(H - 1, m.y + r); y++)
-      for (let x = Math.max(0, m.x - r); x <= Math.min(W - 1, m.x + r); x++)
-        if (!S.vis[y * W + x] && canSee(m, x, y)) S.vis[y * W + x] = 1;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
+      if (!S.vis[y * W + x] && canSee(m, x, y)) S.vis[y * W + x] = 1;
+  }
+  // Tactical overhaul T3: what the team makes of each other unit (a shape, or who and what it is)
+  S.perceived = new Map();
+  for (const t of S.units) {
+    if (!t.alive || t.saved || t.carriedBy || isTeam(t)) continue;
+    let best = 0;
+    for (const m of team()) { if (isPanicked(m) || isBlind(m)) continue; best = Math.max(best, perceive(m, t.x, t.y, t).level); if (best === IDENTIFIED) break; }
+    if (best) S.perceived.set(t.id, best as 1 | 2);
   }
   for (let i = 0; i < W * H; i++) if (S.vis[i]) S.explored[i] = 1;
   const st = S.statue;

@@ -2,7 +2,7 @@
 import { CONT, DRUM, EXIT, FULL, HALF, L, STEEL, TS, WALL, area, floorOf, inContainer, passable, pathTo, tileAt, type Pt } from "../core/grid";
 import { sightFrom } from "../core/sight";
 import { canShoot, activeGun, center, coverAgainst, shotInfo } from "../game/combat";
-import { S, canAct, canSee, isPanicked, isTeam, seen, team, unitAt } from "../game/state";
+import { S, canAct, canSee, isPanicked, isTeam, seen, team, teamPerception, unitAt } from "../game/state";
 import { blastArea, dragOptions, moveCost, reachFor, throwOptions } from "../game/turn";
 import { abilityTargets } from "../game/abilities";
 import type { Unit } from "../game/types";
@@ -250,6 +250,14 @@ export function createRenderer(cv: HTMLCanvasElement) {
     ctx.fillStyle = u.side === "raider" || u.side === "zombie" ? C.alert : "#9cd0a6"; ctx.fillRect(cx - w / 2, cy - 19, w * frac, 2);
   }
 
+  /** A detected but unidentified contact: a dark figure with a question mark, nothing more. */
+  function drawContact(u: Unit, now: number) {
+    const p = placeOf(u, now);
+    ctx.fillStyle = "rgba(20,24,28,0.75)"; ctx.beginPath(); ctx.arc(p.x, p.y + 2, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(p.x, p.y - 9, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#9aa3ab"; ctx.lineWidth = 1.2; ctx.setLineDash([2, 2]); ctx.beginPath(); ctx.arc(p.x, p.y, 14, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    badge(ctx, p.x + 10, p.y + 10, "?", "#9aa3ab");
+  }
   function drawUnit(u: Unit, now: number) {
     const p = placeOf(u, now), cx = p.x, cy = p.y;
     const hurt = Math.max(0, 1 - (now - p.a.hit) / 280), flash = now - p.a.fired < 110, bob = p.moving ? Math.sin(now / 35) * 0.8 : 0;
@@ -597,6 +605,8 @@ export function createRenderer(cv: HTMLCanvasElement) {
       if (!u.alive || u.saved || u.carriedBy) continue;
       if (!isTeam(u) && !seen(u.x, u.y) && !u.restrained) continue;
       if (hidden939(u)) continue;
+      // Tactical overhaul T3: someone the team can only make out as a shape is drawn as one
+      if (!isTeam(u) && !u.restrained && teamPerception(u) === 1) { drawContact(u, now); continue; }
       drawUnit(u, now);
       // Phase 4B markers: eyes on the floor, compelled by SCP-012, marked by SCP-096
       const pp = placeOf(u, now);
@@ -635,7 +645,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
 
     // every enemy the selected operative can shoot right now shows its hit chance (hovering one gives the detail)
     if (playing && sel && sel.side === "mtf" && sel.ap > 0 && !S.mode) {
-      for (const r of S.units) if (r.side === "raider" && r.alive && !r.downed && seen(r.x, r.y) && canShoot(sel, r) && !(S.hover && S.hover.x === r.x && S.hover.y === r.y)) {
+      for (const r of S.units) if ((r.side === "raider" || (!isTeam(r) && teamPerception(r) === 1)) && r.alive && !r.downed && seen(r.x, r.y) && canShoot(sel, r) && !(S.hover && S.hover.x === r.x && S.hover.y === r.y)) {
         const [rx, ry] = center(r); tag(`${shotInfo(sel, r).chance}%`, rx, ry + 19, C.manila);
       }
     }

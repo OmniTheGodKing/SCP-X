@@ -8,7 +8,7 @@ import { AMMO } from "../data/weapons";
 import { WEATHER } from "../data/weather";
 import { NOTES_173 } from "../game/notes";
 import { blinkChance, maxSanOf, pct } from "../game/profiles";
-import { S, canAct, canSee, full, hooks, isBlind, isPanicked, isTeam, label, seen, starers, team, unitAt } from "../game/state";
+import { S, canAct, canSee, full, hooks, isBlind, isPanicked, isTeam, label, seen, starers, team, unitAt , teamPerception } from "../game/state";
 import {
   callBlink, callCheck, doOverwatch, doSeal, dragCheck, endTurn, evacuate, onTap, sealCheck, select, selectNext,
   doReload, fireCheck, reloadCheck, useCheck, useItem, stareCheck, startPlayerTurn, throwCheck, toggleDrag, toggleStare, toggleThrow,
@@ -66,7 +66,7 @@ const TEMPLATE = `
       <span class="pill" id="turnPill">Turn 1</span>
       <span class="pill" id="phasePill">Your move</span>
       <span class="pill hot" id="sirenPill" hidden title="The breach siren: nobody recovers sanity on quiet turns, but SCP-173 can't hear where shots come from. Silence it at the panel.">Siren</span>
-      <span class="pill" id="nightPill" hidden title="Night: nobody sees farther than 9 tiles, except inside a flare's light.">Night</span>
+      <span class="pill" id="nightPill" hidden title="Night: away from lights, figures are only shapes until close (unknown contacts); lit rooms, flares and fires show them clearly.">Night</span>
       <span class="pill" id="weatherPill" hidden></span>
       <span class="pill" id="concealPill" hidden title="Insurgents haven't noticed the team. They only spot you within 4 tiles. Firing or throwing anything gives you away.">Concealed</span>
       <span id="sndSlot"></span>
@@ -89,7 +89,8 @@ const TEMPLATE = `
         <div><b>Dragging.</b> Anyone next to SCP-173 can drag it once per turn while someone else stares at it: D-Class up to 2 tiles, operatives 1. It costs 5 sanity, and afterwards the dragger looks straight back at it.</div>
         <div><b>Sanity</b> recovers on quiet turns: anyone not staring who lost no sanity that turn regains 5 (operatives) or 4 (D-Class).</div>
         <div><b>Cover</b> only stops gunfire, and only when it sits between shooter and target. SCP-173 ignores it.</div>
-        <div><b>Sight and shooting.</b> At least 3 of 10 sight lines between two tiles must be clear to see or shoot. A target with only 3 or 4 clear lines is partly hidden: −15% to hit and no critical hits. Anyone can lean into an open tile beside them to look and shoot past something a few tiles ahead, at the same −15%. Against a wall, crate or pillar, they can only lean out past an end of it: in the middle of a row of crates, everything behind the row is hidden, and a single crate hides a short wedge behind it.</div>
+        <div><b>Sight and shooting.</b> One line of sight decides seeing and shooting: someone is in view when at least 3 of 5 points on their figure can be seen, from the viewer's own tile or leaning out past the end of the cover beside them (no leaning out sideways from the middle of a row of crates). Smoke stops sight; only reinforced glass stops a shot that could be seen. Cover is whatever the shot passes through right beside the target: walls, pillars and crates are full cover (−40), desks, drums and window sills half (−20); with nothing there, the target is flanked.</div>
+        <div><b>Seeing in the dark.</b> In view isn't the same as made out. Distance, light, weather, smoke and movement decide whether a figure is a shape (an unknown contact, ?) or identified. Lit rooms, flares, fires and muzzle flashes help; still figures in cover are harder to spot. An unknown contact can be fired on at −10, whoever it turns out to be.</div>
         <div><b>Going down.</b> An operative at 0 HP is down and bleeds out in 3 turns. A medic with Stabilize can save them; otherwise they survive only if the mission is won first.</div>
         <div><b>Equipment.</b> Armor adds HP and armor points; each point cuts the damage of every hit by 1. Eye drops save one blink while staring. Flashbangs blind everyone within a tile of where they land until next turn, including anyone holding SCP-173. Smoke blocks all sight for two turns. Motion trackers show anything within 6 tiles, through walls.</div>
         <div><b>The Insurgency</b> holds SCP-173 with their eyes too, and loses sanity doing it. When they crack, they cover their eyes and SCP-173 is free to go after them.</div>
@@ -483,10 +484,13 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
       else if (S.mode === "ability" && S.ability) h = `<b>${esc(full(sel))}: ${abilityName(S.ability)}.</b>\n${esc(abilityDesc(S.ability))} Click a highlighted target.`;
       else if (S.mode === "throw" && S.throwing) h = `<b>${esc(full(sel))}: choose where to throw the ${ITEM_NAMES[S.throwing.id].toLowerCase()}.</b>\nLit tiles are in range and in sight. It covers the target tile and every tile around it. Throwing ends their turn.`;
       else if (S.mode === "drag") h = `<b>${esc(sel.name)}: choose where to drag SCP-173.</b>\nOrange tiles keep it in someone else's sight the whole way. Dragging ends their turn.`;
-      else if (hv && hv.side === "raider" && seen(hv.x, hv.y) && sel.side === "mtf" && sel.ap > 0 && canShoot(sel, hv)) {
+      else if (hv && !isTeam(hv) && teamPerception(hv) === 1 && seen(hv.x, hv.y) && !(sel.side === "mtf" && sel.ap > 0 && canShoot(sel, hv))) {
+        h = `<b>Unknown contact.</b>\nSomeone or something is there, but nobody can make out who or what at this distance and in this light. Get closer, light it up, or wait for it to move.`;
+      } else if (hv && (hv.side === "raider" || (!isTeam(hv) && teamPerception(hv) === 1)) && seen(hv.x, hv.y) && sel.side === "mtf" && sel.ap > 0 && canShoot(sel, hv)) {
         const s = shotInfo(sel, hv);
         const fw = fireCheck(sel);
-        h = `<b>${sel.call} → Insurgent: ${s.chance}% to hit</b>${s.crit ? `, ${s.crit}% crit` : ""}${activeGun(sel) ? ` · ${activeGun(sel)!.name}, ${activeGun(sel)!.dmg[0]}–${activeGun(sel)!.dmg[1]} damage` : ""}${sel.gun?.attachment === "bayonet" && Math.max(Math.abs(sel.x - hv.x), Math.abs(sel.y - hv.y)) <= 1 ? " · bayonet: a sure 3" : ""}${fw ? `\n<b>${esc(fw)}</b>` : ""}\n` + s.mods.map(m => `${m[0]} ${m[1] >= 0 ? "+" : ""}${m[1]}`).join(" · ");
+        const who = teamPerception(hv) === 1 ? "unknown contact (it could be anyone)" : "Insurgent";
+        h = `<b>${sel.call} → ${who}: ${s.chance}% to hit</b>${s.crit ? `, ${s.crit}% crit` : ""}${activeGun(sel) ? ` · ${activeGun(sel)!.name}, ${activeGun(sel)!.dmg[0]}–${activeGun(sel)!.dmg[1]} damage` : ""}${sel.gun?.attachment === "bayonet" && Math.max(Math.abs(sel.x - hv.x), Math.abs(sel.y - hv.y)) <= 1 ? " · bayonet: a sure 3" : ""}${fw ? `\n<b>${esc(fw)}</b>` : ""}\n` + s.mods.map(m => `${m[0]} ${m[1] >= 0 ? "+" : ""}${m[1]}`).join(" · ");
       } else if (!sealCheck(sel)) h = `<b>${sel.call} can seal the container now.</b> Press S.`;
       else if (sel.staring) h = `<b>${esc(full(sel))} is staring</b>, ${sel.ap} action${sel.ap === 1 ? "" : "s"}.\nThey can move anywhere that keeps sight of SCP-173. Press B to look away (free).`;
       else h = `<b>${esc(full(sel))}</b>, ${sel.ap} action${sel.ap === 1 ? "" : "s"}.\nClick a tile to move (blue costs 1, amber costs 2).${sel.side === "mtf" ? " Click a visible Insurgent to fire." : " D-Class are unarmed."}${S.has173 ? " Next to SCP-173, press G to drag it." : ""}${matchMedia("(pointer: coarse)").matches ? " Tap twice to confirm." : ""}`;

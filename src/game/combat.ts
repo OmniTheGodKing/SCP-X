@@ -3,7 +3,8 @@ import { rnd, fxRnd } from "../core/rng";
 import { BOND_AIM } from "../campaign/condition";
 import { charmTurns, officerNear } from "./ciTactics";
 import { DIRS, DRUM, FULL, HALF, STEEL, TS, WALL, L, bfs, cheb, tileAt, type Pt } from "../core/grid";
-import { fireLine, fireView, type View } from "../core/sight";
+import { SIGHT_MAX, fireLine, fireView, type View } from "../core/sight";
+import { DETECTED, perceive } from "./perception";
 import { coverOn } from "../core/geom";
 import { breakGlass, d2, openDoor } from "../core/grid";
 import { emitNoise, faceThreat, facingTo } from "./noise";
@@ -38,8 +39,9 @@ export const usingSidearm = (u: Unit) => u.side === "mtf" && !!u.gun && u.gun.am
  *  shut door or reinforced glass in the way) from the shooter's tile or a spot they can lean out to, to the target's
  *  tile or to the spot the target leaned out to this turn. The best such view, or null. */
 export function lineOfFire(sh: Unit, tg: Unit): (View & { tx: number; ty: number }) | null {
-  const lit = !!S.setup.night && S.flares.some(f => f.until >= S.turn && Math.max(Math.abs(f.x - tg.x), Math.abs(f.y - tg.y)) <= 2);
-  const range = lit ? Math.max(rangeOf(sh), 30) : rangeOf(sh);
+  // Tactical overhaul T3: no shot at what can't be made out at all (light, distance, weather and smoke decide)
+  const pc = perceive(sh, tg.x, tg.y, tg);
+  const range = pc.level >= DETECTED ? SIGHT_MAX : 0;
   const aims: [number, number][] = [[tg.x, tg.y]];
   if (tg.exposed && tg.exposed.turn >= S.turn - 1 && (tg.exposed.x !== tg.x || tg.exposed.y !== tg.y)) aims.push([tg.exposed.x, tg.exposed.y]);
   let best: (View & { tx: number; ty: number }) | null = null;
@@ -86,6 +88,8 @@ export function shotInfo(sh: Unit, tg: Unit, reaction = false): ShotInfo {
   if (dist <= 3 && hasPerk(sh, "shotgun_drills")) mods.push(["Shotgun drills", 20]);
   if ((sh.suppressedUntil ?? -1) >= S.turn) mods.push(["Suppressed", -30]);
   if (S.setup.weather === "storm" && dist > 5) mods.push(["Storm", -10]);
+  // Tactical overhaul T3: a shape nobody has made out yet is harder to aim at
+  if (isTeam(sh) && !isTeam(tg) && (S.perceived?.get(tg.id) ?? 2) === 1) mods.push(["Unidentified target", -10]);
   if (isTeam(sh) && (tg.markedUntil ?? -1) >= S.turn) mods.push(["Marked", 15]);
   if (isTeam(sh) && team().some(a => a !== sh && hasPerk(a, "spotter") && canSee(a, tg.x, tg.y))) mods.push(["Spotted", 10]);
   const raw = mods.reduce((a, m) => a + m[1], 0);
@@ -118,6 +122,7 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
   // in a storm the noise covers the shot
   if (sh.side === "mtf" && S.setup.weather !== "storm") breakConcealment("shots fired");
   if (sh.gun && !sidearm) sh.gun.ammo = Math.max(0, sh.gun.ammo - 1);
+  sh.firedTurn = S.turn;
   const roll = rnd() * 100, hit = roll < info.chance;
   if (S.enemyTurn && S.phase !== "player" && !isTeam(sh)) { S.enemyTurn.shots++; if (hit) S.enemyTurn.hits++; }
   // leaning out to fire leaves the shooter exposed at that spot through the enemy's reply
@@ -256,7 +261,7 @@ export async function moveUnit(u: Unit, path: Pt[]) {
     // a shut door opens as someone walks through it, and stays open
     if (openDoor(x, y)) { emitNoise(x, y, "door", u); if (isTeam(u)) computeVis(); }
     if (u.x !== x || u.y !== y) u.facing = facingTo(x - u.x, y - u.y);
-    u.x = x; u.y = y;
+    u.x = x; u.y = y; u.movedTurn = S.turn;
     if (!hasPerk(u, "quiet_steps") && u.side !== "anomaly") emitNoise(x, y, "footsteps", u);
     if (u.carrying) { const c = S.units.find(v => v.id === u.carrying); if (c) { c.x = x; c.y = y; } }
     // SCP-106's rot eats at anyone who walks through it

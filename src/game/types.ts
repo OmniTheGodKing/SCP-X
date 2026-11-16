@@ -38,6 +38,9 @@ export type MissionKind = "breach" | "manhunt" | "coverup" | "strike" | "escort"
 export type Phase = "player" | "anomaly" | "hand" | "subjects" | "over";
 
 export interface Unit {
+  /** Tactical overhaul T3: the turn this unit last moved, and last fired (movement and muzzle flashes are easier to spot). */
+  movedTurn?: number;
+  firedTurn?: number;
   /** An object anomaly (SCP-500, 914, 005): it just sits there until someone carries it off. */
   object?: boolean;
   id: string;
@@ -351,6 +354,8 @@ export interface MissionResult {
 export interface Mem { x: number; y: number; turn: number; }
 
 export interface MissionState {
+  /** Tactical overhaul T3: what the team makes of each other unit this moment (1 detected, 2 identified; absent: unseen). */
+  perceived?: Map<string, 1 | 2>;
   setup: MissionSetup;
   /** Whether SCP-173 is in this mission at all. */
   has173: boolean;

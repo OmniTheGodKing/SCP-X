@@ -9,10 +9,10 @@ export interface WeatherDef { name: string; sight: number; desc: string }
 export const WEATHER_SIGHT: Record<string, number> = { clear: 60, rain: 18, storm: 12, fog: 8, snow: 16 };
 export const WEATHER: Record<Weather, WeatherDef> = {
   clear: { name: "Clear", sight: 0, desc: "No effect." },
-  rain: { name: "Rain", sight: 2, desc: "Nobody sees farther than 18 tiles; fires burn out a turn sooner and spread less." },
-  storm: { name: "Storm", sight: 3, desc: "Nobody sees farther than 12 tiles, and shots past 5 tiles take −10 aim; the noise covers gunfire, so firing doesn't break concealment. Flights there take a day longer." },
-  fog: { name: "Fog", sight: 4, desc: "Nobody sees farther than 8 tiles, and Insurgents only notice the team from 2 tiles closer." },
-  snow: { name: "Snow", sight: 1, desc: "Nobody sees farther than 16 tiles, and everyone moves 1 tile less." },
+  rain: { name: "Rain", sight: 2, desc: "Outdoors, everything is made out at under half the usual distance; fires burn out a turn sooner and spread less." },
+  storm: { name: "Storm", sight: 3, desc: "Outdoors, everything is made out at under a third of the usual distance, and shots past 5 tiles take −10 aim; the noise covers gunfire, so firing doesn't break concealment. Flights there take a day longer." },
+  fog: { name: "Fog", sight: 4, desc: "Outdoors, everything is made out at a fifth of the usual distance, and Insurgents only notice the team from 2 tiles closer." },
+  snow: { name: "Snow", sight: 1, desc: "Outdoors, everything is made out at under half the usual distance, and everyone moves 1 tile less." },
 };
 
 type Odds = Partial<Record<Weather, number>>;

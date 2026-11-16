@@ -1,4 +1,5 @@
 // Player actions and the turn cycle: your move, SCP-173, the Insurgency, then loose D-Class.
+import { DETECTED, perceive, setHaze } from "./perception";
 import { settleFacing, facingTo, facingName, emitNoise } from "./noise";
 import { hazardDealt } from "./mission";
 import { reinforcementsTick } from "./ciTactics";
@@ -18,7 +19,7 @@ import { oldManPhase } from "./scp106";
 import { CORE_BURN, firePhase, fleshContact, ignite, spreadFlesh, turnInfected } from "./fire";
 import {
   S, alive, banner, breakConcealment, canAct, canSee, computeVis, full, fx, highlight, hooks, humans, isPanicked, isTeam, label, log, loseSanity,
-  occupied, reveal, seen, sleep, starers, team, unitAt,
+  occupied, reveal, seen, sleep, starers, team, teamPerception, unitAt,
 } from "./state";
 import { RAID_TURNS, THROWN, type ScpId, type Unit } from "./types";
 import { moveCost, moveOf, reachOf } from "./movement";
@@ -32,7 +33,7 @@ const DRAG_SANITY = 5;
 // Tactical overhaul T2.2: the reach itself comes from movement.ts, the same rules the enemy AI uses.
 export function reachFor(u: Unit | null) {
   if (!u || u.ap < 1) return null;
-  if (u.staring) { const st = S.statue; return reachOf(u, moveOf(u), (x, y) => !sightFrom(x, y, st.x, st.y, rangeOf(u))); }
+  if (u.staring) { const st = S.statue; return reachOf(u, moveOf(u), (x, y) => perceive(u, st.x, st.y, st, [x, y]).level < DETECTED); }
   return reachOf(u);
 }
 export { moveOf, moveCost };
@@ -138,7 +139,7 @@ export function startPlayerTurn(first: boolean) {
   settleFacing();
   const smokeBefore = S.smoke.length;
   S.smoke = S.smoke.filter(s => s.until >= S.turn);
-  setSmoke(S.smoke.map(s => [s.x, s.y]));
+  syncSmoke();
   if (smokeBefore && !S.smoke.length) log("The smoke clears.");
   for (const u of S.units) if (u.alive && u.downed && !u.stabilized && !first) {
     u.bleed = (u.bleed ?? 3) - 1;
@@ -249,6 +250,9 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
     await fire(sel, u, false);
     S.busy = false; afterAction(); return;
   }
+  // Tactical overhaul T3: a contact nobody can make out yet can be fired on (at a penalty), whatever it turns out to be
+  const unknown = !!u && !isTeam(u) && teamPerception(u) === 1 && seen(x, y);
+  if (u && unknown && !sel.eyesDown) return fireAt(sel, u, flash, confirm);
   if (u && u.object && seen(x, y)) { flash(`${u.name} is an object. It isn't going anywhere unless they carry it: stop them.`); return; }
   if (u && u.side === "anomaly" && seen(x, y) && S.scp !== "682") {
     if (S.has173) { reveal("arms"); log("Rounds would do nothing to SCP-173. It has to go in the container."); }
@@ -256,27 +260,7 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
     hooks.update(); return;
   }
   if (u && sel.eyesDown && (u.side === "raider" || u.side === "zombie" || u.side === "anomaly")) { flash("They're looking at the floor: look up first (E) to fire."); return; }
-  if (u && ((u.side === "raider" || u.side === "zombie") && !hidden939(u) || (u.side === "anomaly" && S.scp === "682")) && seen(x, y)) {
-    if (sel.side !== "mtf") { flash("D-Class are unarmed."); return; }
-    if (!canSee(sel, x, y)) { flash(`${sel.call} has no line of sight to that target.`); return; }
-    if (!canShoot(sel, u)) { flash(`${sel.call} can see the target but has no line of fire (a wall or reinforced glass is in the way).`); return; }
-    const fw = fireCheck(sel);
-    if (fw) { flash(fw); return; }
-    if (!confirm()) return;
-    S.busy = true; S.pending = null;
-    // a bayonet settles an adjacent fight without a roll or a round
-    if (sel.gun?.attachment === "bayonet" && cheb(sel.x, sel.y, u.x, u.y) <= 1) {
-      S.busy = false; payStrike(sel);
-      breakConcealment("a bayonet attack");
-      log(`${full(sel)} drives the bayonet home (3 damage).`, "good");
-      fx({ type: "text", x: u.x * TS + TS / 2, y: u.y * TS - 2, text: "3", color: "#ffffff", dur: 800 });
-      S.hitKind = "bayonet"; damage(u, 3, sel); await wakePods(); afterAction(); return;
-    }
-    payFire(sel);
-    await fire(sel, u, false);
-    await wakePods();
-    S.busy = false; afterAction(); return;
-  }
+  if (u && ((u.side === "raider" || u.side === "zombie") && !hidden939(u) || (u.side === "anomaly" && S.scp === "682")) && seen(x, y)) return fireAt(sel, u, flash, confirm);
   if (u) return;
   const res = reachFor(sel);
   const d = res ? res.dist[y * L.W + x] : -1;
@@ -291,6 +275,37 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
   await moveUnit(sel, path);
   await wakePods();
   S.busy = false; afterAction();
+}
+
+/** Tactical overhaul T3.3: smoke is thick the turn it's thrown (it hides everything behind it) and thin on its last
+ *  turn (it only makes things behind it harder to make out). */
+function syncSmoke() {
+  setSmoke(S.smoke.filter(s => s.until > S.turn).map(s => [s.x, s.y]));
+  setHaze(S.smoke.filter(s => s.until === S.turn).map(s => [s.x, s.y]));
+}
+
+/** Fire on a target the player clicked: the checks, the cost, a bayonet if adjacent, then the shot. */
+async function fireAt(sel: Unit, u: Unit, flash: (t: string) => void, confirm: () => boolean) {
+  const x = u.x, y = u.y;
+  if (sel.side !== "mtf") { flash("D-Class are unarmed."); return; }
+  if (!canSee(sel, x, y)) { flash(`${sel.call} has no line of sight to that target.`); return; }
+  if (!canShoot(sel, u)) { flash(`${sel.call} can see the target but has no line of fire (a wall or reinforced glass is in the way).`); return; }
+  const fw = fireCheck(sel);
+  if (fw) { flash(fw); return; }
+  if (!confirm()) return;
+  S.busy = true; S.pending = null;
+  // a bayonet settles an adjacent fight without a roll or a round
+  if (sel.gun?.attachment === "bayonet" && cheb(sel.x, sel.y, u.x, u.y) <= 1) {
+    S.busy = false; payStrike(sel);
+    breakConcealment("a bayonet attack");
+    log(`${full(sel)} drives the bayonet home (3 damage).`, "good");
+    fx({ type: "text", x: u.x * TS + TS / 2, y: u.y * TS - 2, text: "3", color: "#ffffff", dur: 800 });
+    S.hitKind = "bayonet"; damage(u, 3, sel); await wakePods(); afterAction(); return;
+  }
+  payFire(sel);
+  await fire(sel, u, false);
+  await wakePods();
+  S.busy = false; afterAction(); return;
 }
 
 function afterAction() {
@@ -521,8 +536,8 @@ function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y
     log(`${full(u)} throws CS gas.${hit.length ? ` ${hit.length} caught in it, coughing and half-blind (−30 aim).` : ""}`, "good");
   } else {
     for (const [a, b] of area) S.smoke.push({ x: a, y: b, until: S.turn + 1 });
-    setSmoke(S.smoke.map(s => [s.x, s.y]));
-    log(`${full(u)} throws smoke. Nothing can see through it until it clears.`, "key");
+    syncSmoke();
+    log(`${full(u)} throws smoke. Nothing can be seen through it this turn; next turn it thins to a haze that only blurs.`, "key");
   }
   afterAction();
 }
