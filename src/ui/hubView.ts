@@ -4,6 +4,10 @@ import "./hub.css";
 import { directorsBriefing } from "../campaign/briefing";
 import { obligations, projection } from "../campaign/forecast";
 import { crews } from "../campaign/crews";
+import { allRooms, roomLayout } from "../scene/layout";
+import { interiorSvg, type SceneExtras } from "./scene/interior";
+import { operativeFigure } from "./scene/people";
+import { animateEnter, animateLeave, pulse, setTransitions, transitionsSetting } from "./scene/transition";
 import { dispatch, type Command } from "../campaign/commands";
 import { CARTER, HUB_TIPS, ONBOARDING, advanceOnboarding, currentStep } from "./tutorial";
 import { SLOTS as SAVE_SLOTS, activeSlot, clearSlot, slotSummary, type Slot } from "../campaign/save";
@@ -169,6 +173,9 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let lookOpen = false;   // keep the appearance editor open while clicking through parts
   let dCount = 2;
   let sel: { level: number; slot: number } | null = null;
+  // Presentation overhaul P2: the room the Director is standing in (a facility id or a fixed surface location), and
+  // where the overview was scrolled to on the way in
+  let room: string | null = null, roomScroll = 0, rvPanel = true;
   let creditsOpen = false;
   let resetArmed = 0;
   let regionSel: RegionId = pendingMapSel?.startsWith("reg:") ? pendingMapSel.slice(4) as RegionId : HOME;
@@ -233,6 +240,38 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   }
   if (!clickSounds.has(root)) { clickSounds.add(root); root.addEventListener("click", e => { const t = (e.target as HTMLElement).closest?.("button,summary,label.act"); if (!t) return; if (t.matches(".tab")) ui.tab(); else if ((t as HTMLButtonElement).disabled) ui.deny(); else ui.click(); }); }
 
+  /** Into a room: the destination renders at once, then the stage opens out of the slot it came from. */
+  function enterRoom(id: string, from: DOMRect | null) {
+    if (!roomLayout(c, id)) return;
+    roomScroll = window.scrollY; room = id; tab = "site"; speed = 0;
+    const f = c.base.facilities.find(x => x.id === id);
+    if (f) sel = { level: f.level, slot: f.slot };
+    render();
+    window.scrollTo({ top: 0 });
+    animateEnter(root.querySelector<HTMLElement>(".rv-stage"), root.querySelector<HTMLElement>(".rv-ctx"), from);
+  }
+  /** Back to Site-19: the overview renders at once, where it was, and the room closes into its slot. */
+  function leaveRoom() {
+    if (!room) return;
+    const stage = root.querySelector<HTMLElement>(".rv-stage"), snap = stage?.innerHTML ?? null, from = stage?.getBoundingClientRect() ?? null;
+    const id = room;
+    room = null;
+    render();
+    window.scrollTo({ top: roomScroll });
+    const f = c.base.facilities.find(x => x.id === id);
+    const target = f ? root.querySelector(`[data-slot="${f.level},${f.slot}"]`) : root.querySelector(`[data-enter="${id}"]`);
+    animateLeave(snap, from, target?.getBoundingClientRect() ?? null);
+    pulse(target);
+  }
+  /** Straight to the next room along: no overview in between. */
+  function stepRoom(id: string) {
+    if (!roomLayout(c, id)) return;
+    room = id;
+    const f = c.base.facilities.find(x => x.id === id);
+    sel = f ? { level: f.level, slot: f.slot } : null;
+    render();
+  }
+
   function render() {
     advanceOnboarding(c);   // Strategic overhaul E2: steps whose goal is met close themselves
     if (planning && !c.incidents.some(i => i.id === planning)) planning = null;
@@ -266,6 +305,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       ${c.ironman ? `<span class="act disabled" title="Ironman: this campaign can't be replaced by loading a save over it.">Import save</span>` : `<label class="act" for="importFile" title="Load a campaign from an exported file. It replaces the current one.">Import save</label>`}
       <input type="file" id="importFile" accept=".json,application/json" hidden>
       <button class="act" id="creditsBtn" type="button">Credits and licences</button>
+      <button class="act" id="fxToggle" type="button" aria-pressed="${transitionsSetting()}">Room transitions: ${transitionsSetting() ? "on" : "off"}</button>
       ${soundControl()}
     </div></details>
   </header>
@@ -279,7 +319,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   </nav>
   ${flashMsg ? `<p class="warn-box" role="status">${esc(flashMsg)}</p>` : ""}
   ${coachCard()}
-  ${tab === "command" ? commandTab() : tab === "world" ? worldTab() : tab === "site" ? siteTab() : tab === "research" ? researchTab() : tab === "history" ? historyTab() : personnelTab()}
+  ${tab === "command" ? commandTab() : tab === "world" ? worldTab() : tab === "site" ? (room ? roomView() : siteTab()) : tab === "research" ? researchTab() : tab === "history" ? historyTab() : personnelTab()}
   ${creditsOpen ? `<div class="overlay fixed"><div class="sheet" role="dialog" aria-label="Credits">${creditsHtml()}<div class="row"><button class="act primary" type="button" id="creditsClose">Close</button></div></div></div>` : ""}
   ${!c.over && c.notices?.length ? `<div class="overlay fixed"><div class="sheet notice" role="dialog" aria-label="Time paused">
     <div class="label">${dateText(c.day)} · time paused</div>
@@ -1065,6 +1105,39 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       <p class="muted">${busy} of ${c.engineers} engineers are busy. Repairs compete with construction, refits and workshop orders for them.</p></div>`;
   }
 
+  /** Presentation overhaul P2: inside a room. The interior fills the stage; the room's own controls sit in a panel
+   *  that can be put away. */
+  function roomView() {
+    const L = roomLayout(c, room!);
+    if (!L) { room = null; return siteTab(); }
+    const list = allRooms(c), i = list.findIndex(r => r.id === L.id);
+    const prev = list[(i - 1 + list.length) % list.length], next = list[(i + 1) % list.length];
+    const extras: SceneExtras = {};
+    if (L.kind === "quarters") {
+      const ops = c.roster.filter(o => o.alive && !(o.busy && (o.busy.kind === "travel" || o.busy.kind === "contract"))).slice(0, 8);
+      extras.people = ops.map(o => ({ key: o.id, label: o.name.split(" ").slice(-1)[0], spec: operativeFigure(c, o) }));
+      extras.focus = opSel ?? undefined;
+      extras.span = rvPanel ? [200, 1000] : [240, 1360];
+    }
+    if (L.kind === "armory") extras.racks = [...new Set(Object.values(c.models))];
+    const stateText: Record<string, string> = { operational: L.powered ? "Operational" : "No power", building: "Under construction", damaged: "Damaged", wrecked: "Wrecked", repairing: "Under repair", demolishing: "Being torn down", upgrading: "Being refitted" };
+    const ctx = L.kind === "quarters" ? `${opDetail() || `<div class="card"><p class="muted">Select an operative.</p></div>`}`
+      : L.kind === "armory" ? `<div class="card"><div class="label">Armory · weapons in service</div><ul class="why">${(Object.entries(c.models) as [string, string][]).map(([t, m]) => `<li>${esc(t)}: ${esc(m)}</li>`).join("")}</ul>
+          <p class="muted">Attachments in stores: ${Object.entries(c.attachments).filter(([, n]) => n).map(([a, n]) => `${esc(a)} × ${n}`).join(", ") || "none"}.</p></div>`
+      : slotDetail(L.level, L.slot);
+    return `<div class="roomview ${rvPanel ? "" : "nopanel"}" data-room="${esc(L.id)}">
+      <div class="rv-stage">${interiorSvg(L, extras)}</div>
+      <div class="rv-top">
+        <button class="act" type="button" id="leaveRoom" title="Back to Site-19 (Esc)">← Site-19</button>
+        <div class="rv-title"><span class="rv-des">${esc(L.designation)}</span><b>${esc(L.name)}</b><span class="rv-state ${L.state !== "operational" || !L.powered ? "warn" : ""}">${esc(stateText[L.state] ?? L.state)}${L.alarm ? " · ALARM" : ""}</span></div>
+        <div class="rv-nav"><button class="act" type="button" data-roomstep="${esc(prev.id)}" title="Previous room ([)">‹ ${esc(prev.designation)}</button><button class="act" type="button" data-roomstep="${esc(next.id)}" title="Next room (])">${esc(next.designation)} ›</button>
+          <button class="act" type="button" id="rvPanel" aria-pressed="${rvPanel}">${rvPanel ? "Hide panel" : "Show panel"}</button></div>
+      </div>
+      ${L.staff.length && L.kind !== "quarters" ? `<div class="rv-staff">${L.staff.slice(0, 6).map(p => `<span>${esc(p.name)} <i>${esc(p.role)}</i></span>`).join("")}</div>` : ""}
+      <aside class="rv-ctx">${ctx}</aside>
+    </div>`;
+  }
+
   function siteTab() {
     const rows: string[] = [];
     for (let level = 0; level < c.base.levels; level++) {
@@ -1078,9 +1151,11 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     return `<div class="screen-site">
     <section class="col">
       ${powerShort(c) ? `<p class="warn-box">Power shortage: medical bay and psychological services are offline${unpowered(c) ? ", every containment wing is twice as likely to breach, and each cell has a 10% chance a day of failing outright" : ". Backup generators keep the containment wings running"}. Repair or build a generator.</p>` : ""}
-      <div class="xsection">${surfaceSvg(c.hour ?? 12, c.scps.some(x => x.status === "breach") || c.incidents.some(i => i.kind === "raid"))}<div class="basegrid">${rows.join("")}</div>
+      <div class="xsection"><div class="surfwrap">${surfaceSvg(c.hour ?? 12, c.scps.some(x => x.status === "breach") || c.incidents.some(i => i.kind === "raid"))}
+        <button type="button" class="hotspot" data-enter="surface:armory" style="left:24%;width:13%" title="Armory">Armory</button>
+        <button type="button" class="hotspot" data-enter="surface:quarters" style="left:54%;width:17%" title="Epsilon-11 quarters">Epsilon-11 quarters</button></div><div class="basegrid">${rows.join("")}</div>
         <div class="xs-foot">
-          <div class="legendline"><span><i class="lamp ok"></i>operational</span><span><i class="lamp caution"></i>building or repairing</span><span><i class="lamp danger"></i>damaged or breached</span><span>Select a room to manage it; an empty slot to build.</span></div>
+          <div class="legendline"><span><i class="lamp ok"></i>operational</span><span><i class="lamp caution"></i>building or repairing</span><span><i class="lamp danger"></i>damaged or breached</span><span>Select a room to go in; an empty slot to build. The armory and Epsilon-11\'s quarters are on the surface.</span></div>
           ${c.base.excavation > 0 ? `<span class="muted">Excavating level ${c.base.levels + 1}: ${plural(c.base.excavation, "day")} left.</span>`
             : c.base.levels < MAX_LEVELS ? `<button class="act" id="digBtn" type="button" ${exWhy ? `disabled title="${esc(exWhy)}"` : ""}>Excavate level ${c.base.levels + 1} · $${EXCAVATE.cost}k · ${EXCAVATE.days} days · ${EXCAVATE.engineers} engineers</button>` : ""}
         </div>
@@ -1550,6 +1625,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
 
     root.querySelectorAll<HTMLElement>("[data-tab],[data-goto]").forEach(b => b.onclick = () => {
       flashMsg = "";
+      if (room) { if ((b.dataset.tab || b.dataset.goto) === "site") { leaveRoom(); return; } room = null; }
       tab = (b.dataset.tab || b.dataset.goto) as Tab;
       if (tab !== "world") speed = 0;   // time only passes on the world map
       try { localStorage.setItem("site19-tab", tab); } catch { /* fine */ }
@@ -1686,9 +1762,18 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     on("moveBtn", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) change(() => moveScp(c, scp173(), f, chosenWatchers())); });
     root.querySelectorAll<HTMLElement>("[data-slot]").forEach(b => b.onclick = () => {
       const [level, slot] = b.dataset.slot!.split(",").map(Number);
+      const f = facilityAt(c, level, slot);
+      if (f && root.querySelector(".screen-site")) { sel = { level, slot }; enterRoom(f.id, b.getBoundingClientRect()); return; }
       sel = sel && sel.level === level && sel.slot === slot ? null : { level, slot };
       render();
     });
+    root.querySelectorAll<HTMLElement>("[data-enter]").forEach(b => b.onclick = () => enterRoom(b.dataset.enter!, b.getBoundingClientRect()));
+    on("enterRoom", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) enterRoom(f.id, null); });
+    on("leaveRoom", () => leaveRoom());
+    on("rvPanel", () => { rvPanel = !rvPanel; render(); });
+    root.querySelectorAll<HTMLElement>("[data-roomstep]").forEach(b => b.onclick = () => stepRoom(b.dataset.roomstep!));
+    root.querySelectorAll<HTMLElement>("[data-person]").forEach(b => { const pick = () => { opSel = b.dataset.person!; render(); }; b.onclick = pick; b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } }; });
+    on("fxToggle", () => { setTransitions(!transitionsSetting()); render(); });
     root.querySelectorAll<HTMLElement>("[data-build]").forEach(b => b.onclick = () => {
       if (!sel) return;
       const { level, slot } = sel;
@@ -1788,7 +1873,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       if (focus) {
         if (tab === "world") pendingMapSel = "inc:" + focus;
         else if (tab === "command" && c.incidents.some(i => i.id === focus)) planning = focus;
-        else if (tab === "site") { const f = c.base.facilities.find(x => x.id === focus); if (f) sel = { level: f.level, slot: f.slot }; }
+        else if (tab === "site") { const f = c.base.facilities.find(x => x.id === focus); if (f) { sel = { level: f.level, slot: f.slot }; room = f.id; } }
         else if (tab === "personnel") opSel = focus;
       }
       render();
@@ -1872,6 +1957,11 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   const onKey = (e: KeyboardEvent) => {
     const t = e.target as HTMLElement;
     if (!stillHere() || (t.closest && t.closest("input,textarea,select"))) return;
+    if (tab === "site" && room) {
+      if (e.key === "Escape") { e.preventDefault(); leaveRoom(); }
+      else if (e.key === "[" || e.key === "]") { const list = allRooms(c), i = list.findIndex(r => r.id === room); if (i >= 0) stepRoom(list[(i + (e.key === "]" ? 1 : list.length - 1)) % list.length].id); }
+      return;
+    }
     if (tab !== "world") return;
     if (e.key === " ") { e.preventDefault(); setSpeed(speed ? 0 : lastSpeed); }
     else if (["1", "2", "3"].includes(e.key)) setSpeed(SPEEDS[Number(e.key) - 1]);

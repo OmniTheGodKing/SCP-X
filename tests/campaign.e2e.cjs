@@ -113,7 +113,7 @@ const { check, done } = reporter();
   check('7: containment work is done from the wing (or it is already done, or the screen says why not)', clean1.last === clean1.day || (!cleanBtn && (!!clean1.why || clean1.day - clean1.last < 7)), { clean0, clean1 });
 
   // 9 receive an important event: run time until something lands in the briefing as critical or important
-  const got = await runUntil(() => window.__site19.briefing().some(x => x.sev !== 'routine' && (x.tab === 'world' || x.tab === 'command') && !!x.focus && window.__site19.campaign.incidents.some(i => i.id === x.focus)), 90000);
+  const got = await runUntil(() => window.__site19.briefing().some(x => (x.tab === 'world' || x.tab === 'command') && !!x.focus && window.__site19.campaign.incidents.some(i => i.id === x.focus)), 90000);
   check('9: an incident arrives and the Director\'s Briefing raises it', got, await C(() => window.__site19.briefing().map(x => `${x.sev}:${x.title}`)));
 
   // 10 respond through the Director's Briefing

@@ -69,7 +69,8 @@ export function directorsBriefing(c: Campaign): BriefItem[] {
   const offer = c.research.offer;
   if (offer && !c.research.paid.includes(offer.id)) add({ id: "breakthrough", sev: "important", title: `Breakthrough on offer: ${PROJECTS[offer.id].name}`, detail: `Available until ${dateText(offer.until)}.`, tab: "research" });
   const open = c.incidents.filter(i => i !== b && !i.dispatch && c.outbound?.incId !== i.id && i.expires - c.day > 1);
-  if (open.length) add({ id: "incidents", sev: "routine", title: `${open.length} incident${open.length > 1 ? "s" : ""} open`, detail: open.slice(0, 3).map(i => `${i.title.split(": ")[1] ?? i.title} (${i.expires - c.day} days)`).join("; "), tab: "world" });
+  // Go opens the one with the least time left
+  if (open.length) add({ id: "incidents", sev: "routine", title: `${open.length} incident${open.length > 1 ? "s" : ""} open`, detail: open.slice(0, 3).map(i => `${i.title.split(": ")[1] ?? i.title} (${i.expires - c.day} days)`).join("; "), tab: "world", focus: [...open].sort((a, b) => a.expires - b.expires)[0].id });
   if (c.funds >= 0 && c.funds < monthlyUpkeep(c)) add({ id: "funds", sev: "important", title: "Funds below a month's upkeep", detail: `$${c.funds}k in hand against $${monthlyUpkeep(c)}k a month going out.`, tab: "command" });
   else if (c.funds >= 0) {
     // Strategic overhaul D3: the scheduled money alone puts Site-19 in debt within 90 days

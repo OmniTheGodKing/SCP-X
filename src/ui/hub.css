@@ -173,3 +173,32 @@ body:has(.hub) { background: var(--s-bg); }
   .hub .top .readouts { grid-column: 1 / -1; grid-row: 2; justify-self: stretch; }
   .hub .top .readouts .ro { flex: 1 1 auto; }
 }
+
+/* ---- Presentation overhaul P2: inside a room ---- */
+.roomview { position: relative; border: 1px solid var(--s-line-2); background: #050708; overflow: hidden; }
+.rv-stage { position: relative; aspect-ratio: 16 / 9; max-height: calc(100vh - 150px); width: 100%; margin: 0 auto; }
+.rv-stage svg.interior { display: block; width: 100%; height: 100%; }
+.rv-top { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: center; gap: 14px; padding: 10px 12px; background: linear-gradient(180deg, rgba(5,7,8,.92), rgba(5,7,8,0)); z-index: 3; }
+.rv-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.rv-title b { font-family: var(--font-display); font-weight: 400; font-size: 24px; color: var(--s-paper); white-space: nowrap; }
+.rv-des { font-family: var(--font-mono); font-size: 12px; color: var(--s-dim); letter-spacing: .08em; }
+.rv-state { font-family: var(--font-mono); font-size: 12px; color: var(--s-ok); }
+.rv-state.warn { color: var(--s-caution); }
+.rv-nav { margin-left: auto; display: flex; gap: 6px; }
+.rv-ctx { position: absolute; top: 58px; right: 12px; bottom: 12px; width: min(420px, 38%); overflow-y: auto; z-index: 3; display: grid; gap: 10px; align-content: start; }
+.rv-ctx .card { background: rgba(18,23,28,.94); }
+.rv-ctx .roomart { display: none; }
+.roomview.nopanel .rv-ctx { display: none; }
+.rv-staff { position: absolute; left: 12px; bottom: 12px; display: flex; flex-wrap: wrap; gap: 6px; max-width: 56%; z-index: 3; }
+.rv-staff span { font-size: 12px; padding: 3px 8px; background: rgba(5,7,8,.75); border: 1px solid var(--s-line); }
+.rv-staff i { font-style: normal; color: var(--s-dim); font-family: var(--font-mono); font-size: 10.5px; margin-left: 4px; }
+.scene-person { cursor: pointer; outline: none; }
+.scene-person:hover .fig, .scene-person:focus-visible .fig { filter: brightness(1.15); }
+.scene-person.sel .fig { filter: drop-shadow(0 0 10px rgba(110,169,200,.8)); }
+@media (max-width: 1000px) { .rv-ctx { position: static; width: auto; padding: 10px; } .rv-staff { position: static; padding: 8px; max-width: none; } }
+/* the surface buildings that are rooms in their own right */
+.surfwrap { position: relative; }
+.surfwrap .hotspot { position: absolute; top: 28%; height: 62%; background: transparent; border: 1px dashed transparent; color: transparent; font-family: var(--font-mono); font-size: 11px; cursor: pointer; padding: 0; }
+.surfwrap .hotspot:hover, .surfwrap .hotspot:focus-visible { border-color: var(--s-info); color: var(--s-text); background: rgba(5,7,8,.35); }
+.rv-ghost svg { width: 100%; height: 100%; display: block; }
+@media (prefers-reduced-motion: reduce) { .scene-person .fig { transition: none; } }

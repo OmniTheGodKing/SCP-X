@@ -46,7 +46,7 @@ Everything is derived from campaign state, and nothing here changes the rules.
 |---|---|---|
 | P0 | Audit, reference study, art direction (`docs/ART_DIRECTION.md`) | [x] |
 | P1 | Persistent room layouts from campaign state | [x] |
-| P2 | Interior renderer and enter/leave transitions | [ ] |
+| P2 | Interior renderer and enter/leave transitions | [x] |
 | P3 | Quarters: full-body operatives and live customization | [ ] |
 | P4 | Armory: weapon inspection, mount points, visible attachments | [ ] |
 | P5 | Lab, containment chambers, workshop, command | [ ] |
@@ -62,6 +62,35 @@ Everything is derived from campaign state, and nothing here changes the rules.
 
   `allRooms` lists the whole installation. `tests/unit/layout.test.ts` covers: stability and purity, separate
   identities for two rooms of one type, state changes, doors, power, occupants, and the fixed surface locations.
+- P2:
+  - `src/ui/scene/interior.ts` draws a room as one 1600 x 900 cut-away scene from its layout:
+    - the back wall, floor and side walls, with the room's real doors;
+    - pipe runs, signage and light fittings from its hashed features;
+    - the furnishings for its type, and the named people working there;
+    - its state over the top: scaffolding while it's built, cracks, rubble and smoke when damaged, a collapsed
+      ceiling when wrecked, scaffolding again under repair, darkness with red emergency lamps without power, and
+      beacons in an alarm.
+  - Every facility type has an interior. A generator's refit tier changes its machinery, an expanded D-Class block
+    gets a fifth bunk row, and the recreation room shows when one is built. Containment wings are dressed for their
+    occupant (SCP-173, 049, 106, 096, 012, 939, 682), and the cell grows grime as maintenance falls.
+  - People are full figures (`src/ui/scene/figure.ts`): layered on one pivot, with named sockets. Operatives are
+    dressed from their saved look, rank, armour, uniform research and weapon (`src/ui/scene/people.ts`).
+  - Weapons (`src/ui/scene/weapons.ts`) are drawn side-on from per-model frames in `src/data/mounts.ts`, which also
+    holds the mount points and the compatibility table that P4 will enforce.
+  - In the hub:
+    - Selecting a built room goes into it; empty slots keep the build panel. The armory and Epsilon-11's quarters
+      are entered from the surface strip.
+    - The room's existing controls are in a panel over the scene (hideable), so every action still works from
+      inside.
+    - Esc or the Site-19 button leaves; [ and ] step through the rooms in order. The Director's Briefing's Site-19
+      items go straight into the room.
+  - Transitions (`src/ui/scene/transition.ts`): the room opens out of the slot it was entered from, and closes back
+    into it over the live overview. Nothing waits on them: the destination is rendered first. A click or key
+    finishes them. Reduced motion, or System, Room transitions, turns them off.
+  - The briefing's "N incidents open" item now opens the incident with the least time left.
+  - `tests/rooms.e2e.cjs`: entering, leaving, the same room looking the same, stepping, damage and repair from
+    inside, the quarters and armory, selecting an operative, the hideable panel, transitions off.
+  - Bug found by that test and fixed: the scene's light and vignette layers took clicks meant for people.
 
 ## Known limitations
 
