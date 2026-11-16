@@ -10,6 +10,7 @@ import { FACILITIES, engineersFree, isContainment, monthlyUpkeep, powerShort } f
 import { PROJECTS, has, projectVisible, researchersFree, projectLock } from "./research";
 import { routineOverdue } from "./containment";
 import { AUDIT_BELOW, directiveText } from "./council";
+import { projection } from "./forecast";
 import { STAFF_EVENTS } from "./staff";
 import { dateText } from "./campaign";
 
@@ -68,7 +69,12 @@ export function directorsBriefing(c: Campaign): BriefItem[] {
   if (offer && !c.research.paid.includes(offer.id)) add({ id: "breakthrough", sev: "important", title: `Breakthrough on offer: ${PROJECTS[offer.id].name}`, detail: `Available until ${dateText(offer.until)}.`, tab: "research" });
   const open = c.incidents.filter(i => i !== b && !i.dispatch && c.outbound?.incId !== i.id && i.expires - c.day > 1);
   if (open.length) add({ id: "incidents", sev: "routine", title: `${open.length} incident${open.length > 1 ? "s" : ""} open`, detail: open.slice(0, 3).map(i => `${i.title.split(": ")[1] ?? i.title} (${i.expires - c.day} days)`).join("; "), tab: "world" });
-  if (c.funds < monthlyUpkeep(c)) add({ id: "funds", sev: "important", title: "Funds below a month's upkeep", detail: `$${c.funds}k in hand against $${monthlyUpkeep(c)}k a month going out.`, tab: "command" });
+  if (c.funds >= 0 && c.funds < monthlyUpkeep(c)) add({ id: "funds", sev: "important", title: "Funds below a month's upkeep", detail: `$${c.funds}k in hand against $${monthlyUpkeep(c)}k a month going out.`, tab: "command" });
+  else if (c.funds >= 0) {
+    // Strategic overhaul D3: the scheduled money alone puts Site-19 in debt within 90 days
+    const pr = projection(c, 90);   // the same window as the Finances panel
+    if (pr.debtDay !== undefined) add({ id: "debt-ahead", sev: "important", title: `Debt projected by ${dateText(pr.debtDay)}`, detail: `Upkeep and pay outrun the grant and the fronts by $${-pr.monthlyNet}k a month. The Finances panel has the schedule.`, tab: "command" });
+  }
 
   return out.sort((a, z) => SEV_ORDER[a.sev] - SEV_ORDER[z.sev]);
 }

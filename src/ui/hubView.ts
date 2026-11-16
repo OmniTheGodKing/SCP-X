@@ -2,6 +2,7 @@
 import { creditsHtml } from "./credits";
 import "./hub.css";
 import { directorsBriefing } from "../campaign/briefing";
+import { obligations, projection } from "../campaign/forecast";
 import { dispatch, type Command } from "../campaign/commands";
 import { HUB_TIPS } from "./tutorial";
 import { SLOTS as SAVE_SLOTS, activeSlot, clearSlot, slotSummary, type Slot } from "../campaign/save";
@@ -457,6 +458,23 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   }
 
   /** Phase 4E: where the money comes from and goes, and when the next Council payment lands. */
+  /** Strategic overhaul D3: the scheduled money over the next 90 days, and where the balance is heading. */
+  function upcomingHtml() {
+    const obs = obligations(c, 90), pr = projection(c, 90);
+    const max = Math.max(1, c.funds, ...pr.points.map(p => Math.abs(p.funds)));
+    return `<div class="upcoming">
+      <div class="label">Next 90 days · scheduled</div>
+      <div class="rows">${[...new Set(obs.map(o => o.day))].map(day => {
+        // one row per date: a settlement's grant, fronts and upkeep together, with the parts underneath
+        const xs = obs.filter(o => o.day === day), n = xs.reduce((a, o) => a + o.n, 0), settle = xs.some(o => o.kind === "upkeep");
+        const sign = (k: number) => `${k > 0 ? "+" : k < 0 ? "−" : ""}$${Math.abs(k)}k`;
+        return `<div class="r"><span><span class="hday">${dateText(day)}</span> ${settle ? "Monthly settlement" : esc(xs.map(o => o.what).join("; "))}</span><span class="v ${n > 0 ? "ok" : n < 0 ? "neg" : ""}">${sign(n)}</span>
+          ${settle ? `<span class="sub">${xs.map(o => `${esc(o.what.replace(/^\w+ /, ""))} ${sign(o.n)}`).join(" · ")}</span>` : ""}</div>`; }).join("")}</div>
+      <div class="proj" aria-label="Projected balance">${[{ day: c.day, funds: c.funds }, ...pr.points].map(p => `<div class="pt ${p.funds < 0 ? "neg" : ""}" title="${dateText(p.day)}: $${p.funds}k"><b>$${p.funds}k</b><div class="bar"><span style="height:${Math.max(3, Math.abs(p.funds) / max * 100)}%"></span></div><em>${p.day === c.day ? "now" : dateText(p.day).split(" ").slice(0, 2).join(" ")}</em></div>`).join("")}</div>
+      <p class="${pr.debtDay !== undefined ? "warn" : "muted"}">${pr.debtDay !== undefined ? `On scheduled money alone, Site-19 is in debt by ${dateText(pr.debtDay)}, and nothing can be paid for while in debt.` : `On scheduled money alone the balance stays above zero for 90 days.`} Incidents, purchases and rewards are not in this forecast.</p>
+    </div>`;
+  }
+
   function financesCard() {
     const gp = grantParts(c), up = upkeepParts(c), fronts = frontsFunding(c), upkeep = monthlyUpkeep(c), net = gp.total + fronts - upkeep;
     const next = dateOf(c.day); next.setUTCMonth(next.getUTCMonth() + 1, 1);
@@ -476,6 +494,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     return `<div class="card finances">
       <div class="label">${icon("funds", 13)}Finances · $${c.funds}k in hand</div>
       <p>Next O5 Council payment: <b>${dateText(c.day + days)}</b> (${plural(days, "day")}), expected <b>$${gp.total}k</b>, with <b>$${fronts}k</b> from the fronts and <b>$${upkeep}k</b> of upkeep and pay going out: <b class="${net >= 0 ? "ok" : "warn"}">${net >= 0 ? "+" : "−"}$${Math.abs(net)}k</b> a month before anything else.</p>
+      ${upcomingHtml()}
       <div class="fincols">
         <div><div class="label">Each month in</div><ul class="fin">
           ${row(`Council grant: base`, gp.base)}${row(`Standing ${c.council.standing}`, gp.standing)}${row(`${gp.held} ${gp.held === 1 ? "anomaly" : "anomalies"} held`, gp.anomalies)}${row(`${plural(gp.yearsRun, "year")} of service`, gp.years)}${row("Raised grant", gp.raised)}${row(`${DIFFICULTIES[c.difficulty ?? "agent"].name} difficulty`, gp.difficulty)}${row("Emergency repayment", gp.repay, "warn")}

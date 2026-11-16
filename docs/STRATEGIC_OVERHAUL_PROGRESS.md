@@ -91,7 +91,7 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
 | S-C2 | Representative screen: Site-19 cross-section centrepiece | S-C1 | Functional build, repair, staff and containment from the screen; browser test | [x] |
 | S-D1 | Persistent staff identities in tactical missions | none | Named researchers in breach missions; deaths propagate; tested | [x] |
 | S-D2 | Research and engineering depth (assignments, specialties, experiments) | S-B1 | See notes | [ ] |
-| S-D3 | Economy transparency and Council tradeoffs | S-B1 | Ledger and upcoming obligations visible; tested | [ ] |
+| S-D3 | Economy transparency and Council tradeoffs | S-B1 | Ledger and upcoming obligations visible; tested | [x] |
 | S-D4 | Goal-driven Chaos Insurgency and GOC | none | Plans chosen from Site-19's weaknesses and their own resources; tested | [ ] |
 | S-E1 | Screen redesigns: Command, World, Research, Engineering, Personnel, History, Credits | S-C2 | Browser workflow tests | [ ] |
 | S-E2 | Onboarding with Krista Carter | S-E1 | Persisted steps; skippable; tested | [ ] |
@@ -137,6 +137,17 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
   - Fix: a researcher, survivor or record destroyed in a mission no longer counts as a civilian death, which used to
     add regional exposure.
   - `tests/staff.e2e.cjs`.
+- D3 done:
+  - `src/campaign/forecast.ts`: `obligations(c, days)` lists scheduled money (each monthly settlement's grant, fronts
+    and upkeep, emergency repayments ending, contract pay, the O5 inspection's result as things stand) and
+    `projection(c, days)` gives the balance after each settlement and the first day of projected debt. Pure.
+  - The Finances panel shows the next 90 days, one row per date, with the parts of each settlement underneath and
+    a bar per settlement for the projected balance.
+  - The Director's Briefing warns "Debt projected by …" when the scheduled money alone runs out within 90 days.
+  - Council tradeoffs already exist (emergency appropriation for standing, offers and transfers); the forecast now
+    shows what an appropriation's repayment does to the next grants.
+  - `tests/unit/forecast.test.ts`: agrees with the settlement the books record (within $3k, since standing and
+    exposure can drift during the same day), repayments end on schedule, debt is projected, purity, briefing warning.
 
 ## Known issues
 

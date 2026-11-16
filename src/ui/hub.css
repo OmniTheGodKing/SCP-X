@@ -128,3 +128,19 @@ body:has(.hub) { background: var(--s-bg); }
 .sevlog p.sev-critical { border-left-color: var(--s-danger); }
 .sevlog p.sev-important { border-left-color: var(--s-caution); }
 .hub .log { max-height: 360px; }
+
+/* ---- finances: the next 90 days (Strategic overhaul D3) ---- */
+.upcoming { margin: 8px 0 10px; padding: 8px 10px; background: var(--s-surface-2); border: 1px solid var(--s-line); }
+.upcoming .rows .r { font-size: 12.5px; padding: 3px 0; }
+.upcoming .hday { font-family: var(--font-mono); font-size: 11px; color: var(--s-dim); margin-right: 6px; }
+.upcoming .v.ok { color: var(--s-ok); }
+.upcoming .v.neg { color: var(--s-text); }
+.proj { display: flex; gap: 8px; margin: 10px 0 6px; }
+.proj .pt { flex: 1; display: grid; grid-template-rows: auto 64px auto; gap: 3px; text-align: center; }
+.proj .bar { display: flex; flex-direction: column; justify-content: flex-end; border-bottom: 1px solid var(--s-line-2); }
+.proj .bar > span { display: block; background: var(--s-info); opacity: .75; }
+.proj .pt.neg .bar > span { background: var(--s-danger); }
+.proj .pt b { font-family: var(--font-mono); font-size: 10.5px; font-weight: 400; color: var(--s-text); }
+.proj .pt.neg b { color: var(--s-danger); }
+.proj .pt em { font-style: normal; font-family: var(--font-mono); font-size: 10px; color: var(--s-dim); white-space: nowrap; }
+.upcoming p { margin-top: 4px; font-size: 12.5px; }
