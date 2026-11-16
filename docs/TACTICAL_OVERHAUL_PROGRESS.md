@@ -41,8 +41,8 @@ Status: `[x]` done and tested, `[~]` partly done (see notes), `[ ]` not started.
 | T1.4 | Exposure-based visibility [2.4] | T1.3 | Long hallways visible end to end; partial exposure measured | [x] |
 | T1.5 | Line of fire on the same eye points and trace; callers migrated [2.5] | T1.4 | Zero "can see but can't shoot" except through reinforced glass (consistency test); all suites pass | [x] |
 | T2.1 | Geometric directional cover and flanking [3.1] | T1.5 | Cover matrix tests; windows, partitions and doors count by height | [x] |
-| T2.2 | Pathfinding options instead of global flags; AI uses real move and dash [7.4] | T0 | No `setVault`, `setLinkAccess` or `setSlow`; reach unchanged | [ ] |
-| T2.3 | Central action table: costs and validity [6.1] | T0 | One place decides action costs; UI, commands and AI agree | [ ] |
+| T2.2 | Pathfinding options instead of global flags; AI uses real move and dash [7.4] | T0 | No `setVault`, `setLinkAccess` or `setSlow`; reach unchanged | [x] |
+| T2.3 | Central action table: costs and validity [6.1] | T0 | One place decides action costs; UI, commands and AI agree | [x] |
 | T3.1 | Light map [4.1] | T1.1 | Lit corridor at night visible end to end; unlit field not | [x] |
 | T3.2 | Perception: unseen, detected, identified [4.2] | T1.5, T3.1 | Distance and light ladder tests; concealment still works | [ ] |
 | T3.3 | Smoke density [4.4] | T3.2 | Thin smoke reduces detection; thick smoke hides | [ ] |
@@ -112,6 +112,16 @@ Status: `[x]` done and tested, `[~]` partly done (see notes), `[ ]` not started.
   - The old per-case filter `LEAN_SIGHT` is gone.
 - **D4 (T1):** Sight is not forced to be symmetric (owner's instruction). A unit stepping out past cover can see a
   target that can't see it back. Measured asymmetry is reported by the consistency test.
+
+- **T2.2 done.**
+  - `bfs` takes a `PathOpts` (vault, links, slow); `setVault`, `setLinkAccess` and `setSlow` are gone.
+  - `src/game/movement.ts` holds `moveOf`, `moveCost`, `pathOpts`, `blockerFor` and `reachOf`. Units of the same side
+    pass through each other; nobody ends on an occupied tile or a desk.
+  - The player's reach uses it. The enemy AI moves onto it in T5, which replaces its fixed 5-tile planning.
+- **T2.3 done.** `src/game/actions.ts` decides costs and checks: `fireCheck`, `payFire` (SMG 1 action, marksman 2,
+  Double tap), `reloadCheck`/`payReload`, `overwatchCheck`/`payOverwatch`, `payItem`, `payAbility`, `payMove`. The
+  player's commands, the overwatch button and abilities use it; the AI moves onto it in T5. Unit tests in
+  `tests/unit/actions.test.ts`.
 
 ## Unresolved issues
 

@@ -1,4 +1,5 @@
 // The mission screen: map, SCP-173 status, squad, actions, containment file and incident log.
+import { overwatchCheck } from "../game/actions";
 import { MISSION_STEPS } from "./tutorial";
 import { optionalMet } from "../game/mission";
 import { DRUM, EXIT, L, area, floorOf, inContainer } from "../core/grid";
@@ -442,7 +443,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     ctxBtn("dragBtn", off || (S.mode === "drag" ? null : dragWhy), S.mode === "drag" ? "Cancel drag <kbd>G</kbd>" : "Drag <kbd>G</kbd>");
     $("dragBtn").classList.toggle("on", S.mode === "drag");
     ctxBtn("sealBtn", off || sealCheck(sel));
-    setBtn("owBtn", off || (!sel ? "Select someone." : sel.side !== "mtf" ? "D-Class are unarmed." : sel.ap < 1 ? "No actions left this turn." : null));
+    setBtn("owBtn", off || (!sel ? "Select someone." : sel.side !== "mtf" ? "D-Class are unarmed." : overwatchCheck(sel)));
     setBtn("nextBtn", off);
     setBtn("reloadBtn", off || reloadCheck(sel));
     setBtn("faceBtn", off || (!sel ? "Select someone." : null));

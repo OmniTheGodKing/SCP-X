@@ -1,4 +1,5 @@
 // Class abilities used during a mission. Each has a target rule, a cost and an effect.
+import { payAbility } from "./actions";
 import { coverSides } from "../core/geom";
 import { DIRS, DRUM, FULL, HALF, L, STEEL, WALL, cheb, passable, tileAt } from "../core/grid";
 import { hasPerk, spend, usesLeft } from "./perks";
@@ -145,7 +146,7 @@ export function useAbility(u: Unit, p: AbilityId, t: Unit) {
   const c = cost(u, p);
   if (p === "medkit" && c === 0) spend(u, "cm" + S.turn);
   if (d.uses) spend(u, p);
-  u.ap = d.endsTurn ? 0 : u.ap - c;
+  payAbility(u, c, !!d.endsTurn);
   S.mode = null; S.ability = null;
   switch (p) {
     case "medkit":

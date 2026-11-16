@@ -2,7 +2,7 @@
 import { settleFacing, facingTo, facingName, emitNoise } from "./noise";
 import { hazardDealt } from "./mission";
 import { reinforcementsTick } from "./ciTactics";
-import { blastStructure, setLinkAccess, DRUM, FLOOR, HALF, L, STEEL, TS, area, area as area_, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, setSlow, setVault, tileAt, DIRS, type Pt } from "../core/grid";
+import { blastStructure, DRUM, FLOOR, HALF, L, STEEL, TS, area, area as area_, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, tileAt, DIRS, type Pt } from "../core/grid";
 import { setSmoke, sightFrom } from "../core/sight";
 import { canShoot, activeGun, damage, fire, kill, moveUnit } from "./combat";
 import { TYPES } from "../data/weapons";
@@ -21,54 +21,29 @@ import {
   occupied, reveal, seen, sleep, starers, team, unitAt,
 } from "./state";
 import { RAID_TURNS, THROWN, type ScpId, type Unit } from "./types";
+import { moveCost, moveOf, reachOf } from "./movement";
+import { fireCheck, overwatchCheck, payFire, payItem, payMove, payOverwatch, payReload, payStrike, reloadCheck } from "./actions";
 import { carryPhase, checkQuiet, convoyPhase, rivalPhase } from "./rivals";
 import { check096, endOfEnemyPhase, eyesMoveCap, hidden939, isDown682, isNewScp, newAnomalyPhase, placeLure, sealBlock, sealTarget, syncMask, voices } from "./scp4b";
 
 const DRAG_SANITY = 5;
 
 // Staring units can move anywhere within range, provided every tile on the way keeps sight of SCP-173.
+// Tactical overhaul T2.2: the reach itself comes from movement.ts, the same rules the enemy AI uses.
 export function reachFor(u: Unit | null) {
   if (!u || u.ap < 1) return null;
-  const move = moveOf(u);
-  setVault(hasPerk(u, "bulldozer"));
-  setLinkAccess(isTeam(u));
-  setSlow(S.corroded);
-  // the team can walk through each other (a squadmate in a doorway doesn't seal it), but not through anyone else
-  const blocker = (x: number, y: number) => S.units.some(o => o !== u && o.alive && !o.saved && !o.carriedBy && o.x === x && o.y === y && !(isTeam(u) && isTeam(o)));
-  let res;
-  if (u.staring) {
-    const st = S.statue;
-    res = bfs([[u.x, u.y]], move, (x, y) => blocker(x, y) || !sightFrom(x, y, st.x, st.y, rangeOf(u)));
-  } else res = bfs([[u.x, u.y]], u.ap * move, blocker);
-  // ...and nobody ends a move on someone else's tile
-  for (let i = 0; i < res.dist.length; i++) if (res.dist[i] > 0 && occupied(i % L.W, (i / L.W) | 0, u)) res.dist[i] = -res.dist[i] - 100;
-  setVault(false); setLinkAccess(false); setSlow(new Set());
-  // nobody ends a move standing on a desk
-  for (let i = 0; i < res.dist.length; i++) if (res.dist[i] > 0 && tileAt(i % L.W, (i / L.W) | 0) === HALF) res.dist[i] = -res.dist[i] - 100;
-  return res;
+  if (u.staring) { const st = S.statue; return reachOf(u, moveOf(u), (x, y) => !sightFrom(x, y, st.x, st.y, rangeOf(u))); }
+  return reachOf(u);
 }
-export const moveOf = (u: Unit) => Math.max(1, prof(u).move + (u.gun ? TYPES[u.gun.type].move : 0) + (u.moveBonus ?? 0) - (u.carrying ? 1 : 0) - (S.setup.weather === "snow" ? 1 : 0));
-export const moveCost = (u: Unit, d: number) => d <= moveOf(u) ? 1 : 2;
+export { moveOf, moveCost };
 
-/** Why this unit can't fire right now, or null. */
-export function fireCheck(u: Unit) {
-  if (!u.gun) return null;
-  if (u.gun.ammo < 1 && u.side !== "mtf") return "Out of ammo. Reload first (R).";
-  if (u.gun.ammo >= 1 && u.gun.type === "marksman" && u.ap < 2) return "A marksman rifle takes both actions to fire.";
-  return null;
-}
-export function reloadCheck(u: Unit | null) {
-  if (!u || !u.gun) return "Select an operative.";
-  if (u.gun.ammo >= u.gun.mag) return "Magazine is full.";
-  if (u.ap < 1) return "No actions left this turn.";
-  return null;
-}
+export { fireCheck, reloadCheck };
 export function doReload(flash: (t: string) => void) {
   const u = S.selected;
   if (!canAct() || !u) return;
   const why = reloadCheck(u);
   if (why) { flash(why); return; }
-  u.gun!.ammo = u.gun!.mag; u.ap--;
+  payReload(u);
   fx({ type: "cue", cue: "reload", x: u.x * TS + TS / 2, y: u.y * TS + TS / 2, dur: 700 });
   log(`${full(u)} reloads the ${u.gun!.name}.`);
   afterAction();
@@ -270,7 +245,7 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
     const fw = fireCheck(sel);
     if (fw) { flash(fw); return; }
     if (!confirm()) return;
-    S.busy = true; S.pending = null; sel.ap = activeGun(sel)?.type === "smg" ? sel.ap - 1 : 0;
+    S.busy = true; S.pending = null; payFire(sel);
     await fire(sel, u, false);
     S.busy = false; afterAction(); return;
   }
@@ -291,15 +266,13 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
     S.busy = true; S.pending = null;
     // a bayonet settles an adjacent fight without a roll or a round
     if (sel.gun?.attachment === "bayonet" && cheb(sel.x, sel.y, u.x, u.y) <= 1) {
-      S.busy = false; sel.ap = 0;
+      S.busy = false; payStrike(sel);
       breakConcealment("a bayonet attack");
       log(`${full(sel)} drives the bayonet home (3 damage).`, "good");
       fx({ type: "text", x: u.x * TS + TS / 2, y: u.y * TS - 2, text: "3", color: "#ffffff", dur: 800 });
       S.hitKind = "bayonet"; damage(u, 3, sel); await wakePods(); afterAction(); return;
     }
-    if (activeGun(sel)?.type === "smg") sel.ap -= 1;
-    else if (hasPerk(sel, "double_tap") && sel.ap >= 2 && sel.gun?.type !== "marksman" && usesLeft(sel, "double_tap", 1) > 0) { spend(sel, "double_tap"); sel.ap = 1; log(`${full(sel)}: double tap.`, "key"); }
-    else sel.ap = 0;
+    payFire(sel);
     await fire(sel, u, false);
     await wakePods();
     S.busy = false; afterAction(); return;
@@ -313,10 +286,8 @@ export async function onTap(x: number, y: number, touch: boolean, flash: (t: str
   if (cost > 1 && eyesMoveCap(sel)) { flash("Looking at the floor, they can only make the short move."); return; }
   if (!confirm()) return;
   S.busy = true; S.pending = null;
-  sel.ap -= cost;
-  setVault(hasPerk(sel, "bulldozer"));
+  payMove(sel, cost);
   const path = pathTo(res, x, y) || [];
-  setVault(false);
   await moveUnit(sel, path);
   await wakePods();
   S.busy = false; afterAction();
@@ -334,8 +305,8 @@ function afterAction() {
 
 export function doOverwatch() {
   const u = S.selected;
-  if (!canAct() || !u || u.side !== "mtf" || u.ap < 1 || (u.gun && u.gun.ammo < 1) || u.eyesDown) return;
-  u.overwatch = true; u.ap = 0; u.overwatchShots = hasPerk(u, "rapid_reaction") ? 2 : 1;
+  if (!canAct() || !u || u.side !== "mtf" || overwatchCheck(u)) return;
+  payOverwatch(u);
   log(`${full(u)} on overwatch.`);
   afterAction();
 }
@@ -479,7 +450,7 @@ export function useItem(idx: number, flash: (t: string) => void) {
   const why = useCheck(u, idx);
   if (why) { flash(why); return; }
   const it = u.items![idx];
-  it.uses--; u.ap--;
+  it.uses--; payItem(u, false);
   if (it.id === "medkit") {
     const t = medkitTarget(u)!;
     t.hp = Math.min(t.maxHp, t.hp + S.setup.mods.medkitHeal);
@@ -493,7 +464,7 @@ export function useItem(idx: number, flash: (t: string) => void) {
 }
 
 function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y: number) {
-  item.uses--; u.ap = 0;
+  item.uses--; payItem(u, true);
   breakConcealment(item.id === "smoke" ? "a smoke canister hissing" : item.id === "flare" ? "a flare lighting up the area" : item.id === "noisemaker" ? "a noisemaker playing" : "an explosion");
   S.mode = null; S.throwing = null; S.pending = null;
   if (item.id === "noisemaker") { placeLure(u, x, y); return; }
