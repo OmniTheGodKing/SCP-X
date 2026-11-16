@@ -250,6 +250,9 @@ export interface MissionSetup {
   weather?: import("../data/weather").Weather;
   /** Breaches: researchers caught in the wing, and how many D-Class are in the block to get loose. */
   researchers?: number;
+  /** Strategic overhaul D1: the names of the Site-19 researchers caught in the wing, so a death in the mission is
+   *  that person's death in the campaign. */
+  researcherNames?: string[];
   strayPool?: number;
   witnesses: number;
   civilians: number;
@@ -318,6 +321,8 @@ export interface MissionResult {
   /** Breaches: researchers brought out and lost; loose D-Class killed and escaped. */
   researchersRescued: number;
   researchersLost: number;
+  /** The names of the researchers lost, when the setup named them. */
+  researcherNamesLost?: string[];
   straysLost: number;
   straysEscaped: number;
   /** SCP-610: operatives lost to infection, and whether the core was burned out. */

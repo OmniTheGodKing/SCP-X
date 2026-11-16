@@ -6,7 +6,7 @@ import { tickContracts, type ContractState } from "./contracts";
 import { tickLeads, type LeadsState } from "./leads";
 import { DIFFICULTIES, diffOf, type Difficulty, type NewCampaignOptions } from "./difficulty";
 import { FATIGUE, afterMission, bondsOf, restDay, tiredness } from "./condition";
-import { announceHire, hirePerson, losePeople, someone, syncStaff, type Lost, type Person } from "./people";
+import { announceHire, FIELDS, hirePerson, losePeople, someone, syncStaff, type Lost, type Person } from "./people";
 import { TF_BONUS, eta10Call, GOGGLES, NU7, canBringAmnestics, canBringResearcher, canCallNu7, nu7Troopers, otherSiteOutcome, scanOutcome, SPECIALIST, tfOf } from "./taskforces";
 import { newTf, tickTf, type TaskForce, type TfState } from "./taskforces";
 import { pickNick, withNick } from "../data/nicknames";
@@ -739,6 +739,15 @@ export function hireEngineer(c: Campaign) {
   announceHire(c, hirePerson(c, "engineer"));
 }
 
+/** Strategic overhaul D1: who is working in an anomaly's wing when it breaches. Researchers in the anomaly's field
+ *  first (they study it), then the longest-serving; nobody on leave. Deterministic: no dice. */
+export function inTheWing(c: Campaign, scpId: string | undefined, n: number): string[] {
+  syncStaff(c);
+  const branch = scpId ? `SCP-${scpId}` : "";
+  const here = (c.people ?? []).filter(p => p.kind === "researcher" && !p.away);
+  const studies = (p: Person) => !!p.field && (FIELDS[p.field].branches as string[]).includes(branch);
+  return here.sort((a, b) => Number(studies(b)) - Number(studies(a)) || a.since - b.since || a.id.localeCompare(b.id)).slice(0, n).map(p => p.name);
+}
 /** Extra people sent along: a field researcher, an amnestics specialist, Nu-7 on call. */
 const pickName = (xs: string[]) => xs[Math.floor(rnd() * xs.length)];
 export interface Extras { researcher?: boolean; amnestics?: boolean; nu7?: boolean }
@@ -803,7 +812,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     severity: inc.kind === "outbreak" ? c.outbreak?.severity ?? 2 : undefined,
     rioters: inc.kind === "riot" ? riotSize(c) : undefined,
     // a breach at Site-19 catches researchers in the wing and opens the D-Class block
-    researchers: kind === "breach" ? Math.min(c.researchers, rand(1, 3)) : away ? inc.survivors ?? 2 : 0, strayPool: kind === "breach" ? c.dclass : 0, guards: away ? siteGuards : sec.first, lateGuards: sec.late, mtfTurn: kind === "raid" ? raidArrival(c) : mtfArrival(c, inc), liftCount: kind === "raid" ? onStation(c, squad.length) : undefined, roadTurn: kind === "raid" ? mtfArrival(c) : undefined, witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
+    ...(n => ({ researchers: n, researcherNames: kind === "breach" ? inTheWing(c, inc.scpId, n) : undefined }))(kind === "breach" ? Math.min(c.researchers, rand(1, 3)) : away ? inc.survivors ?? 2 : 0), strayPool: kind === "breach" ? c.dclass : 0, guards: away ? siteGuards : sec.first, lateGuards: sec.late, mtfTurn: kind === "raid" ? raidArrival(c) : mtfArrival(c, inc), liftCount: kind === "raid" ? onStation(c, squad.length) : undefined, roadTurn: kind === "raid" ? mtfArrival(c) : undefined, witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
     incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: Math.max(0, Math.max(0, inc.insurgents - (inc.weakened ?? 0)) + (inc.insurgents && inc.kind !== "breach" ? threatExtra(c) + diffOf(c).insurgents : 0)), squad, dclass,
     enemyAim: diffOf(c).aim, tutorial: !!c.tutorial?.on && !c.tutorial.seen.includes("mission"),
     ciRoles: inc.kind === "breach" || inc.kind === "riot" || inc.kind === "outbreak" || inc.kind === "coverup" ? undefined : ciRoles(c),
@@ -914,7 +923,8 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   c.dclass += r.dReturned;
   // breach losses among the staff: researchers, and D-Class from the block
   const other = inc?.kind === "rescue" || inc?.kind === "emergency";   // these people belong to another site
-  if (r.researchersLost && !other) { const who = losePeople(c, "researcher", r.researchersLost, `lost in the wing during ${name}`); lines.push(`${who.length ? who.join(" and ") : plural(r.researchersLost, "researcher")} didn't make it out of the wing.`); }
+  if (r.researchersLost && !other) { const how = `lost in the wing during ${name}`, named = r.researcherNamesLost ?? [];
+    const who = [...named.flatMap(n => losePeople(c, "researcher", 1, how, n)), ...losePeople(c, "researcher", Math.max(0, r.researchersLost - named.length), how)]; lines.push(`${who.length ? who.join(" and ") : plural(r.researchersLost, "researcher")} didn't make it out of the wing.`); }
   if (inc && other) lines.push(...otherSiteOutcome(c, inc, r));
   if (r.researchersRescued && !other) {
     lines.push(`${plural(r.researchersRescued, "researcher")} brought out alive. The team takes heart (+${5 * r.researchersRescued} sanity).`);

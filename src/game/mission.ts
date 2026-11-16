@@ -131,7 +131,7 @@ export function createMission(setup: MissionSetup) {
   const hiding = (setup.researchers ?? 0) + (setup.survivors ?? 0);
   for (let i = 0; i < hiding; i++) {
     const [x, y] = claim(floorTiles(strayRooms[(i + 1) % strayRooms.length]));
-    const name = i < (setup.researchers ?? 0) ? doctors[i % doctors.length] : `${setup.survivorName ?? "Lost operative"} ${i + 1 - (setup.researchers ?? 0)}`;
+    const name = i < (setup.researchers ?? 0) ? setup.researcherNames?.[i] ?? doctors[i % doctors.length] : `${setup.survivorName ?? "Lost operative"} ${i + 1 - (setup.researchers ?? 0)}`;
     units.push(mk({ id: "rs" + (i + 1), side: "civilian", call: name, name, x, y, hp: 4, maxHp: 4, san: 60, researcher: true }));
   }
   // classified records at risk, and what got loose at another site
@@ -304,7 +304,12 @@ export function optionalFor(setup: MissionSetup): { id: OptionalId; text: string
     case "manhunt": return [{ id: "nocas", text: "Let no civilian die" }];
     case "coverup": return [{ id: "allwitnesses", text: "Dose every witness, not just half" }];
     case "escort": case "raid": return [{ id: "nolosses", text: "Lose nobody" }];
-    case "breach": return setup.researchers ? [{ id: "staff", text: "Bring every researcher out alive" }] : [];
+    case "breach": {
+      // name them when they're Site-19's own: these are people on the staff list, not extras
+      const names = setup.researcherNames ?? [];
+      const who = names.length === 1 ? names[0] : names.length ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : "";
+      return setup.researchers ? [{ id: "staff", text: who ? `Bring ${who} out alive` : "Bring every researcher out alive" }] : [];
+    }
     default: return [];
   }
 }
@@ -386,9 +391,11 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
     dLost: detail.filter(u => !u.alive).length,
     researchersRescued: docs.filter(u => u.alive && (u.saved || win)).length,
     researchersLost: docs.filter(u => !u.alive || (!u.saved && !win)).length,
+    researcherNamesLost: S.setup.researcherNames ? docs.filter(u => !u.alive || (!u.saved && !win)).map(u => u.name).filter(n => S.setup.researcherNames!.includes(n)) : undefined,
     straysLost: strays.filter(u => !u.alive || (!win && !u.restrained && !u.saved)).length,
     straysEscaped: strays.filter(u => u.alive && u.saved && !u.restrained).length,
-    civiliansKilled: S.units.filter(u => u.side === "civilian" && !u.alive).length,
+    // researchers and survivors are counted on their own, and records are not people
+    civiliansKilled: S.units.filter(u => u.side === "civilian" && !u.alive && !u.researcher && !u.record).length,
     witnessesEscaped: S.units.filter(u => u.witness && u.saved && !u.dosed).length,
     witnessesDosed: S.units.filter(u => u.witness && u.dosed).length,
     amnesticsUsed: S.setup.amnestics - S.amnestics,

@@ -89,7 +89,7 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
 | S-H2 | Director's Briefing: decision queue derived from state | S-B1 | Items by urgency, each opening its screen; no stale entries; tested | [x] |
 | S-C1 | Visual style guide and design tokens | none | `docs/UI_STYLE_GUIDE.md`; tokens in CSS | [x] |
 | S-C2 | Representative screen: Site-19 cross-section centrepiece | S-C1 | Functional build, repair, staff and containment from the screen; browser test | [x] |
-| S-D1 | Persistent staff identities in tactical missions | none | Named researchers in breach missions; deaths propagate; tested | [ ] |
+| S-D1 | Persistent staff identities in tactical missions | none | Named researchers in breach missions; deaths propagate; tested | [x] |
 | S-D2 | Research and engineering depth (assignments, specialties, experiments) | S-B1 | See notes | [ ] |
 | S-D3 | Economy transparency and Council tradeoffs | S-B1 | Ledger and upcoming obligations visible; tested | [ ] |
 | S-D4 | Goal-driven Chaos Insurgency and GOC | none | Plans chosen from Site-19's weaknesses and their own resources; tested | [ ] |
@@ -129,6 +129,14 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
   - `tests/strategic.e2e.cjs`: header, briefing order and navigation, site overview, build and repair from the
     screen, a rejected command leaving the campaign unchanged, credits, no horizontal scroll at 1280 and 1920.
   - The test hook (`window.__site19`) exposes `dispatch`, `briefing` and `invariants`.
+- D1 done:
+  - A breach's setup names the Site-19 researchers in the wing (`inTheWing` in `campaign.ts`): researchers whose field
+    studies that anomaly first, then the longest-serving, with no dice.
+  - The mission uses those names, and the optional objective lists them. The result reports who was lost by name,
+    and `applyResult` removes exactly those people and records them among the lost.
+  - Fix: a researcher, survivor or record destroyed in a mission no longer counts as a civilian death, which used to
+    add regional exposure.
+  - `tests/staff.e2e.cjs`.
 
 ## Known issues
 
