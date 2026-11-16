@@ -4,6 +4,8 @@ import "./hub.css";
 import { directorsBriefing } from "../campaign/briefing";
 import { obligations, projection } from "../campaign/forecast";
 import { crews } from "../campaign/crews";
+import { attachmentsFor, canFitAttachment, mountsOf, weaponStats } from "../campaign/armory";
+import { MOUNT_NAMES, fits, type MountId } from "../data/mounts";
 import { allRooms, roomLayout } from "../scene/layout";
 import { interiorSvg, type SceneExtras } from "./scene/interior";
 import { operativeFigure } from "./scene/people";
@@ -178,6 +180,9 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let room: string | null = null, roomScroll = 0, rvPanel = true;
   type OpSection = "appearance" | "loadout" | "abilities" | "record" | "bio";
   let opSection: OpSection = "appearance";
+  // Presentation overhaul P4: the operative whose weapon is on the armory bench, the mount selected, the attachment
+  // being previewed (not yet fitted), and how close the bench view is
+  let armOp: string | null = null, armMount: MountId | null = null, armPreview: AttachmentId | "" | null = null, armZoom = 1;
   let creditsOpen = false;
   let resetArmed = 0;
   let regionSel: RegionId = pendingMapSel?.startsWith("reg:") ? pendingMapSel.slice(4) as RegionId : HOME;
@@ -1123,13 +1128,16 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       if (hero) extras.hero = { key: hero.id, spec: operativeFigure(c, hero), x: rvPanel ? 520 : 800 };
       extras.span = rvPanel ? [200, 1000] : [240, 1360];
     }
-    if (L.kind === "armory") extras.racks = [...new Set(Object.values(c.models))];
+    if (L.kind === "armory") {
+      extras.racks = [...new Set(Object.values(c.models))];
+      const ao = armOp ? c.roster.find(o => o.id === armOp && o.alive) : undefined;
+      if (ao) extras.bench = { model: c.models[weaponOf(ao)], attachment: ao.attachment, ghost: armPreview || undefined, highlight: armMount ?? undefined, mounts: mountsOf(c, ao), zoom: armZoom, narrow: rvPanel };
+    }
     const stateText: Record<string, string> = { operational: L.powered ? "Operational" : "No power", building: "Under construction", damaged: "Damaged", wrecked: "Wrecked", repairing: "Under repair", demolishing: "Being torn down", upgrading: "Being refitted" };
     const heroOp = L.kind === "quarters" && opSel ? c.roster.find(o => o.id === opSel && o.alive) : undefined;
     const ctx = L.kind === "quarters" ? (heroOp ? opFocusPanel(heroOp) : `<div class="card"><div class="label">Epsilon-11 · ${c.roster.filter(o => o.alive).length} operatives</div>
         <div class="roster">${c.roster.filter(o => o.alive).map(opRow).join("")}</div><p class="muted">Select an operative in the room or in this list.</p></div>`)
-      : L.kind === "armory" ? `<div class="card"><div class="label">Armory · weapons in service</div><ul class="why">${(Object.entries(c.models) as [string, string][]).map(([t, m]) => `<li>${esc(t)}: ${esc(m)}</li>`).join("")}</ul>
-          <p class="muted">Attachments in stores: ${Object.entries(c.attachments).filter(([, n]) => n).map(([a, n]) => `${esc(a)} × ${n}`).join(", ") || "none"}.</p></div>`
+      : L.kind === "armory" ? armoryPanel()
       : slotDetail(L.level, L.slot);
     return `<div class="roomview ${rvPanel ? "" : "nopanel"}" data-room="${esc(L.id)}">
       <div class="rv-stage">${interiorSvg(L, extras)}</div>
@@ -1508,7 +1516,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
           <div class="eqopts">${weaponOptions(o).map(w => { const m = model(c.models[w]); return pickCard("data-setweapon", w, w === t, `${TYPES[w].name}: ${m.name}`, `${m.dmg.join("–")} damage · ${m.mag} rounds · aim ${m.aim >= 0 ? "+" : ""}${m.aim}. ${esc(TYPES[w].desc)}`); }).join("")}</div>
           <p class="muted">Their class carries these two. Better models come from Weapons research and a workshop refit.</p>`;
         case "attachment": return `<div class="eqopts">${pickCard("data-fitatt", "", !o.attachment, "None", "The weapon as issued.")}
-          ${(Object.keys(ATTACHMENTS) as AttachmentId[]).filter(a => o.attachment === a || (c.attachments[a] ?? 0) > 0).map(a => pickCard("data-fitatt", a, o.attachment === a, ATTACHMENTS[a].name, `${esc(ATTACHMENTS[a].desc)}${o.attachment === a ? " · fitted" : ` · ${c.attachments[a]} in stores`}`)).join("")}</div>
+          ${(Object.keys(ATTACHMENTS) as AttachmentId[]).filter(a => o.attachment === a || ((c.attachments[a] ?? 0) > 0 && fits(c.models[weaponOf(o)], a))).map(a => pickCard("data-fitatt", a, o.attachment === a, ATTACHMENTS[a].name, `${esc(ATTACHMENTS[a].desc)}${o.attachment === a ? " · fitted" : ` · ${c.attachments[a]} in stores`}`)).join("")}</div>
           <p class="muted">Attachments are built in the workshop once researched. Fitting one takes it from stores; taking it off puts it back.</p>`;
         case "ammo": return `<div class="eqopts">${pickCard("data-loadammo", "", !o.ammoType, "Standard ball", "Ordinary rounds.")}
           ${(Object.keys(AMMO) as AmmoId[]).filter(a => o.ammoType === a || (c.ammo[a] ?? 0) > 0).map(a => pickCard("data-loadammo", a, o.ammoType === a, AMMO[a].name, `${esc(AMMO[a].desc)}${o.ammoType === a ? " · loaded" : ` · ${c.ammo[a]} in stores`}`)).join("")}</div>`;
@@ -1603,6 +1611,41 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       <details class="archived" ${lookOpen ? "open" : ""}><summary>Appearance</summary>${p.appearance}</details>
       ${p.abilities}${p.loadout}</div>`;
   }
+  /** Presentation overhaul P4: the armory's panel. With nobody at the bench, the squad and their weapons; with an
+   *  operative's weapon on it, its mounts, what each takes, a preview with the figures before and after, and the
+   *  real fit, removal or workshop order. */
+  function armoryPanel() {
+    const ao = armOp ? c.roster.find(o => o.id === armOp && o.alive) : undefined;
+    if (!ao) return `<div class="card"><div class="label">Armory · choose whose weapon to work on</div>
+      <div class="armlist">${c.roster.filter(o => o.alive).map(o => `<button type="button" class="act armop" data-armop="${o.id}"><b>${esc(o.name)}</b><span>${esc(model(c.models[weaponOf(o)]).name)}${o.attachment ? ` · ${esc(ATTACHMENTS[o.attachment].name)}` : ""}</span></button>`).join("")}</div>
+      <p class="muted">In stores: ${Object.entries(c.attachments).filter(([, n]) => n).map(([a, n]) => `${esc(ATTACHMENTS[a as AttachmentId].name)} × ${n}`).join(", ") || "no attachments"}.</p></div>`;
+    const m = model(c.models[weaponOf(ao)]), now = weaponStats(c, ao);
+    const prev = armPreview !== null ? weaponStats(c, ao, armPreview) : null;
+    const stat = (label: string, a: string, b?: string) => `<div class="r"><span>${label}</span><span class="v">${esc(a)}${b !== undefined && b !== a ? ` → <b class="${b > a ? "ok" : ""}">${esc(b)}</b>` : ""}</span></div>`;
+    const fmt = (s: typeof now) => ({ aim: `${s.aim >= 0 ? "+" : ""}${s.aim}`, crit: `${s.crit}%`, mag: `${s.mag}`, dmg: `${s.dmg[0]}–${s.dmg[1]}` });
+    const A = fmt(now), B = prev ? fmt(prev) : undefined;
+    const opts = armMount ? attachmentsFor(c, ao, armMount) : [];
+    const pv = armPreview;
+    const why = pv !== null ? canFitAttachment(c, ao, pv) : null;
+    const ordWhy = pv ? canOrderAttachment(c, pv) : null;
+    return `<div class="card armbench">
+      <div class="label">${esc(ao.call)} · ${esc(ao.name)}</div><h3 class="fac">${esc(m.name)}</h3>
+      <div class="rows">${stat("Damage", A.dmg)}${stat("Rounds", A.mag, B?.mag)}${stat("Aim", A.aim, B?.aim)}${stat("Critical", A.crit, B?.crit)}</div>
+      ${[...now.notes, ...(prev ? prev.notes.filter(n => !now.notes.includes(n)).map(n => `+ ${n}`) : [])].map(n => `<p class="specs">${esc(n)}</p>`).join("")}
+      <p class="specs">Fitted: ${ao.attachment ? esc(ATTACHMENTS[ao.attachment].name) : "nothing"}. One attachment per weapon.</p>
+      <div class="label" style="margin-top:8px">Mounts on the ${esc(m.name)}</div>
+      <div class="row mounts">${mountsOf(c, ao).map(k => `<button class="act ${armMount === k ? "on" : ""}" type="button" data-mount="${k}" aria-pressed="${armMount === k}">${MOUNT_NAMES[k]}</button>`).join("")}</div>
+      ${armMount ? `<div class="armopts">${opts.map(a => { const n = c.attachments[a] ?? 0, fitted = ao.attachment === a, res = unlockedAttachments(c).includes(a);
+        return `<button type="button" class="act armopt ${pv === a ? "on" : ""}" data-armprev="${a}" aria-pressed="${pv === a}"><b>${esc(ATTACHMENTS[a].name)}</b><span>${esc(ATTACHMENTS[a].desc)}</span><span class="specs">${fitted ? "Fitted" : !res ? "Not researched" : `${n} in stores`}</span></button>`; }).join("")}</div>` : `<p class="muted">Select a mount on the weapon or above.</p>`}
+      ${pv ? `<div class="row">
+          ${why ? `<span class="warn">${esc(why)}</span>` : `<button class="act primary" type="button" id="armFit">Fit · 1 from stores${ao.attachment && ao.attachment !== pv ? ` (the ${esc(ATTACHMENTS[ao.attachment].name.toLowerCase())} goes back)` : ""}</button>`}
+          ${why && /stores/.test(why) ? `<button class="act" type="button" id="armOrder" ${ordWhy ? `disabled title="${esc(ordWhy)}"` : ""}>Order at the workshop · $${ATTACHMENT_COST.cost}k · ${ATTACHMENT_COST.days} days</button>${ordWhy ? `<span class="muted">${esc(ordWhy)}</span>` : ""}` : ""}
+          <button class="act" type="button" id="armCancel">Cancel</button></div>` : ""}
+      ${ao.attachment ? `<div class="row"><button class="act" type="button" id="armRemove">Remove the ${esc(ATTACHMENTS[ao.attachment].name.toLowerCase())}</button></div>` : ""}
+      <div class="row"><span class="specs">View</span><button class="act" type="button" data-armzoom="-1" aria-label="Zoom out" ${armZoom <= 1 ? "disabled" : ""}>−</button><button class="act" type="button" data-armzoom="1" aria-label="Zoom in" ${armZoom >= 2.2 || !armMount ? "disabled" : ""}>+</button>
+        <button class="act" type="button" id="armBack">← Choose another</button><button class="act" type="button" data-enter="surface:quarters">Quarters →</button></div></div>`;
+  }
+
   /** The quarters' focused view: one section of the file at a time. */
   function opFocusPanel(o: Operative) {
     const p = opParts(o);
@@ -1611,7 +1654,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     return `<div class="card plan opfocus">${p.head}
       <div class="row opsecs" role="tablist">${secs.map(([k, n]) => `<button class="act ${opSection === k ? "on" : ""}" type="button" role="tab" data-opsec="${k}" aria-selected="${opSection === k}">${n}</button>`).join("")}</div>
       <div class="opsec">${body}</div>
-      <div class="row"><button class="act" type="button" id="squadBtn">← The squad</button><button class="act" type="button" data-enter="surface:armory">Armory →</button></div></div>`;
+      <div class="row"><button class="act" type="button" id="squadBtn">← The squad</button><button class="act" type="button" data-enter="surface:armory" data-armfor="${o.id}">Their weapon at the armory →</button></div></div>`;
   }
 
   function opRow(o: Operative) {
@@ -1705,7 +1748,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     root.querySelectorAll<HTMLElement>("[data-post]").forEach(b => b.onclick = () => { const g = c.guards.find(x => x.id === b.dataset.post); if (g) run({ type: "postGuard", guardId: g.id, stationId: b.dataset.station! }); });
     root.querySelectorAll<HTMLElement>("[data-rescat]").forEach(b => b.onclick = () => { resCat = b.dataset.rescat as ResearchCat; resCatPicked = true; render(); });
     root.querySelectorAll<HTMLElement>("[data-eqslot]").forEach(b => b.onclick = () => { eqSlot = eqSlot === b.dataset.eqslot ? null : b.dataset.eqslot!; render(); });
-    root.querySelectorAll<HTMLElement>("[data-fitatt]").forEach(b => b.onclick = () => change(() => fitAttachment(c, opNow(), b.dataset.fitatt as AttachmentId | "")));
+    root.querySelectorAll<HTMLElement>("[data-fitatt]").forEach(b => b.onclick = () => run({ type: "fitAttachment", opId: opNow().id, attachment: b.dataset.fitatt as AttachmentId | "" }));
     root.querySelectorAll<HTMLElement>("[data-loadammo]").forEach(b => b.onclick = () => change(() => loadAmmo(c, opNow(), b.dataset.loadammo as AmmoId | "")));
     root.querySelectorAll<HTMLElement>("[data-kitarmor]").forEach(b => b.onclick = () => change(() => { const g = gearOf(opNow().id); g.armor = b.dataset.kitarmor as ItemId | ""; if (g.armor !== "armor_heavy") g.items = g.items.map(i => (i && HEAVY.includes(i) ? "" : i)); }));
     root.querySelectorAll<HTMLElement>("[data-kititem]").forEach(b => b.onclick = () => change(() => { gearOf(opNow().id).items[Number((eqSlot ?? "item0").slice(4))] = b.dataset.kititem as ItemId | ""; }));
@@ -1791,7 +1834,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       sel = sel && sel.level === level && sel.slot === slot ? null : { level, slot };
       render();
     });
-    root.querySelectorAll<HTMLElement>("[data-enter]").forEach(b => b.onclick = () => enterRoom(b.dataset.enter!, b.getBoundingClientRect()));
+    root.querySelectorAll<HTMLElement>("[data-enter]").forEach(b => b.onclick = () => { if (b.dataset.armfor) { armOp = b.dataset.armfor; armMount = null; armPreview = null; armZoom = 1; } enterRoom(b.dataset.enter!, b.getBoundingClientRect()); });
     on("enterRoom", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) enterRoom(f.id, null); });
     on("leaveRoom", () => leaveRoom());
     on("rvPanel", () => { rvPanel = !rvPanel; render(); });
@@ -1800,6 +1843,16 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     on("fxToggle", () => { setTransitions(!transitionsSetting()); render(); });
     root.querySelectorAll<HTMLElement>("[data-opsec]").forEach(b => b.onclick = () => { opSection = b.dataset.opsec as OpSection; render(); });
     on("squadBtn", () => { opSel = null; render(); });
+    // the armory bench
+    root.querySelectorAll<HTMLElement>("[data-armop]").forEach(b => b.onclick = () => { armOp = b.dataset.armop!; armMount = null; armPreview = null; armZoom = 1; render(); });
+    root.querySelectorAll<HTMLElement>("[data-mount]").forEach(b => { const pick = () => { armMount = b.dataset.mount as MountId; armPreview = null; render(); }; b.onclick = pick; b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } }; });
+    root.querySelectorAll<HTMLElement>("[data-armprev]").forEach(b => b.onclick = () => { armPreview = b.dataset.armprev as AttachmentId; render(); });
+    root.querySelectorAll<HTMLElement>("[data-armzoom]").forEach(b => b.onclick = () => { armZoom = Math.max(1, Math.min(2.2, armZoom + Number(b.dataset.armzoom) * 0.6)); render(); });
+    on("armCancel", () => { armPreview = null; render(); });
+    on("armBack", () => { armOp = null; armMount = null; armPreview = null; armZoom = 1; render(); });
+    on("armFit", () => { if (armOp && armPreview !== null) { run({ type: "fitAttachment", opId: armOp, attachment: armPreview }); armPreview = null; } });
+    on("armRemove", () => { if (armOp) { run({ type: "fitAttachment", opId: armOp, attachment: "" }); armPreview = null; } });
+    on("armOrder", () => { if (armPreview) run({ type: "orderAttachment", attachment: armPreview }); });
     root.querySelectorAll<HTMLElement>("[data-build]").forEach(b => b.onclick = () => {
       if (!sel) return;
       const { level, slot } = sel;

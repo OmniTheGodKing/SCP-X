@@ -9,7 +9,9 @@ import {
 } from "./base";
 import { canHireEngineer, hireEngineer, type Campaign, type SiteLogEntry } from "./campaign";
 import { canClean, cleanCell } from "./containment";
-import { PROJECTS, assign, canHireResearcher, canOrder, hireResearcher, order, type ItemId } from "./research";
+import { PROJECTS, assign, canHireResearcher, canOrder, canOrderAttachment, hireResearcher, order, orderAttachment, type ItemId } from "./research";
+import { canFitAttachment, fitTo } from "./armory";
+import type { AttachmentId } from "../data/weapons";
 import { ALERTS, canHireGuard, hireGuard, postGuard, type Alert } from "./security";
 
 export type Command =
@@ -26,6 +28,8 @@ export type Command =
   | { type: "hireGuard"; stationId: string }
   | { type: "postGuard"; guardId: string; stationId: string }
   | { type: "order"; item: ItemId }
+  | { type: "fitAttachment"; opId: string; attachment: AttachmentId | "" }
+  | { type: "orderAttachment"; attachment: AttachmentId }
   | { type: "cleanCell"; scpId: string }
   | { type: "setAlert"; level: Alert };
 
@@ -49,6 +53,8 @@ export function check(c: Campaign, cmd: Command): string | null {
     case "hireGuard": return canHireGuard(c, cmd.stationId);
     case "postGuard": return c.guards.some(g => g.id === cmd.guardId && g.alive) ? null : "No such guard.";
     case "order": return canOrder(c, cmd.item);
+    case "fitAttachment": { const o = c.roster.find(x => x.id === cmd.opId); return o ? canFitAttachment(c, o, cmd.attachment) : "No such operative."; }
+    case "orderAttachment": return canOrderAttachment(c, cmd.attachment);
     case "cleanCell": { const s = c.scps.find(x => x.id === cmd.scpId); return s ? canClean(c, s) : "No such anomaly."; }
     case "setAlert": return ALERTS[cmd.level] ? null : "Unknown alert level.";
   }
@@ -75,6 +81,8 @@ export function dispatch(c: Campaign, cmd: Command): CommandResult {
     case "hireGuard": hireGuard(c, cmd.stationId); break;
     case "postGuard": postGuard(c, c.guards.find(g => g.id === cmd.guardId)!, cmd.stationId); break;
     case "order": order(c, cmd.item); break;
+    case "fitAttachment": fitTo(c, c.roster.find(x => x.id === cmd.opId)!, cmd.attachment); break;
+    case "orderAttachment": orderAttachment(c, cmd.attachment); break;
     case "cleanCell": cleanCell(c, c.scps.find(x => x.id === cmd.scpId)!); break;
     case "setAlert": c.alert = cmd.level; break;
   }

@@ -3,7 +3,7 @@
 import { campaignState, freshSeed, inMission, rnd, setCampaignSeed } from "../core/rng";
 import { fixEta10Calls, newTf } from "./taskforces";
 import { newChaos } from "./chaos";
-import { NICK_RANK, giveNick, lookOf, newBio, type Campaign } from "./campaign";
+import { NICK_RANK, giveNick, lookOf, newBio, reconcileAttachments, type Campaign } from "./campaign";
 import { withGivenName } from "../data/names";
 
 import { newResearch } from "./research";
@@ -171,6 +171,7 @@ export function parseCampaign(raw: string): Campaign | null {
     const cc = c as unknown as Campaign;
     if (typeof cc.rng !== "number") cc.rng = freshSeed();
     setCampaignSeed(cc.rng);
+    reconcileAttachments(cc);   // Presentation overhaul P4: fits the weapon can no longer take go back to stores
     return cc;
   } catch {
     return null;

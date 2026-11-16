@@ -9,6 +9,8 @@ import type { RoomLayout, DoorKind } from "../../scene/layout";
 import { anomalyFigure } from "../art";
 import { figureSvg, type FigureSpec } from "./figure";
 import { weaponSide } from "./weapons";
+import { FRAMES, MOUNT_NAMES, mountAt, type MountId } from "../../data/mounts";
+import type { AttachmentId } from "../../data/weapons";
 import { rollLook } from "../../data/looks";
 
 export const W = 1600, H = 900;
@@ -27,6 +29,8 @@ export interface SceneExtras {
   racks?: string[];
   /** A highlighted person by key. */
   focus?: string;
+  /** The armory's bench: a weapon laid out large, its mounts marked, an attachment previewed on it. */
+  bench?: { model: string; attachment?: string; ghost?: string; highlight?: string; mounts: string[]; zoom: number; owner?: FigureSpec; narrow?: boolean };
   /** One person brought forward, large, with the room still behind them (the quarters' selected operative). */
   hero?: { spec: FigureSpec; key: string; x?: number };
   /** The stretch of the scene, in scene units, people stand across (clear of a side panel). */
@@ -42,7 +46,7 @@ export function interiorSvg(L: RoomLayout, x: SceneExtras = {}) {
   if (built || L.state === "repairing") parts.push(pipes(L), signage(L));
   parts.push(lights(L, dark));
   if (built) parts.push(FURNISH[L.kind]?.(L, x) ?? "");
-  parts.push(people(L, x));
+  parts.push(x.bench ? benchScene(x.bench) : people(L, x));
   parts.push(overlay(L, dark));
   return `<svg class="interior" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" role="img" aria-label="${esc(L.name)} ${esc(L.designation)}">${parts.join("")}</svg>`;
 }
@@ -285,6 +289,35 @@ function people(L: RoomLayout, x: SceneExtras) {
   if (L.kind === "barracks") for (let i = 0; i < Math.min(4, L.headcount); i++) out.push(figureSvg({ look: rollLook(`${L.id}-d${i}`), dress: "dclass", pose: "rest" }, BX0 + 180 + i * 260, BY1 + 60 + (i % 2) * 40, 0.72));
   if (L.kind === "command") out.push(figureSvg({ look: rollLook("duty-officer-1"), dress: "officer" }, BX0 + 300, BY1 + 90, 0.78), figureSvg({ look: rollLook("duty-officer-2", "f"), sex: "f", dress: "officer" }, BX0 + 960, BY1 + 70, 0.74));
   return out.join("");
+}
+
+// ---------- the armory's bench ----------
+/** Where each mount's label sits from its marker, so neighbouring labels never collide. */
+const LABEL_AT: Record<MountId, [number, number]> = { optic: [-70, -42], rearsight: [80, -38], muzzle: [0, -44], lug: [0, 56], magazine: [0, 62], butt: [0, 56], trigger: [0, 60] };
+/** The weapon on the bench, large, with its mounts as markers the player can select. At zoom above 1 the view closes
+ *  in on the selected mount. The drawing is the same one the figures carry, at bench scale. */
+function benchScene(b: NonNullable<SceneExtras["bench"]>) {
+  const f = FRAMES[b.model] ?? FRAMES.m1_garand;
+  const span = b.narrow ? 880 : 1180, base = span / f.length, s = base * b.zoom;
+  // the point to keep in view: the selected mount when zoomed, else the weapon's middle
+  const [fx, fy] = b.zoom > 1 && b.highlight ? mountAt(b.model, b.highlight as MountId) : [f.length / 2, 0];
+  const cx = b.narrow ? 590 : W / 2, cy = 560;
+  const tx = cx - fx * s, ty = cy + fy * s;
+  const marks = b.mounts.map(m => {
+    const [mx, my] = mountAt(b.model, m as MountId), on = b.highlight === m;
+    const px = tx + mx * s, py = ty - my * s;
+    return `<g class="mount ${on ? "on" : ""}" data-mount="${m}" tabindex="0" role="button" aria-label="${MOUNT_NAMES[m as MountId]}">
+      <circle cx="${px}" cy="${py}" r="${on ? 30 : 22}" fill="${on ? "rgba(110,169,200,.25)" : "rgba(5,8,11,.55)"}" stroke="#6ea9c8" stroke-width="${on ? 4 : 2.5}"/>
+      <circle cx="${px}" cy="${py}" r="6" fill="#6ea9c8"/>
+      <text x="${px + LABEL_AT[m as MountId][0]}" y="${py + LABEL_AT[m as MountId][1]}" font-family="IBM Plex Mono,monospace" font-size="17" fill="#d8d3c6" text-anchor="middle" paint-order="stroke" stroke="#05080b" stroke-width="5">${MOUNT_NAMES[m as MountId]}</text></g>`;
+  }).join("");
+  return `<rect width="${W}" height="${H}" fill="#05080b" opacity=".5" pointer-events="none"/>
+    <path d="M60 ${H - 230} H${W - 60} L${W} ${H} H0Z" fill="#3b3226"/><path d="M60 ${H - 230} H${W - 60} L${W - 40} ${H - 205} H40Z" fill="#4e4231"/>
+    <rect x="${cx - 640}" y="${cy - 150}" width="1280" height="300" fill="#2d3a2c" opacity=".55" rx="10"/>
+    ${Array.from({ length: 13 }, (_, i) => `<line x1="${cx - 600 + i * 100}" y1="${cy - 140}" x2="${cx - 600 + i * 100}" y2="${cy + 140}" stroke="#d8d3c6" stroke-opacity=".06"/>`).join("")}
+    <ellipse cx="${cx}" cy="${cy + 120}" rx="560" ry="34" fill="#000" opacity=".35"/>
+    <g class="benchgun" transform="translate(${tx} ${ty}) scale(${s})">${weaponSide(b.model, b.attachment, { ghost: b.ghost as AttachmentId | undefined, highlight: b.highlight as MountId | undefined })}</g>
+    ${marks}`;
 }
 
 // ---------- state over the top ----------

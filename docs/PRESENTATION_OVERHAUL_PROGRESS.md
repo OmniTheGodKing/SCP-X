@@ -48,7 +48,7 @@ Everything is derived from campaign state, and nothing here changes the rules.
 | P1 | Persistent room layouts from campaign state | [x] |
 | P2 | Interior renderer and enter/leave transitions | [x] |
 | P3 | Quarters: full-body operatives and live customization | [x] |
-| P4 | Armory: weapon inspection, mount points, visible attachments | [ ] |
+| P4 | Armory: weapon inspection, mount points, visible attachments | [x] |
 | P5 | Lab, containment chambers, workshop, command | [ ] |
 
 ## Log
@@ -103,6 +103,29 @@ Everything is derived from campaign state, and nothing here changes the rules.
     all show on the figure.
   - `tests/rooms.e2e.cjs` covers: bringing an operative forward, five appearance changes each changing the figure,
     the look surviving a reload, every section opening, and returning to the squad.
+- P4:
+  - Rules (`src/campaign/armory.ts`, `src/data/mounts.ts`): each of the 13 models has a frame, named mount
+    points and a fit list from period practice. For example, the Garand takes a scope, improved sights, a match
+    trigger, a padded butt or a bayonet, but not an extended magazine (its en-bloc clip); the trench gun takes its
+    bayonet; the M3 the OSS suppressor.
+  - `fitAttachment` refuses what the issued model can't take. `reconcileAttachments` returns such a fit to stores
+    when the weapon changes, when research changes the issued model, and when an older save is loaded; nothing is
+    lost. Combat ignores a fit the weapon can't take.
+  - New commands `fitAttachment` and `orderAttachment` go through `dispatch`. The Loadout section's picker
+    lists only fits and uses the same command.
+  - `weaponStats` mirrors combat: scope +5 aim, improved sights +10, match trigger +10% crit, extended magazine +1
+    round, and the specials (graze, silence, bayonet thrust).
+  - The bench: choose an operative (or take their weapon from the quarters); the weapon lies across the armory bench
+    with its mounts marked. Selecting a mount, on the weapon or in the panel, lists what it takes, with research
+    and stores. A preview draws the attachment on the weapon (dashed) and shows the figures before and after. Fit
+    uses one from stores and says what goes back; Remove returns it; Order at the workshop starts a build. Zoom
+    closes in on the selected mount; Cancel discards the preview.
+  - There is no rotation: the weapons are drawn side-on, and the brief rules out faking 3D from a flat image.
+  - Fixed: the ledger labels for attachment and special-ammunition orders were swapped.
+  - Tests: `tests/unit/armory.test.ts` (fits, the command refusing with stores untouched, swap and removal
+    returning to stores, figures matching combat, reissue and old-save returns) and `tests/armory.e2e.cjs` (the
+    bench, the Garand's missing magazine mount, mount selection, preview, figures, zoom, cancel, fit, refusal,
+    persistence, removal).
 
 ## Known limitations
 

@@ -210,3 +210,16 @@ body:has(.hub) { background: var(--s-bg); }
 .opfocus .opsec .row { margin-top: 4px; }
 .opfocus .portrait { display: none; }
 .roomview .hero .fig { transition: filter .2s; }
+
+/* ---- Presentation overhaul P4: the armory bench ---- */
+.armlist { display: grid; gap: 6px; }
+.armlist .armop, .armopts .armopt { display: grid; gap: 2px; text-align: left; }
+.armlist .armop span, .armopt span { font-family: var(--font-body); font-size: 12.5px; color: var(--s-dim); letter-spacing: 0; }
+.armopts { display: grid; gap: 6px; margin: 6px 0; }
+.armopt.on { border-color: var(--s-info); background: rgba(110,169,200,.1); }
+.armbench .mounts { flex-wrap: wrap; gap: 4px; }
+.armbench .mounts .act { padding: 6px 9px; font-size: 11.5px; }
+.roomview .mount { cursor: pointer; outline: none; }
+.roomview .mount:hover circle:first-child, .roomview .mount:focus-visible circle:first-child { stroke-width: 5; }
+.mountpulse { animation: mpulse 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .mountpulse { animation: none; } }

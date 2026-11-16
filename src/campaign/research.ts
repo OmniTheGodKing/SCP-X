@@ -510,7 +510,7 @@ export function canOrderAmmo(c: Campaign, a: AmmoId): string | null {
 }
 export function orderAmmo(c: Campaign, a: AmmoId) {
   if (canOrderAmmo(c, a)) return;
-  spend(c, ATTACHMENT_COST.cost, "workshop", "Attachment");
+  spend(c, ATTACHMENT_COST.cost, "workshop", "Special ammunition");
   c.orders.push({ ammo: a, daysLeft: ATTACHMENT_COST.days });
 }
 export function canOrderAttachment(c: Campaign, a: AttachmentId): string | null {
@@ -522,7 +522,7 @@ export function canOrderAttachment(c: Campaign, a: AttachmentId): string | null 
 }
 export function orderAttachment(c: Campaign, a: AttachmentId) {
   if (canOrderAttachment(c, a)) return;
-  spend(c, ATTACHMENT_COST.cost, "workshop", "Special ammunition");
+  spend(c, ATTACHMENT_COST.cost, "workshop", "Attachment");
   c.orders.push({ attachment: a, daysLeft: ATTACHMENT_COST.days });
 }
 

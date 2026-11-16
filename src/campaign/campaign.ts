@@ -37,7 +37,8 @@ import { tickInspection } from "./inspection";
 import { buildReport, type Report } from "./reports";
 import { missionWeather, nightAt, tickGeo, type FieldOp } from "./geo";
 import { newsFor } from "./news";
-import { CLASS_WEAPONS, WEAPON_TIERS, model, startingModels, type AmmoId, type AttachmentId, type WeaponType } from "../data/weapons";
+import { ATTACHMENTS, CLASS_WEAPONS, WEAPON_TIERS, model, startingModels, type AmmoId, type AttachmentId, type WeaponType } from "../data/weapons";
+import { fits } from "../data/mounts";
 
 // The US Army's enlisted ladder as it stood in 1951 (Staff Sergeant was dropped in 1948 and came back in 1958).
 export const RANKS = ["Private", "Private First Class", "Corporal", "Sergeant", "Sergeant First Class", "Master Sergeant", "Sergeant Major"];
@@ -551,6 +552,7 @@ export function advanceDay(c: Campaign) {
     monthlyCouncil(c);
     monthlyChaos(c);
   }
+  reconcileAttachments(c);   // a research upgrade can change the issued model overnight
   checkOver(c);
   return c.incidents.length > incidentsBefore || c.log.length !== logBefore || !!c.over;
 }
@@ -645,15 +647,28 @@ export function weaken(c: Campaign, inc: Incident) {
 // ---------- weapons ----------
 export const weaponOptions = (o: Operative): WeaponType[] => o.cls ? CLASS_WEAPONS[o.cls] : ["rifle"];
 export const weaponOf = (o: Operative): WeaponType => o.weapon && weaponOptions(o).includes(o.weapon) ? o.weapon : weaponOptions(o)[0];
-export function setWeapon(c: Campaign, o: Operative, t: WeaponType) { if (weaponOptions(o).includes(t)) o.weapon = t; }
+export function setWeapon(c: Campaign, o: Operative, t: WeaponType) { if (weaponOptions(o).includes(t)) { o.weapon = t; reconcileAttachments(c); } }
+/** Presentation overhaul P4: an attachment the operative's current weapon can't take (after a change of weapon, a new
+ *  model from research, or in an older save) goes back to stores, never lost. Returns who had one returned. */
+export function reconcileAttachments(c: Campaign): string[] {
+  const back: string[] = [];
+  for (const o of c.roster) if (o.attachment && !fits(c.models[weaponOf(o)], o.attachment)) {
+    c.attachments[o.attachment] = (c.attachments[o.attachment] ?? 0) + 1;
+    back.push(`${o.name}'s ${ATTACHMENTS[o.attachment].name.toLowerCase()}`);
+    o.attachment = undefined;
+  }
+  if (back.length && c.log) log(c, `Back to stores: ${back.join(", ")}: it doesn't fit the weapon now issued.`, "key");
+  return back;
+}
 export function fitAttachment(c: Campaign, o: Operative, a: AttachmentId | "") {
   if (a && !(c.attachments[a] ?? 0)) return;
+  if (a && !fits(c.models[weaponOf(o)], a)) return;   // P4: only what the weapon can take
   if (o.attachment) c.attachments[o.attachment] = (c.attachments[o.attachment] ?? 0) + 1;
   o.attachment = a || undefined;
   if (a) c.attachments[a]!--;
 }
 export function gunFor(c: Campaign, o: Operative) {
-  const t = weaponOf(o), m = model(c.models[t]), a = o.attachment;
+  const t = weaponOf(o), m = model(c.models[t]), a = o.attachment && fits(m.id, o.attachment) ? o.attachment : undefined;
   const tier = WEAPON_TIERS[c.weaponTier ?? 1];
   const mag = m.mag + (a === "extmag" ? 1 : 0), extra = (t === "rifle" && has(c, "bt_barrels") ? 1 : 0) + tier.dmg;
   return { name: tier.name ? `${tier.name} ${m.name}` : m.name, type: t, dmg: [m.dmg[0] + extra, m.dmg[1] + extra] as [number, number], mag, ammo: mag, aim: m.aim + tier.aim,
