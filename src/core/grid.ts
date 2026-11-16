@@ -9,6 +9,8 @@ export const WALL = 0, FLOOR = 1, HALF = 2, FULL = 3, EXIT = 4, CONT = 5, STEEL 
 /** Phase 4I structure: doors with a kind and a state, windows, and what can be destroyed. */
 export type DoorKind = "standard" | "security" | "containment" | "emergency";
 export type DoorState = "open" | "closed" | "locked" | "breached" | "destroyed";
+/** The order the tactical lab cycles a door through. */
+export const DOOR_STATES_CYCLE: DoorState[] = ["open", "closed", "locked", "destroyed"];
 export interface Door { kind: DoorKind; state: DoorState }
 export interface Glass { kind: "ordinary" | "reinforced"; broken: boolean }
 export type Tile = number;

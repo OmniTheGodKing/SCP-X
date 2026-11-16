@@ -27,6 +27,8 @@ import { generateTown } from "./data/towngen";
 import { mountMission } from "./ui/missionView";
 import { esc } from "./ui/util";
 import { mountDebug } from "./ui/debug";
+import { openLab } from "./ui/lab";
+import { movePreview } from "./game/preview";
 import { transition } from "./ui/audio";
 
 const root = document.getElementById("app")!;
@@ -146,7 +148,11 @@ function showHub() {
   geom,
   // T5/T6: pacing (headless skips animation waits) and the cover rule
   pace, coverAgainst, shotInfo,
+  movePreview,
 };
 
-mountDebug({ campaign: () => campaign, screen: () => screen, refresh: () => { saveCampaign(campaign); if (screen === "hub") showHub(); } });
-showHub();
+function showLab() { screen = "mission"; openLab(root, () => { endMission(); showHub(); }); }
+mountDebug({ campaign: () => campaign, screen: () => screen, refresh: () => { saveCampaign(campaign); if (screen === "hub") showHub(); }, lab: showLab });
+// the tactical lab can be opened straight from the address: …/index.html#lab
+if (location.hash === "#lab") showLab(); else showHub();
+window.addEventListener("hashchange", () => { if (location.hash === "#lab") showLab(); });

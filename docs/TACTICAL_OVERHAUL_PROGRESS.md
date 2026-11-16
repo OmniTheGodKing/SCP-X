@@ -56,8 +56,8 @@ Status: `[x]` done and tested, `[~]` partly done (see notes), `[ ]` not started.
 | T5.1 | Utility AI on shared rules [7.3] | T2.1, T2.2, T3.2, T4.5, T4.6 | Seeded AI scenarios: takes cover, flanks, avoids overwatch, grenades clusters | [x] |
 | T5.2 | Squad coordination and roles | T5.1 | Suppress-and-advance, sniper positions, objective defence | [x] |
 | T6.1 | Presentation hooks: rules can run headless [7.2, partial] | T0 | Combat and enemy turns run with no animation waits in tests | [x] `pace.headless`; sandbox missions |
-| T6.2 | Tactical lab screen on production rules [1.1] | T1.5, T2.1 | Build scenarios and inspect sight, peeks, fire, cover, hit chance, AI; save and load | [ ] |
-| T6.3 | Move preview: shields, flanks, overwatch risk; contact markers; suppression indicators [3.2] | T2.1, T3.2 | Preview equals the dice | [ ] |
+| T6.2 | Tactical lab screen on production rules [1.1] | T1.5, T2.1 | Build scenarios and inspect sight, peeks, fire, cover, hit chance, AI; save and load | [x] |
+| T6.3 | Move preview: shields, flanks, overwatch risk; contact markers; suppression indicators [3.2] | T2.1, T3.2 | Preview equals the dice | [x] |
 | T7.1 | Golden scenario suite and consistency test [1.2, 1.3] | T1.5 | Hallway, rooms, diagonals, corners, doors, windows, crates, long range, smoke | [x] |
 | T7.2 | SCP integration checks | all | 173, 049, 610, 096, 939 suites pass; exceptions documented | [ ] |
 | T7.3 | Strategic compatibility | all | Deployment, results, saves unchanged | [ ] |
@@ -188,6 +188,33 @@ Status: `[x]` done and tested, `[~]` partly done (see notes), `[ ]` not started.
       an overwatch lane, knows only what it has made out).
     - `tests/ai.e2e.cjs` (real maps: 100% of Insurgents in contact ended in cover or on a flank in the test run;
       enemy turns about 0.1 s).
+
+- **T6.2 done: the tactical lab** (`src/ui/lab.ts`).
+  - **Opening it:** from the debug panel (backtick, then "Open the tactical lab") or `index.html#lab`.
+  - **How it runs:** a sandbox mission inside the real mission screen, so moving, shooting, abilities and end turn
+    all work by the normal rules ("Play" tool).
+  - **Tools:** paint walls, floor, half and full cover, drums, windows (ordinary or reinforced; click again to
+    break), partitions, doors (click to cycle open, closed, locked, destroyed), smoke, flares, fire; place
+    operatives, Insurgents, civilians and hostile instances with a chosen weapon; remove units; move a unit freely;
+    pick the viewer. Night, power-out and weather switches.
+  - **Overlays:** the viewer's perception per tile (green identified, amber detected), step-out eye points and the
+    line to the hovered tile with every obstacle it crosses (green fire, amber sight only, red none), cover shields on
+    every unit, overwatch lanes, the light map, reach, and the AI's position scores for an Insurgent viewer.
+  - **Inspection panel:** the hovered tile's obstacle, light, perception (level, distances, reasons), and for a unit
+    the full shot breakdown from `shotInfo`.
+  - **Buttons:** refill, overwatch, fire, suppress, AI turn, end turn.
+  - **Scenarios:** seven presets (open room, long hallway, the owner's crates, doorway and corners, windows and a
+    partition, night field, dug-in operative against a pod); save to the browser; export and import JSON.
+  - **Tested by** `tests/lab.e2e.cjs`.
+- **T6.3 done.** `src/game/preview.ts` (`movePreview`) is the move cursor's source:
+  - Insurgents who could shoot the unit at the destination, and which of them flank it.
+  - Cover on each side from the kernel (windows, partitions and doors included).
+  - The first tile on the path where an Insurgent on overwatch would fire ("OVERWATCH").
+  - Also new: a "SUPPRESSED: MOVING DRAWS FIRE" warning, a SUPPRESSED tag on units, and "NO LINE OF FIRE" with the
+    blocked line when hovering an enemy that can be seen but not shot.
+  - Unknown contacts (T3) are drawn as `?`.
+  - `tests/unit/preview.test.ts` checks the preview against the rules, including that a flagged overwatch lane really
+    draws the shot.
 
 ## Unresolved issues
 

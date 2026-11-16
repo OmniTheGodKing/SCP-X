@@ -31,6 +31,18 @@ export function sandboxGun(type: WeaponType, ammo?: number) {
   return { name: m.name, type, dmg: [...m.dmg] as [number, number], mag: m.mag, ammo: ammo ?? m.mag, aim: m.aim };
 }
 
+/** One unit for a sandbox mission, with sensible defaults for its side. */
+export function makeSandboxUnit(s: SandboxUnit, n: number): Unit {
+  return ({
+    id: s.id ?? `${s.side}${n}`, side: s.side, name: s.name ?? (s.side === "mtf" ? `Operative ${n}` : s.side === "raider" ? "Insurgent" : s.side === "civilian" ? "Civilian" : s.side),
+    call: s.side === "mtf" ? `E11-0${n}` : undefined,
+    x: s.x, y: s.y, hp: s.hp ?? 6, maxHp: s.hp ?? 6, san: 80, aim: s.aim ?? (s.side === "raider" ? 60 : 65), armor: s.armor ?? 0,
+    gun: s.gun ? sandboxGun(s.gun, s.ammo) : s.side === "mtf" || s.side === "raider" ? sandboxGun("rifle", s.ammo) : undefined,
+    perks: (s.perks ?? []) as Unit["perks"], role: s.role as Unit["role"], facing: s.facing ?? 0,
+    alive: true, saved: false, ap: 2, overwatch: false, panicUntil: -1, staring: false, hadLos: false, seen173: false, fled: false, kills: 0, items: [],
+  } as unknown as Unit);
+}
+
 export function createSandbox(spec: SandboxSpec): MissionState {
   const out = spec.outdoors;
   const def: MapDef = {
@@ -43,19 +55,11 @@ export function createSandbox(spec: SandboxSpec): MissionState {
   for (const d of L.door.values()) if (!Object.keys(spec.doors ?? {}).length) d.state = "open";
   L.version++;
   setSmoke([]);
-  let n = 0;
-  const units: Unit[] = spec.units.map(s => ({
-    id: s.id ?? `${s.side}${++n}`, side: s.side, name: s.name ?? (s.side === "mtf" ? `Operative ${n}` : s.side === "raider" ? "Insurgent" : s.side === "civilian" ? "Civilian" : s.side),
-    call: s.side === "mtf" ? `E11-0${n}` : undefined,
-    x: s.x, y: s.y, hp: s.hp ?? 6, maxHp: s.hp ?? 6, san: 80, aim: s.aim ?? (s.side === "raider" ? 60 : 65), armor: s.armor ?? 0,
-    gun: s.gun ? sandboxGun(s.gun, s.ammo) : s.side === "mtf" || s.side === "raider" ? sandboxGun("rifle", s.ammo) : undefined,
-    perks: (s.perks ?? []) as Unit["perks"], role: s.role as Unit["role"], facing: s.facing ?? 0,
-    alive: true, saved: false, ap: 2, overwatch: false, panicUntil: -1, staring: false, hadLos: false, seen173: false, fled: false, kills: 0, items: [],
-  } as unknown as Unit));
+  const units: Unit[] = spec.units.map((u, i) => makeSandboxUnit(u, i + 1));
   const statue = { id: "none", side: "anomaly", name: "nothing", x: 0, y: 0, hp: 1, maxHp: 1, san: 0, alive: false, saved: false, ap: 0, overwatch: false, panicUntil: -1, staring: false, hadLos: false, seen173: false, fled: false, kills: 0, aim: 0 } as unknown as Unit;
   units.push(statue);
   const setup = {
-    seed: spec.seed ?? 1, kind: spec.powerOut ? "emergency" : "strike", map: "wingC", amnestics: 0, night: !!spec.night || !!spec.powerOut, weather: spec.weather ?? "clear",
+    seed: spec.seed ?? 1, lab: true, kind: spec.powerOut ? "emergency" : "strike", map: "wingC", amnestics: 0, night: !!spec.night || !!spec.powerOut, weather: spec.weather ?? "clear",
     witnesses: 0, civilians: 0, incidentId: "lab", title: "Tactical lab", insurgents: units.filter(u => u.side === "raider").length, squad: [], dclass: [], known: [],
     mods: { ...SANDBOX_MODS }, insurgentArmor: 0,
   } as unknown as MissionSetup;

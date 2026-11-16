@@ -25,6 +25,8 @@ export interface DebugHost {
   screen: () => "hub" | "mission";
   /** Save and redraw the hub after a change. */
   refresh: () => void;
+  /** Open the tactical lab (Tactical overhaul T6.2). */
+  lab?: () => void;
 }
 
 const START = Date.UTC(1951, 5, 1);
@@ -65,6 +67,7 @@ export function mountDebug(host: DebugHost) {
 
   function hubPanel(c: Campaign) {
     return [
+      group("Tactical lab", btn("lab", "Open the tactical lab")),
       group("Resources", btn("funds", "+$500k") + btn("intel", "+5 Intel") + btn("amnestics", "+5 amnestics") + btn("dclass", "+4 D-Class") + btn("engineers", "+2 engineers") + btn("researchers", "+2 researchers") + btn("guards", "+2 guards")),
       group("Time", btn("d1", "+1 day") + btn("d7", "+7 days") + btn("d30", "+30 days") + btn("d365", "+1 year")
         + `<label class="dbg-field">Jump to year <select data-dbg-year>${Array.from({ length: 25 }, (_, i) => 1951 + i).map(y => `<option ${y === new Date(START + (c.day - 1) * 864e5).getUTCFullYear() ? "selected" : ""}>${y}</option>`).join("")}</select></label>`),
@@ -112,6 +115,7 @@ export function mountDebug(host: DebugHost) {
       }
     };
     switch (id) {
+      case "lab": panel.hidden = true; host.lab?.(); return false;
       case "funds": c.funds += 500; break;
       case "intel": gainIntel(c, 5); break;
       case "amnestics": c.amnestics += 5; break;

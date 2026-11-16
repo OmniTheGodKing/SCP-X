@@ -92,7 +92,7 @@ export function planPod(pod: Unit[], ts: Threat[]): Plan {
 }
 
 /** Score every tile r can reach this action; returns the best and how the current tile scores. */
-function bestPosition(r: Unit, ts: Threat[], plan: Plan, goal: ((x: number, y: number) => number) | null, steps: number) {
+function bestPosition(r: Unit, ts: Threat[], plan: Plan, goal: ((x: number, y: number) => number) | null, steps: number, collect?: { x: number; y: number; v: number }[]) {
   const res = reachOf(r, steps);
   const actsAfter = r.ap - (steps > moveOf(r) ? 2 : 1) > 0;
   const focus = plan.focus ? team().find(m => m.id === plan.focus) : null;
@@ -117,6 +117,7 @@ function bestPosition(r: Unit, ts: Threat[], plan: Plan, goal: ((x: number, y: n
     const x = i % L.W, y = (i / L.W) | 0;
     if (tileAt(x, y) === HALF) continue;
     const c = score(x, y, actsAfter);
+    collect?.push({ x, y, v: c.v });
     if (c.v > best.v) best = { x, y, ...c };
   }
   return { here, best, path: best.x === r.x && best.y === r.y ? null : pathTo(res, best.x, best.y) };
@@ -221,4 +222,14 @@ export async function tacticalTurn(r: Unit, plan: Plan, goal: ((x: number, y: nu
     if (here.incoming > 0.3) { r.hunkerUntil = S.turn + 1; r.ap = 0; return; }
     return;
   }
+}
+
+/** For the tactical lab: how this Insurgent scores every tile it could move to this action, and the tile it's on. */
+export function scorePositions(r: Unit, plan: Plan = { flankers: [] }): { x: number; y: number; v: number }[] {
+  const out: { x: number; y: number; v: number }[] = [];
+  const ap = r.ap; if (r.ap < 1) r.ap = 2;
+  const p = bestPosition(r, threats(), plan, null, moveOf(r), out);
+  out.push({ x: r.x, y: r.y, v: p.here.v });
+  r.ap = ap;
+  return out;
 }

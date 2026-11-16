@@ -196,7 +196,10 @@ export function selectNext() {
 }
 
 /** Tap/click on a tile. On touch, the first tap previews and the second confirms. */
+/** The tactical lab takes clicks first while one of its tools is active (Tactical overhaul T6.2). */
+export const tapHook: { fn: ((x: number, y: number) => boolean) | null } = { fn: null };
 export async function onTap(x: number, y: number, touch: boolean, flash: (t: string) => void) {
+  if (tapHook.fn && tapHook.fn(x, y)) return;
   if (!canAct()) return;
   if (S.debug?.place173 || S.debug?.kill) { debugTap(x, y); return; }
   const u = unitAt(x, y);
@@ -628,6 +631,8 @@ export const looseWitnesses = () => S.units.filter(u => u.witness && u.alive && 
 export const ESCORT_TURNS = 8;
 export function checkEnd() {
   if (S.over) return true;
+  // the tactical lab never ends on its own
+  if (S.setup.lab) return false;
   const k = S.setup.kind;
   if ((k === "breach" || k === "manhunt") && S.sealed) { finish(true, false); return true; }
   // Phase 4C: destroyed by the GOC or carried off by GRU-P; a convoy that got through
