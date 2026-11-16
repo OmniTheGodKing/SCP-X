@@ -1,4 +1,5 @@
 // Class abilities used during a mission. Each has a target rule, a cost and an effect.
+import { coverSides } from "../core/geom";
 import { DIRS, DRUM, FULL, HALF, L, STEEL, WALL, cheb, passable, tileAt } from "../core/grid";
 import { hasPerk, spend, usesLeft } from "./perks";
 import { maxSanOf } from "./profiles";
@@ -53,7 +54,8 @@ export const ABILITIES: AbilityDef[] = [
 
 const UNIVERSAL: AbilityId[] = ["cutradio", "secure", "dose", "lockdown", "doors", "siren", "calm", "restrain", "pickup", "drop", "exfil", "hunker", "recover", "restore", "scan", "hood", "lead096", "score", "shake", "casemask"];
 const onExit = (u: Unit) => L.exitMap[u.y * L.W + u.x] === 0;
-const hasCover = (u: Unit) => DIRS.some(([dx, dy]) => { const t = tileAt(u.x + dx, u.y + dy); return t === WALL || t === FULL || t === HALF || t === STEEL || t === DRUM; });
+/** Cover beside them on some side (Tactical overhaul T2.1: from the geometry kernel's obstacles). */
+const hasCover = (u: Unit) => coverSides(u.x, u.y).some(v => v > 0);
 const knows = (u: Unit, p: AbilityId) => UNIVERSAL.includes(p)
   ? u.side === "mtf" && abilityTargets(u, p).length > 0 && (p !== "dose" || S.amnestics > 0)
   : hasPerk(u, p as PerkId);

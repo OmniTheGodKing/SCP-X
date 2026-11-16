@@ -44,6 +44,8 @@ const check = (n, name, ok, detail) => { results.push(`${ok ? 'PASS' : 'FAIL'} $
   const t2 = await E(() => { const A = window.__site19, G = A.grid;
     // the west office door is at (10,3) in wing C (walls above and below; the office is west, the cell east). Stand in
     // the cell right beside the doorway at (11,2) and look into the office through the open door
+    // the office's furniture is placed at random: clear it so the lines tested here depend only on the wall and door
+    for (let y = 1; y <= 5; y++) for (let x = 1; x <= 9; x++) if (G.grid[y][x] === 2 || G.grid[y][x] === 3) G.grid[y][x] = 1; G.version++;
     const door = [10, 3]; A.openDoor(10, 3);
     const out = [];
     for (const [tx, ty] of [[8, 4], [7, 5], [9, 5], [6, 3], [5, 1]]) out.push([tx, ty, A.sight(11, 2, tx, ty)]);
@@ -63,6 +65,8 @@ const check = (n, name, ok, detail) => { results.push(`${ok ? 'PASS' : 'FAIL'} $
     const throughWall = A.canShoot(m, r);
     // a corner: shooter in the corridor at (13,7), just west of the cell door (14,6); target in the cell at (14,3).
     // Straight from (13,7) the wall (13,6) is in the way: the shot has to come from leaning out at (14,7).
+    // the cell's furniture is placed at random: clear it so only the walls and door matter
+    for (let y = 1; y <= 5; y++) for (let x = 11; x <= 17; x++) if (G.grid[y][x] === 2 || G.grid[y][x] === 3) G.grid[y][x] = 1;
     const cdoor = G.door.get(6 * G.W + 14); cdoor.state = 'open'; G.version++;
     m.x = 13; m.y = 7; r.x = 14; r.y = 3;
     const lof = A.lineOfFire(m, r);
@@ -82,6 +86,8 @@ const check = (n, name, ok, detail) => { results.push(`${ok ? 'PASS' : 'FAIL'} $
     d.state = 'destroyed'; G.version++; const destroyed = { sight: A.sight(9, 3, 11, 3), pass: A.passable(10, 3) };
     d.state = 'open'; G.version++;
     // the reinforced observation window at (12,6): see through, can't walk, bullets stop
+    // the cell's furniture is placed at random: keep the line from the window to (12,4) clear of it
+    G.grid[5][12] = 1; G.grid[4][12] = 1; G.version++;
     const win = G.glass.get(6 * G.W + 12);
     const wSight = A.sight(12, 7, 12, 4), wPass = A.passable(12, 6), wFire = A.fireLine(12, 7, 12, 4);
     win.broken = true; G.version++; const brokenFire = A.fireLine(12, 7, 12, 4); win.broken = false; G.version++;

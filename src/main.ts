@@ -11,6 +11,7 @@ import { scpName } from "./campaign/containment";
 import { pendingBreach } from "./campaign/campaign";
 import { createMission } from "./game/mission";
 import { endMission, forceRng } from "./core/rng";
+import * as geom from "./core/geom";
 import { S } from "./game/state";
 import type { MissionKind, MissionResult, MissionSetup } from "./game/types";
 import { mountHub, openTab } from "./ui/hubView";
@@ -141,6 +142,8 @@ function showHub() {
   generateTown,
   // Tactical overhaul T0: force every gameplay roll to one value (null to stop), for tests
   rng: { force: forceRng },
+  // Tactical overhaul T1: the geometry kernel itself
+  geom,
 };
 
 mountDebug({ campaign: () => campaign, screen: () => screen, refresh: () => { saveCampaign(campaign); if (screen === "hub") showHub(); } });

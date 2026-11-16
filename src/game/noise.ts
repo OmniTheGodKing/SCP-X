@@ -3,6 +3,7 @@
 // operative glances toward it and, if nothing is there, turns back to the direction the player set. Insurgents hear
 // by the same rules and go to look. Facing is attention and animation, not a blind cone: anyone can still see an
 // enemy behind them.
+import { obstacleAt, trace } from "../core/geom";
 import { rnd } from "../core/rng";
 import { L, opaque, doorShut, cheb } from "../core/grid";
 import { S, alive, canSee, isTeam, log, seen, team } from "./state";
@@ -22,16 +23,12 @@ export const facingName = (f: number) => DIRS8[((f % 8) + 8) % 8];
 /** What's left of a noise by the time it reaches a listener: distance, then each wall and shut door between. */
 export function heardAt(lx: number, ly: number, nx: number, ny: number, loud: number) {
   let walls = 0, doors = 0;
-  // walk the straight line between the two tiles and count what it passes through
-  const n = Math.max(Math.abs(nx - lx), Math.abs(ny - ly));
-  let px = -1, py = -1;
-  for (let k = 1; k < n; k++) {
-    const x = Math.round(lx + (nx - lx) * k / n), y = Math.round(ly + (ny - ly) * k / n);
-    if (x === px && y === py) continue;
-    px = x; py = y;
-    if (doorShut(x, y)) doors++;
-    else if (opaque(x, y)) walls++;
-  }
+  // Tactical overhaul T1: the same trace as sight, counting every solid obstacle the straight line passes through
+  trace(lx + 0.5, ly + 0.5, nx + 0.5, ny + 0.5, 0, c => {
+    const ob = obstacleAt(c.x, c.y);
+    if (!ob.sight) return;
+    if (doorShut(c.x, c.y)) doors++; else walls++;
+  });
   // a storm outdoors, or the breach siren, drowns quiet noises
   const masking = (S.setup.weather === "storm" ? 3 : S.setup.weather === "rain" ? 1 : 0) + (S.siren ? 2 : 0);
   return loud - Math.hypot(nx - lx, ny - ly) - walls * WALL_LOSS - doors * DOOR_LOSS - masking;

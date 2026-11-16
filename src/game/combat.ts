@@ -3,7 +3,8 @@ import { rnd, fxRnd } from "../core/rng";
 import { BOND_AIM } from "../campaign/condition";
 import { charmTurns, officerNear } from "./ciTactics";
 import { DIRS, DRUM, FULL, HALF, STEEL, TS, WALL, L, bfs, cheb, tileAt, type Pt } from "../core/grid";
-import { MIN_SIGHT, fireLine, sightNeeded, viewSpots, visFrac, type View } from "../core/sight";
+import { fireLine, fireView, type View } from "../core/sight";
+import { coverOn } from "../core/geom";
 import { breakGlass, d2, openDoor } from "../core/grid";
 import { emitNoise, faceThreat, facingTo } from "./noise";
 import { hasPerk, rangeOf } from "./perks";
@@ -18,19 +19,9 @@ import { shotAt106 } from "./scp106";
 import { hit682, hostFalls } from "./scp4b";
 import { dropTrophy } from "./rivals";
 
-export function coverAgainst(tx: number, ty: number, sx: number, sy: number) {
-  const vx = sx - tx, vy = sy - ty, len = Math.hypot(vx, vy) || 1;
-  let best = 0;
-  for (const [dx, dy] of DIRS) {
-    const t = tileAt(tx + dx, ty + dy);
-    const c = (t === WALL || t === FULL || t === STEEL) ? 40 : t === HALF || t === DRUM ? 20 : 0;
-    if (!c) continue;
-    // straight-side cover protects within 60° of its face, corner cover only within ~23°
-    const cos = (vx * dx + vy * dy) / (len * Math.hypot(dx, dy));
-    if (cos >= (dx && dy ? 0.92 : 0.5)) best = Math.max(best, c);
-  }
-  return best;
-}
+/** Cover a figure on (tx, ty) has against a shot from (sx, sy). Tactical overhaul T2.1: read off the line of fire
+ *  itself by the geometry kernel (geom.coverOn), the same function the cover shields and the enemy AI use. */
+export const coverAgainst = (tx: number, ty: number, sx: number, sy: number) => coverOn(tx, ty, sx, sy).value;
 
 export interface ShotInfo { chance: number; mods: [string, number][]; crit: number; from: View; }
 
@@ -52,11 +43,11 @@ export function lineOfFire(sh: Unit, tg: Unit): (View & { tx: number; ty: number
   const aims: [number, number][] = [[tg.x, tg.y]];
   if (tg.exposed && tg.exposed.turn >= S.turn - 1 && (tg.exposed.x !== tg.x || tg.exposed.y !== tg.y)) aims.push([tg.exposed.x, tg.exposed.y]);
   let best: (View & { tx: number; ty: number }) | null = null;
-  for (const [tx, ty] of aims) for (const [sx, sy] of viewSpots(sh.x, sh.y, tx, ty)) {
-    if (d2(sx, sy, tx, ty) > range * range) continue;
-    const f = visFrac(sx, sy, tx, ty), own = sx === sh.x && sy === sh.y;
-    if (f < sightNeeded(own) || !fireLine(sx, sy, tx, ty)) continue;
-    if (!best || f > best.f || (f === best.f && own)) best = { f, x: sx, y: sy, tx, ty };
+  // Tactical overhaul T1: the same eye points, trace and body exposure as sight; the shot also needs the bullets'
+  // path to enough of the target clear (reinforced glass is the only thing that stops fire but not sight)
+  for (const [tx, ty] of aims) {
+    const v = fireView(sh.x, sh.y, tx, ty, range);
+    if (v && (!best || v.f > best.f)) best = { ...v, tx, ty };
   }
   return best;
 }
@@ -184,17 +175,7 @@ export async function fire(sh: Unit, tg: Unit, reaction: boolean) {
 }
 
 /** The cover tile beside (tx, ty) that faces a shooter at (sx, sy): the one a round meant for the target would strike. */
-function coverTileFacing(tx: number, ty: number, sx: number, sy: number): [number, number] | null {
-  const vx = sx - tx, vy = sy - ty, len = Math.hypot(vx, vy) || 1;
-  let best: [number, number] | null = null, bc = 0;
-  for (const [dx, dy] of DIRS) {
-    const t = tileAt(tx + dx, ty + dy);
-    if (!(t === WALL || t === FULL || t === STEEL || t === HALF || t === DRUM)) continue;
-    const cos = (vx * dx + vy * dy) / (len * Math.hypot(dx, dy));
-    if (cos > bc) { bc = cos; best = [tx + dx, ty + dy]; }
-  }
-  return best;
-}
+const coverTileFacing = (tx: number, ty: number, sx: number, sy: number) => coverOn(tx, ty, sx, sy).tile;
 
 export const BLEED_TURNS = 3;
 

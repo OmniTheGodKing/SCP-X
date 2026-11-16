@@ -35,20 +35,20 @@ Status: `[x]` done and tested, `[~]` partly done (see notes), `[ ]` not started.
 | T0.2 | Headless unit harness | T0.1 | `tests/unit/*.test.ts` run in Node | [x] |
 | T0.3 | Seeded gameplay randomness with campaign and mission streams; cosmetic randomness separate [0.2] | none | No `Math.random` in `src/game`, `src/campaign`, `src/data` or `src/core` except `rng.ts` (unit-tested); same seed gives same rolls; old saves get a seed | [x] |
 | T0.4 | Save fixtures and compatibility tests [0.4] | T0.2 | v24 fixtures captured from the pre-overhaul build load and round-trip | [x] |
-| T1.1 | Obstacle model derived from map tiles [2.1] | T0 | Every map converts; walkability unchanged; obstacle kinds tested | [ ] |
-| T1.2 | One trace for sight and fire [2.2] | T1.1 | Headless trace tests on synthetic grids | [ ] |
-| T1.3 | Geometric step-out peeking [2.3] | T1.2 | The owner's crate drawings hold without tuning constants | [ ] |
-| T1.4 | Exposure-based visibility [2.4] | T1.3 | Long hallways visible end to end; partial exposure measured | [ ] |
-| T1.5 | Line of fire on the same eye points and trace; callers migrated [2.5] | T1.4 | Zero "can see but can't shoot" except through reinforced glass (consistency test); all suites pass | [ ] |
-| T2.1 | Geometric directional cover and flanking [3.1] | T1.5 | Cover matrix tests; windows, partitions and doors count by height | [ ] |
+| T1.1 | Obstacle model derived from map tiles [2.1] | T0 | Every map converts; walkability unchanged; obstacle kinds tested | [x] |
+| T1.2 | One trace for sight and fire [2.2] | T1.1 | Headless trace tests on synthetic grids | [x] |
+| T1.3 | Geometric step-out peeking [2.3] | T1.2 | The owner's crate drawings hold without tuning constants | [x] |
+| T1.4 | Exposure-based visibility [2.4] | T1.3 | Long hallways visible end to end; partial exposure measured | [x] |
+| T1.5 | Line of fire on the same eye points and trace; callers migrated [2.5] | T1.4 | Zero "can see but can't shoot" except through reinforced glass (consistency test); all suites pass | [x] |
+| T2.1 | Geometric directional cover and flanking [3.1] | T1.5 | Cover matrix tests; windows, partitions and doors count by height | [x] |
 | T2.2 | Pathfinding options instead of global flags; AI uses real move and dash [7.4] | T0 | No `setVault`, `setLinkAccess` or `setSlow`; reach unchanged | [ ] |
 | T2.3 | Central action table: costs and validity [6.1] | T0 | One place decides action costs; UI, commands and AI agree | [ ] |
-| T3.1 | Light map [4.1] | T1.1 | Lit corridor at night visible end to end; unlit field not | [ ] |
+| T3.1 | Light map [4.1] | T1.1 | Lit corridor at night visible end to end; unlit field not | [x] |
 | T3.2 | Perception: unseen, detected, identified [4.2] | T1.5, T3.1 | Distance and light ladder tests; concealment still works | [ ] |
 | T3.3 | Smoke density [4.4] | T3.2 | Thin smoke reduces detection; thick smoke hides | [ ] |
 | T4.1 | Weapon range curves [5.1] | T0 | Hit-chance-by-distance table per weapon | [ ] |
-| T4.2 | Exposure term replaces "partly hidden" [5.2] | T1.4 | Hit-chance tests | [ ] |
-| T4.3 | Grazes, stray rounds hitting cover [5.3, 5.4] | T1.2 | Seeded statistics | [ ] |
+| T4.2 | Exposure term replaces "partly hidden" [5.2] | T1.4 | Hit-chance tests | [x] |
+| T4.3 | Grazes, stray rounds hitting cover [5.3, 5.4] | T1.2 | Seeded statistics | [x] |
 | T4.4 | Status registry [5.5] | T0 | Same durations; statuses listed | [ ] |
 | T4.5 | One reaction system: all sides, perceived movement only [6.2] | T3.2, T2.3 | Reaction matrix tests | [ ] |
 | T4.6 | XCOM 2 suppression [6.3] | T4.5 | Moving while suppressed draws a shot; ends overwatch | [ ] |
@@ -58,7 +58,7 @@ Status: `[x]` done and tested, `[~]` partly done (see notes), `[ ]` not started.
 | T6.1 | Presentation hooks: rules can run headless [7.2, partial] | T0 | Combat and enemy turns run with no animation waits in tests | [ ] |
 | T6.2 | Tactical lab screen on production rules [1.1] | T1.5, T2.1 | Build scenarios and inspect sight, peeks, fire, cover, hit chance, AI; save and load | [ ] |
 | T6.3 | Move preview: shields, flanks, overwatch risk; contact markers; suppression indicators [3.2] | T2.1, T3.2 | Preview equals the dice | [ ] |
-| T7.1 | Golden scenario suite and consistency test [1.2, 1.3] | T1.5 | Hallway, rooms, diagonals, corners, doors, windows, crates, long range, smoke | [ ] |
+| T7.1 | Golden scenario suite and consistency test [1.2, 1.3] | T1.5 | Hallway, rooms, diagonals, corners, doors, windows, crates, long range, smoke | [x] |
 | T7.2 | SCP integration checks | all | 173, 049, 610, 096, 939 suites pass; exceptions documented | [ ] |
 | T7.3 | Strategic compatibility | all | Deployment, results, saves unchanged | [ ] |
 
@@ -82,6 +82,36 @@ Status: `[x]` done and tested, `[~]` partly done (see notes), `[ ]` not started.
   - two flaky test setups fixed (accept4b forced rolls, the accept4c convoy raider pinned in a corner)
 - Known flaky (pre-existing, not reproduced in 4 runs after T0): accept4c "GRU-P left alone, they carry it off" can
   stall the carriers.
+
+- **T1 and T2.1 done.** Geometry kernel in `src/core/geom.ts`:
+  - **Obstacle model:** shape (full tile or thin centre line), height (low, high, wall), what it stops (sight,
+    fire), destructible, glass. Derived from the map characters and the live door and glass state.
+  - **One trace:** `trace()` for every line question.
+  - **Step-out eye points:** `eyePoints()` gives the unit's own tile plus side tiles where the cover ends.
+  - **Body exposure:** `exposure()`, 5 sample points on the target's figure.
+  - **Thresholds:** `VIS_MIN = 0.6` (3 of 5 points) and `STEP_OUT = 0.75` (lean depth).
+  - **`sight.ts`** keeps its old exports as thin wrappers. `lineOfFire` uses `fireView` (same eyes, same trace).
+  - **Cover:** `coverOn()` reads cover off the line of fire, so windows, partitions and doors count by height. Shots
+    near a corner count both sides.
+  - **Also on the kernel:** hunker uses `coverSides`; noise counts walls with the same trace.
+  - **Tests:**
+    - `tests/unit/geom.test.ts` (15 tests: hallway, walls, kinds, windows, doorway, corner squeeze, the owner's three
+      crate diagrams, step-outs, SCP-173 raw sight, a random-map property test, cover matrix).
+    - `tests/consistency.e2e.cjs`: 0 "can see but can't shoot" on town, farm, rail, church and wing C, outside
+      reinforced glass. The audit measured 62–104 per map before.
+  - **Test fixes:** accept4i and window had expectations from the old 10-ray method or relied on random furniture.
+    The window test now asserts the real geometric cone through a one-tile window; furniture is cleared where a test
+    needs a fixed line.
+- **D3 (T1):**
+  - Visibility is "enough of the target's body (3 of 5 points) is in view from the best eye point". The eye points
+    are the tile centre, or a lean of 0.75 tiles toward a step-out side.
+  - These two constants alone reproduce the owner's approved crate diagrams:
+    - one crate leaves a 3-tile wedge;
+    - three crates seen from the middle leave a large blind area;
+    - three crates seen from the end leave about 100° open to that side.
+  - The old per-case filter `LEAN_SIGHT` is gone.
+- **D4 (T1):** Sight is not forced to be symmetric (owner's instruction). A unit stepping out past cover can see a
+  target that can't see it back. Measured asymmetry is reported by the consistency test.
 
 ## Unresolved issues
 

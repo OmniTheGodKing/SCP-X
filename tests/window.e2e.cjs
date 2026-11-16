@@ -33,7 +33,10 @@ const dbg = async (p, k) => { await p.evaluate(() => document.activeElement?.blu
     const shot = A.fireLine(vx, vy, win - 3, row + 2);
     return { a, win, viewer: [vx, vy], seen, behind, shot };
   });
-  const ok = !r.error && r.seen.filter(s => s[2]).length >= 5 && r.behind.every(s => !s[2]) && !!r.shot;
+  // Tactical overhaul T1: the cone is now the real geometric one through a one-tile window, from the viewer's eye at
+  // the centre of their tile: (9,10), (10,10), (11,9) and (12,10) are inside it; (8,10) and (10,9) are past its edge
+  const inCone = [[9, 10], [10, 10], [11, 9], [12, 10]];
+  const ok = !r.error && inCone.every(([x, y]) => r.seen.some(s => s[0] === x && s[1] === y && s[2])) && r.behind.every(s => !s[2]) && !!r.shot;
   console.log(ok ? 'PASS' : 'FAIL', 'diagonal sight through a window, none through the wall beside it ::', JSON.stringify(r));
   // after a move, an operative turns to the nearest enemy in sight (not the way they walked)
   const f = await p.evaluate(async () => {
