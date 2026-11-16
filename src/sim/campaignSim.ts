@@ -57,7 +57,8 @@ function answer(c: Campaign, inc: Incident, s: Strategy, rnd: () => number) {
   resolveTeam(c, inc);
 }
 
-export function simulate(strategy: StrategyId, days: number, seed = 1, difficulty: Difficulty = "agent"): SimResult {
+/** `observe` (developer tools and tests) sees the campaign after each simulated day, with that day's invariant errors. */
+export function simulate(strategy: StrategyId, days: number, seed = 1, difficulty: Difficulty = "agent", observe?: (c: Campaign, errors: string[]) => void): SimResult {
   setCampaignSeed(seed);
   const c = newCampaign({ difficulty, ironman: false, tutorial: false, seed });
   setCampaignSeed(seed);
@@ -104,7 +105,9 @@ export function simulate(strategy: StrategyId, days: number, seed = 1, difficult
     idleResearcherDays += idle;
     if (c.log.length === lastLog) quietDays++;
     lastLog = c.log.length;
-    for (const e of checkInvariants(c)) if (errors.length < 50) errors.push(`day ${c.day}: ${e}`);
+    const today = checkInvariants(c);
+    for (const e of today) if (errors.length < 50) errors.push(`day ${c.day}: ${e}`);
+    observe?.(c, today);
     daily.push({ day: c.day, funds: c.funds, standing: c.council.standing, exposure: globalExposure(c), threat: c.chaos.threat, researchers: c.researchers, idleResearchers: idle, engineers: c.engineers, facilities: c.base.facilities.length, breaches, openIncidents: c.incidents.length, opsAlive: c.roster.filter(o => o.alive).length });
   }
   const funds = daily.map(x => x.funds);

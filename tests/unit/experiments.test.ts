@@ -63,3 +63,23 @@ test("experiments: a failed cell-work roll names the anomaly's own danger, not S
   ok(/acid early/.test(text), "the SCP-682 failure line: " + c.log.slice(0, 8).map(l => l.text).join(" / "));
   ok(!/blinked at the same moment/.test(text), "not the SCP-173 line");
 });
+
+test("recovery: a loose anomaly recovered with no free wing goes to Site-17, not into thin air", async () => {
+  const { resolveScp } = await import("../../src/campaign/containment");
+  const c = newCampaign({ difficulty: "agent", ironman: false, tutorial: false, seed: 8 });
+  c.scps.push({ id: "049", name: "SCP-049", title: "Plague Doctor", cls: "Euclid", status: "loose", wingId: "", maintenance: 0, lastCleaned: c.day } as never);
+  const s = c.scps.find(x => x.id === "049")!;
+  resolveScp(c, { id: "r1", kind: "recovery", scpId: "049", region: "europe", title: "Incident 9: SCP-049 recovery" } as never, true);
+  // the starting site has one Euclid wing, and SCP-173 is in it
+  eq(s.status, "away", "held elsewhere");
+  ok((s.returnDay ?? 0) > c.day, "due back");
+  eq(checkInvariants(c), [], "consistent");
+  // with a free wing it goes straight in
+  const free: [number, number][] = [];
+  for (let l = 0; l < c.base.levels; l++) for (let k = 0; k < 6; k++) if (!c.base.facilities.some(f => f.level === l && f.slot === k)) free.push([l, k]);
+  const [level, slot] = free[0];
+  c.base.facilities.push({ id: "fw", type: "cont_euclid", level, slot, daysLeft: 0, disabled: false, repairDays: 0 });
+  s.status = "loose";
+  resolveScp(c, { id: "r2", kind: "recovery", scpId: "049", region: "europe", title: "Incident 10: SCP-049 recovery" } as never, true);
+  eq([s.status, s.wingId], ["contained", "fw"], "into the free wing");
+});

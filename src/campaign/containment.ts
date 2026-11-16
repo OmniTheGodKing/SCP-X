@@ -300,9 +300,20 @@ export function resolveScp(c: Campaign, inc: Incident, recovered: boolean) {
   const s = c.scps.find(x => x.id === inc.scpId);
   if (!s) return;
   if (recovered) {
-    s.status = "contained";
-    s.maintenance = Math.max(s.maintenance, 60);
+    // Strategic overhaul D: back into its own wing if that still stands, is free and is strong enough, otherwise the
+    // first free wing that will hold it. With none, Site-17 holds it until one opens (an anomaly that was never at
+    // Site-19, or whose wing was torn down or taken, used to be marked contained in no wing at all).
+    const own = c.base.facilities.find(f => f.id === s.wingId);
+    const ownOk = own && isContainment(own.type) && operational(own) && (FACILITIES[own.type].grade ?? 0) >= CLASS_GRADE[s.cls] && !c.scps.some(o => o !== s && o.wingId === own.id && (o.status === "contained" || o.status === "breach"));
+    const to = ownOk ? own : freeWings(c, s.cls)[0];
     s.resurfaceDay = undefined;
+    if (!to) {
+      s.status = "away"; s.wingId = ""; s.returnDay = c.day + 10; s.maintenance = 100;
+      log(c, `${s.name} is recovered, but Site-19 has no free ${s.cls}-grade wing. Site-17 holds it until one is ready.`, "key", "site");
+      return;
+    }
+    s.status = "contained"; s.wingId = to.id;
+    s.maintenance = Math.max(s.maintenance, 60);
   } else {
     goDark(c, s, "The team couldn't stop it.", inc.kind === "recovery" ? REGIONS[inc.region].towns.find(t => inc.title.includes(t)) ?? REGIONS[inc.region].name : "Site-19");
   }

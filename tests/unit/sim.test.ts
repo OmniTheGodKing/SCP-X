@@ -35,3 +35,12 @@ test("sim: the same seed gives the same campaign", () => {
   const a = simulate("balanced", 60, 99), b = simulate("balanced", 60, 99);
   eq(JSON.stringify(a.daily), JSON.stringify(b.daily), "identical runs");
 });
+test("sim: four years for every strategy keep the invariants, SCP-610's outbreak included", () => {
+  const bad: string[] = []; let outbreakDays = 0;
+  for (const st of STRATEGIES) {
+    const r = simulate(st, 1500, 2654435761, "agent", c => { if (c.outbreak) outbreakDays++; });
+    if (r.invariantErrors.length) bad.push(`${st}: ${r.invariantErrors[0]}`);
+  }
+  eq(bad, [], "no invariant errors");
+  ok(outbreakDays > 0, "an outbreak happened in the runs");
+});

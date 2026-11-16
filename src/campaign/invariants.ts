@@ -40,5 +40,10 @@ export function checkInvariants(c: Campaign): string[] {
   const inc = new Set<string>();
   for (const i of c.incidents) { if (inc.has(i.id)) out.push(`duplicate incident ${i.id}`); inc.add(i.id); }
   if (c.activeIncident && !inc.has(c.activeIncident)) out.push(`the active incident ${c.activeIncident} is gone`);
+  // SCP-610: an outbreak in progress has exactly one incident on the map, at a severity from 1 to 5, and none without one
+  const outbreaks = c.incidents.filter(i => i.kind === "outbreak").length;
+  if (c.outbreak && (c.outbreak.severity < 1 || c.outbreak.severity > 5)) out.push(`SCP-610 severity ${c.outbreak.severity} out of range`);
+  if (c.outbreak && outbreaks !== 1) out.push(`SCP-610 outbreak with ${outbreaks} outbreak incidents`);
+  if (!c.outbreak && outbreaks) out.push(`${outbreaks} SCP-610 incident(s) with no outbreak`);
   return out;
 }

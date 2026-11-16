@@ -173,6 +173,17 @@ poor       180d  funds -347            standing 0   exposure 83  threat 84  brea
   - Known operations show the analysts' reading of why they were chosen.
   - The GOC's chance of turning up for an anomaly (`gocInterest`) follows the region's exposure, 10% to 40%.
   - `tests/unit/factions.test.ts`.
+- SCP-610 and long-horizon consistency:
+  - New invariants: an outbreak in progress has exactly one outbreak incident, at severity 1 to 5, and there is no
+    outbreak incident without an outbreak.
+  - `sim.test.ts` runs every strategy for 1,500 days (past the 1953 to 1954 outbreak) and requires zero invariant
+    errors. A 28-run sweep at that length found no SCP-610 inconsistency.
+  - That sweep found one bug: a loose anomaly recovered when its old wing was gone or taken (or one never held)
+    was marked contained in no wing. `resolveScp` now puts it in its own wing if that still holds it, else the
+    first free wing that fits, else Site-17 holds it until a wing opens (the existing transfer return).
+  - `simulate` takes an optional per-day observer, for tests and the developer inspector.
+- Centralized difficulty: already satisfied. `difficulty.ts` holds one table of levers (funds, grant, Insurgent
+  count and aim, breach and agenda multipliers) read through `diffOf`; no scattered difficulty checks were found.
 
 ## Known issues
 
