@@ -4,6 +4,7 @@ import "./hub.css";
 import { directorsBriefing } from "../campaign/briefing";
 import { obligations, projection } from "../campaign/forecast";
 import { crews } from "../campaign/crews";
+import { UNIFORMS } from "../campaign/research";
 import { attachmentsFor, canFitAttachment, mountsOf, weaponStats } from "../campaign/armory";
 import { researchersAssigned } from "../campaign/research";
 import { MOUNT_NAMES, fits, type MountId } from "../data/mounts";
@@ -129,6 +130,16 @@ const RESEARCH_ICON: Record<ResearchCat, string> = { anomalies: "anomaly", arms:
 const HIST_ICON: Record<HistCat, string> = { deployment: "escort", breach: "breach", anomaly: "anomaly", casualty: "death", personnel: "promotion", council: "council", insurgency: "insurgency", region: "front" };
 const RESEARCH_CAT_NAMES: Record<ResearchCat, string> = { anomalies: "Anomalies", arms: "Weapons and armor", gear: "Gear", facilities: "Facilities and power", personnel: "Personnel", insurgency: "Insurgency" };
 const ARMOR_PROJECTS = ["padded_jacket", "nylon_liner", "plated_undersuit", "powered_harness"];
+/** What stands on the lab's bench for a project: armour on a stand for armour and uniforms, a rifle in a vise for
+ *  weapons and attachments, field kit for equipment, a blueprint for the site, a chart for personnel, papers for the
+ *  Insurgency, a specimen jar for the anomalies. */
+function apparatusOf(id: string): string {
+  const p = PROJECTS[id];
+  if (p.armorTier || ARMOR_PROJECTS.includes(id) || (p.unlocks && ITEMS[p.unlocks].armor) || UNIFORMS.some(u => u.id === id)) return "armor";
+  if (p.branch === "Weapons" || p.weaponTier || p.ammo || p.attachment) return "arms";
+  const k = researchCat(id);
+  return k === "facilities" ? "site" : k === "anomalies" ? "anomaly" : k;
+}
 function researchCat(id: string): ResearchCat {
   const p = PROJECTS[id];
   if (p.branch.startsWith("SCP-") || p.branch === "Objects") return "anomalies";
@@ -1224,7 +1235,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       extras.span = target ? [200, 1000] : [240, 1160];
     }
     Object.assign(extras, liveExtras(L));
-    if (L.kind === "lab") { const pid = focusProject(); extras.apparatus = pid ? researchCat(pid) : undefined; }
+    if (L.kind === "lab") { const pid = focusProject(); extras.apparatus = pid ? apparatusOf(pid) : undefined; }
     if (L.kind === "armory") {
       extras.racks = [...new Set(Object.values(c.models))];
       const ao = armOp ? c.roster.find(o => o.id === armOp && o.alive) : undefined;
@@ -1237,16 +1248,18 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     const selT = ts.find(t => t.id === target);
     // the camera: the selected object comes to the left third, a little closer, with its panel on the right
     let cam = "";
+    const objX = selT && selT.rect[2] > 0 ? (selT.rect[0] + selT.rect[2] / 2) / FRAME.W : 0.3;
+    const panelLeft = !!selT && objX > 0.56 && !extras.bench;
     if (selT && selT.rect[2] > 0 && selT.rect[2] < 900 && !extras.bench && !extras.hero) {
-      const k = 1.16, cx = (selT.rect[0] + selT.rect[2] / 2) / FRAME.W, cy = (selT.rect[1] + selT.rect[3] / 2) / FRAME.H;
-      const tx = Math.max((1 - k) * 100, Math.min(0, (0.34 - cx * k) * 100)), ty = Math.max((1 - k) * 100, Math.min(0, (0.5 - cy * k) * 100));
+      const k = 1.16, cx = objX, cy = (selT.rect[1] + selT.rect[3] / 2) / FRAME.H, want = panelLeft ? 0.7 : 0.32;
+      const tx = Math.max((1 - k) * 100, Math.min(0, (want - cx * k) * 100)), ty = Math.max((1 - k) * 100, Math.min(0, (0.5 - cy * k) * 100));
       cam = `transform: translate(${tx.toFixed(2)}%, ${ty.toFixed(2)}%) scale(${k})`;
     }
     const stateText: Record<string, string> = { operational: L.powered ? "Operational" : "No power", building: "Under construction", damaged: "Damaged", wrecked: "Wrecked", repairing: "Under repair", demolishing: "Being torn down", upgrading: "Being refitted" };
     const labs = L.kind === "lab" ? c.base.facilities.filter(f => f.type === "lab") : [];
     const panel = target ? (target.startsWith("person:") ? target : selT?.panel ?? null) : null;
     const title = target?.startsWith("person:") ? (c.roster.find(o => `person:${o.id}` === target)?.name ?? selT?.label ?? "") : selT?.label ?? "";
-    return `<div class="roomview ${panel ? "haspanel" : ""}" data-room="${esc(L.id)}">
+    return `<div class="roomview ${panel ? "haspanel" : ""} ${panelLeft ? "panel-left" : ""}" data-room="${esc(L.id)}">
       <div class="rv-stage"><div class="rv-cam" style="${cam}">${interiorSvg(L, extras)}</div></div>
       <div class="rv-top">
         <button class="act" type="button" id="leaveRoom" title="Back to Site-19 (Esc)">← Site-19</button>
@@ -1258,7 +1271,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       ${L.kind === "command" ? commandStrip() : ""}
       <nav class="objbar" aria-label="In this room">${ts.filter(t => t.kind !== "person" || L.kind !== "quarters").map(t => `<button class="act ${t.id === target ? "on" : ""} k-${t.kind}" type="button" data-target="${esc(t.id)}" aria-pressed="${t.id === target}" title="${esc(t.hint)}">${esc(t.label)}</button>`).join("")}
         ${L.kind === "quarters" ? ops.map(o => `<button class="act ${target === `person:${o.id}` ? "on" : ""} k-person" type="button" data-person="${o.id}">${esc(o.name.split(" ").slice(-1)[0])}</button>`).join("") : ""}</nav>
-      ${panel ? `<aside class="ctxpanel ${ctxWide ? "wide" : ""}" role="dialog" aria-label="${esc(title)}">
+      ${panel ? `<aside class="ctxpanel ${ctxWide ? "wide" : ""} ${panelLeft ? "left" : ""}" role="dialog" aria-label="${esc(title)}">
         <div class="ctx-h"><b>${esc(title)}</b>${selT ? `<span class="muted">${esc(selT.hint)}</span>` : ""}<button class="act" type="button" id="ctxWide" aria-pressed="${ctxWide}" title="Widen">${ctxWide ? "⇥" : "⇤"}</button><button class="act" type="button" id="ctxClose" aria-label="Close (Esc)">×</button></div>
         <div class="ctx-b">${panelFor(panel, L)}</div></aside>` : ""}
     </div>`;
@@ -2061,6 +2074,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     root.querySelectorAll<HTMLElement>("[data-enter]").forEach(b => b.onclick = () => { if (b.dataset.armfor) { armOp = b.dataset.armfor; armMount = null; armPreview = null; armZoom = 1; } enterRoom(b.dataset.enter!, b.getBoundingClientRect()); if (b.dataset.armfor) { target = "bench"; render(); } });
     on("enterRoom", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) enterRoom(f.id, null); });
     on("leaveRoom", () => leaveRoom());
+    // the room fills the window below the header, whatever the header's height at this width
+    { const rv = root.querySelector<HTMLElement>(".roomview"); if (rv) rv.style.setProperty("--rvh", `${Math.max(380, Math.round(window.innerHeight - rv.getBoundingClientRect().top - window.scrollY - 14))}px`); }
     // environment-first: the room's objects, the panel, the way back
     const pickTarget = (id: string) => {
       const L = currentRoom() ? roomLayout(c, currentRoom()!) : null; if (!L) return;
@@ -2286,6 +2301,9 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     else if (["1", "2", "3"].includes(e.key)) setSpeed(SPEEDS[Number(e.key) - 1]);
   };
   document.addEventListener("keydown", onKey);
+  // the room keeps filling the window as it is resized
+  const onResize = () => { if (!stillHere()) { window.removeEventListener("resize", onResize); return; } const rv = root.querySelector<HTMLElement>(".roomview"); if (rv) rv.style.setProperty("--rvh", `${Math.max(380, Math.round(window.innerHeight - rv.getBoundingClientRect().top - window.scrollY - 14))}px`); };
+  window.addEventListener("resize", onResize);
   requestAnimationFrame(tick);
 
   render();

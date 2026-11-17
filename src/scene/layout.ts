@@ -7,7 +7,7 @@
 // fittings) comes from a hash of its stable id, so Barracks f7 always looks like Barracks f7, and a second barracks
 // built later looks different and keeps its own look.
 import type { Campaign } from "../campaign/campaign";
-import { FACILITIES, SLOTS, operational, powerShort, type Facility, type FacilityType } from "../campaign/base";
+import { FACILITIES, SLOTS, dclassCapacity, operational, powerShort, type Facility, type FacilityType } from "../campaign/base";
 import { present } from "../campaign/people";
 import { researchersAssigned } from "../campaign/research";
 import { crews } from "../campaign/crews";
@@ -46,6 +46,8 @@ export interface RoomLayout {
   activity: string[];
   /** D-Class in the block, guards posted, prisoners held: counts the room shows as bodies. */
   headcount: number;
+  /** The D-Class block: beds across Site-19, so the room can show crowding (over 80% of beds). */
+  capacity?: number;
 }
 
 const SHORT: Partial<Record<FacilityType, string>> = { cont_safe: "Safe wing", cont_euclid: "Euclid wing", cont_keter: "Keter wing", barracks: "D-Class block", security: "Security station", psych: "Psychological services" };
@@ -88,12 +90,12 @@ export function roomLayout(c: Campaign, id: string): RoomLayout | null {
   const occ = c.scps.find(s => s.wingId === f.id && (s.status === "contained" || s.status === "breach"));
   const staff: RoomLayout["staff"] = [];
   const activity: string[] = [];
-  let headcount = 0;
+  let headcount = 0, capacity: number | undefined;
   switch (f.type) {
     case "lab": staff.push(...labStaff(c, f)); for (const [pid, n] of Object.entries(c.research.assigned)) if (n) activity.push(pid); break;
     case "workshop": { const w = crews(c).crews.filter(j => j.what.startsWith("Workshop")); for (const j of w) { activity.push(j.what); for (const p of j.crew) staff.push({ id: p.id, name: p.name, role: "engineer" }); } break; }
     case "security": for (const g of c.guards.filter(g => g.alive && g.stationId === f.id)) staff.push({ id: g.id, name: g.name, role: "guard" }); headcount = staff.length; break;
-    case "barracks": headcount = c.dclass; break;
+    case "barracks": headcount = c.dclass; capacity = dclassCapacity(c); break;
     case "holding": headcount = c.prisoners?.length ?? 0; break;
     case "medical": for (const o of c.roster.filter(o => o.alive && (o.hp < o.maxHp || (o.injury && o.injury.until > c.day)))) staff.push({ id: o.id, name: o.name, role: "patient" }); break;
     case "psych": for (const o of c.roster.filter(o => o.alive && o.busy?.kind === "therapy")) staff.push({ id: o.id, name: o.name, role: "patient" }); break;
@@ -109,7 +111,7 @@ export function roomLayout(c: Campaign, id: string): RoomLayout | null {
     doors: { left: doorFor(c, f, -1), right: doorFor(c, f, 1) },
     features: { pipes: pick(0), signage: pick(1), lights: pick(2), floor: pick(3), clutter: pick(4) },
     upgrades: { expanded: !!f.upgraded, recreation: !!f.recreation, genTier: f.genTier ?? 0, grade: FACILITIES[f.type].grade },
-    staff, occupant: occ ? { scpId: occ.id, status: occ.status, maintenance: occ.maintenance } : undefined, activity, headcount,
+    staff, occupant: occ ? { scpId: occ.id, status: occ.status, maintenance: occ.maintenance } : undefined, activity, headcount, capacity,
   };
 }
 

@@ -280,3 +280,14 @@ body:has(.hub) { background: var(--s-bg); }
 .cmdstrip { left: 12px; right: 12px; top: 56px; width: auto; display: flex; flex-wrap: wrap; gap: 4px; max-height: 70px; overflow: hidden; }
 .cmdstrip .cs-item { display: inline-grid; grid-template-columns: 4px minmax(0, auto) auto; max-width: 430px; padding: 3px 4px 3px 0; font-size: 12.5px; }
 .cmdstrip .cs-item > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the stage takes the window's remaining height (measured at render); the panel can open on the left */
+.roomview .rv-stage { height: var(--rvh, min(calc(100vh - 150px), 62.5vw)); min-height: 380px; }
+.ctxpanel.left { right: auto; left: 12px; }
+.roomview.panel-left .objbar { left: calc(min(460px, 40%) + 24px); right: 12px; }
+.roomview.panel-left:has(.ctxpanel.wide) .objbar { left: calc(min(880px, 72%) + 24px); }
+/* panel content always wraps to the panel's width */
+.ctxpanel .ctx-b { overflow-x: hidden; }
+.ctxpanel .ctx-b > *, .ctxpanel .ctx-b .panel, .ctxpanel .ctx-b .card { min-width: 0; max-width: 100%; }
+.ctxpanel .panel-h { flex-wrap: wrap; }
+.ctxpanel .ovgrid { grid-template-columns: 1fr; }
+.ctxpanel, .ctxpanel .ctx-b { grid-template-columns: minmax(0, 1fr); }
