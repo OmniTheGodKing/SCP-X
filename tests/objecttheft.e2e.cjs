@@ -15,7 +15,7 @@ async function theft(b) {
   await dbg(p, 's-breach');
   const camp = await p.evaluate(() => { const c = window.__site19.campaign, i = c.incidents.find(i => i.kind === 'breach');
     return { id: i?.id, title: i?.title, ins: i?.insurgents, log: c.log?.slice?.(-3) }; });
-  await p.click('[data-tab="command"]'); await p.click(`[data-plan="${camp.id}"]`); await p.click('#launchBtn'); await p.waitForTimeout(400);
+  await p.click('[data-tab="command"]'); await require("./lib.cjs").planIncident(p, camp.id); await p.click('#launchBtn'); await p.waitForTimeout(400);
   return { p, errs, camp, E: (f, a) => p.evaluate(f, a) };
 }
 (async () => {

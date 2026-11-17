@@ -24,4 +24,11 @@ function reporter() {
     done() { console.log(results.join('\n')); const ok = results.every(r => r.startsWith('PASS')); console.log(ok ? 'ALL PASS' : 'SOME FAILED'); if (!ok) process.exitCode = 1; },
   };
 }
-module.exports = { ROOT, GAME_URL, OUT, close, dbg, fresh, reporter };
+/** Environment-first interface: open an object's panel in the room on screen (its object-bar button). */
+const openTarget = async (p, id) => { if (!(await p.$(`.objbar [data-target="${id}"][aria-pressed="true"]`))) await p.click(`.objbar [data-target="${id}"]`); await p.waitForTimeout(80); };
+/** An incident's Respond button: in Command's alerts strip, else in the communications console's panel. */
+async function planIncident(p, id) {
+  if (!(await p.$(`[data-plan="${id}"]`))) await openTarget(p, 'comms');
+  await p.click(`[data-plan="${id}"]`);
+}
+module.exports = { ROOT, GAME_URL, OUT, close, dbg, fresh, reporter, openTarget, planIncident };

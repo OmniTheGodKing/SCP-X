@@ -10,7 +10,7 @@ const { fresh, dbg, reporter } = require('./lib.cjs');
     await E(() => { const c = window.__site19.campaign; c.tutorial = false; c.day = 400; });
     await dbg(p, 'strike'); await p.click('[data-tab="command"]');
     const id = await E(m => { const c = window.__site19.campaign; const i = c.incidents.find(i => i.kind === 'strike'); i.map = m; i.night = false; i.weather = 'clear'; i.insurgents = 5; return i.id; }, map);
-    await p.click(`[data-plan="${id}"]`); await p.click('#launchBtn'); await p.waitForTimeout(300);
+    await require("./lib.cjs").planIncident(p, id); await p.click('#launchBtn'); await p.waitForTimeout(300);
     if (await E(() => !!window.__site19.campaign.outbound)) { await dbg(p, 'land'); await p.waitForTimeout(300); }
     const r = await E(async () => {
       const A = window.__site19, S = A.mission; A.pace.headless = true;

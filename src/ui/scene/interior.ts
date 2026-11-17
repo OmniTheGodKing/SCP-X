@@ -12,10 +12,11 @@ import { weaponSide } from "./weapons";
 import { FRAMES, MOUNT_NAMES, mountAt, type MountId } from "../../data/mounts";
 import type { AttachmentId } from "../../data/weapons";
 import { rollLook } from "../../data/looks";
+import { DCLASS_PER_FIGURE, FRAME, STAFF_SHOWN, signLabel, signRect, staffSlot, type Target } from "../../scene/targets";
 
-export const W = 1600, H = 900;
-/** The back wall's rectangle, and the floor line people stand on at the back. */
-const BX0 = 200, BX1 = 1400, BY0 = 120, BY1 = 640;
+export const W = FRAME.W, H = FRAME.H;
+/** The back wall's rectangle, and the floor line people stand on at the back (shared with the targets). */
+const { BX0, BX1, BY0, BY1 } = FRAME;
 const C = {
   ceil: "#1c2125", wallUp: "#7d7866", wallUpLit: "#a39d86", dado: "#3d4a40", dadoDk: "#2f3a32", floor: "#34383a", floorDk: "#26292b",
   steel: "#56636d", steelDk: "#3b454e", steelLt: "#7d8a93", olive: "#58603f", amber: "#d9a441", red: "#c0503f", green: "#7fb08a",
@@ -43,6 +44,11 @@ export interface SceneExtras {
   hero?: { spec: FigureSpec; key: string; x?: number };
   /** The stretch of the scene, in scene units, people stand across (clear of a side panel). */
   span?: [number, number];
+  /** Environment-first interface: the room's interactive objects, and the one selected. */
+  targets?: Target[];
+  selected?: string;
+  /** The lab: the kind of apparatus on the bench for the project there (anomalies, arms, gear, site, personnel, intel). */
+  apparatus?: string;
 }
 
 export function interiorSvg(L: RoomLayout, x: SceneExtras = {}) {
@@ -54,8 +60,10 @@ export function interiorSvg(L: RoomLayout, x: SceneExtras = {}) {
   if (built || L.state === "repairing") parts.push(pipes(L), signage(L));
   parts.push(lights(L, dark));
   if (built) parts.push(FURNISH[L.kind]?.(L, x) ?? "", activity(L, x));
+  if (built) parts.push(fixtures(L));
   parts.push(x.bench ? benchScene(x.bench) : people(L, x));
   parts.push(overlay(L, dark));
+  if (x.targets?.length) parts.push(targetLayer(x.targets, x.selected));
   return `<svg class="interior" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" role="img" aria-label="${esc(L.name)} ${esc(L.designation)}">${parts.join("")}</svg>`;
 }
 
@@ -71,20 +79,47 @@ function defs() {
     <radialGradient id="sc-vig" cx=".5" cy=".5" r=".75"><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".6"/></radialGradient>
     <radialGradient id="sc-red" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="${C.red}" stop-opacity=".55"/><stop offset="1" stop-color="${C.red}" stop-opacity="0"/></radialGradient>
     <pattern id="sc-hz" width="28" height="28" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="28" height="28" fill="#1a1a1a"/><rect width="14" height="28" fill="${C.hz}"/></pattern>
+    <pattern id="sc-tilesm" width="40" height="40" patternUnits="userSpaceOnUse"><rect width="40" height="40" fill="none" stroke="#7d8078" stroke-opacity=".55" stroke-width="2"/></pattern>
+    <pattern id="sc-panelwood" width="150" height="200" patternUnits="userSpaceOnUse"><rect x="8" y="10" width="134" height="180" fill="none" stroke="#2e2418" stroke-width="4"/><rect x="0" width="4" height="200" fill="#3a2e1e"/></pattern>
+    <pattern id="sc-ribs" width="36" height="100" patternUnits="userSpaceOnUse"><rect width="10" height="100" fill="#fff" opacity=".06"/><rect x="10" width="3" height="100" fill="#000" opacity=".2"/></pattern>
+    <pattern id="sc-planks" width="200" height="34" patternUnits="userSpaceOnUse"><rect width="200" height="34" fill="none" stroke="#3a2e1e" stroke-opacity=".6" stroke-width="2"/><circle cx="20" cy="17" r="2" fill="#2a2018"/></pattern>
+    <pattern id="sc-rivets" width="120" height="90" patternUnits="userSpaceOnUse"><rect width="120" height="90" fill="none" stroke="#22282c" stroke-width="3"/>${[8, 112].map(px => [8, 82].map(py => `<circle cx="${px}" cy="${py}" r="3.5" fill="#6c777f"/>`).join("")).join("")}</pattern>
     <pattern id="sc-tile" width="120" height="60" patternUnits="userSpaceOnUse"><rect width="120" height="60" fill="none" stroke="#000" stroke-opacity=".18" stroke-width="2"/></pattern>
     <pattern id="sc-conc" width="160" height="80" patternUnits="userSpaceOnUse"><rect width="160" height="80" fill="none" stroke="#000" stroke-opacity=".08" stroke-width="2"/><circle cx="40" cy="30" r="2" fill="#000" opacity=".1"/><circle cx="120" cy="60" r="1.5" fill="#000" opacity=".1"/></pattern>
   </defs>`;
 }
 
 /** The box: ceiling, back wall with the dado line, floor in perspective, the two side walls. */
+/** Each kind of room is built differently: a lab is tiled, Command panelled, the workshop corrugated steel over
+ *  stained concrete, containment riveted plate, the D-Class block painted institutional blue-grey, the surface
+ *  buildings timber huts. */
+const ARCH: Record<string, { up: string; low: string; dado: number; pat?: string; patLow?: string }> = {
+  lab: { up: "#b4b0a0", low: "#c9cbc4", dado: 430, patLow: "sc-tilesm" },
+  medical: { up: "#b8b6aa", low: "#c9cbc4", dado: 420, patLow: "sc-tilesm" },
+  amnestics: { up: "#a9a796", low: "#bfc2b9", dado: 440, patLow: "sc-tilesm" },
+  command: { up: "#5d6058", low: "#4a3a28", dado: 450, patLow: "sc-panelwood" },
+  psych: { up: "#8a7e66", low: "#5a4630", dado: 450, patLow: "sc-panelwood" },
+  workshop: { up: "#5c6064", low: "#3c3b36", dado: 500, pat: "sc-ribs" },
+  generator: { up: "#55595c", low: "#3a3a36", dado: 500, pat: "sc-ribs" },
+  barracks: { up: "#6a6c66", low: "#3b4a52", dado: 480 },
+  holding: { up: "#62645e", low: "#3b4a52", dado: 480 },
+  security: { up: "#6e6a5a", low: "#3d4a40", dado: 470 },
+  training: { up: "#6e6a5a", low: "#3d4a40", dado: 470 },
+  quarters: { up: "#7a6a4e", low: "#4b4a3c", dado: 470, pat: "sc-planks" },
+  armory: { up: "#6e5f46", low: "#4b4a3c", dado: 470, pat: "sc-planks" },
+  cont: { up: "#4a5257", low: "#3a4247", dado: 470, pat: "sc-rivets", patLow: "sc-rivets" },
+};
 function shell(L: RoomLayout) {
-  const surface = L.kind === "quarters" || L.kind === "armory";
-  const dadoY = 470, lower = L.kind.startsWith("cont_") ? "#3a4247" : surface ? "#4b4a3c" : C.dado;
+  const a = ARCH[L.kind.startsWith("cont_") ? "cont" : L.kind] ?? { up: C.wallUp, low: C.dado, dado: 470 };
+  const dadoY = a.dado, lower = a.low;
   const floorTone = L.features.floor === 0 ? "url(#sc-floor)" : L.features.floor === 1 ? "#2f3437" : L.features.floor === 2 ? "#363229" : "#2c3134";
   return `<rect width="${W}" height="${H}" fill="${C.ceil}"/>
     <path d="M0 0 H${W} L${BX1} ${BY0} H${BX0}Z" fill="#171b1e"/>
-    <rect x="${BX0}" y="${BY0}" width="${BX1 - BX0}" height="${BY1 - BY0}" fill="url(#sc-wall)"/>
+    <rect x="${BX0}" y="${BY0}" width="${BX1 - BX0}" height="${BY1 - BY0}" fill="${a.up}"/>
+    <rect x="${BX0}" y="${BY0}" width="${BX1 - BX0}" height="${BY1 - BY0}" fill="url(#sc-wall)" opacity=".45"/>
+    ${a.pat ? `<rect x="${BX0}" y="${BY0}" width="${BX1 - BX0}" height="${dadoY - BY0}" fill="url(#${a.pat})"/>` : ""}
     <rect x="${BX0}" y="${dadoY}" width="${BX1 - BX0}" height="${BY1 - dadoY}" fill="${lower}"/>
+    ${a.patLow ? `<rect x="${BX0}" y="${dadoY}" width="${BX1 - BX0}" height="${BY1 - dadoY}" fill="url(#${a.patLow})"/>` : ""}
     <rect x="${BX0}" y="${dadoY - 6}" width="${BX1 - BX0}" height="6" fill="${C.dadoDk}"/>
     <rect x="${BX0}" y="${BY0}" width="${BX1 - BX0}" height="${BY1 - BY0}" fill="url(#sc-conc)"/>
     <path d="M${BX0} ${BY1} H${BX1} L${W} ${H} H0Z" fill="${floorTone}"/>
@@ -125,10 +160,11 @@ function pipes(L: RoomLayout) {
   return out.join("");
 }
 function signage(L: RoomLayout) {
-  const label = `${L.level < 0 ? `B${L.slot}` : L.designation} · ${L.name.toUpperCase()}`, w = Math.round(label.length * 12.4 + 34), x = L.features.signage % 2 ? BX0 + 40 : BX1 - 40 - w;
-  return `<rect x="${x}" y="${BY0 + 90}" width="${w}" height="44" fill="#1f2326" opacity=".85"/><text x="${x + 16}" y="${BY0 + 120}" font-family="IBM Plex Mono,monospace" font-size="20" font-weight="600" letter-spacing="1" fill="${C.paper}">${esc(label)}</text>
+  const [x, y, w, h] = signRect(L);
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#1f2326" opacity=".85"/><text x="${x + 16}" y="${y + 30}" font-family="IBM Plex Mono,monospace" font-size="20" font-weight="600" letter-spacing="1" fill="${C.paper}">${esc(signLabel(L))}</text>
     ${L.features.signage >= 2 ? `<text x="${BX0 + (BX1 - BX0) / 2}" y="${BY0 + 80}" font-family="IBM Plex Mono,monospace" font-size="15" letter-spacing="3" fill="#2a2a24" opacity=".6" text-anchor="middle">SECURE · CONTAIN · PROTECT</text>` : ""}`;
 }
+
 function lights(L: RoomLayout, dark: boolean) {
   const n = 2 + (L.features.lights % 3), out: string[] = [];
   for (let i = 0; i < n; i++) {
@@ -192,21 +228,21 @@ const FURNISH: Partial<Record<RoomLayout["kind"], (L: RoomLayout, x: SceneExtras
     <rect x="${BX0 + 620}" y="${BY1 - 120}" width="140" height="90" rx="16" fill="#4a5a46"/><rect x="${BX0 + 620}" y="${BY1 - 190}" width="40" height="160" rx="12" fill="#56684f"/>
     <rect x="${BX1 - 360}" y="${BY0 + 110}" width="300" height="${BY1 - BY0 - 110}" fill="${C.wood}"/>${[0, 1, 2, 3].map(r => Array.from({ length: 9 }, (_, i) => `<rect x="${BX1 - 350 + i * 32}" y="${BY0 + 130 + r * 100}" width="24" height="80" fill="${["#6a2e2a", "#2e4a6a", "#4a5a2e", "#6a5a2e"][(i + r) % 4]}"/>`).join("")).join("")}
     <rect x="${BX0 + 520}" y="${BY0 + 170}" width="200" height="140" fill="${C.paper}" stroke="${C.wood}" stroke-width="8"/><path d="M${BX0 + 540} ${BY0 + 280} q40 -60 80 -20 t80 -40" stroke="#6a8a6a" stroke-width="6" fill="none"/>`,
-  lab: (L) => `
+  lab: (L, x) => `
     <rect x="${BX0 + 60}" y="${BY0 + 130}" width="420" height="220" fill="#1f2a24" stroke="${C.wood}" stroke-width="10"/>
     <text x="${BX0 + 80}" y="${BY0 + 175}" font-family="Special Elite,monospace" font-size="22" fill="#d8d8d0" opacity=".8">${esc((L.activity[0] ?? "no project").replace(/_/g, " ").slice(0, 26))}</text>
     ${[0, 1, 2, 3].map(i => `<path d="M${BX0 + 80} ${BY0 + 210 + i * 30}h${120 + (i * 70) % 220}" stroke="#d8d8d0" stroke-opacity=".5" stroke-width="3"/>`).join("")}
     ${bench(BX0 + 20, BX1 - BX0 - 40)}
-    ${[[BX0 + 120, C.green], [BX0 + 220, C.glass], [BX0 + 360, C.amber], [BX0 + 860, "#b36b8a"], [BX0 + 1000, C.green]].map(([fx, col]) => flask(fx as number, BY1 - 120, col as string)).join("")}
-    <rect x="${BX0 + 560}" y="${BY1 - 260}" width="70" height="140" fill="#2a3138"/><circle cx="${BX0 + 595}" cy="${BY1 - 250}" r="22" fill="#14181c" stroke="${C.steelLt}" stroke-width="4"/><rect x="${BX0 + 588}" y="${BY1 - 300}" width="14" height="50" fill="#2a3138"/>
+    ${[[BX0 + 120, C.green], [BX0 + 220, C.glass], [BX0 + 360, C.amber], [BX0 + 1010, C.green]].map(([fx, col]) => flask(fx as number, BY1 - 120, col as string)).join("")}
+    ${apparatus(x.apparatus ?? "anomalies")}
     <rect x="${BX1 - 330}" y="${BY0 + 120}" width="260" height="${BY1 - BY0 - 240}" fill="#2f363c" stroke="${C.steel}" stroke-width="6"/><rect x="${BX1 - 310}" y="${BY0 + 140}" width="220" height="200" fill="${C.glass}" opacity=".2"/><text x="${BX1 - 200}" y="${BY0 + 370}" font-family="IBM Plex Mono,monospace" font-size="14" fill="${C.paper}" text-anchor="middle">FUME HOOD</text>`,
   workshop: (L) => `
     <rect x="${BX0 + 40}" y="${BY0 + 120}" width="380" height="250" fill="#3a3128"/>${Array.from({ length: 14 }, (_, i) => `<path d="M${BX0 + 70 + (i % 7) * 50} ${BY0 + 150 + Math.floor(i / 7) * 110} v${60 + (i * 13) % 30}" stroke="${C.steelLt}" stroke-width="8" stroke-linecap="round"/>`).join("")}
     <rect x="${BX0 + 480}" y="${BY1 - 200}" width="300" height="60" fill="${C.steel}"/><rect x="${BX0 + 500}" y="${BY1 - 140}" width="40" height="140" fill="${C.steelDk}"/><rect x="${BX0 + 720}" y="${BY1 - 140}" width="40" height="140" fill="${C.steelDk}"/><rect x="${BX0 + 540}" y="${BY1 - 250}" width="120" height="50" fill="${C.steelDk}"/><rect x="${BX0 + 660}" y="${BY1 - 232}" width="110" height="14" fill="#9aa4ad"/>
     <text x="${BX0 + 630}" y="${BY1 - 160}" font-family="IBM Plex Mono,monospace" font-size="13" fill="#1a1a1a" text-anchor="middle">LATHE</text>
-    <rect x="${BX1 - 330}" y="${BY1 - 380}" width="40" height="380" fill="${C.steelDk}"/><rect x="${BX1 - 380}" y="${BY1 - 380}" width="140" height="60" fill="${C.steel}"/><rect x="${BX1 - 350}" y="${BY1 - 320}" width="16" height="70" fill="#9aa4ad"/>
+    <rect x="${BX0 + 40}" y="${BY0 - 20}" width="${BX1 - BX0 - 80}" height="14" fill="#2a2e31"/><rect x="${BX0 + 600}" y="${BY0 - 6}" width="60" height="30" fill="${C.amber}" opacity=".8"/><path d="M${BX0 + 630} ${BY0 + 24} v120" stroke="#1a1a1a" stroke-width="3"/><path d="M${BX0 + 615} ${BY0 + 144} h30 l-6 18 h-18z" fill="#4a5056"/>
     ${bench(BX0 + 820, 300, C.woodLt)}${L.activity.length ? `<text x="${BX0 + 970}" y="${BY1 - 140}" font-family="IBM Plex Mono,monospace" font-size="15" fill="${C.paper}" text-anchor="middle">${esc(L.activity[0].replace("Workshop: ", "").slice(0, 24))}</text><rect x="${BX0 + 880}" y="${BY1 - 132}" width="180" height="10" fill="${C.amber}" opacity=".8"/>` : ""}
-    ${crate(BX1 - 220, BY1, 110, 80, "STORES")}${crate(BX1 - 200, BY1 - 80, 80, 60)}`,
+    ${crate(BX1 - 140, BY1 + 170, 120, 90, "STORES")}${crate(BX1 - 10, BY1 + 170, 80, 64)}${crate(BX1 - 120, BY1 + 80, 90, 60)}`,
   training: () => `
     ${[0, 1, 2].map(i => `<rect x="${BX0 + 260 + i * 330}" y="${BY1 - 300}" width="10" height="300" fill="${C.wood}"/><circle cx="${BX0 + 265 + i * 330}" cy="${BY1 - 300}" r="60" fill="${C.paper}"/><circle cx="${BX0 + 265 + i * 330}" cy="${BY1 - 300}" r="38" fill="none" stroke="${C.ink}" stroke-width="5"/><circle cx="${BX0 + 265 + i * 330}" cy="${BY1 - 300}" r="12" fill="${C.red}"/>`).join("")}
     ${Array.from({ length: 10 }, (_, i) => `<ellipse cx="${BX0 + 60 + i * 120}" cy="${BY1 - 16}" rx="60" ry="22" fill="#8f805c"/>`).join("")}`,
@@ -219,7 +255,7 @@ const FURNISH: Partial<Record<RoomLayout["kind"], (L: RoomLayout, x: SceneExtras
     <rect x="${BX0 + 700}" y="${BY1 - 360}" width="40" height="240" fill="${C.glass}" opacity=".4" stroke="#cfd8dc" stroke-width="3"/><path d="M${BX0 + 740} ${BY1 - 300} q120 -60 160 40" stroke="#cfd8dc" stroke-width="6" fill="none"/>${flask(BX0 + 900, BY1 - 120, "#b9d3a8", 1.6)}
     ${bench(BX0 + 620, 520)}`,
   quarters: (L, x) => `
-    ${[0, 1, 2, 3].map(i => bunk(BX0 + 40 + i * 300, BY1, "#4f5a3a") + `<rect x="${BX0 + 60 + i * 300}" y="${BY1 - 44}" width="120" height="44" fill="#4b5a46" stroke="#2c3528" stroke-width="3"/><rect x="${BX0 + 110 + i * 300}" y="${BY1 - 30}" width="20" height="8" fill="${C.steelLt}"/>`).join("")}
+    ${[0, 1, 2].map(i => bunk(BX0 + 40 + i * 300, BY1, "#4f5a3a") + `<rect x="${BX0 + 60 + i * 300}" y="${BY1 - 44}" width="120" height="44" fill="#4b5a46" stroke="#2c3528" stroke-width="3"/><rect x="${BX0 + 110 + i * 300}" y="${BY1 - 30}" width="20" height="8" fill="${C.steelLt}"/>`).join("")}
     <rect x="${BX0 + 120}" y="${BY0 + 150}" width="200" height="130" fill="#2a3a5a"/><rect x="${BX0 + 120}" y="${BY0 + 150}" width="200" height="12" fill="#c9a45c"/><text x="${BX0 + 220}" y="${BY0 + 230}" font-family="IBM Plex Mono,monospace" font-size="22" font-weight="700" fill="${C.paper}" text-anchor="middle">E-11</text>
     <text x="${BX0 + 220}" y="${BY0 + 260}" font-family="IBM Plex Mono,monospace" font-size="13" fill="${C.paper}" text-anchor="middle">NINE-TAILED FOX</text>${x.people?.length ? "" : ""}`,
   armory: (_L, x) => {
@@ -287,15 +323,18 @@ function people(L: RoomLayout, x: SceneExtras) {
     return slots.filter((_, i) => i % 2 === 1).join("") + slots.filter((_, i) => i % 2 === 0).join("");
   }
   const dress: Record<string, FigureSpec["dress"]> = { researcher: "labcoat", engineer: "coveralls", guard: "guard", patient: "fatigues" };
-  const shown = L.staff.filter(s => s.role !== "patient").slice(0, 4);
+  const shown = L.staff.filter(s => s.role !== "patient").slice(0, STAFF_SHOWN);
   const out = shown.map((s, i) => {
-    const px = BX0 + 140 + i * ((BX1 - BX0 - 280) / Math.max(1, shown.length - 1 || 1)) + (shown.length === 1 ? (BX1 - BX0 - 280) / 2 : 0);
+    const px = staffSlot(i, shown.length).x;
     const spec: FigureSpec = { look: rollLook(s.id), dress: dress[s.role] ?? "fatigues", headgear: s.role === "engineer" ? "hardhat" : "", weapon: s.role === "guard" ? "m2_carbine" : undefined, pose: "work" };
-    return `<g class="scene-staff"><title>${esc(s.name)}</title>${figureSvg(spec, px, BY1 + 40 + (i % 2) * 50, 0.72)}</g>`;
+    const sl = staffSlot(i, shown.length);
+    return `<g class="scene-staff"><title>${esc(s.name)}</title>${figureSvg(spec, px, sl.y, sl.s)}</g>`;
   });
   // the D-Class block shows its people as a few figures in orange; Command its duty officers
-  if (L.kind === "barracks") for (let i = 0; i < Math.min(4, L.headcount); i++) out.push(figureSvg({ look: rollLook(`${L.id}-d${i}`), dress: "dclass", pose: "rest" }, BX0 + 180 + i * 260, BY1 + 60 + (i % 2) * 40, 0.72));
+  if (L.kind === "barracks") for (let i = 0; i < Math.min(5, Math.ceil(L.headcount / DCLASS_PER_FIGURE)); i++) out.push(figureSvg({ look: rollLook(`${L.id}-d${i}`), dress: "dclass", pose: "rest" }, BX0 + 180 + i * 260, BY1 + 60 + (i % 2) * 40, 0.72));
   if (L.kind === "command") out.push(figureSvg({ look: rollLook("duty-officer-1"), dress: "officer" }, BX0 + 300, BY1 + 90, 0.78), figureSvg({ look: rollLook("duty-officer-2", "f"), sex: "f", dress: "officer" }, BX0 + 960, BY1 + 70, 0.74));
+  const more = L.staff.filter(s => s.role !== "patient").length - shown.length;
+  if (more > 0) out.push(`<rect x="${BX1 - 250}" y="${BY1 + 200}" width="230" height="36" fill="#05080b" opacity=".7"/><text x="${BX1 - 135}" y="${BY1 + 224}" font-family="IBM Plex Mono,monospace" font-size="16" fill="${C.paper}" text-anchor="middle">+ ${more} more at work</text>`);
   return out.join("");
 }
 
@@ -336,6 +375,53 @@ function activity(L: RoomLayout, x: SceneExtras) {
       <text x="${BX0 + 945}" y="${BY0 + 310}" font-family="IBM Plex Mono,monospace" font-size="18" fill="${C.paper}" text-anchor="middle">${esc(x.ops.clock)}</text>`);
   }
   return o.join("");
+}
+
+// ---------- environment-first: the objects each room is worked through ----------
+/** Fixtures that exist to be used: the lab's records cabinet, Command's recruitment desk, the D-Class orders board,
+ *  a wing's test console, the door from the quarters to the armory. Each is a target (src/scene/targets.ts). */
+function fixtures(L: RoomLayout) {
+  const o: string[] = [];
+  if (L.kind === "lab") o.push(`${cabinet(BX0 + 780, 240)}<rect x="${BX0 + 788}" y="${BY1 - 232}" width="64" height="20" fill="${C.paper}"/><text x="${BX0 + 820}" y="${BY1 - 217}" font-family="IBM Plex Mono,monospace" font-size="12" font-weight="700" fill="#2a241a" text-anchor="middle">RECORDS</text>`);
+  if (L.kind === "command") o.push(`<path d="M${BX0 + 1000} ${BY1 + 70} h200 l20 100 h-240z" fill="#4a3c2a"/><rect x="${BX0 + 1040}" y="${BY1 + 40}" width="110" height="34" rx="4" fill="#2a2e31"/>${[0, 1, 2, 3, 4].map(i => `<circle cx="${BX0 + 1058 + i * 19}" cy="${BY1 + 58}" r="5" fill="#9aa4ad"/>`).join("")}<rect x="${BX0 + 1060}" y="${BY1 + 20}" width="70" height="20" fill="${C.paper}"/>
+    <text x="${BX0 + 1100}" y="${BY1 + 150}" font-family="IBM Plex Mono,monospace" font-size="13" fill="${C.paper}" text-anchor="middle">RECRUITMENT</text>`);
+  if (L.kind === "barracks") o.push(`<rect x="${BX0 + 40}" y="${BY0 + 170}" width="260" height="150" fill="#8a6a42" stroke="#4a3a22" stroke-width="8"/>${[0, 1, 2, 3].map(i => `<rect x="${BX0 + 58 + (i % 2) * 120}" y="${BY0 + 184 + Math.floor(i / 2) * 64}" width="100" height="52" fill="${C.paper}" transform="rotate(${(i % 3) - 1} ${BX0 + 108 + (i % 2) * 120} ${BY0 + 210 + Math.floor(i / 2) * 64})"/>`).join("")}
+    <text x="${BX0 + 170}" y="${BY0 + 164}" font-family="IBM Plex Mono,monospace" font-size="14" fill="${C.paper}" text-anchor="middle">ORDERS</text>`);
+  if (L.kind.startsWith("cont_") && L.occupant) o.push(`<path d="M${BX0 + 80} ${BY1 + 80} h300 l20 90 h-340z" fill="#3a4148"/><rect x="${BX0 + 110}" y="${BY1 + 46}" width="240" height="40" fill="#2a3036"/>${[0, 1, 2, 3].map(i => `<circle cx="${BX0 + 140 + i * 60}" cy="${BY1 + 66}" r="13" fill="#14181c" stroke="${C.paper}" stroke-width="2"/><line x1="${BX0 + 140 + i * 60}" y1="${BY1 + 66}" x2="${BX0 + 146 + i * 60}" y2="${BY1 + 57}" stroke="${C.amber}" stroke-width="2"/>`).join("")}
+    <text x="${BX0 + 230}" y="${BY1 + 150}" font-family="IBM Plex Mono,monospace" font-size="13" fill="${C.paper}" text-anchor="middle">TEST CONSOLE</text>`);
+  if (L.kind === "quarters") o.push(`<rect x="${BX0 + 990}" y="${BY0 + 200}" width="110" height="320" fill="#4a3c2a" stroke="#2a2018" stroke-width="8"/><rect x="${BX0 + 1006}" y="${BY0 + 220}" width="78" height="120" fill="#5a4a34"/><circle cx="${BX0 + 1080}" cy="${BY0 + 380}" r="6" fill="#c9a45c"/>
+    <rect x="${BX0 + 985}" y="${BY0 + 172}" width="120" height="24" fill="#1f2326"/><text x="${BX0 + 1045}" y="${BY0 + 190}" font-family="IBM Plex Mono,monospace" font-size="14" fill="${C.paper}" text-anchor="middle">ARMORY →</text>`);
+  return o.join("");
+}
+
+/** The lab's bench: the apparatus for the project on it, by the kind of project, so a project is a thing on the
+ *  bench and not only a line on the board. */
+function apparatus(kind: string) {
+  const x = BX0 + 640, y = BY1 - 120;   // centre of the bench top
+  switch (kind) {
+    case "gear": case "arms": return kind === "gear"
+      ? `<rect x="${x - 6}" y="${y - 170}" width="12" height="150" fill="${C.steelDk}"/><path d="M${x - 70} ${y - 160} h140 l-8 120 h-124z" fill="#565c5f"/>${[0, 1, 2].map(i => `<path d="M${x - 62} ${y - 130 + i * 30} h124" stroke="#3a4046" stroke-width="4"/>`).join("")}<circle cx="${x + 30}" cy="${y - 100}" r="9" fill="#2a2e31"/><path d="M${x + 24} ${y - 106} l12 12" stroke="${C.red}" stroke-width="3"/><rect x="${x - 100}" y="${y - 22}" width="200" height="22" fill="#3a4148"/>`
+      : `<g transform="translate(${x - 150} ${y - 70}) scale(.3)">${weaponSide("m1_garand")}</g><rect x="${x - 40}" y="${y - 50}" width="30" height="50" fill="${C.steelDk}"/><rect x="${x - 60}" y="${y - 58}" width="70" height="14" fill="${C.steel}"/>`;
+    case "site": return `<rect x="${x - 110}" y="${y - 120}" width="220" height="110" fill="#2e4a6a"/>${[0, 1, 2, 3, 4].map(i => `<path d="M${x - 100} ${y - 104 + i * 20} h${120 + (i * 37) % 80}" stroke="#d9e2ea" stroke-opacity=".6" stroke-width="2"/>`).join("")}<rect x="${x + 40}" y="${y - 80}" width="50" height="50" fill="none" stroke="#d9e2ea" stroke-opacity=".7" stroke-width="2"/><circle cx="${x + 65}" cy="${y - 55}" r="14" fill="none" stroke="#d9e2ea" stroke-opacity=".7" stroke-width="2"/>`;
+    case "personnel": return `<rect x="${x - 90}" y="${y - 110}" width="180" height="100" fill="#2a3036"/><rect x="${x - 80}" y="${y - 100}" width="160" height="60" fill="#e9e4d4"/><path d="M${x - 76} ${y - 70} l20 -14 l14 24 l18 -30 l16 22 l22 -10 l20 8 l14 -6" stroke="#2a241a" stroke-width="2" fill="none"/>${[0, 1, 2].map(i => `<circle cx="${x - 50 + i * 50}" cy="${y - 24}" r="8" fill="#14181c" stroke="${C.amber}" stroke-width="2"/>`).join("")}`;
+    case "insurgency": return `<path d="M${x - 100} ${y - 14} l30 -60 h150 l-30 60z" fill="${C.paper}"/><path d="M${x - 60} ${y - 54} h90 M${x - 70} ${y - 40} h100 M${x - 80} ${y - 26} h70" stroke="#2a241a" stroke-width="2"/><rect x="${x - 10}" y="${y - 70}" width="60" height="16" fill="${C.red}" opacity=".8"/><circle cx="${x + 60}" cy="${y - 40}" r="18" fill="#8a2a22"/>`;
+    default: return `<rect x="${x - 50}" y="${y - 190}" width="100" height="180" rx="40" fill="${C.glass}" opacity=".25" stroke="#cfd8dc" stroke-width="3"/><rect x="${x - 60}" y="${y - 20}" width="120" height="20" fill="${C.steelDk}"/><rect x="${x - 56}" y="${y - 200}" width="112" height="16" fill="${C.steelDk}"/>
+      <path d="M${x - 20} ${y - 40} q20 -60 0 -110 q20 30 30 0 q-5 60 -10 110z" fill="#7a8a6a" opacity=".7"/>`;   // a specimen in its jar
+  }
+}
+
+/** The interactive objects: a marker on each, a ring and a label on hover, focus or selection. Mouse and keyboard. */
+function targetLayer(ts: Target[], selected?: string) {
+  return `<g class="targets">${ts.filter(t => t.rect[2] > 0).map(t => {
+    const [x, y, w, h] = t.rect, sel = selected === t.id, cx = x + Math.min(w - 14, 18), cy = Math.max(14, y + 14);
+    const label = t.label.length > 30 ? t.label.slice(0, 29) + "…" : t.label, lw = label.length * 9.4 + 22;
+    const lx = Math.min(W - lw - 6, Math.max(6, x)), ly = Math.max(6, y - 34);
+    return `<g class="itarget k-${t.kind} ${sel ? "sel" : ""}" data-target="${esc(t.id)}" tabindex="0" role="button" aria-pressed="${sel}" aria-label="${esc(t.label)}: ${esc(t.hint)}">
+      <rect class="hit" x="${x}" y="${y}" width="${w}" height="${h}" fill="transparent"/>
+      <rect class="ring" x="${x - 4}" y="${y - 4}" width="${w + 8}" height="${h + 8}" rx="10" fill="none"/>
+      <g class="pip"><circle cx="${cx}" cy="${cy}" r="11"/><circle cx="${cx}" cy="${cy}" r="4"/></g>
+      <g class="chip"><rect x="${lx}" y="${ly}" width="${lw}" height="28" rx="4"/><text x="${lx + 11}" y="${ly + 19}">${esc(label)}</text></g></g>`;
+  }).join("")}</g>`;
 }
 
 // ---------- the armory's bench ----------

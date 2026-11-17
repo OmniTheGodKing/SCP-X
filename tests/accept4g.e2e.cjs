@@ -30,7 +30,7 @@ async function stage(b, url, audio) {
   await dbg(p, 'strike');
   await p.click('[data-tab="command"]');
   const id = await p.evaluate(() => { const c = window.__site19.campaign; const i = c.incidents.find(i => i.kind === 'strike'); i.map = 'wingC'; i.night = false; i.weather = 'clear'; return i.id; });
-  await p.click(`[data-plan="${id}"]`); for (const op of ['op1', 'op2']) await p.click(`[data-pick="${op}"]`).catch(() => {});
+  await require("./lib.cjs").planIncident(p, id); for (const op of ['op1', 'op2']) await p.click(`[data-pick="${op}"]`).catch(() => {});
   await p.click('#launchBtn'); await p.waitForTimeout(300);
   if (await p.evaluate(() => !!window.__site19.campaign.outbound)) { await dbg(p, 'land'); await p.waitForTimeout(300); }
   await p.evaluate(() => {

@@ -3,7 +3,7 @@
 // buildings are rooms too; the room's controls still work from inside it.
 const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path');
-const { GAME_URL, ROOT, OUT, close, reporter } = require('./lib.cjs');
+const { GAME_URL, ROOT, OUT, close, reporter, openTarget } = require('./lib.cjs');
 const { check, done } = reporter();
 
 (async () => {
@@ -49,6 +49,7 @@ const { check, done } = reporter();
     const st = await E(() => document.querySelector('.rv-state')?.innerText);
     check('rooms: a damaged room says so', /damaged|wrecked/i.test(st), st);
     await p.screenshot({ path: `${OUT}/room-damaged.png` });
+    await openTarget(p, 'service');
     if (await p.$('#repairBtn:not([disabled])')) {
       await p.click('#repairBtn'); await p.waitForTimeout(150); await close(p);
       const after = await E(() => document.querySelector('.rv-state')?.innerText);
@@ -64,7 +65,7 @@ const { check, done } = reporter();
   check('rooms: Epsilon-11 quarters, with the operatives in them', q.room === 'surface:quarters' && q.people >= 4, q);
   const who = await E(() => document.querySelectorAll('.scene-person')[1].dataset.person);
   await p.click(`.scene-person[data-person="${who}"]`); await p.waitForTimeout(150);
-  const picked = await E(() => ({ hero: document.querySelector('.hero')?.dataset.person, panel: document.querySelector('.rv-ctx')?.innerText.slice(0, 60) }));
+  const picked = await E(() => ({ hero: document.querySelector('.hero')?.dataset.person, panel: document.querySelector('.ctxpanel')?.innerText.slice(0, 60) }));
   check('quarters: selecting an operative brings them forward, full height, with their file', picked.hero === who, picked);
   await p.screenshot({ path: `${OUT}/room-quarters.png` });
 
@@ -96,9 +97,11 @@ const { check, done } = reporter();
   await p.screenshot({ path: `${OUT}/room-armory.png` });
 
   // the panel can be put away
-  await p.click('#rvPanel'); await p.waitForTimeout(80);
-  check('rooms: the controls panel hides to show the room', await E(() => getComputedStyle(document.querySelector('.rv-ctx')).display === 'none'));
-  await p.click('#rvPanel');
+  // the panel belongs to the object: it closes, and the room is left uncovered
+  await openTarget(p, 'racks');
+  check('rooms: selecting an object opens its panel', await E(() => !!document.querySelector('.ctxpanel')));
+  await p.click('#ctxClose'); await p.waitForTimeout(80);
+  check('rooms: closing it leaves the room uncovered', await E(() => !document.querySelector('.ctxpanel')));
 
   // transitions can be switched off and the game still navigates
   await E(() => localStorage.setItem('site19-transitions', 'off'));

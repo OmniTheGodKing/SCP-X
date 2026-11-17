@@ -11,7 +11,7 @@ const { check, done } = reporter();
   await dbg(p, 'researchers');   // four researchers on staff, so a breach catches up to three
   await E(() => { const c = window.__site19.campaign;
     c.scps[0].status = 'breach'; c.incidents.push({ id: 'incS', kind: 'breach', scpId: '173', title: 'Incident 901: SCP-173 breach, staff test', appeared: c.day, expires: c.day, insurgents: 0, region: 'east_us', map: 'wingC' }); });
-  await p.click('[data-tab=site]'); await p.click('[data-tab=command]'); await p.click('[data-plan="incS"]');
+  await p.click('[data-tab=site]'); await p.click('[data-tab=command]'); await require('./lib.cjs').planIncident(p, 'incS');
   await p.click('#launchBtn'); await p.waitForTimeout(400); await close(p);
   const staff = await E(() => window.__site19.campaign.people.filter(x => x.kind === 'researcher' && !x.away).map(x => x.name));
   const inWing = await E(() => window.__site19.mission.units.filter(u => u.researcher).map(u => u.name));

@@ -13,7 +13,7 @@ const dbg = async (p, k) => { await p.evaluate(() => document.activeElement?.blu
     await p.evaluate(() => { const c = window.__site19.campaign; c.tutorial = false; c.day = 400; });
     await dbg(p, 'strike'); await p.click('[data-tab="command"]');
     const id = await p.evaluate(([m, r]) => { const c = window.__site19.campaign; const i = c.incidents.find(i => i.kind === 'strike'); i.map = m; i.night = false; i.weather = 'clear'; i.insurgents = r === 2 ? 8 : i.insurgents; return i.id; }, [map, run]);
-    await p.click(`[data-plan="${id}"]`);
+    await require('./lib.cjs').planIncident(p, id);
     await p.click('#launchBtn'); await p.waitForTimeout(300);
     if (await p.evaluate(() => !!window.__site19.campaign.outbound)) { await dbg(p, 'land'); await p.waitForTimeout(300); }
     await (await p.$('#cv')).screenshot({ path: OUT + '/map-' + map + '.png' });

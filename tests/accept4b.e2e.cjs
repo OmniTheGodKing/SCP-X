@@ -18,7 +18,7 @@ async function start(b, id) {
   await dbg(p, 'see' + id);
   await p.click('[data-tab="command"]');
   const inc = await p.evaluate(sid => { const c = window.__site19.campaign; const i = c.incidents.find(i => i.scpId === sid); i.map = 'town'; i.insurgents = 0; i.night = false; i.weather = 'clear'; return i.id; }, id);
-  await p.click(`[data-plan="${inc}"]`);
+  await require('./lib.cjs').planIncident(p, inc);
   await p.click('#launchBtn'); await p.waitForTimeout(300);
   if (await p.evaluate(() => !!window.__site19.campaign.outbound)) { await dbg(p, 'land'); await p.waitForTimeout(400); }
   await p.evaluate(() => { const S = window.__site19.mission; for (const u of S.units) if (u.side === 'raider' || u.side === 'dclass' || (u.side === 'civilian' && !u.host)) u.alive = false; window.__site19.computeVis(); });
@@ -252,6 +252,7 @@ const FREE = `(x, y, n) => { const A = window.__site19, S = A.mission, G = A.gri
       got.push(await p.evaluate(sid => window.__site19.campaign.scps.find(s => s.id === sid)?.status ?? 'handed off', id));
     }
     await p.click('[data-tab="research"]').catch(() => {});
+    await p.click('.objbar [data-target="board"]').catch(() => {}); await p.waitForTimeout(80);
     const branches = await p.evaluate(() => [...document.querySelectorAll('[data-branch], .branch, .rbranch')].map(e => e.textContent.trim()).filter(t => /SCP-(096|012|939|035|682)/.test(t)).slice(0, 10));
     const research = await p.evaluate(() => document.body.innerText.match(/Blindfold drill|Composition analysis|Voice analysis|Mask psychology|Regeneration study/g));
     // a breach of each held one, and SCP-682's knock-on

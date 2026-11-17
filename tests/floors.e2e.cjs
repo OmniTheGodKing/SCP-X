@@ -15,7 +15,7 @@ const check = (name, ok, detail) => results.push(`${ok ? 'PASS' : 'FAIL'} ${name
   await p.evaluate(() => document.activeElement?.blur?.()); await p.keyboard.press('`'); await p.click('[data-dbg="raid"]'); await p.click('[data-dbg="close"]'); await close(p);
   await p.click('[data-tab="command"]');
   const id = await p.evaluate(() => window.__site19.campaign.incidents.find(i => i.kind === 'raid').id);
-  await p.click(`[data-plan="${id}"]`); await p.click('#launchBtn'); await p.waitForTimeout(400);
+  await require("./lib.cjs").planIncident(p, id); await p.click('#launchBtn'); await p.waitForTimeout(400);
   const E = (f, a) => p.evaluate(f, a);
 
   const setup = await E(() => { const A = window.__site19, S = A.mission, G = A.grid;

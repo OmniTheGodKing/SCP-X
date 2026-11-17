@@ -14,7 +14,7 @@ const close = async p => { while (await p.$('#noticeOk')) await p.click('#notice
     await p.evaluate(() => document.activeElement?.blur?.()); await p.keyboard.press('`'); await p.click('[data-dbg="raid"]'); await p.click('[data-dbg="close"]'); await close(p);
     await p.click('[data-tab="command"]');
     const id = await p.evaluate(() => window.__site19.campaign.incidents.find(i => i.kind === 'raid').id);
-    await p.click(`[data-plan="${id}"]`);
+    await require("./lib.cjs").planIncident(p, id);
     const panel = await p.evaluate(() => [...document.querySelectorAll('.card.plan p')].map(e => e.textContent).find(t => /Site Security/.test(t)));
     await p.click('#launchBtn'); await p.waitForTimeout(400);
     out[alert] = await p.evaluate(() => { const S = window.__site19.mission; return { reinforce: S.reinforce.map(r => ({ turn: r.turn, n: r.members.length, road: !!r.road, guard: !!r.members[0]?.guard })), brief: S.log.find(l => /coming through the wire/.test(l.text))?.text.match(/Site Security holds[^.]*\./)?.[0] }; });

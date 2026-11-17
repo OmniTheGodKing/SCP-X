@@ -9,7 +9,7 @@ async function launchFirst(p, E, kind) {
   await p.click('[data-tab="command"]');
   const id = await E(k => window.__site19.campaign.incidents.find(i => i.kind === k)?.id, kind);
   if (!id) return false;
-  await p.click(`[data-plan="${id}"]`); await p.click('#launchBtn'); await p.waitForTimeout(300);
+  await require("./lib.cjs").planIncident(p, id); await p.click('#launchBtn'); await p.waitForTimeout(300);
   if (await E(() => !!window.__site19.campaign.outbound)) { await dbg(p, 'land'); await p.waitForTimeout(300); }
   await E(() => { window.__site19.pace.headless = true; });
   return true;

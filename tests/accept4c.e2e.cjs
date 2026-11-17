@@ -17,7 +17,7 @@ async function page(b) {
   return { p, errs, E: (f, a) => p.evaluate(f, a) };
 }
 async function launch(p, incId) {
-  await p.click('[data-tab="command"]'); await p.click(`[data-plan="${incId}"]`); await p.click('#launchBtn'); await p.waitForTimeout(300);
+  await p.click('[data-tab="command"]'); await require('./lib.cjs').planIncident(p, incId); await p.click('#launchBtn'); await p.waitForTimeout(300);
   if (await p.evaluate(() => !!window.__site19.campaign.outbound)) { await dbg(p, 'land'); await p.waitForTimeout(300); }
 }
 /** A sighting turned into a GOC or GRU mission on the farm: SCP-049 for the GOC, SCP-012 (which can be carried) for GRU-P. */

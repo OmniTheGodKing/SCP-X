@@ -3,7 +3,7 @@
 // shows containment risk; rejected commands change nothing.
 const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path');
-const { GAME_URL, ROOT, close, reporter } = require('./lib.cjs');
+const { GAME_URL, ROOT, close, reporter, openTarget } = require('./lib.cjs');
 const { check, done } = reporter();
 
 (async () => {
@@ -22,8 +22,9 @@ const { check, done } = reporter();
   const roRows = await E(() => { const r = [...document.querySelectorAll('.readouts .ro')].map(e => e.getBoundingClientRect().top); return new Set(r.map(Math.round)).size; });
   check('header: the readouts fit on one line at 1440px', roRows === 1, roRows);
 
-  // ---- Command: the briefing ----
+  // ---- Command: the briefing, on the command center's operations display ----
   await p.click('[data-tab="command"]'); await p.waitForTimeout(100);
+  await openTarget(p, 'ops');
   const brief = await E(() => [...document.querySelectorAll('.brief-item')].map(e => ({ sev: [...e.classList].find(k => ['critical', 'important', 'routine'].includes(k)), title: e.querySelector('b')?.textContent, go: e.querySelector('[data-brief]')?.dataset.brief })));
   check('command: the Director\'s Briefing lists items', brief.length > 0, brief.length);
   const order = { critical: 0, important: 1, routine: 2 };
@@ -68,6 +69,7 @@ const { check, done } = reporter();
   const dmg = await E(() => { const c = window.__site19.campaign; const f = c.base.facilities.find(x => x.disabled && x.repairDays === 0); return f ? `${f.level},${f.slot}` : null; });
   if (dmg) {
     await p.click(`[data-slot="${dmg}"]`); await p.waitForTimeout(100);
+    await openTarget(p, 'service');
     const can = await E(() => !!document.querySelector('#repairBtn:not([disabled])'));
     if (can) {
       await p.click('#repairBtn'); await p.waitForTimeout(100); await close(p);
@@ -86,13 +88,15 @@ const { check, done } = reporter();
   // research: the tab opens on a category with projects, and project rows keep their layout (a stray .proj rule once
   // broke them)
   await p.click('[data-tab="research"]'); await p.waitForTimeout(100);
+  await openTarget(p, 'board');
   const rs = await E(() => { const rows = [...document.querySelectorAll('.projects .proj')]; return { n: rows.length, tall: rows.slice(0, 3).map(r => Math.round(r.getBoundingClientRect().height)) }; });
   check('research: opens on a category with projects', rs.n > 0, rs);
   check('research: project rows are compact', rs.tall.every(h => h < 180), rs.tall);
   // personnel: an operative is shown without having to pick one
   await p.click('[data-tab="personnel"]'); await p.waitForTimeout(100);
-  const op = await E(() => ({ sel: !!document.querySelector('.oprow.sel'), detail: !!document.querySelector('.screen-personnel .col:nth-child(2) .card') }));
-  check('personnel: the first operative is selected and shown large', op.sel && op.detail, op);
+  await p.click('.scene-person'); await p.waitForTimeout(120);
+  const op = await E(() => ({ room: document.querySelector('.roomview')?.dataset.room, hero: !!document.querySelector('.hero'), file: !!document.querySelector('.ctxpanel .opfocus') }));
+  check('personnel: the quarters, and a selected operative comes forward with their file', op.room === 'surface:quarters' && op.hero && op.file, op);
   // site: work and crews name the engineers
   await p.click('[data-tab="site"]'); await p.waitForTimeout(100);
   if (await p.$('#siteOverview')) { await p.click('#siteOverview'); await p.waitForTimeout(100); }

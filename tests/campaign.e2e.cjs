@@ -6,7 +6,7 @@
 // 16 save and reload · 17 continue the campaign.
 // The tactical fight itself is covered by the tactical suites; here it is ended with the debug "Win now" control.
 const { chromium } = require('playwright');
-const { fresh, close, dbg, reporter, OUT } = require('./lib.cjs');
+const { fresh, close, dbg, reporter, OUT, openTarget } = require('./lib.cjs');
 const { check, done } = reporter();
 
 (async () => {
@@ -45,7 +45,7 @@ const { check, done } = reporter();
 
   // 3 assign personnel: post any unposted guard at a Security station
   const sec = await C(() => { const c = window.__site19.campaign; const f = c.base.facilities.find(x => x.type === 'security'); return f ? `${f.level},${f.slot}` : null; });
-  if (sec) { await p.click(`[data-slot="${sec}"]`); await p.waitForTimeout(80); }
+  if (sec) { await p.click(`[data-slot="${sec}"]`); await p.waitForTimeout(80); await openTarget(p, 'service'); }
   const before3 = await C(() => window.__site19.campaign.guards.filter(g => g.stationId).length);
   const postBtn = await p.$('[data-post]');
   if (postBtn) { await postBtn.click(); await p.waitForTimeout(80); }
@@ -54,6 +54,7 @@ const { check, done } = reporter();
 
   // 4 begin research
   await tab('research');
+  await openTarget(p, 'board');
   await p.click('[data-assign]:not([disabled])'); await p.waitForTimeout(80);
   const res = await C(() => Object.values(window.__site19.campaign.research.assigned).reduce((a, n) => a + n, 0));
   check('4: a researcher is on a project', res >= 1, res);
@@ -92,10 +93,10 @@ const { check, done } = reporter();
   // 6 manufacture equipment at the workshop
   if (wsDone) {
     await tab('site');
-    await p.click(`[data-slot="${ws.slot}"]`); await p.waitForTimeout(80);
+    await p.click(`[data-slot="${ws.slot}"]`); await p.waitForTimeout(80); await openTarget(p, 'workbench');
     const sel = '[data-order]:not([disabled]), [data-att]:not([disabled]), [data-ammoorder]:not([disabled])';
     let ord = await p.$(sel);
-    if (!ord) { await dbg(p, 'unlockall'); await tab('site'); await p.click(`[data-slot="${ws.slot}"]`); await p.waitForTimeout(80); ord = await p.$(sel); }
+    if (!ord) { await dbg(p, 'unlockall'); await tab('site'); await p.click(`[data-slot="${ws.slot}"]`); await p.waitForTimeout(80); await openTarget(p, 'workbench'); ord = await p.$(sel); }
     const n0 = await C(() => window.__site19.campaign.orders.length);
     if (ord) { await ord.click(); await p.waitForTimeout(80); await close(p); }
     const n1 = await C(() => window.__site19.campaign.orders.length);
@@ -105,7 +106,7 @@ const { check, done } = reporter();
   // 7 manage containment: clean SCP-173's cell from its wing
   await tab('site');
   const wing = await C(() => { const c = window.__site19.campaign, s = c.scps[0], f = c.base.facilities.find(x => x.id === s.wingId); return f ? `${f.level},${f.slot}` : null; });
-  await p.click(`[data-slot="${wing}"]`); await p.waitForTimeout(80);
+  await p.click(`[data-slot="${wing}"]`); await p.waitForTimeout(80); await openTarget(p, 'vault');
   const clean0 = await C(() => window.__site19.campaign.scps[0].lastCleaned);
   const cleanBtn = await p.$('[data-clean]:not([disabled])');
   if (cleanBtn) { await cleanBtn.click(); await p.waitForTimeout(120); await close(p); }
@@ -118,7 +119,7 @@ const { check, done } = reporter();
   check('9: an incident arrives and the Director\'s Briefing raises it', got, await C(() => window.__site19.briefing().map(x => `${x.sev}:${x.title}`)));
 
   // 10 respond through the Director's Briefing
-  await tab('command');
+  await tab('command'); await openTarget(p, 'ops');
   const item = await C(() => { const el = [...document.querySelectorAll('.brief-item [data-brief]')].find(b => /^(world|command)\|/.test(b.dataset.brief) && b.dataset.brief.split('|')[1]); return el?.dataset.brief ?? null; });
   const incId = await C(() => window.__site19.campaign.incidents.find(i => !i.dispatch)?.id);
   if (item) { await p.click(`.brief-item [data-brief="${item}"]`); await p.waitForTimeout(120); }
@@ -128,13 +129,14 @@ const { check, done } = reporter();
   // 11 select a global mission, 12 deploy an MTF
   const target = (item && item.split('|')[1]) || incId;
   await tab('command');
+  if (!(await p.$(`[data-plan="${target}"]`))) await openTarget(p, 'comms');
   const planBtn = await p.$(`[data-plan="${target}"]`) ?? await p.$('[data-plan]');
   if (planBtn) { await planBtn.click(); await p.waitForTimeout(150); }
   const planning = await C(() => !!document.querySelector('#launchBtn'));
   check('11: a mission is selected and its deployment screen is open', planning);
   await p.click('#launchBtn').catch(() => {}); await p.waitForTimeout(300); await close(p);
   // a far incident means a flight: land it now
-  if (await C(() => !!window.__site19.campaign.outbound)) { await dbg(p, 'land'); await tab('world'); await p.click('[data-speed="1"]').catch(() => {}); await p.waitForTimeout(1200); await close(p); }
+  if (await C(() => !!window.__site19.campaign.outbound)) { await dbg(p, 'land'); if (await p.$('[data-tab="world"]')) { await tab('world'); await p.click('[data-speed="1"]').catch(() => {}); } await p.waitForTimeout(1200); await close(p); }
   const inMission = await C(() => !!window.__site19.mission && !window.__site19.mission.over);
   check('12: Epsilon-11 deploys and the tactical mission starts', inMission);
 

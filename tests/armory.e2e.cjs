@@ -2,7 +2,7 @@
 // what it takes; a preview draws the attachment on the weapon and the figures change; Fit really fits it (stores,
 // the mission gun, the save); an impossible fit is refused with the reason; Remove gives it back.
 const { chromium } = require('playwright');
-const { fresh, close, reporter, OUT } = require('./lib.cjs');
+const { fresh, close, reporter, OUT, openTarget } = require('./lib.cjs');
 const { check, done } = reporter();
 
 (async () => {
@@ -15,6 +15,7 @@ const { check, done } = reporter();
     const o = c.roster.find(x => (x.weapon ?? 'rifle') === 'rifle' && c.models.rifle === 'm1_garand') ?? c.roster[0]; return o.id; });
   await p.click('[data-tab="site"]'); await p.waitForTimeout(100);
   await p.click('[data-enter="surface:armory"]'); await p.waitForTimeout(600);
+  await openTarget(p, 'racks');
   await p.click(`[data-armop="${who}"]`); await p.waitForTimeout(150);
   const bench = await E(() => ({ gun: !!document.querySelector('.benchgun'), mounts: [...document.querySelectorAll('.rv-stage .mount')].map(m => m.dataset.mount) }));
   check('armory: the weapon goes on the bench with its mounts marked', bench.gun && bench.mounts.length >= 3, bench);
@@ -54,6 +55,7 @@ const { check, done } = reporter();
   check('armory: the fit is saved', await E(id => window.__site19.campaign.roster.find(o => o.id === id).attachment === 'scope', who));
   await p.click('[data-tab="site"]'); await p.waitForTimeout(100);
   await p.click('[data-enter="surface:armory"]'); await p.waitForTimeout(500);
+  await openTarget(p, 'racks');
   await p.click(`[data-armop="${who}"]`); await p.waitForTimeout(100);
   await p.click('#armRemove'); await p.waitForTimeout(100);
   const removed = await E(id => { const c = window.__site19.campaign; return { att: c.roster.find(o => o.id === id).attachment, stores: c.attachments.scope }; }, who);

@@ -5,8 +5,10 @@ import { directorsBriefing } from "../campaign/briefing";
 import { obligations, projection } from "../campaign/forecast";
 import { crews } from "../campaign/crews";
 import { attachmentsFor, canFitAttachment, mountsOf, weaponStats } from "../campaign/armory";
+import { researchersAssigned } from "../campaign/research";
 import { MOUNT_NAMES, fits, type MountId } from "../data/mounts";
-import { allRooms, roomLayout } from "../scene/layout";
+import { allRooms, designationOf, roomLayout } from "../scene/layout";
+import { DCLASS_PER_FIGURE, FRAME, targetsFor } from "../scene/targets";
 import { interiorSvg, type SceneExtras } from "./scene/interior";
 import { operativeFigure } from "./scene/people";
 import { animateEnter, animateLeave, pulse, setTransitions, transitionsSetting } from "./scene/transition";
@@ -177,7 +179,10 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let sel: { level: number; slot: number } | null = null;
   // Presentation overhaul P2: the room the Director is standing in (a facility id or a fixed surface location), and
   // where the overview was scrolled to on the way in
-  let room: string | null = null, roomScroll = 0, rvPanel = true;
+  let room: string | null = null, roomScroll = 0;
+  // Environment-first interface: the object selected in the room (its panel is open), whether that panel is widened,
+  // which lab the Research tab stands in, and the room to go back to after following a link into another
+  let target: string | null = null, ctxWide = false, labPick: string | null = null, prevRoom: { tab: Tab; id: string } | null = null;
   type OpSection = "appearance" | "loadout" | "abilities" | "record" | "bio";
   let opSection: OpSection = "appearance";
   // Presentation overhaul P4: the operative whose weapon is on the armory bench, the mount selected, the attachment
@@ -252,7 +257,12 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   /** Into a room: the destination renders at once, then the stage opens out of the slot it came from. */
   function enterRoom(id: string, from: DOMRect | null) {
     if (!roomLayout(c, id)) return;
-    roomScroll = window.scrollY; room = id; tab = "site"; speed = 0;
+    // following a link from one room into another remembers the way back
+    const here = inRoomScreen() ? currentRoom() : null;
+    prevRoom = here && here !== id ? { tab, id: here } : null;
+    if (!here) roomScroll = window.scrollY;
+    room = id; tab = "site"; speed = 0; target = null;
+    if (c.base.facilities.find(x => x.id === id)?.type === "lab") labPick = id;
     const f = c.base.facilities.find(x => x.id === id);
     if (f) sel = { level: f.level, slot: f.slot };
     render();
@@ -261,21 +271,23 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   }
   /** Back to Site-19: the overview renders at once, where it was, and the room closes into its slot. */
   function leaveRoom() {
-    if (!room) return;
+    const id = currentRoom();
+    if (!id) return;
     const stage = root.querySelector<HTMLElement>(".rv-stage"), snap = stage?.innerHTML ?? null, from = stage?.getBoundingClientRect() ?? null;
-    const id = room;
-    room = null;
+    room = null; tab = "site"; target = null; prevRoom = null;
+    const lf = c.base.facilities.find(x => x.id === id);
+    if (lf) sel = { level: lf.level, slot: lf.slot };
     render();
     window.scrollTo({ top: roomScroll });
     const f = c.base.facilities.find(x => x.id === id);
-    const target = f ? root.querySelector(`[data-slot="${f.level},${f.slot}"]`) : root.querySelector(`[data-enter="${id}"]`);
-    animateLeave(snap, from, target?.getBoundingClientRect() ?? null);
-    pulse(target);
+    const dest = f ? root.querySelector(`[data-slot="${f.level},${f.slot}"]`) : root.querySelector(`[data-enter="${id}"]`);
+    animateLeave(snap, from, dest?.getBoundingClientRect() ?? null);
+    pulse(dest);
   }
   /** Straight to the next room along: no overview in between. */
   function stepRoom(id: string) {
     if (!roomLayout(c, id)) return;
-    room = id;
+    room = id; tab = "site"; target = null; prevRoom = null;
     const f = c.base.facilities.find(x => x.id === id);
     sel = f ? { level: f.level, slot: f.slot } : null;
     render();
@@ -328,7 +340,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   </nav>
   ${flashMsg ? `<p class="warn-box" role="status">${esc(flashMsg)}</p>` : ""}
   ${coachCard()}
-  ${tab === "command" ? commandTab() : tab === "world" ? worldTab() : tab === "site" ? (room ? roomView() : siteTab()) : tab === "research" ? researchTab() : tab === "history" ? historyTab() : personnelTab()}
+  ${tab === "world" ? worldTab() : tab === "history" ? historyTab() : tab === "site" ? (room ? roomView(room) : siteTab())
+    : tabRoom(tab) ? roomView(tabRoom(tab)!) : tab === "research" ? researchTab() : tab === "command" ? commandTab() : personnelTab()}
   ${creditsOpen ? `<div class="overlay fixed"><div class="sheet" role="dialog" aria-label="Credits">${creditsHtml()}<div class="row"><button class="act primary" type="button" id="creditsClose">Close</button></div></div></div>` : ""}
   ${!c.over && c.notices?.length ? `<div class="overlay fixed"><div class="sheet notice" role="dialog" aria-label="Time paused">
     <div class="label">${dateText(c.day)} · time paused</div>
@@ -593,30 +606,24 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     </div>`;
   }
 
-  function commandTab() {
-    // Strategic overhaul C/H: the Director's Briefing leads; the situation, the Council and the money sit beside it
+  // Environment-first: the Command screen's parts, each opened from an object in the command center
+  function briefingBlock() {
     const brief = directorsBriefing(c);
     const sevCount = (k: string) => brief.filter(b => b.sev === k).length;
-    return `${roomBanner("command", "Into Command")}<div class="screen-command">
-    <section class="col">
-      <div class="panel"><div class="panel-h"><b>Director's briefing</b><span class="meta">${sevCount("critical")} critical · ${sevCount("important")} important · ${dateText(c.day)}</span></div>
+    return `      <div class="panel"><div class="panel-h"><b>Director's briefing</b><span class="meta">${sevCount("critical")} critical · ${sevCount("important")} important · ${dateText(c.day)}</span></div>
         <div class="panel-b"><div class="brief">${brief.length ? brief.map(b => `<div class="brief-item ${b.sev}"><div><b>${esc(b.title)}</b><div class="d">${esc(b.detail)}</div></div>
           <button class="act ${b.sev === "critical" ? "danger" : ""}" type="button" data-brief="${esc(b.tab)}|${esc(b.focus ?? "")}">${b.tab === "command" && b.focus ? "Respond" : "Go"}</button></div>`).join("")
-          : `<p class="brief-empty">Nothing needs a decision right now. Let time run on the World map.</p>`}</div></div></div>
-      <div class="card">
+          : `<p class="brief-empty">Nothing needs a decision right now. Let time run on the World map.</p>`}</div></div></div>`;
+  }
+  function incidentsBlock() { return `      <div class="card">
         <div class="label">${icon("anomaly", 13)}Active incidents · ${c.incidents.length}</div>
         ${c.incidents.length ? c.incidents.map(incidentCard).join("") : `<p class="muted">No open incidents. Let time run to see what happens next.</p>`}
       </div>
-      ${staffCard()}
-      ${inspectionSoon(c) ? `<div class="card plan"><div class="label">O5 inspection · ${dateText(c.inspectionDay!)}</div>
+`; }
+  function inspectionBlock() { return `      ${inspectionSoon(c) ? `<div class="card plan"><div class="label">O5 inspection · ${dateText(c.inspectionDay!)}</div>
         <p>If the inspector came today: $${INSPECTION.perCheck}k for each check passed${inspectionChecks(c).filter(k => !k.ok).length >= INSPECTION.failAt ? `, and <span class="warn">$${INSPECTION.penalty}k docked</span>` : ""}.</p>
-        <ul class="why">${inspectionChecks(c).map(k => `<li class="${k.ok ? "" : "warn"}">${k.ok ? "✓" : "✗"} ${esc(k.label)}</li>`).join("")}</ul></div>` : ""}
-      ${contractsCard()}
-      ${chaosCard()}
-      ${c.scps.map(scpSummary).join("")}
-    </section>
-    <section class="col">
-      <div class="panel"><div class="panel-h"><b>Situation</b><span class="meta">${speed ? `time running ${speed}×` : "time paused"}</span></div><div class="panel-b">
+        <ul class="why">${inspectionChecks(c).map(k => `<li class="${k.ok ? "" : "warn"}">${k.ok ? "✓" : "✗"} ${esc(k.label)}</li>`).join("")}</ul></div>` : ""}`; }
+  function situationBlock() { return `      <div class="panel"><div class="panel-h"><b>Situation</b><span class="meta">${speed ? `time running ${speed}×` : "time paused"}</span></div><div class="panel-b">
         <div class="ovgrid">
           <div>${ro("Global exposure", `${c.exposure} / 100`, c.exposure >= 60 ? "danger" : c.exposure >= 35 ? "caution" : "", "The average of the six regions; a collapsed front counts as 100.")}<div class="meter ${c.exposure >= 60 ? "danger" : c.exposure >= 35 ? "caution" : ""}"><span style="width:${c.exposure}%"></span></div></div>
           <div>${ro("O5 standing", `${c.council.standing} / 100`, c.council.standing < AUDIT_BELOW ? "danger" : c.council.standing < 40 ? "caution" : "", tierOf(c.council.standing).name)}<div class="meter ${c.council.standing < AUDIT_BELOW ? "danger" : ""}"><span style="width:${c.council.standing}%"></span></div></div>
@@ -627,14 +634,16 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
         <div class="row" style="margin-top:4px">${(Object.keys(ALERTS) as Alert[]).map(a => `<button class="act ${c.alert === a ? "on primary" : ""}" type="button" data-alert="${a}" aria-pressed="${c.alert === a}">${ALERTS[a].name}</button>`).join("")}</div>
         <p class="muted">${esc(ALERTS[c.alert].desc)} Time only passes on the World map.</p>
         <div class="row"><button class="act primary" type="button" data-goto="world">Open the world map</button></div>
-      </div></div>
-      ${councilCard()}
-      ${financesCard()}
-      <div class="panel"><div class="panel-h"><b>Site log</b><span class="meta">newest first</span></div>
-        <div class="panel-b"><div class="log sevlog">${c.log.map(l => `<p class="${l.kind} sev-${l.sev ?? "routine"}"><span>D${l.day}</span>${esc(l.text)}</p>`).join("")}</div></div></div>
-    </section>
+      </div></div>`; }
+  function logBlock() { return `      <div class="panel"><div class="panel-h"><b>Site log</b><span class="meta">newest first</span></div>
+        <div class="panel-b"><div class="log sevlog">${c.log.map(l => `<p class="${l.kind} sev-${l.sev ?? "routine"}"><span>D${l.day}</span>${esc(l.text)}</p>`).join("")}</div></div></div>`; }
+  function commandTab() {
+    return `<div class="screen-command">
+    <section class="col">${briefingBlock()}${incidentsBlock()}${staffCard()}${inspectionBlock()}${contractsCard()}${chaosCard()}${c.scps.map(scpSummary).join("")}</section>
+    <section class="col">${situationBlock()}${councilCard()}${financesCard()}${logBlock()}</section>
   </div>`;
   }
+
 
   function scpSummary(s: ScpRecord) {
     return scpSummaryText(s).replace(/^<div class="card status([^"]*)">/, m => `${m}<div class="dossierwrap">${dossierPhoto(s.id)}</div>`);
@@ -1027,15 +1036,17 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       ${justDone ? `<p class="specs">Last completed: ${esc(PROJECTS[justDone]?.name ?? justDone)}.</p>` : ""}</div>`;
   }
 
-  function researchTab() {
+  /** The research catalog: what can be researched, what's under way, the category tabs, the assignment controls.
+   *  Environment-first: opened from the lab's project board. */
+  function researchCatalog() {
     const branches: Branch[] = ["SCP-173", ...(["049", "106", "096", "012", "939", "035", "682"] as const).filter(id => c.scps.some(s => s.id === id)).map(id => `SCP-${id}` as Branch),
       ...(c.scps.some(isInert) ? ["Objects" as Branch] : []),
       ...((c.materials.prisoners ?? 0) > 0 ? ["Insurgency" as Branch] : []), "Personnel", "Weapons", "Equipment", "Site"];
     const offer = c.research.offer, insp = c.research.inspired;
     const bt = Object.keys(PROJECTS).filter(id => PROJECTS[id].breakthrough && !has(c, id) && offered(c, id));
     const s = scp173();
-    return `${roomBanner("lab", "Into the lab")}<div class="hubgrid">
-    <section class="col">
+    void s;
+    return `
       <div class="card">
         <div class="label">Research · ${c.researchers} researchers, ${researchersFree(c)} unassigned · lab space for ${researcherCapacity(c)}</div>
         <p class="muted">Put researchers on any projects you like; each one adds a day of work per day. A project's cost is paid when work starts.</p>
@@ -1054,8 +1065,18 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
         <div class="card"><div class="row restabs">${cats.map(x => `<button class="act ${x.k === cur.k ? "on" : ""}" type="button" data-rescat="${x.k}" aria-pressed="${x.k === cur.k}">${icon(RESEARCH_ICON[x.k], 14)}${RESEARCH_CAT_NAMES[x.k]} · ${x.ids.filter(id => !has(c, id)).length}</button>`).join("")}</div>
           <div class="projects scrollpanel">${cur.ids.length ? [...cur.ids].sort((a, b) => Number(has(c, a)) - Number(has(c, b))).map(projectRow).join("") : `<p class="muted">Nothing to research here yet.</p>`}</div></div>`;
       })()}
-    </section>
-    <section class="col">
+    `;
+  }
+  /** The experiments dossier (secondary to the lab: opened from its records cabinet). */
+  function experimentsDossier() {
+    const branches: Branch[] = ["SCP-173", ...(["049", "106", "096", "012", "939", "035", "682"] as const).filter(id => c.scps.some(s => s.id === id)).map(id => `SCP-${id}` as Branch),
+      ...(c.scps.some(isInert) ? ["Objects" as Branch] : []),
+      ...((c.materials.prisoners ?? 0) > 0 ? ["Insurgency" as Branch] : []), "Personnel", "Weapons", "Equipment", "Site"];
+    const offer = c.research.offer, insp = c.research.inspired;
+    const bt = Object.keys(PROJECTS).filter(id => PROJECTS[id].breakthrough && !has(c, id) && offered(c, id));
+    const s = scp173();
+    void bt; void offer; void insp; void branches;
+    return `
       <div class="file scrollpanel tall">
         <div class="dossierwrap">${dossierPhoto(s.id)}</div><div class="label">Experiments · ${c.research.tests.length} of ${Object.keys(TESTS).length} on file</div>
         <h2>Test log</h2>
@@ -1069,9 +1090,14 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
         })()}
         ${watcherPicker()}
       </div>
-    </section>
-  </div>`;
+    `;
   }
+  /** Without a working lab there is no lab to stand in: the catalog and dossier, said plainly. */
+  function researchTab() {
+    return `<div class="card notice-nolab"><div class="label">No research lab</div><p>Site-19 has no research lab, so there is nowhere to do research. Build one on the Site-19 tab; researchers need a lab to work.</p><div class="row"><button class="act" type="button" data-goto="site">Site-19 →</button></div></div>
+      <div class="hubgrid"><section class="col">${researchCatalog()}</section><section class="col">${experimentsDossier()}</section></div>`;
+  }
+
 
   function projectRow(id: string) {
     const p = PROJECTS[id], r = c.research, n = r.assigned[id] || 0, prog = r.progress[id] || 0;
@@ -1164,48 +1190,187 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       <p class="muted">${busy} of ${c.engineers} engineers are busy. Repairs compete with construction, refits and workshop orders for them.</p></div>`;
   }
 
-  /** Presentation overhaul P2: inside a room. The interior fills the stage; the room's own controls sit in a panel
-   *  that can be put away. */
-  function roomView() {
-    const L = roomLayout(c, room!);
+  /** Environment-first: the room a main tab stands in. Research is the lab (the one last chosen, else a working one),
+   *  Command the command center, Personnel Epsilon-11's quarters. None when the campaign has no such room. */
+  function tabRoom(t: Tab): string | null {
+    if (t === "research") {
+      const labs = c.base.facilities.filter(f => f.type === "lab");
+      const pick = labs.find(f => f.id === labPick) ?? labs.find(f => operational(f)) ?? labs[0];
+      return pick?.id ?? null;
+    }
+    if (t === "command") return c.base.facilities.find(f => f.type === "command")?.id ?? null;
+    if (t === "personnel") return "surface:quarters";
+    return null;
+  }
+  const inRoomScreen = () => (tab === "site" && !!room) || (tab !== "site" && !!tabRoom(tab));
+  const currentRoom = () => tab === "site" ? room : tabRoom(tab);
+
+  /** Environment-first: inside a room. The scene fills the screen; its objects are the interface. Selecting one
+   *  brings the camera to it and opens a panel for it; nothing else covers the room. */
+  function roomView(id: string) {
+    // the room's own controls (repair, upgrade, staff) act on the selected slot: this room
+    { const fx = c.base.facilities.find(x => x.id === id); if (fx) sel = { level: fx.level, slot: fx.slot }; }
+    const L = roomLayout(c, id);
     if (!L) { room = null; return siteTab(); }
     const list = allRooms(c), i = list.findIndex(r => r.id === L.id);
     const prev = list[(i - 1 + list.length) % list.length], next = list[(i + 1) % list.length];
     const extras: SceneExtras = {};
+    const ops = L.kind === "quarters" ? c.roster.filter(o => o.alive && !(o.busy && (o.busy.kind === "travel" || o.busy.kind === "contract"))).slice(0, 8) : [];
     if (L.kind === "quarters") {
-      const ops = c.roster.filter(o => o.alive && !(o.busy && (o.busy.kind === "travel" || o.busy.kind === "contract"))).slice(0, 8);
       extras.people = ops.map(o => ({ key: o.id, label: o.name.split(" ").slice(-1)[0], spec: operativeFigure(c, o) }));
       extras.focus = opSel ?? undefined;
-      const hero = opSel ? c.roster.find(o => o.id === opSel && o.alive) : undefined;
-      if (hero) extras.hero = { key: hero.id, spec: operativeFigure(c, hero), x: rvPanel ? 520 : 800 };
-      extras.span = rvPanel ? [200, 1000] : [240, 1360];
+      const hero = target?.startsWith("person:") ? c.roster.find(o => `person:${o.id}` === target && o.alive) : undefined;
+      if (hero) extras.hero = { key: hero.id, spec: operativeFigure(c, hero), x: 520 };
+      extras.span = target ? [200, 1000] : [240, 1160];
     }
     Object.assign(extras, liveExtras(L));
+    if (L.kind === "lab") { const pid = focusProject(); extras.apparatus = pid ? researchCat(pid) : undefined; }
     if (L.kind === "armory") {
       extras.racks = [...new Set(Object.values(c.models))];
       const ao = armOp ? c.roster.find(o => o.id === armOp && o.alive) : undefined;
-      if (ao) extras.bench = { model: c.models[weaponOf(ao)], attachment: ao.attachment, ghost: armPreview || undefined, highlight: armMount ?? undefined, mounts: mountsOf(c, ao), zoom: armZoom, narrow: rvPanel };
+      if (ao && target === "bench") extras.bench = { model: c.models[weaponOf(ao)], attachment: ao.attachment, ghost: armPreview || undefined, highlight: armMount ?? undefined, mounts: mountsOf(c, ao), zoom: armZoom, narrow: true };
+    }
+    const ts = targetsFor(L, { heroes: ops.map(o => ({ id: o.id, name: o.name })), armOp: !!armOp });
+    if (target && !ts.some(t => t.id === target) && !(L.kind === "quarters" && target.startsWith("person:"))) target = null;
+    extras.targets = extras.bench ? ts.filter(t => t.id !== "bench" && t.id !== "racks") : ts;
+    extras.selected = target ?? undefined;
+    const selT = ts.find(t => t.id === target);
+    // the camera: the selected object comes to the left third, a little closer, with its panel on the right
+    let cam = "";
+    if (selT && selT.rect[2] > 0 && selT.rect[2] < 900 && !extras.bench && !extras.hero) {
+      const k = 1.16, cx = (selT.rect[0] + selT.rect[2] / 2) / FRAME.W, cy = (selT.rect[1] + selT.rect[3] / 2) / FRAME.H;
+      const tx = Math.max((1 - k) * 100, Math.min(0, (0.34 - cx * k) * 100)), ty = Math.max((1 - k) * 100, Math.min(0, (0.5 - cy * k) * 100));
+      cam = `transform: translate(${tx.toFixed(2)}%, ${ty.toFixed(2)}%) scale(${k})`;
     }
     const stateText: Record<string, string> = { operational: L.powered ? "Operational" : "No power", building: "Under construction", damaged: "Damaged", wrecked: "Wrecked", repairing: "Under repair", demolishing: "Being torn down", upgrading: "Being refitted" };
-    const heroOp = L.kind === "quarters" && opSel ? c.roster.find(o => o.id === opSel && o.alive) : undefined;
-    const ctx = L.kind === "quarters" ? (heroOp ? opFocusPanel(heroOp) : `<div class="card"><div class="label">Epsilon-11 · ${c.roster.filter(o => o.alive).length} operatives</div>
-        <div class="roster">${c.roster.filter(o => o.alive).map(opRow).join("")}</div><p class="muted">Select an operative in the room or in this list.</p></div>`)
-      : L.kind === "armory" ? armoryPanel()
-      : L.kind === "lab" ? `${slotDetail(L.level, L.slot)}${labPanel()}`
-      : L.kind.startsWith("cont_") && L.occupant ? `${slotDetail(L.level, L.slot)}${(() => { const ts = (Object.keys(TESTS) as TestId[]).filter(t => testScp(t) === L.occupant!.scpId);
-          return ts.length ? `<div class="file"><div class="label">Experiments on SCP-${esc(L.occupant!.scpId)}</div>${ts.map(t => testRow(t)).join("")}${watcherPicker()}</div>` : ""; })()}`
-      : slotDetail(L.level, L.slot);
-    return `<div class="roomview ${rvPanel ? "" : "nopanel"}" data-room="${esc(L.id)}">
-      <div class="rv-stage">${interiorSvg(L, extras)}</div>
+    const labs = L.kind === "lab" ? c.base.facilities.filter(f => f.type === "lab") : [];
+    const panel = target ? (target.startsWith("person:") ? target : selT?.panel ?? null) : null;
+    const title = target?.startsWith("person:") ? (c.roster.find(o => `person:${o.id}` === target)?.name ?? selT?.label ?? "") : selT?.label ?? "";
+    return `<div class="roomview ${panel ? "haspanel" : ""}" data-room="${esc(L.id)}">
+      <div class="rv-stage"><div class="rv-cam" style="${cam}">${interiorSvg(L, extras)}</div></div>
       <div class="rv-top">
         <button class="act" type="button" id="leaveRoom" title="Back to Site-19 (Esc)">← Site-19</button>
+        ${prevRoom && prevRoom.id !== L.id ? `<button class="act" type="button" id="roomBack">← ${esc(roomLayout(c, prevRoom.id)?.name ?? "Back")}</button>` : ""}
         <div class="rv-title"><span class="rv-des">${esc(L.designation)}</span><b>${esc(L.name)}</b><span class="rv-state ${L.state !== "operational" || !L.powered ? "warn" : ""}">${esc(stateText[L.state] ?? L.state)}${L.alarm ? " · ALARM" : ""}</span></div>
-        <div class="rv-nav"><button class="act" type="button" data-roomstep="${esc(prev.id)}" title="Previous room ([)">‹ ${esc(prev.designation)}</button><button class="act" type="button" data-roomstep="${esc(next.id)}" title="Next room (])">${esc(next.designation)} ›</button>
-          <button class="act" type="button" id="rvPanel" aria-pressed="${rvPanel}">${rvPanel ? "Hide panel" : "Show panel"}</button></div>
+        <div class="rv-nav">${labs.length > 1 ? labs.map(f => `<button class="act ${f.id === L.id ? "on" : ""}" type="button" data-labpick="${f.id}" aria-pressed="${f.id === L.id}">${esc(designationOf(f.level, f.slot))}</button>`).join("") : ""}
+          ${tab === "site" ? `<button class="act" type="button" data-roomstep="${esc(prev.id)}" title="Previous room ([)">‹ ${esc(prev.designation)}</button><button class="act" type="button" data-roomstep="${esc(next.id)}" title="Next room (])">${esc(next.designation)} ›</button>` : ""}</div>
       </div>
-      ${L.staff.length && L.kind !== "quarters" ? `<div class="rv-staff">${L.staff.slice(0, 6).map(p => `<span>${esc(p.name)} <i>${esc(p.role)}</i></span>`).join("")}</div>` : ""}
-      <aside class="rv-ctx">${ctx}</aside>
+      ${L.kind === "command" ? commandStrip() : ""}
+      <nav class="objbar" aria-label="In this room">${ts.filter(t => t.kind !== "person" || L.kind !== "quarters").map(t => `<button class="act ${t.id === target ? "on" : ""} k-${t.kind}" type="button" data-target="${esc(t.id)}" aria-pressed="${t.id === target}" title="${esc(t.hint)}">${esc(t.label)}</button>`).join("")}
+        ${L.kind === "quarters" ? ops.map(o => `<button class="act ${target === `person:${o.id}` ? "on" : ""} k-person" type="button" data-person="${o.id}">${esc(o.name.split(" ").slice(-1)[0])}</button>`).join("") : ""}</nav>
+      ${panel ? `<aside class="ctxpanel ${ctxWide ? "wide" : ""}" role="dialog" aria-label="${esc(title)}">
+        <div class="ctx-h"><b>${esc(title)}</b>${selT ? `<span class="muted">${esc(selT.hint)}</span>` : ""}<button class="act" type="button" id="ctxWide" aria-pressed="${ctxWide}" title="Widen">${ctxWide ? "⇥" : "⇤"}</button><button class="act" type="button" id="ctxClose" aria-label="Close (Esc)">×</button></div>
+        <div class="ctx-b">${panelFor(panel, L)}</div></aside>` : ""}
     </div>`;
+  }
+
+  /** Command's alerts: always on screen, so nothing urgent hides behind a click. The briefing's top items and every
+   *  open incident, each with its action. */
+  function commandStrip() {
+    const brief = directorsBriefing(c).filter(b => b.sev !== "routine").slice(0, 3);
+    const inc = c.incidents.slice(0, 5);
+    if (!brief.length && !inc.length) return `<div class="cmdstrip quiet"><span class="muted">Nothing needs a decision. The world map runs the clock.</span></div>`;
+    return `<div class="cmdstrip">${brief.map(b => `<div class="cs-item ${b.sev}"><span>${esc(b.title)}</span><button class="act" type="button" data-brief="${esc(b.tab)}|${esc(b.focus ?? "")}">Go</button></div>`).join("")}
+      ${inc.map(i => `<div class="cs-item inc"><span>${esc(i.title.split(": ")[1] ?? i.title)} <i>${i.expires - c.day <= 0 ? "last day" : plural(i.expires - c.day, "day")}</i></span><button class="act" type="button" data-plan="${i.id}" ${c.over || travelBlock(c, i) ? "disabled" : ""}>Respond</button></div>`).join("")}</div>`;
+  }
+
+  /** The project the lab's bench and board are about: the one selected, else the first under way. */
+  function focusProject() { return resFocus && PROJECTS[resFocus] ? resFocus : Object.keys(c.research.assigned).find(k => c.research.assigned[k] && PROJECTS[k]) ?? null; }
+
+  /** What an object's panel holds. All of it is the game's existing management, through its commands. */
+  function panelFor(p: string, L: NonNullable<ReturnType<typeof roomLayout>>): string {
+    const f = c.base.facilities.find(x => x.id === L.id);
+    if (p.startsWith("person:")) {
+      const pid = p.slice(7), o = c.roster.find(x => x.id === pid && x.alive);
+      if (o) { opSel = o.id; return opFocusPanel(o); }
+      return personPanel(pid);
+    }
+    switch (p) {
+      // the lab
+      case "research": return researchCatalog();
+      case "project": { const id = focusProject(), run = Object.keys(c.research.assigned).filter(k => c.research.assigned[k] && PROJECTS[k]);
+        if (!id) return `<p class="muted">Nothing is on the bench. Choose a project on the board.</p><div class="row"><button class="act primary" type="button" data-target="board">Project board</button></div>`;
+        const pr = PROJECTS[id];
+        return `${run.length > 1 ? `<div class="row">${run.map(k => `<button class="act ${k === id ? "on" : ""}" type="button" data-resfocus="${k}">${esc(PROJECTS[k].name)}</button>`).join("")}</div>` : ""}
+          <div class="projects">${projectRow(id)}</div>
+          <p class="specs">Branch: ${esc(pr.branch)}${pr.needs?.length ? ` · needs ${esc(pr.needs.map(n => PROJECTS[n]?.name ?? n).join(", "))}` : ""}${pr.needsTest ? ` · needs the ${esc(TESTS[pr.needsTest].name.toLowerCase())}` : ""}</p>
+          <p class="specs">${pr.unlocks ? `Unlocks ${esc(ITEMS[pr.unlocks].name)} at the workshop. ` : ""}${pr.attachment ? `Unlocks the ${esc(ATTACHMENTS[pr.attachment].name.toLowerCase())} for the armory. ` : ""}</p>`; }
+      case "experiments": {
+        const wings = c.scps.filter(x => x.status === "contained" && x.wingId && (Object.keys(TESTS) as TestId[]).some(t => testScp(t) === x.id));
+        return `${wings.length ? `<div class="row">${wings.map(x => `<button class="act" type="button" data-enter="${x.wingId}">${esc(x.name)}'s chamber →</button>`).join("")}</div>` : ""}${experimentsDossier()}`; }
+      // the command center
+      case "briefing": return briefingBlock() + situationBlock();
+      case "intel": return chaosCard() + inspectionBlock() + c.scps.map(scpSummary).join("");
+      case "council": return councilCard() + contractsCard();
+      case "comms": return incidentsBlock() + staffCard() + logBlock();
+      case "admin": return financesCard();
+      // Epsilon-11's quarters
+      case "roster": return personnelRoster();
+      // the armory
+      case "issue": case "bench": return armoryPanel();
+      // the workshop
+      case "crews": { const eWhy = canHireEngineer(c); return `<div class="row"><button class="act" id="engBtn" type="button" ${eWhy || c.over ? `disabled title="${esc(eWhy || "")}"` : ""}>Hire engineer · $${ENGINEER_COST}k</button>${eWhy ? `<span class="muted">${esc(eWhy)}</span>` : ""}</div>${engineeringPanel()}${staffList("engineer")}`; }
+      case "production": return productionPanel();
+      case "catalog": return workshopCard();
+      case "stores": return storesPanel();
+      // the D-Class block
+      case "occupancy": return occupancyPanel(f!);
+      case "dorders": return facilityPanel(f!);
+      // a containment wing
+      case "anomaly": { const s2 = c.scps.find(x => x.id === L.occupant?.scpId); return s2 ? scpSummary(s2) : ""; }
+      case "tests": { const sid = L.occupant?.scpId, tests = (Object.keys(TESTS) as TestId[]).filter(t => testScp(t) === sid);
+        return tests.length ? `<div class="file">${tests.map(t => testRow(t)).join("")}${watcherPicker()}</div>` : `<p class="muted">No experiments are written up for SCP-${esc(sid ?? "")} yet.</p>`; }
+      case "procedures": { const s2 = c.scps.find(x => x.id === L.occupant?.scpId); return s2 ? containmentCard(s2) : `<p class="muted">The cell is empty.</p>${f ? slotDetail(f.level, f.slot) : ""}`; }
+      case "room": return f ? slotDetail(f.level, f.slot) : "";
+      default: return "";
+    }
+  }
+
+  /** A researcher, engineer or guard: who they are, what they're on, and what they're good for. */
+  function personPanel(pid: string) {
+    const p = (c.people ?? []).find(x => x.id === pid), g = c.guards.find(x => x.id === pid);
+    if (g) return `<ul class="memorial">${guardRow(g)}</ul>`;
+    if (!p) return `<p class="muted">They are no longer at Site-19.</p>`;
+    if (p.kind === "researcher") {
+      const branches = p.field ? FIELDS[p.field].branches : [];
+      const onProject = (c.people ?? []).filter(x => x.kind === "researcher" && !x.away).indexOf(p) < researchersAssigned(c);
+      const fitting = Object.keys(PROJECTS).filter(id => branches.includes(PROJECTS[id].branch) && projectVisible(c, id) && !has(c, id) && !PROJECTS[id].breakthrough).slice(0, 4);
+      return `<div class="row">${portraitSvg(p.look, undefined, 64)}<div><h3 class="fac">${esc(p.name)}</h3><p class="specs">${p.field ? esc(FIELDS[p.field].name) : "Researcher"} · since ${dateText(p.since)}</p></div></div>
+        <p>${onProject ? "At work on a project." : `<span class="warn">Not on a project.</span>`} ${p.field ? `Projects in ${esc(branches.join(", "))} go ${Math.round(FIELD_BONUS * 100)}% faster while they are on staff.` : ""}</p>
+        <p class="muted">${esc(p.bio)}</p>
+        ${fitting.length ? `<div class="label">In their field</div><div class="projects">${fitting.map(projectRow).join("")}</div>` : ""}`;
+    }
+    const job = crews(c).crews.find(j => j.crew.some(x => x.id === p.id));
+    return `<div class="row">${portraitSvg(p.look, undefined, 64)}<div><h3 class="fac">${esc(p.name)}</h3><p class="specs">${p.trade ? `${esc(TRADES[p.trade].name)}: ${esc(TRADES[p.trade].desc.toLowerCase())}` : "Engineer"} · since ${dateText(p.since)}</p></div></div>
+      <p>${job ? `On: ${esc(job.what)} (${plural(job.days, "day")} left).` : "Free."}</p><p class="muted">${esc(p.bio)}</p>`;
+  }
+
+  /** The workshop's machinery: what's being made, by whom, and when it's done. */
+  function productionPanel() {
+    if (!c.orders.length) return `<p class="muted">Nothing in production.</p><div class="row"><button class="act primary" type="button" data-target="workbench">Workbench</button></div>`;
+    const job = crews(c).crews.filter(j => j.what.startsWith("Workshop"));
+    return `<div class="rows">${c.orders.map((o, k) => { const name = o.item ? ITEMS[o.item].name : o.attachment ? ATTACHMENTS[o.attachment].name : o.ammo ? AMMO[o.ammo].name : "Armor refit";
+      const total = o.item ? ITEMS[o.item].days : o.refit ? REFIT.days : ATTACHMENT_COST.days, crew = job[k]?.crew.map(p => p.name).join(", ");
+      return `<div class="r"><span><b>${esc(name)}</b></span><span class="v">${plural(o.daysLeft, "day")}</span><span class="sub">${crew ? esc(crew) : "waiting for an engineer"}</span><div class="meter" style="grid-column:1/-1"><span style="width:${Math.max(0, Math.min(100, (1 - o.daysLeft / Math.max(1, total)) * 100))}%"></span></div></div>`; }).join("")}</div>`;
+  }
+  /** The workshop's stores: what's on the shelves, and selling the surplus. */
+  function storesPanel() {
+    const rows: string[] = [];
+    const add = (kind: StoreKind, id: string, name: string, n: number) => { if (n > 0) rows.push(`<div class="r"><span>${esc(name)}</span><span class="v">× ${n}</span><span class="sub"><button class="act" type="button" data-sellstore="${kind}:${id}">Sell one · +$${sellPrice(c, kind, id)}k</button></span></div>`); };
+    for (const [id, n] of Object.entries(c.inventory)) add("item", id, ITEMS[id as ItemId]?.name ?? id, n ?? 0);
+    for (const [id, n] of Object.entries(c.attachments)) add("att", id, ATTACHMENTS[id as AttachmentId]?.name ?? id, n ?? 0);
+    for (const [id, n] of Object.entries(c.ammo)) add("ammo", id, AMMO[id as AmmoId]?.name ?? id, n ?? 0);
+    return rows.length ? `<div class="rows">${rows.join("")}</div>` : `<p class="muted">The stores are empty.</p>`;
+  }
+  /** The D-Class block's bunks: beds, occupancy and crowding, and the upgrades that change them. */
+  function occupancyPanel(f: Facility) {
+    const cap = dclassCapacity(c), share = cap ? c.dclass / cap : 1, uw = canUpgrade(c, f), rw = canAddRecreation(c, f);
+    return `<div class="rows"><div class="r"><span>D-Class held</span><span class="v">${c.dclass} of ${cap} beds</span></div>
+      <div class="r ${share > 0.8 ? "danger" : ""}"><span>Occupancy</span><span class="v">${Math.round(share * 100)}%</span><span class="sub">${share > 0.8 ? "Overcrowded: morale falls 2 a day." : share < 0.6 ? "Room to breathe: morale recovers 1 a day." : "Crowded, not overcrowded."}</span></div>
+      <div class="r"><span>This block</span><span class="v">${f.upgraded ? "expanded · 15 beds" : "10 beds"}${f.recreation ? " · recreation room" : ""}</span></div></div>
+      <p class="specs">Each figure in the room stands for up to ${DCLASS_PER_FIGURE} D-Class.</p>
+      ${f.upgraded ? "" : `<div class="row"><button class="act" type="button" id="upgradeBtn" ${uw ? `disabled title="${esc(uw)}"` : ""}>Expand · $${UPGRADE.cost}k · ${plural(UPGRADE.days, "day")}</button>${uw ? `<span class="muted">${esc(uw)}</span>` : ""}</div>`}
+      ${f.recreation ? "" : `<div class="row"><button class="act" type="button" id="recBtn" ${rw ? `disabled title="${esc(rw)}"` : ""}>Recreation room</button>${rw ? `<span class="muted">${esc(rw)}</span>` : ""}</div>`}`;
   }
 
   function siteTab() {
@@ -1502,7 +1667,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
         <div class="row"><button class="act" id="hireResBtn" type="button" ${rw ? `disabled title="${esc(rw)}"` : ""}>Hire researcher · $60k</button>${rw ? `<span class="muted">${esc(rw)}</span>` : ""}</div>
         <p class="muted">Working on: ${Object.entries(c.research.assigned).filter(([, n]) => n).map(([id, n]) => `${esc(PROJECTS[id]?.name ?? (TESTS[id.slice(5) as TestId]?.name || id))} (${n})`).join(", ") || "nothing"}.</p>
         ${staffList("researcher")}
-        <button class="act" type="button" data-goto="research">Open the Research tab</button>`); }
+        <button class="act" type="button" data-target="board">Project board</button>`); }
       case "amnestics": return box(`Amnestics · ${c.amnestics} of ${amnesticsCapacity(c)} doses`, `<p class="muted">Each lab brews ${has(c, "classb_amnestics") ? 2 : 1} dose every 5 days. Doses go on cover-ups and cover stories.</p>`);
       case "generator": { const t = genTierOf(f), next = GEN_TIERS[(f.genTier ?? 0) + 1], rw = canRefitGen(c, f);
         return box(`${t.name} · ${f.upgradeDays ? "offline for refitting" : `${t.power} power`}`, f.upgradeDays
@@ -1523,11 +1688,9 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     const why = bonus ? `${o.maxHp} base${armor ? ` + ${armor} ${ITEMS[o.kit!.armor as ItemId].name.toLowerCase()}` : ""}${uni ? ` + ${uni} ${uniformOf(c).name.toLowerCase()}` : ""}` : "";
     return { hp: o.hp + bonus, max: o.maxHp + bonus, why };
   }
-  function personnelTab() {
-    // the selected operative is the centrepiece: with nobody chosen, the first on the roster
-    if (!c.roster.some(x => x.id === opSel && x.alive)) opSel = c.roster.find(x => x.alive)?.id ?? null;
-    return `<div class="hubgrid screen-personnel">
-    <section class="col">
+  /** Epsilon-11's roster, site staff, the lost, the retired and the memorial: the quarters' duty roster. */
+  function personnelRoster() {
+    return `
       <div class="card">
         <div class="label">Epsilon-11 "Nine-Tailed Fox" roster</div>
         <p class="muted">Select an operative to see their class, perks and traits. ${esc(TF_DESC.e11)}</p>
@@ -1537,9 +1700,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
         <div class="roster">${c.roster.filter(o => o.alive && tfOf(o) === "eta10").map(opRow).join("") || `<p class="muted">Nobody yet. Hire recruits into Eta-10 from the recruit pool.</p>`}</div>` : ""}
         <div class="row"><button class="act" type="button" data-gotocommand>Recruit at Command · ${plural((c.recruits ?? []).length, "candidate")} this month</button></div>
       </div>
-    </section>
-    <section class="col">
-      ${opDetail()}
+    
       <p class="muted">Guards, training, therapy, D-Class, engineers and prisoners are managed from their facilities on the Site-19 tab.</p>
       <div class="card"><div class="label">Site staff · ${plural(c.researchers, "researcher")}, ${plural(c.engineers, "engineer")}</div>
         ${staffList("researcher")}${staffList("engineer")}
@@ -1553,9 +1714,13 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
         <div class="label">Memorial</div>
         <ul class="memorial">${c.roster.filter(o => !o.alive).map(o => `<li>${portraitSvg(lookOf(o), o.unit, 36, true)} <b>${esc(fieldName(o))}</b> (${esc(o.call)}), ${RANKS[o.rank]}${o.unit ? `, formerly ${esc(UNITS[o.unit].name)}` : ""}${o.bio ? `, of ${esc(o.bio.home)}` : ""} · ${plural(o.missions, "mission")}, ${plural(o.kills, "kill")}${o.wounds ? `, wounded ${o.wounds}×` : ""}${o.seals ? `, ${o.seals} sealed` : ""}${o.medals?.length ? ` · ${o.medals.map(m => MEDALS[m].name).join(", ")}` : ""} · killed ${o.diedDay ? dateText(o.diedDay) : ""}${o.diedAt ? `, ${esc(o.diedAt)}` : ""}</li>`).join("")}</ul>
       </div>` : ""}
-    </section>
-  </div>`;
+    `;
   }
+  function personnelTab() {
+    if (!c.roster.some(x => x.id === opSel && x.alive)) opSel = c.roster.find(x => x.alive)?.id ?? null;
+    return `<div class="hubgrid screen-personnel"><section class="col">${personnelRoster()}</section><section class="col">${opDetail()}</section></div>`;
+  }
+
 
   /** XCOM-style equipment: a row of slots, and the one clicked opens below with its stats and what can go in it. */
   function equipment(o: Operative) {
@@ -1749,6 +1914,9 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     root.querySelectorAll<HTMLElement>("[data-tab],[data-goto]").forEach(b => b.onclick = () => {
       flashMsg = "";
       if (room) { if ((b.dataset.tab || b.dataset.goto) === "site") { leaveRoom(); return; } room = null; }
+      target = null; prevRoom = null;
+      // arriving at Site-19 from another screen shows the overview, not a room a tab happened to stand in
+      if ((b.dataset.tab || b.dataset.goto) === "site" && tab !== "site") sel = null;
       tab = (b.dataset.tab || b.dataset.goto) as Tab;
       if (tab !== "world") speed = 0;   // time only passes on the world map
       try { localStorage.setItem("site19-tab", tab); } catch { /* fine */ }
@@ -1890,23 +2058,37 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       sel = sel && sel.level === level && sel.slot === slot ? null : { level, slot };
       render();
     });
-    root.querySelectorAll<HTMLElement>("[data-enter]").forEach(b => b.onclick = () => { if (b.dataset.armfor) { armOp = b.dataset.armfor; armMount = null; armPreview = null; armZoom = 1; } enterRoom(b.dataset.enter!, b.getBoundingClientRect()); });
+    root.querySelectorAll<HTMLElement>("[data-enter]").forEach(b => b.onclick = () => { if (b.dataset.armfor) { armOp = b.dataset.armfor; armMount = null; armPreview = null; armZoom = 1; } enterRoom(b.dataset.enter!, b.getBoundingClientRect()); if (b.dataset.armfor) { target = "bench"; render(); } });
     on("enterRoom", () => { const f = sel && facilityAt(c, sel.level, sel.slot); if (f) enterRoom(f.id, null); });
     on("leaveRoom", () => leaveRoom());
-    on("rvPanel", () => { rvPanel = !rvPanel; render(); });
+    // environment-first: the room's objects, the panel, the way back
+    const pickTarget = (id: string) => {
+      const L = currentRoom() ? roomLayout(c, currentRoom()!) : null; if (!L) return;
+      const t = targetsFor(L, { armOp: !!armOp }).find(x => x.id === id);
+      if (t?.panel === "go:world") { target = null; tab = "world"; render(); return; }
+      if (t?.panel === "go:armory") { if (opSel) { armOp = opSel; armMount = null; armPreview = null; armZoom = 1; } const r = root.querySelector(`[data-target="${id}"]`)?.getBoundingClientRect() ?? null; enterRoom("surface:armory", r); if (armOp) { target = "bench"; render(); } return; }
+      target = target === id ? null : id;
+      if (id === "bench" && !armOp) target = "racks";
+      render();
+    };
+    root.querySelectorAll<HTMLElement>("[data-target]").forEach(b => { b.onclick = () => pickTarget(b.dataset.target!); b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickTarget(b.dataset.target!); } }; });
+    on("ctxClose", () => { target = null; render(); });
+    on("ctxWide", () => { ctxWide = !ctxWide; render(); });
+    on("roomBack", () => { if (prevRoom) { const p = prevRoom; prevRoom = null; target = null; if (p.tab === "site") room = p.id; else { room = null; } tab = p.tab; render(); } });
+    root.querySelectorAll<HTMLElement>("[data-labpick]").forEach(b => b.onclick = () => { labPick = b.dataset.labpick!; if (tab === "site") room = labPick; target = null; render(); });
     root.querySelectorAll<HTMLElement>("[data-roomstep]").forEach(b => b.onclick = () => stepRoom(b.dataset.roomstep!));
-    root.querySelectorAll<HTMLElement>("[data-person]").forEach(b => { const pick = () => { opSel = b.dataset.person!; render(); }; b.onclick = pick; b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } }; });
+    root.querySelectorAll<HTMLElement>("[data-person]").forEach(b => { const pick = () => { opSel = b.dataset.person!; target = `person:${opSel}`; render(); }; b.onclick = pick; b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } }; });
     on("fxToggle", () => { setTransitions(!transitionsSetting()); render(); });
     root.querySelectorAll<HTMLElement>("[data-opsec]").forEach(b => b.onclick = () => { opSection = b.dataset.opsec as OpSection; render(); });
-    on("squadBtn", () => { opSel = null; render(); });
+    on("squadBtn", () => { target = null; render(); });
     root.querySelectorAll<HTMLElement>("[data-resfocus]").forEach(b => b.onclick = () => { resFocus = b.dataset.resfocus!; justDone = null; render(); });
     // the armory bench
-    root.querySelectorAll<HTMLElement>("[data-armop]").forEach(b => b.onclick = () => { armOp = b.dataset.armop!; armMount = null; armPreview = null; armZoom = 1; render(); });
+    root.querySelectorAll<HTMLElement>("[data-armop]").forEach(b => b.onclick = () => { armOp = b.dataset.armop!; armMount = null; armPreview = null; armZoom = 1; target = "bench"; render(); });
     root.querySelectorAll<HTMLElement>("[data-mount]").forEach(b => { const pick = () => { armMount = b.dataset.mount as MountId; armPreview = null; render(); }; b.onclick = pick; b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } }; });
     root.querySelectorAll<HTMLElement>("[data-armprev]").forEach(b => b.onclick = () => { armPreview = b.dataset.armprev as AttachmentId; render(); });
     root.querySelectorAll<HTMLElement>("[data-armzoom]").forEach(b => b.onclick = () => { armZoom = Math.max(1, Math.min(2.2, armZoom + Number(b.dataset.armzoom) * 0.6)); render(); });
     on("armCancel", () => { armPreview = null; render(); });
-    on("armBack", () => { armOp = null; armMount = null; armPreview = null; armZoom = 1; render(); });
+    on("armBack", () => { armOp = null; armMount = null; armPreview = null; armZoom = 1; target = "racks"; render(); });
     on("armFit", () => { if (armOp && armPreview !== null) { run({ type: "fitAttachment", opId: armOp, attachment: armPreview }); armPreview = null; } });
     on("armRemove", () => { if (armOp) { run({ type: "fitAttachment", opId: armOp, attachment: "" }); armPreview = null; } });
     on("armOrder", () => { if (armPreview) run({ type: "orderAttachment", attachment: armPreview }); });
@@ -2093,9 +2275,10 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   const onKey = (e: KeyboardEvent) => {
     const t = e.target as HTMLElement;
     if (!stillHere() || (t.closest && t.closest("input,textarea,select"))) return;
-    if (tab === "site" && room) {
-      if (e.key === "Escape") { e.preventDefault(); leaveRoom(); }
-      else if (e.key === "[" || e.key === "]") { const list = allRooms(c), i = list.findIndex(r => r.id === room); if (i >= 0) stepRoom(list[(i + (e.key === "]" ? 1 : list.length - 1)) % list.length].id); }
+    if (inRoomScreen()) {
+      // Esc puts the panel away first, then leaves the room
+      if (e.key === "Escape") { e.preventDefault(); if (target) { target = null; render(); } else leaveRoom(); }
+      else if ((e.key === "[" || e.key === "]") && tab === "site") { const list = allRooms(c), i = list.findIndex(r => r.id === room); if (i >= 0) stepRoom(list[(i + (e.key === "]" ? 1 : list.length - 1)) % list.length].id); }
       return;
     }
     if (tab !== "world") return;
