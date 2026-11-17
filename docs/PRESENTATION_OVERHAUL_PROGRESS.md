@@ -50,6 +50,7 @@ Everything is derived from campaign state, and nothing here changes the rules.
 | P3 | Quarters: full-body operatives and live customization | [x] |
 | P4 | Armory: weapon inspection, mount points, visible attachments | [x] |
 | P5 | Lab, containment chambers, workshop, command | [x] |
+| P6 | Environment-first interface: the rooms are the screens | [x] |
 
 ## Log
 
@@ -145,11 +146,115 @@ Everything is derived from campaign state, and nothing here changes the rules.
   - campaign.e2e: an incident that must be answered stops the World clock. On this test's fresh random seed that
     can happen early, so the wait now steps the day with the debug control when the clock is blocked.
 
+## Environment-first interface (P6)
+
+Directive: "Environment-first strategic interface overhaul: correct the existing presentation, do not start over."
+Commits: `dd1046d` (the interface, tests A to G) and `27670c3` (refinements: panel side, stage height, apparatus,
+D-Class crowding, panel widths).
+
+### Architecture reused
+
+- Room interiors are still drawn by `src/ui/scene/interior.ts` from `roomLayout()` (`src/scene/layout.ts`). The
+  layout gained `capacity` (D-Class beds across the site) and nothing else; saves are unchanged.
+- Every management view is an existing block of `src/ui/hubView.ts`, split out of the old dashboards so it can open
+  in a room: `researchCatalog`, `experimentsDossier`, `briefingBlock`, `incidentsBlock`, `inspectionBlock`,
+  `situationBlock`, `logBlock`, `personnelRoster`. Their buttons dispatch the same validated commands as before.
+- The 3D path is untouched: targets are plain rectangles in scene coordinates, so a 3D renderer can place the same
+  ids on its own meshes.
+
+### Navigation
+
+- Research opens the laboratory (the one last picked, else the first operational one, else the first built);
+  Command opens the command center; Personnel opens Epsilon-11's quarters. There is no dashboard in between.
+- Site-19 shows the cross-section; entering a room from it gives the same room the tab gives (test G).
+- World stays the Geoscape and History stays the archive, both unchanged.
+- In a room: "← Site-19" leaves, "← (previous room)" returns after a jump (barracks to armory, lab to a chamber),
+  the lab selector switches labs, and prev/next walks the level on the Site-19 tab. Esc closes the panel first,
+  then leaves the room.
+- No lab: the Research tab shows a notice with a button to build one. A lab being built, damaged or without power
+  still opens, with its state on the nameplate and its board saying why work has stopped.
+
+### Interaction framework
+
+- `src/scene/targets.ts` (pure): `targetsFor(layout, opts)` lists a room's interactive objects. Each has a stable
+  id, a kind (object, person, door, service), an accessible label, the panel it opens and a rectangle in the
+  1600x900 scene frame. `signRect` makes the room's nameplate the "Room services" target (build, repair, upgrade).
+- `targetLayer()` draws each as a focusable group (`role="button"`, `tabindex="0"`) with a hit area, a ring on
+  hover, focus and selection, a pip and a label chip. Enter or Space selects. Only objects that open something are
+  targets; there are no decorative hotspots.
+- The object bar under the scene lists the same targets as buttons, for keyboard and screen-reader users.
+- Unit test `tests/unit/targets.test.ts`: ids unique, every target inside the frame, no two non-person targets
+  overlapping by more than 10%.
+
+### Panels and camera
+
+- One contextual panel (`.ctxpanel`) replaces the permanent sidebars. It can be closed (×, Esc) or widened (⇤),
+  and holds the full block it replaced, so nothing is lost.
+- The panel opens on the side away from the selected object; the camera (`.rv-cam`, scale 1.16) moves the object
+  into the free side. Reduced motion turns the move off.
+- Command's urgent items run as a ticker along the ceiling (`.cmdstrip`), with Respond buttons for incidents, so
+  the briefing's critical lines are on screen without a click.
+- The stage fills the window under the header at any size (`--rvh`, kept on resize).
+
+### Rooms
+
+| Room | Targets and what they open |
+|---|---|
+| Lab | project board (assign researchers, focus), apparatus on the bench (the focused project; drawn by what it makes), records cabinet (experiments dossier, with links to each chamber), researchers (their file) |
+| Command | operations display (Director's Briefing, alert level), intelligence clocks, Council teletype, communications console (incidents, Respond), administration, plotting table (to the Geoscape), recruitment desk |
+| Quarters | each operative (brought forward full height with customization), roster, armory door |
+| Armory | weapon racks (issue), bench (mount points, previews, fit and remove) |
+| Workshop | tool board (crews), lathe (orders in production), workbench (what can be built), stores |
+| D-Class block | bunks (occupancy, capacity, crowding), orders board (monthly policy, morale) |
+| Containment wing | observation window (the anomaly), test console (its experiments), vault door (procedures) |
+
+- Room architecture varies by function: tiled lab, panelled command, ribbed workshop, planked quarters, riveted
+  armory, each with its own fixtures.
+- People shown: up to four named staff stand at their stations; more appear as "+ N more at work". In the D-Class
+  block each figure stands for up to three D-Class (the bunks panel says so), and over 80% of beds the block gets
+  floor mattresses and an OVER CAPACITY stencil.
+
+### Tests
+
+- `tests/environment.e2e.cjs`, the directive's tests A to G, clicking objects in the scene itself:
+  - A Research: World to Research lands in the lab with no dashboard; the board assigns a researcher (campaign
+    changes); closing the panel leaves the lab; the records cabinet opens the dossier; Esc twice returns to Site-19;
+    the lab from Site-19 is the same lab with the same board.
+  - B Command: Personnel to Command lands in the command center; urgent items are on screen; the operations
+    display opens the briefing; changing the alert level changes the campaign; Esc returns to the room.
+  - C Personnel: the quarters; an operative comes forward over half the scene's height; a jacket change shows on the
+    figure; the look survives leaving and returning.
+  - D Armory: the operative's weapon goes on the bench; the scope is previewed, fitted for real, and still fitted
+    after a reload.
+  - E Engineering: the workbench starts an order; the lathe shows it in production.
+  - F D-Class: the bunks show occupancy and capacity; the orders board changes the monthly policy.
+  - G The same lab by Site-19 and by the tab, also after a reload.
+- Existing suites updated to reach their views through room objects (`openTarget`, `planIncident` in
+  `tests/lib.cjs`).
+- Result at `27670c3`: `npm test` 23 of 23 suites pass, 126 unit tests.
+
+### Screenshots
+
+Taken at 1280x720, 1440x900 and 1920x1080 with no page errors: the lab, its board, Command and its operations
+display, the quarters and an operative, the armory bench, the workshop and its bench, the D-Class block and its
+bunks, a containment wing and its observation window. The e2e run also writes `env-*.png` to the test output folder.
+
+### Limitations
+
+- All art is still provisional code-drawn SVG. Final visual fidelity has not been reached.
+- The camera is a 2D pan and zoom; there is no 3D camera yet.
+- At 1280x720 a zoomed room can slide its painted nameplate under the top bar; at 1920 the bunks panel covers the
+  right-hand bunk. Both are presentation only.
+- The armory has no weapon rotation.
+- The Geoscape and History screens are unchanged.
+- Tactical missions still draw operatives as tokens, without the customized figure.
+
 ## Remaining work
 
 - The directive arrived cut off in its section 13 (Command center); sections after it were not received.
-- Command center: the room heads the Command screen and shows live state; the Director's Briefing, situation,
-  Council and finances panels below it are unchanged.
+- Command center: done in P6; the briefing, situation, Council and finances open from the room's stations.
+- Next for the environment-first interface: a 3D camera using the same target ids; History as an archive room;
+  medical and psychological stations; finished art per `docs/ART_DIRECTION.md`.
 - Not done:
   - the History screen as an archive room;
   - the Geoscape;
