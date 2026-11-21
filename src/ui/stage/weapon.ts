@@ -38,7 +38,10 @@ export const HARDPOINT_NAMES: Record<Hardpoint, string> = { optic: "Sight rail",
 
 /** Hardpoints measured on the photographs in art/weapon (prepared by scripts/prep-weapon-art.py), where they
  *  differ from the drawn profile's. Only used when that model's photo is present. */
-const PHOTO_HP: Record<string, Partial<Record<Hardpoint, [number, number]>>> = {};
+const PHOTO_HP: Record<string, Partial<Record<Hardpoint, [number, number]>>> = {
+  m1_garand: { optic: [178, 34], trigger: [134, 68], mag: [162, 66], butt: [16, 68] },
+  m14: { optic: [168, 34], trigger: [127, 63], mag: [150, 62], butt: [14, 66] },
+};
 
 /** Where each hardpoint sits in the 400 × 120 frame. */
 export function hardpoints(modelId: string, type: WeaponType): Record<Hardpoint, [number, number]> {
