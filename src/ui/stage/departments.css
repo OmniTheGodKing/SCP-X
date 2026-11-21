@@ -66,3 +66,11 @@
 }
 .flash { animation: flash-card 1.4s ease-out; }
 @keyframes flash-card { 0%, 30% { box-shadow: 0 0 0 3px var(--manila); } 100% { box-shadow: 0 0 0 0 transparent; } }
+
+/* Phase 5 planning: which squad answers, and why a hands-off team's chances are what they are */
+.squadpick { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; }
+.squadpick .act { display: grid; text-align: left; gap: 2px; }
+.squadpick .act span { font-size: 11px; color: var(--muted); }
+.assess ul { margin: 4px 0 0; padding-left: 18px; font-size: 12.5px; display: grid; gap: 1px; }
+.assess .good { color: var(--ok); } .assess .bad { color: var(--alert); }
+.mlabel { font: 600 10.5px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }

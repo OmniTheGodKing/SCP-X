@@ -1,6 +1,6 @@
 // Site Security: the guards who are actually at Site-19 when a cell fails, the alert level that
 // decides how quickly Epsilon-11 can get there, and breaches left to the guards alone.
-import { homeRegion } from "./org";
+import { deployCap, homeRegion } from "./org";
 import { earn, spend } from "./ledger";
 import { chronicle } from "./history";
 import { TRAITS, type TraitId } from "../data/classes";
@@ -313,7 +313,9 @@ export const TRAINING: Record<string, { name: string; cost: number; desc: string
   command_staff:  { name: "Command staff", cost: 300, needs: "officer_school", captain: true, desc: "A field command structure under a Sergeant First Class. Squad size 6." },
   guard_training: { name: "Guard training program", cost: 100, desc: "Site Security trains on the range every week. Guards get +10 aim and +10 sanity." },
 };
-export const squadSize = (c: Campaign) => 4 + (c.purchases.includes("officer_school") ? 1 : 0) + (c.purchases.includes("command_staff") ? 1 : 0);
+/** How many go on a mission: Phase 5 sites use the Foundation-wide doctrine (4, 6, 8); older saves keep Site-19's
+ *  training-range courses. */
+export const squadSize = (c: Campaign) => c.mtfs ? deployCap(c) : 4 + (c.purchases.includes("officer_school") ? 1 : 0) + (c.purchases.includes("command_staff") ? 1 : 0);
 export function canTrain(c: Campaign, id: string) {
   const t = TRAINING[id];
   if (c.purchases.includes(id)) return "Already done.";

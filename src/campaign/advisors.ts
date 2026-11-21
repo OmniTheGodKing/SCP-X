@@ -6,6 +6,7 @@ import type { Campaign } from "./campaign";
 import { dateText, fieldName, pendingBreach } from "./campaign";
 import { FACILITIES, engineersFree, powerShort } from "./base";
 import { unpowered } from "./containment";
+import { geoOf } from "./org";
 import { ATTACHMENTS, AMMO } from "../data/weapons";
 import { ITEMS, PROJECTS, has, offered, projectDays, researchersFree } from "./research";
 
@@ -28,6 +29,8 @@ export function remark(c: Campaign, who: AdvisorId): Remark {
     case "carter": {
       const b = pendingBreach(c);
       if (b) return { text: `${b.title.split(":")[0]} is live inside the site. Epsilon-11 goes now or Site Security holds it alone.`, tone: "urgent", plan: b.id, label: "Plan the response" };
+      const m = c.mtfs?.[0];
+      if (m && c.day - m.founded <= 6 && !c.incidents.length) return { text: `${m.designation} has its charter and two squads: ${m.squads.map(q => q.name).join(" and ")}. Epsilon\u201111 won't be there next time. Get them drilled and kitted before the first call.`, tone: "plain", goto: "personnel", label: "Barracks" };
       const dead = recent(c, 10).filter(h => h.cat === "casualty");
       if (dead.length) {
         const fallen = c.roster.filter(o => !o.alive && o.diedDay !== undefined && c.day - o.diedDay <= 10);
@@ -46,6 +49,7 @@ export function remark(c: Campaign, who: AdvisorId): Remark {
       return { text: "Board's clear. Let the clock run on the world map; something will surface.", tone: "plain", goto: "world", label: "World map" };
     }
     case "bell": {
+      if (c.site && c.day - c.site.founded <= 10 && c.research.done.length === 0 && researchersFree(c) > 0) return { text: `The instance from ${"Provisional Site-11"} is in our wing now, and nobody here has studied one closely yet. I'd start with its containment research before anything else.`, tone: "plain" };
       const done = recentLog(c, 7).filter(l => l.text.startsWith("Research complete:"));
       if (done.length) {
         const name = done[done.length - 1].text.replace("Research complete: ", "").split(".")[0];
@@ -67,6 +71,10 @@ export function remark(c: Campaign, who: AdvisorId): Remark {
       return { text: "Every bench is covered. Hire more staff at a research lab if you want more at once.", tone: "plain", goto: "site", label: "Site-19" };
     }
     case "russo": {
+      if (c.site && c.day - c.site.founded <= 10 && !c.base.facilities.some(f => f.type === "workshop")) {
+        const g = geoOf(c);
+        return { text: `${c.site.designation} is a hole in the ground with a generator in it. ${g && g.remoteness > 0.6 ? `Every crate comes up from ${g.hub}, so supplies cost us more out here.` : g ? `${g.hub} is close, which keeps supplies cheap.` : ""} A workshop first, then barracks space and a training range.`, tone: "plain", goto: "site", label: "Site-19" };
+      }
       if (powerShort(c)) return { text: `We're drawing more power than the generators make. ${unpowered(c) ? "Containment wings are running on prayer." : "The backups are holding containment, for now."} Build or refit a generator.`, tone: "urgent", goto: "site", label: "Site-19" };
       const broken = c.base.facilities.filter(f => f.disabled && !(f.repairDays > 0));
       if (broken.length) return { text: `${FACILITIES[broken[0].type].name}${broken.length > 1 ? ` and ${broken.length - 1} more` : ""} took damage and nobody's on the repair yet.`, tone: "urgent", goto: "site", label: "Site-19" };

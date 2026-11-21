@@ -48,8 +48,8 @@ export function mountSitePick(root: HTMLElement, c: Campaign, done: () => void) 
   let view = { x: 0, y: 10, w: 360, h: 150 };
   let at: [number, number] | null = null;
   let flash = "";
-  const num = 10 + Math.floor(Math.random() * 80);
-  let desig = `Site-${num === 19 ? 64 : num}`, name = "";
+  const num = [10, 12, 13, 14, 15, 16, 17, 18, 20, 23, 26, 28, 31, 33, 37, 41, 42, 45, 47, 52, 56, 58, 61, 64, 66, 72, 77, 81, 84, 88][Math.floor(Math.random() * 30)];
+  let desig = `Site-${num}`, name = "";
   const defaultName = (lon: number, lat: number) => { const g = siteGeo(lon, lat); return `${REGIONS[g.region].name.split(" ").slice(-1)[0]} Containment Facility`; };
 
   function info() {

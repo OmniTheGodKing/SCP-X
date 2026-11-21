@@ -30,6 +30,10 @@ import { mountMenu } from "./ui/menu";
 import { mountDebrief, mountMtfFound, mountSitePick } from "./ui/founding";
 import { beginOpening, closeOpening, openingIncident, openingLoadouts } from "./campaign/opening";
 import { bindCampaign } from "./campaign/org";
+import * as org from "./campaign/org";
+import * as autoteam from "./campaign/autoteam";
+import * as researchMod from "./campaign/research";
+import * as securityMod from "./campaign/security";
 import { SPECIALTIES, SPECS } from "./data/mtf";
 
 const root = document.getElementById("app")!;
@@ -179,6 +183,7 @@ function showHub() {
 (window as unknown as { __site19: object }).__site19 = {
   get mission() { return S; },
   get campaign() { return campaign; },
+  save: () => saveCampaign(campaign),
   get grid() { return L; },
   sight: sightFrom,
   reach: reachFor,
@@ -190,6 +195,8 @@ function showHub() {
   scp4b,
   // Phase 4C
   generateTown,
+  // Phase 5: the organization, site geography and hands-off deployments, for the acceptance tests
+  org, autoteam, research: researchMod, security: securityMod,
 };
 
 mountDebug({ campaign: () => campaign, screen: () => screen, refresh: () => { saveCampaign(campaign); if (screen === "hub") showHub(); } });

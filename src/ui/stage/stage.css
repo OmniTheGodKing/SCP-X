@@ -159,7 +159,7 @@
 .stage .lookrow { display: grid; grid-template-columns: 100px 34px 1fr 34px; align-items: center; gap: 6px; font-size: 13px; }
 .stage .lookrow b { text-align: center; font-weight: 500; }
 .stage .renamegrid { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; }
-.stage .pfile.archive { width: min(520px, 48%); }
+.stage .pfile.archive { width: min(640px, 54%); }
 
 /* ------------------------------------------------ Armory */
 .stage.armory { height: auto; min-height: clamp(600px, calc(100vh - 262px), 960px); }

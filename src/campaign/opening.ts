@@ -66,5 +66,5 @@ export function callsignsFor(c: Campaign, designation: string) {
   const m = /^([A-Za-z])[a-z]*-?(\d+)$/.exec(designation.trim().replace(/\s+/g, "-"));
   const pre = m ? `${m[1].toUpperCase()}${m[2]}` : designation.slice(0, 3).toUpperCase();
   let n = 1;
-  for (const o of c.roster.filter(x => x.alive && x.squad)) o.call = `${pre}-${String(n++).padStart(2, "0")}`;
+  for (const o of c.roster.filter(x => x.alive && !x.loan)) o.call = `${pre}-${String(n++).padStart(2, "0")}`;
 }

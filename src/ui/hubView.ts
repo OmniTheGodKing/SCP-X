@@ -11,7 +11,7 @@ import { councilSeal, dossierPhoto, gearArt, iconBody, icon, incidentScene, insu
 import { ART_DEFS, roomSvg, surfaceSvg } from "./art";
 import { CAT_NAMES, INCOME_CATS, SPEND_CATS, monthIndex } from "../campaign/ledger";
 import { LEADS, canLeadAction, leadAction, leadPrice, offerText, type Lead, type LeadAction } from "../campaign/leads";
-import { AUTO_KINDS, canDispatch, dispatchOdds, dispatchTeam } from "../campaign/autoteam";
+import { AUTO_KINDS, assessTeam, autoKinds, canDispatch, dispatchOdds, dispatchTeam } from "../campaign/autoteam";
 import { CONTRACTS, NEEDS, acceptContract, canAcceptContract, contractPool, whoText } from "../campaign/contracts";
 import { ambience, playMusic, soundControl, transition, ui, wireSound } from "./audio";
 import { DISRUPT_INTEL, INQUIRY, PLANS, goalText, whenText, REVEAL_INTEL, THREAT_STEPS, canDisrupt, canInvestigateBreach, canReveal, disrupt, investigateBreach, reveal } from "../campaign/chaos";
@@ -160,6 +160,8 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let dlg: null | { view: "slots" } | { view: "new"; slot: Slot; difficulty: Difficulty; ironman: boolean; tutorial: boolean } = null;
   /** Which task force is being sent, and the support people and units going with it. */
   let tfPick: TaskForce = "e11";
+  /** Phase 5: the squad answering the incident being planned. */
+  let squadPick: string | null = null;
   const extras: Extras = {};
   const watchers = new Set<string>();
   const gear = new Map<string, { armor: ItemId | ""; items: (ItemId | "")[] }>();
@@ -205,7 +207,11 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   const ready = () => c.roster.filter(o => deployable(c, o));
   // an ambushed convoy is defended by whoever made the capture, wounded or not
   // a squad is one task force: with Eta-10 formed, the panel picks which one goes
-  const readyFor = (inc: Incident) => inc.kind === "escort" && inc.squad ? c.roster.filter(o => o.alive && inc.squad!.includes(o.id)) : c.tf.eta10 ? ready().filter(o => tfOf(o) === tfPick) : ready();
+  const readyFor = (inc: Incident) => inc.kind === "escort" && inc.squad ? c.roster.filter(o => o.alive && inc.squad!.includes(o.id))
+    : c.mtfs ? ready().filter(o => o.squad && o.squad === (squadPick ?? defaultSquad()))
+    : c.tf.eta10 ? ready().filter(o => tfOf(o) === tfPick) : ready();
+  /** The squad offered first: the one at home with the most people fit to go. */
+  const defaultSquad = () => mtfsOf(c).flatMap(m => m.squads).filter(sq => !squadAway(c, sq.id)).sort((a, b) => ready().filter(o => o.squad === b.id).length - ready().filter(o => o.squad === a.id).length)[0]?.id ?? null;
   const watchPool = () => guardsReady(c);
   const scp173 = () => c.scps.find(s => s.id === "173")!;
 
@@ -633,6 +639,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       ${inc.kind === "riot" ? (() => { const g = guardsReady(c).slice(0, 8); return `<p>Site Security: <b>${g.length}</b> ${g.length === 1 ? "guard answers" : "guards answer"}${g.length ? ` (${g.map(x => esc(x.name)).join(", ")})` : ". Nobody is fit to respond"}. D-Class left: <b>${c.dclass}</b>.</p>`; })() : `
       ${c.tf.eta10 && inc.kind !== "escort" ? `<div class="row">${(["e11", "eta10"] as TaskForce[]).map(t => `<button class="act ${tfPick === t ? "on" : ""}" type="button" data-tf="${t}" aria-pressed="${tfPick === t}">${esc(TF_NAMES[t])}</button>`).join("")}</div>
         <p class="muted">A squad is one task force: ${esc(TF_DESC[tfPick])} You play one; the other can only go hands-off.</p>` : ""}
+      ${c.mtfs && inc.kind !== "escort" ? `<div class="mlabel">Which squad answers</div><div class="squadpick">${mtfsOf(c).flatMap(m => m.squads.map(sq => { const away = squadAway(c, sq.id), fit = ready().filter(o => o.squad === sq.id).length, on = (squadPick ?? defaultSquad()) === sq.id;
+          return `<button type="button" class="act ${on ? "on" : ""}" data-squadpick="${sq.id}" ${away ? `disabled title="${esc(away)}"` : ""} aria-pressed="${on}"><b>${esc(m.designation)} · ${esc(sq.name)}</b><span>${esc(SPECIALTIES[sq.specialty].name)} · ${away ? esc(away) : `${fit} fit`}</span></button>`; })).join("")}</div>` : ""}
       <p class="muted">Pick up to ${squadSize(c)} operatives. Only fully healed operatives can deploy; sanity carries over, so watch it.${inc.kind === "breach" ? " You can also send nobody and play it with the guards alone." : ""}</p>
       <div class="pick">${ops.length ? ops.map(o => `<label class="pickop ${chosen.has(o.id) ? "on" : ""}">
         <input type="checkbox" id="pick-${o.id}" data-pick="${o.id}" ${chosen.has(o.id) ? "checked" : ""} ${!chosen.has(o.id) && chosen.size >= squadSize(c) ? "disabled" : ""}>
@@ -649,10 +657,12 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
         <button class="act" type="button" id="dPlus" ${dCount >= Math.min(c.dclass, MAX_DCLASS) ? "disabled" : ""}>+</button>
         <span class="muted">of ${c.dclass} in holding</span>
       </div>`}
-      ${(() => { if (!c.tf.eta10 || !AUTO_KINDS.includes(inc.kind)) return "";
+      ${(() => { if (!(c.mtfs || c.tf.eta10) || !autoKinds(c).includes(inc.kind)) return "";
         const team = [...chosen].map(id => c.roster.find(o => o.id === id)!).filter(Boolean), w = canDispatch(c, inc, team);
+        const as = c.mtfs && team.length ? assessTeam(c, inc, team) : null;
         return `<div class="row"><button class="act" type="button" id="autoBtn" ${w ? `disabled title="${esc(w)}"` : ""}>Send them without you${w ? "" : ` · ${Math.round(dispatchOdds(c, inc, team) * 100)}% chance`}</button>
-          <span class="muted">${esc(w ?? "Like leaving it to Site Security: no manual control, and they can fail. Wounds, deaths and rewards come back in the debrief.")}</span></div>`; })()}
+          <span class="muted">${esc(w ?? "Like leaving it to Site Security: no manual control, and they can fail. Wounds, deaths and rewards come back in the debrief.")}</span></div>
+          ${as ? `<div class="assess"><span class="specs">Objective ${Math.round(as.primary * 100)}% · people ${Math.round(as.people * 100)}%</span><ul>${as.factors.map(([l, v]) => `<li class="${v >= 0 ? "good" : "bad"}">${v >= 0 ? "+" : "−"}${Math.abs(Math.round(v * 100))} ${esc(l)}</li>`).join("")}</ul></div>` : ""}`; })()}
       ${secondInGroup(c, inc) ? `<p class="warn">Another incident from this group is already answered: this one can only go to a team sent without you.</p>` : ""}
       <div class="row">
         <button class="act primary" type="button" id="launchBtn" ${secondInGroup(c, inc) ? "disabled" : chosen.size || ((inc.kind === "breach" || inc.kind === "riot" || inc.kind === "raid") && guardsReady(c).length) ? "" : "disabled"}>${inc.kind === "riot" ? `Send in ${plural(Math.min(8, guardsReady(c).length), "guard")}` : `Deploy ${plural(chosen.size, "operative")}`}${noD ? "" : ` and ${dCount} D-Class`}</button>
@@ -1688,7 +1698,13 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       if (planning) speed = 0;   // nothing expires while a plan is being made
       const pl = c.incidents.find(i => i.id === planning);
       if (planning && pl?.kind === "escort") chosen.clear();
+      if (planning) squadPick = null;
       if (planning && !chosen.size && pl) for (const o of readyFor(pl).slice(0, squadSize(c))) chosen.add(o.id);
+      render();
+    });
+    root.querySelectorAll<HTMLElement>("[data-squadpick]").forEach(b => b.onclick = () => {
+      squadPick = b.dataset.squadpick!; chosen.clear();
+      const pl = c.incidents.find(i => i.id === planning); if (pl) for (const o of readyFor(pl).slice(0, squadSize(c))) chosen.add(o.id);
       render();
     });
     root.querySelectorAll<HTMLInputElement>("[data-pick]").forEach(b => b.onchange = () => {
