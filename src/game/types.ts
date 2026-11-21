@@ -13,9 +13,13 @@ export type { AmmoId, AttachmentId, WeaponType };
 export type ItemId = "armor" | "armor_light" | "armor_heavy" | "hazmat" | "leadsuit"
   | "contsuit" | "incendiary" | "flamer" | "flare" | "eyedrops" | "flashbang" | "smoke" | "tracker" | "frag" | "csgas" | "bazooka" | "law" | "medkit" | "camera" | "restraints" | "darts" | "ward"
   // Phase 4B capture kit, issued for the mission's anomaly
-  | "hood" | "folder" | "noisemaker" | "case";
+  | "hood" | "folder" | "noisemaker" | "case"
+  // Phase 5 squad-specialist kit: Breach Response charges, Containment Security barricades
+  | "breach_charge" | "barricade";
 /** Items thrown or fired at a tile, and the heavy weapons among them (heavy armor only). */
-export const THROWN: ItemId[] = ["frag", "flashbang", "smoke", "csgas", "bazooka", "law", "flare", "incendiary", "flamer", "noisemaker"];
+export const THROWN: ItemId[] = ["frag", "flashbang", "smoke", "csgas", "bazooka", "law", "flare", "incendiary", "flamer", "noisemaker", "breach_charge", "barricade"];
+/** Kit placed against the tile beside the operative rather than thrown. */
+export const PLACED: ItemId[] = ["breach_charge", "barricade"];
 export const HEAVY: ItemId[] = ["bazooka", "law", "flamer"];
 
 /** The weapon a unit carries into a mission. */

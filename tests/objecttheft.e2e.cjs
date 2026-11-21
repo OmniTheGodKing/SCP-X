@@ -8,7 +8,7 @@ const check = (name, ok, detail) => results.push(`${ok ? 'PASS' : 'FAIL'} ${name
 async function theft(b) {
   const p = await b.newPage({ viewport: { width: 1300, height: 1000 } });
   const errs = []; p.on('pageerror', e => errs.push(e.message + ' ' + (e.stack || '').split('\n')[1]));
-  await p.goto('file:///home/user/scp-x/dist/index.html'); await p.evaluate(() => localStorage.clear()); await p.reload();
+  await p.goto('file:///home/user/scp-x/dist/index.html?legacy'); await p.evaluate(() => localStorage.clear()); await p.reload();
   await p.evaluate(() => { const c = window.__site19.campaign; c.day = 400; c.tutorial = false;
     Object.assign(c.scps[0], { id: '500', name: 'SCP-500', title: 'Panacea', cls: 'Safe' }); });
   await dbg(p, 's-breach');

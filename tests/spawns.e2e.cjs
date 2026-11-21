@@ -8,7 +8,7 @@ const dbg = async (p, k) => { await p.evaluate(() => document.activeElement?.blu
   const errs = []; p.on('pageerror', e => errs.push(e.message));
   const rows = [];
   for (const map of ['wingC', 'town', 'farm', 'port', 'dblock', 'gate', 'rail', 'church', 'lab', 'ship']) for (let run = 0; run < 3; run++) {
-    await p.goto('file:///home/user/scp-x/dist/index.html'); await p.evaluate(() => localStorage.clear()); await p.reload();
+    await p.goto('file:///home/user/scp-x/dist/index.html?legacy'); await p.evaluate(() => localStorage.clear()); await p.reload();
     await p.evaluate(() => { const c = window.__site19.campaign; c.tutorial = false; c.day = 400; });
     await dbg(p, 'strike'); await p.click('[data-tab="command"]');
     const id = await p.evaluate(([m, r]) => { const c = window.__site19.campaign; const i = c.incidents.find(i => i.kind === 'strike'); i.map = m; i.night = false; i.weather = 'clear'; i.insurgents = r === 2 ? 8 : i.insurgents; return i.id; }, [map, run]);

@@ -305,3 +305,21 @@
 .stage .shelfitem { grid-template-columns: 56px 1fr; justify-items: start; align-items: center; text-align: left; padding: 4px 6px; background: rgba(20, 24, 28, .85); border-color: #2a3036; }
 .stage .shelfitem .gear { width: 56px; height: 24px; }
 .stage .shelfitem .count { right: 4px; top: 4px; }
+
+/* Phase 5: the organization board and panel */
+.stage .orgboard { background: #2c3a2e !important; box-shadow: inset 0 0 0 6px #1a221b, 0 4px 10px rgba(0, 0, 0, .6) !important; }
+.stage .orgboard b { background: #d8bf86 !important; } .stage .orgboard span { background: #e9e2cc !important; transform: none !important; }
+.stage .pfile .org { gap: 12px; }
+.stage .orgmtf { display: grid; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid rgba(60, 45, 20, .25); }
+.stage .orgmtf h4 { margin: 0; font: 400 20px var(--font-display); }
+.stage .orgsq { display: grid; gap: 4px; padding: 8px; background: rgba(255, 255, 255, .3); border: 1px solid rgba(60, 45, 20, .25); }
+.stage .sqhead { display: flex; gap: 6px; align-items: center; } .stage .sqhead input { flex: 1; font: 400 17px var(--font-display); }
+.stage .pfile select { font: 12px var(--font-mono); padding: 4px; background: #f4efe0; border: 1px solid rgba(60, 45, 20, .4); color: #2a241a; }
+.stage .orglist { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 13px; }
+.stage .orglist li { display: grid; grid-template-columns: 10px auto 1fr auto; gap: 6px; align-items: center; }
+.stage .orglist li .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage .olamp { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.stage .olamp.t-ok { background: #3f8a4a; } .stage .olamp.t-warn { background: #c48a1e; } .stage .olamp.t-bad { background: #a3301e; } .stage .olamp.t-away { background: #7a7f84; }
+.stage .pfile .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.stage .shelfitem.unqual { opacity: .4; }
+.stage .tape.reserve { border-color: #7a7f84; color: #7a7f84; }

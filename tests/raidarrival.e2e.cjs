@@ -8,7 +8,7 @@ const close = async p => { while (await p.$('#noticeOk')) await p.click('#notice
   const errs = []; p.on('pageerror', e => errs.push(e.message));
   const out = {};
   for (const alert of ['full', 'heightened', 'normal']) {
-    await p.goto('file:///home/user/scp-x/dist/index.html'); await p.evaluate(() => localStorage.clear()); await p.reload();
+    await p.goto('file:///home/user/scp-x/dist/index.html?legacy'); await p.evaluate(() => localStorage.clear()); await p.reload();
     await p.evaluate(a => { const c = window.__site19.campaign; c.day = 400; c.tutorial = false; c.alert = a; }, alert);
     await p.evaluate(() => document.activeElement?.blur?.()); await p.keyboard.press('`'); await p.click('[data-dbg="raid"]'); await p.click('[data-dbg="close"]'); await close(p);
     await p.click('[data-tab="command"]');

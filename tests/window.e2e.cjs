@@ -7,7 +7,7 @@ const dbg = async (p, k) => { await p.evaluate(() => document.activeElement?.blu
 (async () => {
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1300, height: 900 } });
   const errs = []; p.on('pageerror', e => errs.push(e.message));
-  await p.goto('file:///home/user/scp-x/dist/index.html'); await p.evaluate(() => localStorage.clear()); await p.reload();
+  await p.goto('file:///home/user/scp-x/dist/index.html?legacy'); await p.evaluate(() => localStorage.clear()); await p.reload();
   await p.evaluate(() => { const c = window.__site19.campaign; c.tutorial = false; c.day = 400; });
   await dbg(p, 'strike'); await p.click('[data-tab="command"]');
   const id = await p.evaluate(() => { const c = window.__site19.campaign; const i = c.incidents.find(i => i.kind === 'strike'); i.map = 'wingC'; return i.id; });

@@ -12,7 +12,7 @@ const check = (name, ok, detail) => results.push(`${ok ? 'PASS' : 'FAIL'} ${name
 async function start(b, id) {
   const p = await b.newPage({ viewport: { width: 1300, height: 950 } });
   const errs = []; p.on('pageerror', e => errs.push(e.message + ' ' + (e.stack || '').split('\n')[1]));
-  await p.goto('file:///home/user/scp-x/dist/index.html'); await p.evaluate(() => localStorage.clear()); await p.reload();
+  await p.goto('file:///home/user/scp-x/dist/index.html?legacy'); await p.evaluate(() => localStorage.clear()); await p.reload();
   await p.evaluate(() => { const c = window.__site19.campaign; c.tutorial = false; c.day = 500; });
   await dbg(p, 'see' + id);
   await p.click('[data-tab="command"]');
@@ -238,7 +238,7 @@ const FREE = `(x, y, n) => { const A = window.__site19, S = A.mission, G = A.gri
   {
     const p = await b.newPage({ viewport: { width: 1300, height: 950 } });
     const errs = []; p.on('pageerror', e => errs.push(e.message));
-    await p.goto('file:///home/user/scp-x/dist/index.html'); await p.evaluate(() => localStorage.clear()); await p.reload();
+    await p.goto('file:///home/user/scp-x/dist/index.html?legacy'); await p.evaluate(() => localStorage.clear()); await p.reload();
     await p.evaluate(() => { const c = window.__site19.campaign; c.tutorial = false; c.day = 500; c.funds = 3000; });
     const sight = await p.evaluate(() => { const c = window.__site19.campaign; return Object.fromEntries(Object.entries(c.sightings)); });
     // free wings for them: copy an existing containment wing to empty slots (the debug capture hands off if none)

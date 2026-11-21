@@ -11,7 +11,7 @@ const check = (name, ok, detail) => results.push(`${ok ? 'PASS' : 'FAIL'} ${name
 async function page(b) {
   const p = await b.newPage({ viewport: { width: 1300, height: 950 } });
   const errs = []; p.on('pageerror', e => errs.push(e.message + ' ' + (e.stack || '').split('\n')[1]));
-  await p.goto('file:///home/user/scp-x/dist/index.html'); await p.evaluate(() => localStorage.clear()); await p.reload();
+  await p.goto('file:///home/user/scp-x/dist/index.html?legacy'); await p.evaluate(() => localStorage.clear()); await p.reload();
   await p.evaluate(() => { const c = window.__site19.campaign; c.tutorial = false; c.day = 900; });
   return { p, errs, E: (f, a) => p.evaluate(f, a) };
 }
@@ -175,7 +175,7 @@ async function rivalMission(b, who) {
     const { p, errs, E } = await page(b);
     const out = [];
     for (const map of ['rail', 'church', 'lab', 'ship', 'gate']) {
-      await p.goto('file:///home/user/scp-x/dist/index.html'); await E(() => localStorage.clear()); await p.reload();
+      await p.goto('file:///home/user/scp-x/dist/index.html?legacy'); await E(() => localStorage.clear()); await p.reload();
       await E(() => { const c = window.__site19.campaign; c.tutorial = false; c.day = 900; });
       await dbg(p, 'strike');
       const id = await E(m => { const i = window.__site19.campaign.incidents.find(i => i.kind === 'strike'); i.map = m; return i.id; }, map);

@@ -2,7 +2,7 @@
 import { settleFacing, facingTo, facingName, emitNoise } from "./noise";
 import { hazardDealt } from "./mission";
 import { reinforcementsTick } from "./ciTactics";
-import { blastStructure, setLinkAccess, DRUM, FLOOR, HALF, L, STEEL, TS, area, area as area_, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, setSlow, setVault, tileAt, DIRS, type Pt } from "../core/grid";
+import { blastStructure, setLinkAccess, DRUM, FLOOR, HALF, PART, WALL, L, STEEL, TS, area, area as area_, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, setSlow, setVault, tileAt, DIRS, type Pt } from "../core/grid";
 import { setSmoke, sightFrom } from "../core/sight";
 import { canShoot, activeGun, damage, fire, kill, moveUnit } from "./combat";
 import { TYPES } from "../data/weapons";
@@ -20,7 +20,7 @@ import {
   S, alive, banner, breakConcealment, canAct, canSee, computeVis, full, fx, highlight, hooks, humans, isPanicked, isTeam, label, log, loseSanity,
   occupied, reveal, seen, sleep, starers, team, unitAt,
 } from "./state";
-import { RAID_TURNS, THROWN, type ScpId, type Unit } from "./types";
+import { PLACED, RAID_TURNS, THROWN, type ScpId, type Unit } from "./types";
 import { carryPhase, checkQuiet, convoyPhase, rivalPhase } from "./rivals";
 import { check096, endOfEnemyPhase, eyesMoveCap, hidden939, isDown682, isNewScp, newAnomalyPhase, placeLure, sealBlock, sealTarget, syncMask, voices } from "./scp4b";
 
@@ -431,6 +431,17 @@ export const throwRange = (u: Unit) => S.throwing?.id === "bazooka" ? 10 : S.thr
 /** Tiles the unit can throw to: within range and in sight. */
 export function throwOptions(u: Unit) {
   const out = new Set<number>();
+  // a breaching charge goes against an adjacent door, partition, ordinary wall or barricade; a barricade on an
+  // adjacent clear floor tile
+  if (S.throwing && PLACED.includes(S.throwing.id)) {
+    for (const [dx, dy] of DIRS) {
+      const x = u.x + dx, y = u.y + dy, t = tileAt(x, y), i = y * L.W + x, d = L.door.get(i);
+      if (x <= 0 || y <= 0 || x >= L.W - 1 || y >= L.H - 1) continue;
+      if (S.throwing.id === "breach_charge" ? (d && d.state !== "destroyed") || t === PART || t === HALF || (t === WALL && !L.def.reinforced)
+          : t === FLOOR && !d && !S.units.some(v => v.alive && v.x === x && v.y === y)) out.add(i);
+    }
+    return out;
+  }
   for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++)
     if ((x - u.x) ** 2 + (y - u.y) ** 2 <= throwRange(u) ** 2 && passable(x, y) && canSee(u, x, y)) out.add(y * L.W + x);
   return out;
@@ -497,6 +508,21 @@ function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y
   breakConcealment(item.id === "smoke" ? "a smoke canister hissing" : item.id === "flare" ? "a flare lighting up the area" : item.id === "noisemaker" ? "a noisemaker playing" : "an explosion");
   S.mode = null; S.throwing = null; S.pending = null;
   if (item.id === "noisemaker") { placeLure(u, x, y); return; }
+  if (item.id === "barricade") {
+    L.grid[y][x] = HALF; L.version++;
+    log(`${full(u)} sets up a portable barricade: half cover.`, "key");
+    computeVis(); afterAction(); return;
+  }
+  if (item.id === "breach_charge") {
+    fx({ type: "blast", x: x * TS + TS / 2, y: y * TS + TS / 2, r: 1.2, dur: 600 });
+    highlight(5, "#ff9a50"); emitNoise(x, y, "explosion", u);
+    const what = blastStructure(x, y, 2);
+    log(what ? `${full(u)} blows the breaching charge: ${({ cover: "the barricade", door: "the door", partition: "the partition", window: "the glass", wall: "the wall" } as Record<string, string>)[what]} is gone.` : `${full(u)}'s breaching charge does nothing to that.`, "key");
+    // the blast goes through to whoever is behind it, not back at the team that set it
+    const bx = x + (x - u.x), by = y + (y - u.y);
+    for (const v of S.units.filter(v => v.alive && !v.saved && !isTeam(v) && cheb(v.x, v.y, bx, by) <= 1)) { S.hitKind = "explosive"; damage(v, Math.max(0, 2 - (v.armor ?? 0)), u); }
+    computeVis(); afterAction(); return;
+  }
   const area = blastArea(x, y);
   const inArea = (v: Unit) => area.some(([a, b]) => a === v.x && b === v.y);
   if (item.id === "frag" || item.id === "bazooka" || item.id === "law") {

@@ -1,3 +1,4 @@
+import { homeRegion } from "./org";
 import { fieldMap } from "../data/maps";
 // Anomalies held at Site-19: daily breach risk, cell cleaning, breaches, and escapes.
 import { earn, spend } from "./ledger";
@@ -100,7 +101,7 @@ export function startBreach(c: Campaign, s: ScpRecord, cause: string) {
     appeared: c.day,
     expires: c.day,
     insurgents: Math.min(3, rand(0, 1) + Math.floor((c.day - 1) / 120)),
-    region: HOME, map: "wingC",
+    region: homeRegion(c), map: "wingC",
     // what really caused it is only known if someone looks into it afterwards
     cause: c.chaos.pendingCause ?? (c.chaos.moles && Math.random() < 0.3 ? "sabotage" : ANOMALOUS_CAUSE.includes(s.id) ? (Math.random() < 0.5 ? "anomalous" : "accident") : "accident"),
   };
@@ -159,7 +160,7 @@ export function goDark(c: Campaign, s: ScpRecord, why: string, from = "Site-19")
 
 export function resurface(c: Campaign, s: ScpRecord, at?: RegionId) {
   const open = REGION_IDS.filter(r => !c.regions[r].collapsed);
-  const region = at ?? open[rand(0, open.length - 1)] ?? HOME;
+  const region = at ?? open[rand(0, open.length - 1)] ?? homeRegion(c);
   const towns = REGIONS[region].towns, where = towns[rand(0, towns.length - 1)];
   const inc: Incident = {
     id: "inc" + c.nextIncident,
@@ -267,7 +268,7 @@ export function tickContainment(c: Campaign) {
       if (c.day >= (s.returnDay ?? 0)) comeBack(c, s);
     } else if (s.status === "loose") {
       if (s.id === "682" && (c.day - (s.resurfaceDay ?? c.day)) % 30 === 0) addStanding(c, -2, "SCP-682 is still loose");
-      if ((c.day - (s.resurfaceDay ?? 0)) % 4 === 0) addExposure(c, HOME, 1);
+      if ((c.day - (s.resurfaceDay ?? 0)) % 4 === 0) addExposure(c, homeRegion(c), 1);
       if (s.resurfaceDay !== undefined && c.day >= s.resurfaceDay) resurface(c, s);
     }
   }
@@ -420,7 +421,7 @@ export const transferBonus = (cls: ScpClass) => cls === "Keter" ? 150 : 100;
 
 export function firstSighting(c: Campaign, id: ScpId) {
   const open = REGION_IDS.filter(r => !c.regions[r].collapsed);
-  const region = open[rand(0, open.length - 1)] ?? HOME;
+  const region = open[rand(0, open.length - 1)] ?? homeRegion(c);
   const towns = REGIONS[region].towns, where = towns[rand(0, towns.length - 1)];
   const d = SCP_DEFS[id];
   const inc: Incident = {

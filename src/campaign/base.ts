@@ -1,4 +1,5 @@
 // Site-19's facilities: what can be built where, power, engineers, construction and repairs.
+import { geoOf } from "./org";
 import { earn, spend } from "./ledger";
 import { TRADE_CHANCE, hasTrade } from "./people";
 import type { Campaign } from "./campaign";
@@ -182,9 +183,11 @@ export const salaries = (c: Campaign) => c.roster.filter(o => o.alive).length * 
 export function upkeepParts(c: Campaign) {
   const facilities = c.base.facilities.reduce((a, f) => a + (f.type === "security" && has(c, "bt_security") ? 0 : FACILITIES[f.type].upkeep) + (f.type === "generator" ? genTierOf(f).upkeep : 0), 0);
   const operatives = c.roster.filter(o => o.alive).length * SALARY.operative, guards = c.guards.filter(g => g.alive).length * SALARY.guard;
-  return { facilities, operatives, guards, alert: ALERTS[c.alert].upkeep };
+  // Phase 5: supplies cost more the further the site is from an airfield or port
+  const g = geoOf(c), supply = g ? Math.round((facilities + operatives) * (g.supply - 1)) : 0;
+  return { facilities, operatives, guards, alert: ALERTS[c.alert].upkeep, supply };
 }
-export const monthlyUpkeep = (c: Campaign) => { const u = upkeepParts(c); return u.facilities + u.operatives + u.guards + u.alert; };
+export const monthlyUpkeep = (c: Campaign) => { const u = upkeepParts(c); return u.facilities + u.operatives + u.guards + u.alert + u.supply; };
 export const healPerDay = (c: Campaign) => (countOperational(c, "medical") && !powerShort(c) ? 2 : 1) + (has(c, "necrotic_study") ? 1 : 0) + (has(c, "bt_triage") ? 1 : 0);
 export const sanityPerDay = (c: Campaign) => countOperational(c, "psych") && !powerShort(c) ? 20 : 10;
 

@@ -11,6 +11,7 @@ import type { Weather } from "../data/weather";
 import { has } from "./research";
 import { addStanding, noteMissed } from "./council";
 import { HOME, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
+import { baseTravel, geoOf, homeRegion } from "./org";
 
 export interface RegionState { exposure: number; collapsed: boolean; lastCoverStory?: number;
   /** false: no Foundation front there yet (older saves leave it unset: contacted). contactDue: the day contact completes. */
@@ -99,7 +100,7 @@ export const regionFunding = (c: Campaign, r: RegionId) =>
 
 export const transportName = (c: Campaign) => has(c, "c130") ? "C-130 Hercules" : has(c, "c119") ? "C-119 Flying Boxcar" : "C-47 Skytrain";
 export function travelDays(c: Campaign, r: RegionId) {
-  const base = REGIONS[r].travel;
+  const base = baseTravel(c, r);
   if (!base) return 0;
   return Math.max(1, Math.ceil(base * (has(c, "c130") ? 0.5 : has(c, "c119") ? 0.75 : 1)));
 }
@@ -203,7 +204,7 @@ export function tickWorld(c: Campaign) {
   // SCP-610: the first outbreak in 1954, then it spreads every week it's left alone
   if (c.outbreakDay && c.day >= c.outbreakDay) {
     c.outbreakDay = undefined;
-    const open = REGION_IDS.filter(r => r !== HOME && !c.regions[r].collapsed);
+    const open = REGION_IDS.filter(r => r !== homeRegion(c) && !c.regions[r].collapsed);
     const r = pick(open.length ? open : REGION_IDS);
     c.outbreak = { region: r, severity: 2, lastMission: c.day };
     c.materials.outbreaks = (c.materials.outbreaks ?? 0) + 1;

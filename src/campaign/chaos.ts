@@ -1,3 +1,4 @@
+import { homeRegion } from "./org";
 import { fieldMap } from "../data/maps";
 // The Chaos Insurgency as one organization: a single worldwide agenda that advances while its cells and operations go
 // unchecked (like XCOM 2's Avatar Project), monthly operations Site-19 can find and disrupt (like dark events), a named
@@ -154,14 +155,14 @@ function newPlans(c: Campaign) {
   const made: Plan[] = kinds.map(kind => {
     const front = kind === "infiltrate" ? pick(REGION_IDS.filter(r => isContacted(c, r) && !c.regions[r].collapsed)) : undefined;
     const due = c.day + rand(14, 24);
-    return { id: "p" + k.nextPlan++, kind, region: front ?? (kind === "raid" || kind === "sabotage" || kind === "mole" || kind === "agitate" ? HOME : pick(open)), due, known: true,
+    return { id: "p" + k.nextPlan++, kind, region: front ?? (kind === "raid" || kind === "sabotage" || kind === "mole" || kind === "agitate" ? homeRegion(c) : pick(open)), due, known: true,
       win: [Math.max(c.day + 7, due - rand(3, 8)), due + rand(3, 8)] as [number, number] };
   });
   // like guerrilla operations: each operation's cell is located, and the three strikes arrive together. Answering one
   // closes the others, and the operations behind those go ahead.
   const group = "ops" + k.nextPlan, open0 = Math.min(...made.map(p => p.win![0]));
   for (const p of made) {
-    const at = isContacted(c, p.region) ? p.region : HOME, inc = locateCellFor(c, at);
+    const at = isContacted(c, p.region) ? p.region : homeRegion(c), inc = locateCellFor(c, at);
     inc.plan = p.id; inc.ciOp = true; inc.group = group; inc.map = fieldMap("strike");
     inc.expires = Math.max(open0, c.day + travelDays(c, at) + 3);
     inc.title = `${inc.title} (${PLANS[p.kind].name})`;

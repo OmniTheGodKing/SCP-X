@@ -8,6 +8,8 @@ import { RANKS, dateOf, fieldName, gunFor, lookOf, promotionDue, weaponOf, weapo
 import { injured, tiredness } from "../campaign/condition";
 import { ARMOR_KINDS, ARMOR_TIERS, ITEMS, armorStats, uniformOf, type ItemId } from "../campaign/research";
 import { tfOf } from "../campaign/taskforces";
+import { qualifiedFor, squadOfOp } from "../campaign/org";
+import { SPECIALTIES } from "../data/mtf";
 import { CLASSES } from "../data/classes";
 import { AMMO, ATTACHMENTS, SIDEARM, TYPES, model, type AmmoId, type AttachmentId } from "../data/weapons";
 import { HEAVY } from "../game/types";
@@ -63,15 +65,24 @@ export function statusOf(c: Campaign, o: Operative): { text: string; tone: Tone 
 // ---------------------------------------------------------------- Barracks
 
 interface Spot { o: Operative; x: number; z: number; }
-function layout(c: Campaign): { spots: Spot[]; lockers: { o: Operative; x: number }[]; split: number | null } {
-  const alive = c.roster.filter(o => o.alive);
-  const e11 = alive.filter(o => tfOf(o) === "e11"), eta = alive.filter(o => tfOf(o) !== "e11");
-  const all = [...e11, ...eta], n = all.length, R = BARRACKS_ROOM;
-  const pitch = Math.min(170, (R.w - 260) / Math.max(1, n));
-  const x0 = -((n - 1) * pitch) / 2 - (eta.length ? 40 : 0);
-  const lockers = all.map((o, i) => ({ o, x: x0 + i * pitch + (i >= e11.length ? 80 : 0) }));
+function layout(c: Campaign): { spots: Spot[]; lockers: { o: Operative; x: number }[]; bands: { label: string; x0: number; x1: number; cls: string }[] } {
+  const alive = c.roster.filter(o => o.alive), R = BARRACKS_ROOM;
+  // the line-up stands by squad (Phase 5 sites) or by task force (older saves), with a gap and a floor tape for each
+  const groups: { label: string; cls: string; ops: Operative[] }[] = c.mtfs
+    ? [...c.mtfs.flatMap(m => m.squads.map(sq => ({ label: `${m.designation} · ${sq.name}`, cls: "", ops: alive.filter(o => o.squad === sq.id) }))), { label: "Reserve", cls: "reserve", ops: alive.filter(o => !o.squad || !c.mtfs!.some(m => m.squads.some(sq => sq.id === o.squad))) }]
+    : [{ label: "EPSILON-11", cls: "", ops: alive.filter(o => tfOf(o) === "e11") }, { label: "ETA-10", cls: "eta", ops: alive.filter(o => tfOf(o) !== "e11") }];
+  const used = groups.filter(g => g.ops.length), n = alive.length, gap = 70;
+  const pitch = Math.min(170, (R.w - 260 - gap * (used.length - 1)) / Math.max(1, n));
+  let x = -((n - 1) * pitch + gap * (used.length - 1)) / 2;
+  const lockers: { o: Operative; x: number }[] = [], bands: { label: string; x0: number; x1: number; cls: string }[] = [];
+  for (const g of used) {
+    const start = x;
+    for (const o of g.ops) { lockers.push({ o, x }); x += pitch; }
+    bands.push({ label: g.label, x0: start - pitch / 2 + 6, x1: x - pitch / 2 - 6, cls: g.cls });
+    x += gap;
+  }
   const spots = lockers.filter(l => !l.o.busy).map((l, i) => ({ o: l.o, x: l.x, z: -R.d / 2 + 230 + (i % 2) * 30 }));
-  return { spots, lockers, split: eta.length ? x0 + e11.length * pitch + 40 - pitch / 2 : null };
+  return { spots, lockers, bands };
 }
 
 const ERA_NAMES: Record<Era, string> = { "1950s": "1951 pattern", "1960s": "1960s refit", "1970s": "1970s refit", "1980s": "1980s refit" };
@@ -105,16 +116,16 @@ export function barracksHtml(q: QuartersCtx) {
     onBackWall(R, -R.w / 2 + 90, 0, 130, 330, `<button type="button" class="door" data-gotoarmory aria-label="Go to the Armory"><span class="doorsign">ARMORY</span><span class="window"></span><span class="handle"></span></button>`),
     onBackWall(R, R.w / 2 - 90, 0, 130, 330, `<button type="button" class="door exit" data-gotocommand aria-label="Go to Command to recruit"><span class="doorsign">COMMAND · RECRUITING</span><span class="window"></span><span class="handle"></span></button>`),
     onBackWall(R, -R.w / 2 + 230, 330, 110, 70, `<button type="button" class="plaque ${q.archive === "memorial" ? "on" : ""}" data-archive="memorial" aria-label="Memorial: ${fallen} fallen"><b>IN MEMORIAM</b><span>${fallen ? `${fallen} name${fallen === 1 ? "" : "s"}` : "no names yet"}</span></button>`),
+    c.mtfs ? onBackWall(R, 0, 300, 220, 120, `<button type="button" class="board orgboard ${q.archive === "org" ? "on" : ""}" data-archive="org" aria-label="MTF organization board"><b>${esc(c.mtfs.map(m => m.designation).join(" · "))}</b>${c.mtfs[0].squads.map(sq => `<span>${esc(sq.name)}</span>`).join("")}</button>`) : "",
     onBackWall(R, R.w / 2 - 240, 300, 120, 120, `<button type="button" class="board ${q.archive === "staff" ? "on" : ""}" data-archive="staff" aria-label="Site staff board"><b>SITE STAFF</b><span>${c.researchers} research · ${c.engineers} engineering</span><span class="pins"></span></button>`),
     retired ? onBackWall(R, -R.w / 2 + 230, 220, 110, 80, `<button type="button" class="frame ${q.archive === "retired" ? "on" : ""}" data-archive="retired" aria-label="Retired operatives">${portraitSvg(c.retired![c.retired!.length - 1].look ?? lookOf({ id: c.retired![0].name }), c.retired![c.retired!.length - 1].unit, 46)}<span>Retired · ${retired}</span></button>`) : "",
   ].join("");
   const back = `<div class="paint"></div>${wallArt ? `<img class="wallart" src="${wallArt}" alt="">` : ""}
-    <div class="stencil">EPSILON-11 · BILLET B${L.split !== null ? "" : ""}</div>
+    <div class="stencil">${esc(c.mtfs?.[0] ? `${c.mtfs[0].designation} · ${c.site?.designation ?? ""}` : "EPSILON-11 · BILLET B")}</div>
     ${[-0.32, 0, 0.32].map(f => `<div class="sconce" style="left:${50 + f * 100}%"></div>`).join("")}`;
   const floor = `<div class="tiles"></div>
     ${[-0.3, 0, 0.3].map(f => `<div class="pool" style="left:${50 + f * 100}%"></div>`).join("")}
-    <div class="tape" style="left:${(L.spots[0]?.x ?? 0) + R.w / 2 - 90}px;width:${Math.max(200, (L.split ?? (L.spots[L.spots.length - 1]?.x ?? 0) + 90) - (L.spots[0]?.x ?? 0) + 90)}px">EPSILON-11</div>
-    ${L.split !== null ? `<div class="tape eta" style="left:${L.split + R.w / 2 + 20}px;width:${R.w / 2 - L.split - 140}px">ETA-10</div>` : ""}`;
+    ${L.bands.map(b => `<div class="tape ${b.cls}" style="left:${b.x0 + R.w / 2}px;width:${Math.max(60, b.x1 - b.x0)}px">${esc(b.label.toUpperCase())}</div>`).join("")}`;
   const shadows = L.spots.map(s => onFloor(s.x, s.z + 6, 120, 46, "shadow")).join("");
   const figs = L.spots.map(s => {
     const st = statusOf(c, s.o), fh = q.fieldHp(s.o), on = q.opSel === s.o.id;
@@ -193,7 +204,7 @@ export function armoryHtml(q: QuartersCtx) {
   // the shelf of utility kit; with a belt slot picked, clicking an item puts it there
   const itemSlot = tray.startsWith("item") ? Number(tray.slice(4)) : -1;
   const shelfItems = (Object.keys(ITEMS) as ItemId[]).filter(k => !ITEMS[k].armor && ((c.inventory[k] ?? 0) > 0 || g.items.includes(k)));
-  const shelf = shelfItems.map(k => { const heavyNo = HEAVY.includes(k) && g.armor !== "armor_heavy"; return `<button type="button" class="shelfitem ${g.items.includes(k) ? "on" : ""}" data-shelfitem="${k}" ${heavyNo ? `disabled title="Heavy weapons need heavy plate in the armor slot."` : `title="${esc(ITEMS[k].desc)}"`}>${gearArt(k)}<span>${esc(ITEMS[k].name)}</span>${store(c.inventory[k])}</button>`; }).join("") || `<p class="empty">The shelves are bare. The workshop builds grenades, medkits and the rest once they're researched.</p>`;
+  const shelf = shelfItems.map(k => { const heavyNo = HEAVY.includes(k) && g.armor !== "armor_heavy", qual = qualifiedFor(c, o, k), no = heavyNo ? "Heavy weapons need heavy plate in the armor slot." : qual; return `<button type="button" class="shelfitem ${g.items.includes(k) ? "on" : ""} ${qual ? "unqual" : ""}" data-shelfitem="${k}" ${no ? `disabled title="${esc(no)}"` : `title="${esc(ITEMS[k].desc)}"`}>${gearArt(k)}<span>${esc(ITEMS[k].name)}</span>${store(c.inventory[k])}</button>`; }).join("") || `<p class="empty">The shelves are bare. The workshop builds grenades, medkits and the rest once they're researched.</p>`;
 
   // ammunition crates under the bench
   const crates = [`<button type="button" class="crate ${!o.ammoType ? "on" : ""}" data-loadammo=""><span class="stencil">.30 BALL</span><small>Standard</small></button>`,
@@ -210,7 +221,7 @@ export function armoryHtml(q: QuartersCtx) {
         <div class="spot"></div>
         ${figureSvg(figureSpecOf(c, o, g), { cls: "big", label: `${fieldName(o)} in their kit` })}
         ${FIGURE_SPOTS.map(s => `<button type="button" class="bodyspot ${tray === s.key || (s.key === "item0" && itemSlot >= 0) ? "on" : ""}" data-eqslot="${s.key}" style="left:${s.box[0]}%;top:${s.box[1]}%;width:${s.box[2]}%;height:${s.box[3]}%" aria-label="${s.label}"><span>${s.label}</span></button>`).join("")}
-        <div class="nametape"><b>${esc(o.call)}</b> ${esc(fieldName(o))}<small>${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""} · field HP ${fh.hp}/${fh.max}</small></div>
+        <div class="nametape"><b>${esc(o.call)}</b> ${esc(fieldName(o))}<small>${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""} · field HP ${fh.hp}/${fh.max}</small>${(() => { const sq = squadOfOp(c, o); return sq ? `<small>${esc(sq.mtf.designation)} · ${esc(sq.squad.name)} · ${esc(SPECIALTIES[sq.squad.specialty].name)}</small>` : c.mtfs ? `<small>Reserve: no squad</small>` : ""; })()}</div>
       </div>
       <div class="bench">
         <div class="benchtop"></div>

@@ -33,9 +33,10 @@ const OBJECTIVES = {
 const ITEM_NAMES: Record<ItemId, string> = { armor: "Flak vest", armor_light: "Recon smock", armor_heavy: "Heavy plate", hazmat: "Hazmat suit", leadsuit: "Lead-lined suit",
   contsuit: "Containment suit", incendiary: "Incendiary", flamer: "M2 flamethrower", flare: "Signal flare", eyedrops: "Eye drops", flashbang: "Stun grenade", smoke: "M18 smoke", tracker: "Seismic sensor", frag: "M26 frag", csgas: "CS gas", bazooka: "M20 bazooka", law: "M72 LAW",
   medkit: "Medkit", camera: "Field camera", restraints: "Restraint kit", darts: "Amnestic darts", ward: "Warding charm",
-  hood: "Canvas hood", folder: "Lined folder", noisemaker: "Noisemaker", case: "Lead-lined case" };
+  hood: "Canvas hood", folder: "Lined folder", noisemaker: "Noisemaker", case: "Lead-lined case", breach_charge: "Breaching charge", barricade: "Portable barricade" };
 import type { MissionResult, Unit } from "../game/types";
-import { esc } from "./util";
+import { esc, localizeDom } from "./util";
+import { localizeText } from "../campaign/org";
 import { createRenderer, view, viewRows } from "./render";
 import { ESCAPE_AT, escaping } from "../game/scp173";
 import { ESCORT_TURNS, MAX_SEALED } from "../game/turn";
@@ -324,6 +325,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   }
 
   function update() {
+    queueMicrotask(() => localizeDom(root, localizeText));
     const st = S.statue;
     $("turnPill").textContent = `Turn ${S.turn}`;
     const ph = { player: "Your move", anomaly: "SCP-173", hand: "Chaos Insurgency", subjects: "D-Class fleeing", over: "Incident closed" }[S.phase];
@@ -506,6 +508,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   hooks.log = renderLog;
   hooks.finished = (r: MissionResult) => {
     $("overlaySheet").innerHTML = debrief(r) + `<button class="act primary" type="button" id="returnBtn">Return to Site-19</button>`;
+    localizeDom($("overlaySheet"), localizeText);
     $("overlay").hidden = false;
     $("returnBtn").onclick = () => { stop(); onReturn(); };
     $("returnBtn").focus();

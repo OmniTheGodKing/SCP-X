@@ -1,3 +1,4 @@
+import { homeRegion } from "./org";
 import { fieldMap } from "../data/maps";
 // The O5 Council: Site-19's standing with it, its monthly orders, what it can be asked for, and the transfers of
 // anomalies it arranges between sites. Standing is separate from exposure: exposure is what the public knows,
@@ -371,7 +372,7 @@ function arrive(c: Campaign, t: Transit) {
   // the Insurgency watches the roads into Site-19 once it's active
   if ((yearOf(c.day) >= 1952 || planActive(c, "hijack")) && Math.random() < (planActive(c, "hijack") ? 1 : d.cls === "Safe" ? 0.15 : 0.3)) {
     const inc: Incident = {
-      id: "inc" + c.nextIncident, kind: "escort", scpId: t.scp, region: HOME, map: fieldMap("escort"),
+      id: "inc" + c.nextIncident, kind: "escort", scpId: t.scp, region: homeRegion(c), map: fieldMap("escort"),
       title: `Incident ${String(c.nextIncident).padStart(3, "0")}: Transfer convoy ambushed carrying ${d.name}`,
       appeared: c.day, expires: c.day, insurgents: Math.min(6, 3 + Math.floor((yearOf(c.day) - 1951) / 3)), transfer: t,
     };
@@ -400,7 +401,7 @@ export function transferFought(c: Campaign, t: Transit, win: boolean): string {
   if (win) { receive(c, t); return `${scpName(t.scp)} reached Site-19.`; }
   addStanding(c, -8, `lost ${scpName(t.scp)} in transit`);
   chronicle(c, "anomaly", `${scpName(t.scp)} was taken by the Insurgency from a transfer convoy.`);
-  addExposure(c, HOME, 8);
+  addExposure(c, homeRegion(c), 8);
   if (t.scp === "106") c.sightings["106"] = c.day + rand(60, 120);
   return `The Insurgency took ${scpName(t.scp)} off the truck. The Council holds Site-19 responsible.`;
 }

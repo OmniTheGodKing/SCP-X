@@ -26,12 +26,21 @@ import { mountMission } from "./ui/missionView";
 import { esc } from "./ui/util";
 import { mountDebug } from "./ui/debug";
 import { transition } from "./ui/audio";
+import { mountMenu } from "./ui/menu";
+import { mountDebrief, mountMtfFound, mountSitePick } from "./ui/founding";
+import { beginOpening, closeOpening, openingIncident, openingLoadouts } from "./campaign/opening";
+import { bindCampaign } from "./campaign/org";
+import { SPECIALTIES, SPECS } from "./data/mtf";
 
 const root = document.getElementById("app")!;
+/** ?legacy skips the title screen and the Phase 5 opening: a first visit starts a Site-19 campaign at the hub, as
+ *  before. The automated tests use it. */
+const LEGACY = new URLSearchParams(location.search).has("legacy");
 let campaign: Campaign = loadCampaign() ?? newCampaign({ difficulty: "agent", ironman: false, tutorial: true });   // a first visit starts with the tutorial on
 resolveInterrupted(campaign);
 if (!campaign.recruits) refreshRecruits(campaign);   // saves from before the recruit pool
-saveCampaign(campaign);
+bindCampaign(campaign);
+if (LEGACY) saveCampaign(campaign);
 
 const WIN: Record<MissionKind, [string, string]> = {
   breach: ["Recontained", "%s is sealed in the transport container."],
@@ -63,27 +72,71 @@ function debriefHtml(r: MissionResult, d: Debrief, kind: MissionKind, scp: strin
 
 let screen: "hub" | "mission" = "hub";
 /** Start a mission now and come back to the World Map after its debrief. */
-function launch(setup: MissionSetup, inc: Incident) {
+function launch(setup: MissionSetup, inc: Incident, after?: (r: MissionResult) => void) {
   saveCampaign(campaign);
   createMission(setup);
   screen = "mission";
-  mountMission(root, () => { transition.returnHome(); openTab("world", "reg:" + inc.region); showHub(); }, result => {
-    const d = applyResult(campaign, result);
+  let result: MissionResult | null = null;
+  mountMission(root, () => { transition.returnHome(); if (after && result) { after(result); return; } openTab("world", "reg:" + inc.region); showHub(); }, r => {
+    result = r;
+    const d = applyResult(campaign, r);
     saveCampaign(campaign);
-    return debriefHtml(result, d, setup.kind, scpName(setup.scp ?? "173"));
+    return debriefHtml(r, d, setup.kind, scpName(setup.scp ?? "173"));
   });
+}
+
+// ---------- Phase 5: title screen, the opening mission, founding the site and the first MTF ----------
+function showMenu() {
+  screen = "hub";
+  mountMenu(root, {
+    newGame: o => {
+      useSlot(o.slot); clearCampaign();
+      campaign = newCampaign({ difficulty: o.difficulty, ironman: o.ironman, tutorial: true });
+      beginOpening(campaign); bindCampaign(campaign); saveCampaign(campaign);
+      route();
+    },
+    load: slot => { const c = useSlot(slot); if (!c) return; campaign = c; resolveInterrupted(campaign); bindCampaign(campaign); saveCampaign(campaign); route(); },
+  });
+}
+/** Take a campaign to wherever it is: the opening mission, a founding step, or the hub. */
+function route() {
+  switch (campaign.phase) {
+    case "opening": {
+      const inc = openingIncident(campaign) ?? beginOpening(campaign);
+      const setup = buildSetup(campaign, inc, openingLoadouts(campaign), 2);
+      setup.title = inc.title;
+      setup.mtfTurn = 1;   // the detachment is already on site: the player commands it from the first turn
+      launch(setup, inc, r => {
+        mountDebrief(root, campaign, r.win, () => { closeOpening(campaign, r.win); saveCampaign(campaign); route(); });
+      });
+      return;
+    }
+    case "site": mountSitePick(root, campaign, () => { saveCampaign(campaign); route(); }); return;
+    case "mtf": mountMtfFound(root, campaign, () => {
+      const m = campaign.mtfs![0];
+      log(campaign, `${m.designation} "${m.name}" is chartered at ${campaign.site!.designation}: ${m.squads.map(s => `${s.name} (${SPECIALTIES[s.specialty].name})`).join(" and ")}.`, "key");
+      saveCampaign(campaign); openTab("command"); showHub();
+    }); return;
+    default: showHub();
+  }
 }
 function showHub() {
   screen = "hub";
   mountHub(root, campaign, {
     save: () => saveCampaign(campaign),
-    newCampaign: (opts, slot) => { useSlot(slot); clearCampaign(); campaign = newCampaign(opts); saveCampaign(campaign); openTab("command"); showHub(); },
+    newCampaign: (opts, slot) => { useSlot(slot); clearCampaign(); campaign = newCampaign(opts); if (!LEGACY) beginOpening(campaign); bindCampaign(campaign); saveCampaign(campaign); openTab("command"); route(); },
+    menu: () => { saveCampaign(campaign); showMenu(); },
+    newMtf: () => mountMtfFound(root, campaign, () => {
+      const m = campaign.mtfs![campaign.mtfs!.length - 1];
+      log(campaign, `${m.designation} "${m.name}" is chartered at ${campaign.site?.designation ?? "the site"}: ${SPECS[m.spec].name}.`, "key");
+      saveCampaign(campaign); openTab("personnel"); showHub();
+    }, { first: false, cancel: () => showHub() }),
     loadSlot: slot => {
       if (!slotSummary(slot)) return;   // nothing there: stay put
       saveCampaign(campaign);
       const c = useSlot(slot);
-      if (c) { campaign = c; resolveInterrupted(campaign); saveCampaign(campaign); }
-      openTab("command"); showHub();
+      if (c) { campaign = c; resolveInterrupted(campaign); bindCampaign(campaign); saveCampaign(campaign); }
+      openTab("command"); route();
     },
     importCampaign: (c: Campaign) => { campaign = c; resolveInterrupted(campaign); saveCampaign(campaign); log(campaign, "Campaign loaded from an exported save.", "key"); showHub(); },
     deploy: (inc, loadouts, dCount, extras) => {
@@ -140,4 +193,4 @@ function showHub() {
 };
 
 mountDebug({ campaign: () => campaign, screen: () => screen, refresh: () => { saveCampaign(campaign); if (screen === "hub") showHub(); } });
-showHub();
+if (LEGACY) showHub(); else showMenu();

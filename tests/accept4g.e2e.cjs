@@ -4,7 +4,7 @@
 // Usage: node tests/accept4g.e2e.cjs [path to the pre-4G build's index.html]
 const { chromium } = require('playwright');
 const SP = '/tmp/claude-0/-home-user-scp-x/54b8bb60-76e9-5ac7-87cb-a04ccc4cc055/scratchpad/';
-const AFTER = 'file:///home/user/scp-x/dist/index.html';
+const AFTER = 'file:///home/user/scp-x/dist/index.html?legacy';
 const BEFORE = process.argv[2] ? 'file://' + process.argv[2] : null;
 const close = async p => { while (await p.$('#noticeOk')) await p.click('#noticeOk').catch(() => {}); };
 const dbg = async (p, k) => { await p.evaluate(() => document.activeElement?.blur?.()); await p.keyboard.press('`'); await p.click(`[data-dbg="${k}"]`); await p.click('[data-dbg="close"]').catch(() => {}); await close(p); };

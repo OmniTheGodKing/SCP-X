@@ -3,7 +3,7 @@ const { chromium } = require('playwright');
 (async () => {
   const b = await chromium.launch(); const p = await (await b.newContext({ viewport: { width: 1300, height: 1400 } })).newPage();
   const errs = []; p.on('pageerror', e => errs.push(e.message));
-  await p.goto('file://' + require('path').resolve(__dirname, '../dist/index.html')); await p.waitForTimeout(300);
+  await p.goto('file://' + require('path').resolve(__dirname, '../dist/index.html?legacy')); await p.waitForTimeout(300);
   await p.evaluate(() => { localStorage.clear(); }); await p.reload(); await p.waitForTimeout(300);
   await p.evaluate(() => { const c = window.__site19.campaign; c.inventory = { frag: 2 };
     c.scps[0].status = 'breach'; c.incidents.push({ id: 'incX', kind: 'breach', scpId: '173', title: 'Incident 900: SCP-173 breach, test', appeared: c.day, expires: c.day, insurgents: 3, region: 'east_us', map: 'wingC' }); });

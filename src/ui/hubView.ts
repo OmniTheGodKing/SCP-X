@@ -28,6 +28,8 @@ import { LEANS, QUALITY, UNITS, nationalityOf } from "../data/units";
 import { FACIAL, HAIR_BY_SEX, HAIR_COLORS, HAIR_STYLES, HEADGEAR, LOOK_PARTS, SEX_NAMES, SKIN, fitLook, rollLook } from "../data/looks";
 import { portraitSvg } from "./portrait";
 import { commandBand, engineeringBand, researchBand } from "./departments";
+import { addSquad, assignToSquad, bindCampaign, canAddSquad, eligibleKit, localizeText, retrainSquad, siteOf19, specUnlock, squadRosterMax, mtfsOf, squadMembers, squadAway, squadOfOp, deployCap, qualifiedFor } from "../campaign/org";
+import { MTF_CONFIG, SPECIALTIES, SPECS, type SpecialtyId } from "../data/mtf";
 import { armoryHtml, barracksHtml, barracksTarget, BARRACKS_ROOM, type QuartersCtx } from "./quarters";
 import { leaveToward, wireStage } from "./stage/scene";
 import { INSPECTION, inspectionChecks, inspectionSoon } from "../campaign/inspection";
@@ -64,7 +66,7 @@ import {
   promoteGuard, breachGuards, letGuardsHandleRiot, letGuardsHandleRaid, raidArrivalText, raidOdds, postedAt, postGuard, unposted, TRAINING, canTrain, squadSize, train, type Alert, type Guard,
 } from "../campaign/security";
 import { HEAVY, type ScpId } from "../game/types";
-import { esc } from "./util";
+import { esc, localizeDom } from "./util";
 
 const MAX_DCLASS = 4, MAX_WATCHERS = 2;
 type Tab = "command" | "world" | "site" | "research" | "personnel" | "armory" | "history";
@@ -79,6 +81,8 @@ export interface HubActions {
   newCampaign: (opts: NewCampaignOptions, slot: Slot) => void;
   loadSlot: (slot: Slot) => void;
   importCampaign: (c: Campaign) => void;
+  menu: () => void;
+  newMtf: () => void;
 }
 
 const KIND_NAMES = { raid: "Raid", riot: "Riot", outbreak: "SCP-610", breach: "Breach", recovery: "Manhunt", coverup: "Cover-up", strike: "Strike", escort: "Ambush", retaliation: "Retaliation", rescue: "Lost team", emergency: "Site emergency" } as const;
@@ -265,6 +269,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       <span class="pill ${c.researchers && researchersFree(c) <= 0 ? "warm" : ""}" title="Researchers not assigned to a project, out of everyone on staff.${c.researchers && researchersFree(c) <= 0 ? " All of them are busy: new research has to wait." : ""}">${icon("researchers", 14)}Researchers ${researchersFree(c)}/${c.researchers} free</span>
       <span class="pill ${pw ? "hot" : ""}">${icon("power", 14)}Power ${powerUse(c)}/${powerSupply(c)}</span>
       ${c.debug ? `<span class="pill hot">Debug save</span>` : ""}
+      <button class="act" id="menuBtn" type="button" title="Back to the title screen (the campaign is saved)">Main menu</button>
       <button class="act" id="campaignsBtn" type="button">Campaigns${c.ironman ? " · Ironman" : ""}</button>
       <button class="act" id="exportBtn" type="button" title="Download this campaign as a file, to keep or move to another browser">Export save</button>
       ${c.ironman ? `<span class="act disabled" title="Ironman: this campaign can't be replaced by loading a save over it.">Import save</span>` : `<label class="act" for="importFile" title="Load a campaign from an exported file. It replaces the current one.">Import save</label>`}
@@ -298,6 +303,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     <button class="act primary" type="button" id="overBtn">Start a new campaign</button>
   </div></div>` : ""}
 </main>`;
+    bindCampaign(c); localizeDom(root, localizeText);
     bind(); wireSound(root); hubSounds(); wireStages();
   }
 
@@ -307,7 +313,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   /** Planes in the air: squads flying out to an incident and home again, placed by the clock (hours included), so
    *  they move along their route while time runs. */
   function flightMarkup(k: number) {
-    const [sx, sy] = project(SITE19.lon, SITE19.lat), now = c.day + (c.hour ?? 0) / 24;
+    const [sx, sy] = project(siteOf19(c).lon, siteOf19(c).lat), now = c.day + (c.hour ?? 0) / 24;
     const plane = (ax: number, ay: number, bx: number, by: number, f: number, cls: string, title: string) => {
       f = Math.max(0, Math.min(1, f));
       const z = cls === "out" ? 1.7 : 1;   // the squad on its way out is the one to watch
@@ -487,7 +493,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
           ${row(`Council grant: base`, gp.base)}${row(`Standing ${c.council.standing}`, gp.standing)}${row(`${gp.held} ${gp.held === 1 ? "anomaly" : "anomalies"} held`, gp.anomalies)}${row(`${plural(gp.yearsRun, "year")} of service`, gp.years)}${row("Raised grant", gp.raised)}${row(`${DIFFICULTIES[c.difficulty ?? "agent"].name} difficulty`, gp.difficulty)}${row("Emergency repayment", gp.repay, "warn")}
           ${REGION_IDS.filter(r => regionFunding(c, r)).map(r => row(REGIONS[r].front, regionFunding(c, r))).join("")}</ul></div>
         <div><div class="label">Each month out</div><ul class="fin">
-          ${row("Facility upkeep", -up.facilities)}${row(`Operatives' pay (${c.roster.filter(o => o.alive).length})`, -up.operatives)}${row(`Guards' pay (${c.guards.filter(g => g.alive).length})`, -up.guards)}${row(`${ALERTS[c.alert].name} alert`, -up.alert)}</ul></div>
+          ${row("Facility upkeep", -up.facilities)}${row(`Operatives' pay (${c.roster.filter(o => o.alive).length})`, -up.operatives)}${row(`Guards' pay (${c.guards.filter(g => g.alive).length})`, -up.guards)}${row("Supply routes (remote site)", -up.supply)}${row(`${ALERTS[c.alert].name} alert`, -up.alert)}</ul></div>
       </div>
       ${why.length ? `<p class="muted">The grant has changed since last month: ${esc(why.join("; "))}.</p>` : ""}
       ${c.council.repay ? `<p class="warn">Emergency appropriation: $${c.council.repay.n}k comes off each of the next ${plural(c.council.repay.left, "grant")}.</p>` : ""}
@@ -679,7 +685,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     const carry = (Object.keys(ITEMS) as ItemId[]).filter(i => !ITEMS[i].armor && ((c.inventory[i] || 0) > 0) && (g.armor === "armor_heavy" || !HEAVY.includes(i)));
     const slot = (i: number) => `<select id="gear-${o.id}-${i}" data-gear="${o.id}" data-slot-i="${i}" aria-label="${esc(o.name)} item slot ${i + 1}">
       <option value="">Empty slot</option>
-      ${carry.map(it => { const left = spare(it, o.id, i); return `<option value="${it}" ${g.items[i] === it ? "selected" : ""} ${left < 1 && g.items[i] !== it ? "disabled" : ""}>${ITEMS[it].name} (${Math.max(0, left)} left)</option>`; }).join("")}
+      ${carry.map(it => { const left = spare(it, o.id, i), q = qualifiedFor(c, o, it); return `<option value="${it}" ${g.items[i] === it ? "selected" : ""} ${(left < 1 && g.items[i] !== it) || q ? "disabled" : ""}>${ITEMS[it].name} (${q ? "not trained" : `${Math.max(0, left)} left`})</option>`; }).join("")}
     </select>`;
     const kinds = ARMOR_KINDS.filter(k => (c.inventory[k] || 0) > 0 || g.armor === k);
     return `<div class="loadrow"><b>${esc(o.call)} ${esc(fieldName(o))}</b>
@@ -696,7 +702,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   function worldTab() {
     const [x0, y0, w, h] = [8, 14, 344, 124];
     const path = (poly: [number, number][]) => "M" + poly.map(([lo, la]) => project(lo, la).map(v => v.toFixed(1)).join(",")).join("L") + "Z";
-    const [sx, sy] = project(SITE19.lon, SITE19.lat);
+    const [sx, sy] = project(siteOf19(c).lon, siteOf19(c).lat);
     const selInc = mapSel?.startsWith("inc:") ? c.incidents.find(i => i.id === mapSel!.slice(4)) ?? null : null;
     const selLead = mapSel?.startsWith("lead:") ? c.leads?.list.find(l => l.id === mapSel!.slice(5)) ?? null : null;
     const selFac = mapSel?.startsWith("fac:") ? FACILITIES_WORLD.find(f => f.id === mapSel!.slice(4)) ?? null : null;
@@ -704,7 +710,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     // zoom: every on-screen size is multiplied by k so markers and text stay the same size at any zoom
     // k: map units per "design pixel", from the zoom and the map's width on screen (bigger on a phone)
     const mapPx = Math.max(300, (document.querySelector(".geomap svg")?.clientWidth ?? (window.innerWidth < 960 ? window.innerWidth - 40 : window.innerWidth * 0.66)));
-    if (Math.abs(geoView.h / geoView.w - mapAspect()) > 0.01) { const [s19x] = project(SITE19.lon, SITE19.lat); geoView = clampView({ ...geoView, x: geoView.w >= WORLD_VIEW.w ? s19x - 80 : geoView.x }); }
+    if (Math.abs(geoView.h / geoView.w - mapAspect()) > 0.01) { const [s19x] = project(siteOf19(c).lon, siteOf19(c).lat); geoView = clampView({ ...geoView, x: geoView.w >= WORLD_VIEW.w ? s19x - 80 : geoView.x }); }
     const v = geoView, k = Math.max(0.25, v.w / mapPx * 2.6);
     const label = (r: RegionId) => REGIONS[r].name.replace("Western ", "W. ").replace("Eastern ", "E. ").replace("United States", "US").replace(" and the Middle East", " & M.E.");
     // regions as territories: the land inside each region's boxes, tinted by its exposure
@@ -1324,9 +1330,44 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     const entering = lastDrawn !== tab; lastDrawn = tab;
     return { c, opSel, eqSlot, gearOf, fieldHp, dossier, archive, archiveHtml, entering };
   }
+  /** Phase 5: the site's MTFs, their squads and people, from the board on the barracks wall. */
+  function orgPanel(head: (t: string) => string) {
+    const ms = mtfsOf(c), cap = deployCap(c), max = squadRosterMax(c);
+    const lamp = (o: Operative) => { const t = o.busy ? "away" : injured(c, o) || tiredness(o) === "exhausted" ? "bad" : o.hp < o.maxHp || tiredness(o) === "tired" ? "warn" : "ok"; return `<i class="olamp t-${t}"></i>`; };
+    const moveSel = (o: Operative) => `<select data-sqmove="${o.id}" aria-label="Assign ${esc(o.name)}">${ms.flatMap(m => m.squads.map(sq => `<option value="${sq.id}" ${o.squad === sq.id ? "selected" : ""}>${esc(m.designation)} · ${esc(sq.name)}</option>`)).join("")}<option value="" ${o.squad ? "" : "selected"}>Reserve</option></select>`;
+    const row = (o: Operative) => `<li>${lamp(o)}<b>${esc(o.call)}</b> ${esc(fieldName(o))} <span class="muted">${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}${o.injury && o.injury.until > c.day ? ` · ${esc(o.injury.name)}` : o.busy ? ` · away ${o.busy.daysLeft} d` : ""}</span>${moveSel(o)}</li>`;
+    const reserve = c.roster.filter(o => o.alive && (!o.squad || !squadOfOp(c, o)));
+    const hist = (c.history ?? []).filter(h => h.cat === "deployment").slice(-5).reverse();
+    const kit = eligibleKit(c).map(i => `${ITEMS[i].name}: ${c.inventory[i] ?? 0}`).join(" · ");
+    const next = ms.length < MTF_CONFIG.maxMtfs ? (["bio", "heavy", "recon"] as const).map(sp => ({ sp, why: specUnlock(c, sp) })) : [];
+    const newWhy = ms.length >= MTF_CONFIG.maxMtfs ? `At most ${MTF_CONFIG.maxMtfs} MTFs.` : c.council.standing < MTF_CONFIG.mtfStanding ? `Needs Council standing ${MTF_CONFIG.mtfStanding} (now ${c.council.standing}).` : c.funds < MTF_CONFIG.mtfCost ? `Needs $${MTF_CONFIG.mtfCost}k.` : next.every(x => x.why) ? "No other specialization is unlocked yet." : null;
+    return `${head(`Organization · ${esc(siteOf19(c).designation)}`)}
+      <div class="fbody org">
+      ${ms.map(m => `<section class="orgmtf">
+        <h4>${esc(m.designation)} "${esc(m.name)}"</h4>
+        <p class="specs">${esc(SPECS[m.spec].name)} · chartered ${dateText(m.founded)} · deploys ${cap} per squad (Foundation doctrine) · ${c.roster.filter(o => o.alive && m.squads.some(sq => sq.id === o.squad) && deployable(c, o)).length} fit of ${c.roster.filter(o => o.alive && m.squads.some(sq => sq.id === o.squad)).length}</p>
+        ${m.squads.map(sq => { const mem = squadMembers(c, sq.id), away = squadAway(c, sq.id), re = sq.retrainUntil && sq.retrainUntil > c.day;
+          return `<div class="orgsq">
+            <div class="sqhead"><input data-sqname="${sq.id}" value="${esc(sq.name)}" maxlength="24" aria-label="Squad name"><button type="button" class="act" data-sqrename="${sq.id}">Rename</button>
+              <select data-sqspec="${sq.id}" aria-label="Squad specialty">${SPECS[m.spec].specialties.map(id => `<option value="${id}" ${sq.specialty === id ? "selected" : ""}>${esc(SPECIALTIES[id].name)}</option>`).join("")}</select></div>
+            <p class="specs">${mem.length}/${max} on the roster · ${mem.filter(o => deployable(c, o)).length} fit to deploy${away ? ` · <b>${esc(away)}</b>` : ""}${re ? ` · <span class="warn">retraining, ${sq.retrainUntil! - c.day} d: specialist kit unusable</span>` : ""}</p>
+            <p class="muted">${esc(SPECIALTIES[sq.specialty].desc)} Changing specialty takes ${MTF_CONFIG.retrainDays} days of retraining.</p>
+            <ul class="orglist">${mem.map(row).join("") || `<li class="muted">Nobody assigned.</li>`}</ul>
+          </div>`; }).join("")}
+        ${(() => { const why = canAddSquad(c, m); return `<div class="row"><input id="newSq-${m.id}" maxlength="24" placeholder="New squad name"><select id="newSqSpec-${m.id}">${SPECS[m.spec].specialties.map(id => `<option value="${id}">${esc(SPECIALTIES[id].name)}</option>`).join("")}</select><button type="button" class="act" data-addsq="${m.id}" ${why ? `disabled title="${esc(why)}"` : ""}>Raise a squad · $${MTF_CONFIG.squadCost}k</button>${why ? `<span class="muted">${esc(why)}</span>` : ""}</div>`; })()}
+      </section>`).join("")}
+      <section class="orgmtf"><h4>Reserve · ${reserve.length}</h4><p class="muted">At the site but in no squad: rotate them in as people are hurt or tired. Recruit more at Command.</p><ul class="orglist">${reserve.map(row).join("") || `<li class="muted">Nobody in reserve.</li>`}</ul></section>
+      <section class="orgmtf"><h4>Specialist kit in stores</h4><p class="specs">${kit || "None. Squads' specialist kit is built at the workshop once a squad is trained for it."}</p></section>
+      <section class="orgmtf"><h4>Operational history</h4>${hist.length ? `<ul class="memorial">${hist.map(h => `<li>${dateText(h.day)}: ${esc(h.text)}</li>`).join("")}</ul>` : `<p class="muted">No deployments yet.</p>`}</section>
+      <section class="orgmtf"><h4>Another MTF</h4><p class="muted">${next.map(x => `${esc(SPECS[x.sp].name)}: ${x.why ? esc(x.why) : "unlocked"}`).join(" · ")}</p>
+        <div class="row"><button type="button" class="act" data-newmtf ${newWhy ? `disabled title="${esc(newWhy)}"` : ""}>Charter another MTF · $${MTF_CONFIG.mtfCost}k</button>${newWhy ? `<span class="muted">${esc(newWhy)}</span>` : ""}</div></section>
+      </div>`;
+  }
+
   /** The wall archive opened from the barracks: site staff, retired operatives, the memorial. */
   function archiveHtml(k: string) {
     const head = (t: string) => `<header class="filehead"><span class="eyebrow">Site-19 · Barracks</span><h3>${t}</h3><button type="button" class="x" data-archive="${k}" aria-label="Close">×</button></header>`;
+    if (k === "org") return orgPanel(head);
     if (k === "staff") return `${head(`Site staff · ${plural(c.researchers, "researcher")}, ${plural(c.engineers, "engineer")}`)}
       <p class="muted">Guards, training, therapy, D-Class, engineers and prisoners are managed from their facilities on the Site-19 tab.</p>
       ${staffList("researcher")}${staffList("engineer")}
@@ -1456,6 +1497,11 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     root.querySelectorAll<HTMLElement>("[data-hire]").forEach(b => b.onclick = () => { const k = c.recruits?.find(x => x.id === b.dataset.hire); if (k) change(() => hireCandidate(c, k, b.dataset.hiretf === "eta10" ? "eta10" : "e11")); });
     root.querySelectorAll<HTMLElement>("[data-op]").forEach(b => b.onclick = () => { if (opSel !== b.dataset.op) dosTab = "record"; opSel = opSel === b.dataset.op ? null : b.dataset.op!; lookOpen = false; archive = null; reframe = true; render(); });
     // the barracks and the armory
+    root.querySelectorAll<HTMLSelectElement>("[data-sqmove]").forEach(sel => sel.onchange = () => { const o = c.roster.find(x => x.id === sel.dataset.sqmove); if (!o) return; const why = assignToSquad(c, o, sel.value || undefined); if (why) flashMsg = why; act.save(); render(); });
+    root.querySelectorAll<HTMLSelectElement>("[data-sqspec]").forEach(sel => sel.onchange = () => { const sq = mtfsOf(c).flatMap(m => m.squads).find(x => x.id === sel.dataset.sqspec); if (sq) change(() => { retrainSquad(c, sq, sel.value as SpecialtyId); }); });
+    root.querySelectorAll<HTMLElement>("[data-sqrename]").forEach(b => b.onclick = () => { const sq = mtfsOf(c).flatMap(m => m.squads).find(x => x.id === b.dataset.sqrename), v = root.querySelector<HTMLInputElement>(`[data-sqname="${b.dataset.sqrename}"]`)?.value.trim(); if (sq && v) change(() => { sq.name = v; }); });
+    root.querySelectorAll<HTMLElement>("[data-addsq]").forEach(b => b.onclick = () => { const m = mtfsOf(c).find(x => x.id === b.dataset.addsq); if (!m) return; const nm = root.querySelector<HTMLInputElement>(`#newSq-${m.id}`)?.value ?? "", sp = root.querySelector<HTMLSelectElement>(`#newSqSpec-${m.id}`)?.value as SpecialtyId; change(() => { const why = addSquad(c, m, nm, sp); if (why) flashMsg = why; }); });
+    root.querySelectorAll<HTMLElement>("[data-newmtf]").forEach(b => b.onclick = () => act.newMtf());
     root.querySelectorAll<HTMLElement>("[data-dostab]").forEach(b => b.onclick = () => { dosTab = b.dataset.dostab!; reframe = false; render(); });
     root.querySelectorAll<HTMLElement>("[data-archive]").forEach(b => b.onclick = () => { archive = archive === b.dataset.archive ? null : b.dataset.archive!; if (archive) opSel = null; reframe = true; render(); });
     const toArmory = (id?: string) => { if (id) opSel = id; eqSlot = null; tab = "armory"; try { localStorage.setItem("site19-tab", tab); } catch { /* fine */ } render(); };
@@ -1556,6 +1602,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       else { const n = LOOK_PARTS[k]; l[k] = (l[k] + d + n) % n; }
       change(() => { o.look = l; });
     });
+    on("menuBtn", () => act.menu());
     on("renameBtn", () => {
       const o = c.roster.find(x => x.id === opSel), n = root.querySelector<HTMLInputElement>("#renameName")!.value.trim(), k = root.querySelector<HTMLInputElement>("#renameCall")!.value.trim();
       const nk = root.querySelector<HTMLInputElement>("#renameNick")!.value.trim().replace(/"/g, "");
@@ -1624,7 +1671,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     }
     root.querySelectorAll<HTMLElement>("[data-zoom]").forEach(b => b.onclick = () => {
       const z = b.dataset.zoom, cx = geoView.x + geoView.w / 2, cy = geoView.y + geoView.h / 2;
-      if (z === "world") { const [s19x] = project(SITE19.lon, SITE19.lat); geoView = clampView({ x: s19x - WORLD_VIEW.w / 2, y: WORLD_VIEW.y, w: WORLD_VIEW.w, h: 0 }); }
+      if (z === "world") { const [s19x] = project(siteOf19(c).lon, siteOf19(c).lat); geoView = clampView({ x: s19x - WORLD_VIEW.w / 2, y: WORLD_VIEW.y, w: WORLD_VIEW.w, h: 0 }); }
       else { const nw = geoView.w * (z === "in" ? 1 / 1.5 : 1.5); geoView = clampView({ x: cx - nw / 2, y: cy - nw * mapAspect() / 2, w: nw, h: 0 }); }
       render();
     });
