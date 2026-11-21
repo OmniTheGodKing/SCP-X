@@ -74,3 +74,5 @@
 .assess ul { margin: 4px 0 0; padding-left: 18px; font-size: 12.5px; display: grid; gap: 1px; }
 .assess .good { color: var(--ok); } .assess .bad { color: var(--alert); }
 .mlabel { font: 600 10.5px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+.dept .enterroom { align-self: flex-end; margin-left: auto; padding: 9px 14px; background: rgba(8, 10, 12, .85); border: 1px solid var(--manila); color: var(--manila); font: 600 12px var(--font-mono) !important; letter-spacing: .06em; text-transform: uppercase; }
+.dept .enterroom:hover { background: var(--manila); color: #14181b; }

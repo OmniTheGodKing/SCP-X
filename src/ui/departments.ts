@@ -46,14 +46,14 @@ export function advisorSvg(id: AdvisorId) {
   return `<svg class="advisor-svg" viewBox="0 0 200 240" role="img" aria-label="${esc(ADVISORS[id].name)}">${body}${head}${glasses}</svg>`;
 }
 
-function band(c: Campaign, id: AdvisorId, room: string, stations: string, extraCls = "") {
+function band(c: Campaign, id: AdvisorId, room: string, stations: string, extraCls = "", enter?: { id: string; label: string }) {
   const a = ADVISORS[id], r = remark(c, id), era = eraOf(dateOf(c.day).getUTCFullYear());
   const act = r.plan ? `data-plan="${r.plan}"` : r.goto ? `data-goto="${r.goto}"` : "";
   return `<section class="dept dept-${room} era-${era} ${extraCls}" aria-label="${esc(a.dept)}">
     <div class="deptroom" aria-hidden="true"></div>
     <div class="advisor">${advisorSvg(id)}<div class="nameplate"><b>${esc(a.name)}</b><span>${esc(a.title)}</span></div></div>
     <div class="remark tone-${r.tone}"><span class="eyebrow">${esc(a.dept)} · ${dateText(c.day)}</span><p>${esc(r.text)}</p>${act && r.label ? `<button type="button" class="act" ${act}>${esc(r.label)}</button>` : ""}</div>
-    <div class="stations">${stations}</div>
+    <div class="stations">${stations}${enter ? `<button type="button" class="enterroom" data-enter="${esc(enter.id)}">${esc(enter.label)} →</button>` : ""}</div>
   </section>`;
 }
 
@@ -64,7 +64,7 @@ export function commandBand(c: Campaign) {
   return band(c, "carter", "ops", `
     <div class="plotboard"><span class="boardtitle">Situation board</span>${pins || `<p class="quiet">No open incidents.</p>`}</div>
     <button type="button" class="display" data-goto="world"><span class="scan"></span><b>World map</b><small>${c.incidents.length} open · exposure ${c.exposure}</small></button>
-    <button type="button" class="display squad" data-goto="personnel"><b>${ready}/${alive}</b><small>operatives fit to deploy</small></button>`);
+    <button type="button" class="display squad" data-goto="personnel"><b>${ready}/${alive}</b><small>operatives fit to deploy</small></button>`, "", (() => { const f = c.base.facilities.find(x => x.type === "command"); return f ? { id: f.id, label: "Enter the operations room" } : undefined; })());
 }
 
 export function researchBand(c: Campaign) {
@@ -77,7 +77,7 @@ export function researchBand(c: Campaign) {
   }).join("");
   const idle = researchersFree(c);
   const test = c.research.testing ? `<div class="bench chamber"><span class="flask amber"><i style="--v:.5"></i></span><b>Test under way</b><small>SCP-173's cell</small></div>` : "";
-  return band(c, "bell", "lab", `${benches}${test}${idle > 0 ? `<div class="bench idle"><span class="stools">${"<i></i>".repeat(Math.min(6, idle))}</span><b>${idle} unassigned</b><small>Waiting for a project</small></div>` : ""}${!benches && !test && !idle ? `<p class="quiet">No researchers on staff. Hire them at a research lab.</p>` : ""}`);
+  return band(c, "bell", "lab", `${benches}${test}${idle > 0 ? `<div class="bench idle"><span class="stools">${"<i></i>".repeat(Math.min(6, idle))}</span><b>${idle} unassigned</b><small>Waiting for a project</small></div>` : ""}${!benches && !test && !idle ? `<p class="quiet">No researchers on staff. Hire them at a research lab.</p>` : ""}`, "", (() => { const f = c.base.facilities.find(x => x.type === "lab" && x.daysLeft === 0) ?? c.base.facilities.find(x => x.type === "lab"); return f ? { id: f.id, label: "Enter the laboratory" } : undefined; })());
 }
 
 export function engineeringBand(c: Campaign) {

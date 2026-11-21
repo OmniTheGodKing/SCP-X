@@ -31,4 +31,11 @@ async function planIncident(p, id) {
   if (!(await p.$(`[data-plan="${id}"]`))) await openTarget(p, 'comms');
   await p.click(`[data-plan="${id}"]`);
 }
-module.exports = { ROOT, GAME_URL, OUT, close, dbg, fresh, reporter, openTarget, planIncident };
+/** Open a tab and go into its room: Command and Research through the department room's entry button, the
+ *  quarters through the Site-19 surface (the Barracks and Armory tabs show their own rooms). */
+async function openRoomTab(p, t) {
+  if (t === 'personnel') { await p.click('[data-tab="site"]'); await p.waitForTimeout(60); await p.click('[data-enter="surface:quarters"]'); await p.waitForTimeout(120); return; }
+  await p.click(`[data-tab="${t}"]`); await p.waitForTimeout(60);
+  if (t === 'command' || t === 'research') { const b = await p.$('.dept [data-enter]'); if (b) { await b.click(); await p.waitForTimeout(120); } }
+}
+module.exports = { ROOT, GAME_URL, OUT, close, dbg, fresh, reporter, openTarget, planIncident, openRoomTab };
