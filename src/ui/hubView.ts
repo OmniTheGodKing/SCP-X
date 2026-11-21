@@ -27,6 +27,8 @@ import { MEDALS } from "../data/bios";
 import { LEANS, QUALITY, UNITS, nationalityOf } from "../data/units";
 import { FACIAL, HAIR_BY_SEX, HAIR_COLORS, HAIR_STYLES, HEADGEAR, LOOK_PARTS, SEX_NAMES, SKIN, fitLook, rollLook } from "../data/looks";
 import { portraitSvg } from "./portrait";
+import { armoryHtml, barracksHtml, barracksTarget, BARRACKS_ROOM, type QuartersCtx } from "./quarters";
+import { leaveToward, wireStage } from "./stage/scene";
 import { INSPECTION, inspectionChecks, inspectionSoon } from "../campaign/inspection";
 import {
   UPGRADE, countOperational, damageEffect, engineersBusy, repairOf, GEN_TIERS, canRefitGen, genTierOf, generatorOutput, refitGenerator, canUpgrade, upgradeFacility, RECREATION, canAddRecreation, addRecreation, DEMOLISH, canDemolish, demolish, demolishDays, demolishLeavesShort, ENGINEER_COST, EXCAVATE, FACILITIES, nameInText, GRADE_NAMES, MAX_LEVELS, REPAIR, SLOTS, build, canBuild, canExcavate, canRepair,
@@ -64,7 +66,7 @@ import { HEAVY, type ScpId } from "../game/types";
 import { esc } from "./util";
 
 const MAX_DCLASS = 4, MAX_WATCHERS = 2;
-type Tab = "command" | "world" | "site" | "research" | "personnel" | "history";
+type Tab = "command" | "world" | "site" | "research" | "personnel" | "armory" | "history";
 /** History tab: the category shown and the incident report opened from it. */
 let histCat: HistCat | "all" = "all", openReport: string | null = null;
 
@@ -138,7 +140,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   /** The research category tab open. */
   let resCat: ResearchCat = "anomalies";
   /** The equipment slot open on the personnel file. */
-  let eqSlot: string | null = "weapon";
+  let eqSlot: string | null = null;
   /** Two-step confirmation inside the page (the claude.ai viewer blocks the browser's own confirm boxes): the first
    *  click turns the button into a warning, a second click within four seconds goes ahead. */
   let armedKey = "", armedTimer = 0;
@@ -159,6 +161,12 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let flashMsg = "";
   let opSel: string | null = null;
   let lookOpen = false;   // keep the appearance editor open while clicking through parts
+  /** Which page of the personnel file is open, and which wall archive in the barracks. */
+  let dosTab = "record";
+  let archive: string | null = null;
+  let lastDrawn = "";
+  /** Point the barracks camera at the selected operative on the next draw (not after a drag). */
+  let reframe = true;
   let dCount = 2;
   let sel: { level: number; slot: number } | null = null;
   let resetArmed = 0;
@@ -224,6 +232,12 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   }
   if (!clickSounds.has(root)) { clickSounds.add(root); root.addEventListener("click", e => { const t = (e.target as HTMLElement).closest?.("button,summary,label.act"); if (!t) return; if (t.matches(".tab")) ui.tab(); else if ((t as HTMLButtonElement).disabled) ui.deny(); else ui.click(); }); }
 
+  function wireStages() {
+    const st = root.querySelector<HTMLElement>("[data-stage=barracks]");
+    if (st) { const o = c.roster.find(x => x.id === opSel && x.alive && !x.busy); wireStage(st, "barracks", barracksTarget(c, o ? o.id : null), { yaw: 34, minDist: -420, maxDist: 1300 }, reframe); reframe = false; }
+    const arm = root.querySelector<HTMLElement>("[data-stage=armory]");
+    if (arm && !opSel) opSel = c.roster.find(x => x.alive)?.id ?? null;
+  }
   function render() {
     if (planning && !c.incidents.some(i => i.id === planning)) planning = null;
     { const pl = c.incidents.find(i => i.id === planning); for (const id of [...chosen]) if (!(pl ? readyFor(pl) : ready()).some(o => o.id === id)) chosen.delete(id); }
@@ -262,12 +276,13 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     ${tabBtn("world", "World")}
     ${tabBtn("site", "Site-19")}
     ${tabBtn("research", `Research${researchersFree(c) > 0 && c.researchers ? ` · ${researchersFree(c)} idle` : ""}`)}
-    ${tabBtn("personnel", "Personnel")}
+    ${tabBtn("personnel", "Barracks")}
+    ${tabBtn("armory", "Armory")}
     ${tabBtn("history", "History")}
   </nav>
   ${flashMsg ? `<p class="warn-box" role="status">${esc(flashMsg)}</p>` : ""}
   ${coachCard()}
-  ${tab === "command" ? commandTab() : tab === "world" ? worldTab() : tab === "site" ? siteTab() : tab === "research" ? researchTab() : tab === "history" ? historyTab() : personnelTab()}
+  ${tab === "command" ? commandTab() : tab === "world" ? worldTab() : tab === "site" ? siteTab() : tab === "research" ? researchTab() : tab === "history" ? historyTab() : personnelTab()}${tab === "personnel" || tab === "armory" ? "" : (lastDrawn = "", "")}
   ${!c.over && c.notices?.length ? `<div class="overlay fixed"><div class="sheet notice" role="dialog" aria-label="Time paused">
     <div class="label">${dateText(c.day)} · time paused</div>
     <ul class="debrief">${c.notices.slice(0, 8).map(n => `<li class="${n.kind}">${esc(n.text)}</li>`).join("")}${c.notices.length > 8 ? `<li>…and ${c.notices.length - 8} more in the site log.</li>` : ""}</ul>
@@ -282,7 +297,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     <button class="act primary" type="button" id="overBtn">Start a new campaign</button>
   </div></div>` : ""}
 </main>`;
-    bind(); wireSound(root); hubSounds();
+    bind(); wireSound(root); hubSounds(); wireStages();
   }
 
   const nightPoints = () => nightPointsOf(c);
@@ -1301,164 +1316,90 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     return { hp: o.hp + bonus, max: o.maxHp + bonus, why };
   }
   function personnelTab() {
-    return `<div class="hubgrid">
-    <section class="col">
-      <div class="card">
-        <div class="label">Epsilon-11 "Nine-Tailed Fox" roster</div>
-        <p class="muted">Select an operative to see their class, perks and traits. ${esc(TF_DESC.e11)}</p>
-        <div class="roster">${c.roster.filter(o => o.alive && tfOf(o) === "e11").map(opRow).join("") || `<p class="muted">Nobody on this roster.</p>`}</div>
-        ${c.tf.eta10 ? `<div class="label" style="margin-top:14px">Eta-10 "See No Evil" roster</div>
-        <p class="muted">${esc(TF_DESC.eta10)}</p>
-        <div class="roster">${c.roster.filter(o => o.alive && tfOf(o) === "eta10").map(opRow).join("") || `<p class="muted">Nobody yet. Hire recruits into Eta-10 from the recruit pool.</p>`}</div>` : ""}
-        <div class="row"><button class="act" type="button" data-gotocommand>Recruit at Command · ${plural((c.recruits ?? []).length, "candidate")} this month</button></div>
-      </div>
-    </section>
-    <section class="col">
-      ${opDetail()}
+    const q = quartersCtx();
+    return tab === "armory" ? armoryHtml(q) : barracksHtml(q);
+  }
+  function quartersCtx(): QuartersCtx {
+    const entering = lastDrawn !== tab; lastDrawn = tab;
+    return { c, opSel, eqSlot, gearOf, fieldHp, dossier, archive, archiveHtml, entering };
+  }
+  /** The wall archive opened from the barracks: site staff, retired operatives, the memorial. */
+  function archiveHtml(k: string) {
+    const head = (t: string) => `<header class="filehead"><span class="eyebrow">Site-19 · Barracks</span><h3>${t}</h3><button type="button" class="x" data-archive="${k}" aria-label="Close">×</button></header>`;
+    if (k === "staff") return `${head(`Site staff · ${plural(c.researchers, "researcher")}, ${plural(c.engineers, "engineer")}`)}
       <p class="muted">Guards, training, therapy, D-Class, engineers and prisoners are managed from their facilities on the Site-19 tab.</p>
-      <div class="card"><div class="label">Site staff · ${plural(c.researchers, "researcher")}, ${plural(c.engineers, "engineer")}</div>
-        ${staffList("researcher")}${staffList("engineer")}
-        ${c.staffLost?.length ? `<div class="label" style="margin-top:8px">Staff lost</div><ul class="memorial">${c.staffLost.map(l => `<li><b>${esc(l.name)}</b>, ${l.kind}${l.field ? ` (${esc(FIELDS[l.field].name.toLowerCase())})` : l.trade ? ` (${esc(TRADES[l.trade].name.toLowerCase())})` : ""}: ${esc(l.how)}, ${dateText(l.day)}</li>`).join("")}</ul>` : ""}
-      </div>
-      ${c.retired?.length ? `<div class="card">
-        <div class="label">Retired</div>
-        <ul class="memorial">${c.retired.map(r => `<li>${r.look ? portraitSvg(r.look, r.unit, 36) : ""} <b>${esc(r.name)}</b> (${esc(r.call)}), ${RANKS[r.rank]}${r.unit ? `, formerly ${esc(UNITS[r.unit].name)}` : ""} · ${plural(r.missions, "mission")}${r.kills ? `, ${plural(r.kills, "kill")}` : ""}${r.medals?.length ? ` · ${r.medals.map(m => MEDALS[m].name).join(", ")}` : ""} · ${r.trainer ? "trainer at the range" : "honourable discharge"}, ${dateText(r.day)}</li>`).join("")}</ul>
-      </div>` : ""}
-      ${c.roster.some(o => !o.alive) ? `<div class="card">
-        <div class="label">Memorial</div>
-        <ul class="memorial">${c.roster.filter(o => !o.alive).map(o => `<li>${portraitSvg(lookOf(o), o.unit, 36, true)} <b>${esc(fieldName(o))}</b> (${esc(o.call)}), ${RANKS[o.rank]}${o.unit ? `, formerly ${esc(UNITS[o.unit].name)}` : ""}${o.bio ? `, of ${esc(o.bio.home)}` : ""} · ${plural(o.missions, "mission")}, ${plural(o.kills, "kill")}${o.wounds ? `, wounded ${o.wounds}×` : ""}${o.seals ? `, ${o.seals} sealed` : ""}${o.medals?.length ? ` · ${o.medals.map(m => MEDALS[m].name).join(", ")}` : ""} · killed ${o.diedDay ? dateText(o.diedDay) : ""}${o.diedAt ? `, ${esc(o.diedAt)}` : ""}</li>`).join("")}</ul>
-      </div>` : ""}
-    </section>
-  </div>`;
+      ${staffList("researcher")}${staffList("engineer")}
+      ${c.staffLost?.length ? `<div class="label" style="margin-top:8px">Staff lost</div><ul class="memorial">${c.staffLost.map(l => `<li><b>${esc(l.name)}</b>, ${l.kind}${l.field ? ` (${esc(FIELDS[l.field].name.toLowerCase())})` : l.trade ? ` (${esc(TRADES[l.trade].name.toLowerCase())})` : ""}: ${esc(l.how)}, ${dateText(l.day)}</li>`).join("")}</ul>` : ""}`;
+    if (k === "retired") return `${head("Retired")}<ul class="memorial">${(c.retired ?? []).map(r => `<li>${r.look ? portraitSvg(r.look, r.unit, 36) : ""} <b>${esc(r.name)}</b> (${esc(r.call)}), ${RANKS[r.rank]}${r.unit ? `, formerly ${esc(UNITS[r.unit].name)}` : ""} · ${plural(r.missions, "mission")}${r.kills ? `, ${plural(r.kills, "kill")}` : ""}${r.medals?.length ? ` · ${r.medals.map(m => MEDALS[m].name).join(", ")}` : ""} · ${r.trainer ? "trainer at the range" : "honourable discharge"}, ${dateText(r.day)}</li>`).join("") || `<li class="muted">Nobody has retired yet.</li>`}</ul>`;
+    const dead = c.roster.filter(o => !o.alive);
+    return `${head("In memoriam")}${dead.length ? `<ul class="memorial">${dead.map(o => `<li>${portraitSvg(lookOf(o), o.unit, 36, true)} <b>${esc(fieldName(o))}</b> (${esc(o.call)}), ${RANKS[o.rank]}${o.unit ? `, formerly ${esc(UNITS[o.unit].name)}` : ""}${o.bio ? `, of ${esc(o.bio.home)}` : ""} · ${plural(o.missions, "mission")}, ${plural(o.kills, "kill")}${o.wounds ? `, wounded ${o.wounds}×` : ""}${o.seals ? `, ${o.seals} sealed` : ""}${o.medals?.length ? ` · ${o.medals.map(m => MEDALS[m].name).join(", ")}` : ""} · killed ${o.diedDay ? dateText(o.diedDay) : ""}${o.diedAt ? `, ${esc(o.diedAt)}` : ""}</li>`).join("")}</ul>` : `<p class="muted">No Epsilon-11 operative has died under this command. The plaque is blank.</p>`}`;
   }
 
-  /** XCOM-style equipment: a row of slots, and the one clicked opens below with its stats and what can go in it. */
-  function equipment(o: Operative) {
-    const g = gearOf(o.id), gun = gunFor(c, o), t = weaponOf(o), uni = uniformOf(c), slots = o.perks.includes("field_kit") ? 3 : 2;
-    const tile = (key: string, label: string, value: string, sub = "", art = "empty") => `<button type="button" class="eqslot ${eqSlot === key ? "on" : ""}" data-eqslot="${key}" aria-pressed="${eqSlot === key}"><span class="eqlabel">${label}</span>${gearArt(art)}<b>${esc(value)}</b>${sub ? `<span class="muted">${esc(sub)}</span>` : ""}</button>`;
-    const stat = (k: string, v: string) => `<span class="eqstat"><span class="muted">${k}</span> ${v}</span>`;
-    const pickCard = (attr: string, value: string, on: boolean, title: string, body: string, disabled = "") => `<button type="button" class="eqopt ${on ? "on" : ""}" ${attr}="${value}" ${disabled ? `disabled title="${esc(disabled)}"` : ""}><b>${esc(title)}</b><span class="muted">${body}</span></button>`;
-    const detail = (() => {
-      switch (eqSlot) {
-        case "weapon": return `<div class="eqstats">${stat("Damage", gun.dmg.join("–"))}${stat("Magazine", String(gun.mag))}${stat("Aim", `${gun.aim >= 0 ? "+" : ""}${gun.aim}`)}${stat("Move", `${TYPES[t].move >= 0 ? "+" : ""}${TYPES[t].move}`)}${stat("Crit", `+${TYPES[t].crit}%`)}${gun.pierce ? stat("Pierce", String(gun.pierce)) : ""}</div>
-          <p class="muted">${esc(TYPES[t].desc)}</p>
-          <div class="eqfitted"><div class="row"><span><span class="muted">Attachment</span> <b>${o.attachment ? esc(ATTACHMENTS[o.attachment].name) : "None"}</b>${o.attachment ? ` <span class="muted">· ${esc(ATTACHMENTS[o.attachment].desc)}</span>` : ""}</span><button class="act" type="button" data-eqslot="attachment">Change</button></div>
-            <div class="row"><span><span class="muted">Ammunition</span> <b>${o.ammoType ? esc(AMMO[o.ammoType].name) : "Standard ball"}</b>${o.ammoType ? ` <span class="muted">· ${esc(AMMO[o.ammoType].desc)}</span>` : ""}</span><button class="act" type="button" data-eqslot="ammo">Change</button></div></div>
-          <div class="eqopts">${weaponOptions(o).map(w => { const m = model(c.models[w]); return pickCard("data-setweapon", w, w === t, `${TYPES[w].name}: ${m.name}`, `${m.dmg.join("–")} damage · ${m.mag} rounds · aim ${m.aim >= 0 ? "+" : ""}${m.aim}. ${esc(TYPES[w].desc)}`); }).join("")}</div>
-          <p class="muted">Their class carries these two. Better models come from Weapons research and a workshop refit.</p>`;
-        case "attachment": return `<div class="eqopts">${pickCard("data-fitatt", "", !o.attachment, "None", "The weapon as issued.")}
-          ${(Object.keys(ATTACHMENTS) as AttachmentId[]).filter(a => o.attachment === a || (c.attachments[a] ?? 0) > 0).map(a => pickCard("data-fitatt", a, o.attachment === a, ATTACHMENTS[a].name, `${esc(ATTACHMENTS[a].desc)}${o.attachment === a ? " · fitted" : ` · ${c.attachments[a]} in stores`}`)).join("")}</div>
-          <p class="muted">Attachments are built in the workshop once researched. Fitting one takes it from stores; taking it off puts it back.</p>`;
-        case "ammo": return `<div class="eqopts">${pickCard("data-loadammo", "", !o.ammoType, "Standard ball", "Ordinary rounds.")}
-          ${(Object.keys(AMMO) as AmmoId[]).filter(a => o.ammoType === a || (c.ammo[a] ?? 0) > 0).map(a => pickCard("data-loadammo", a, o.ammoType === a, AMMO[a].name, `${esc(AMMO[a].desc)}${o.ammoType === a ? " · loaded" : ` · ${c.ammo[a]} in stores`}`)).join("")}</div>`;
-        case "armor": return `<div class="eqopts">${pickCard("data-kitarmor", "", !g.armor, "No armor slot", `Only the uniform: +${uni.hp} HP${uni.points ? `, +${uni.points} armor` : ""}.`)}
-          ${ARMOR_KINDS.filter(k => (c.inventory[k] ?? 0) > 0 || g.armor === k).map(k => { const st = armorStats(k, c.armorTier); return pickCard("data-kitarmor", k, g.armor === k, ITEMS[k].name, `+${st.hp} HP · ${st.points} armor${st.move ? ` · ${st.move > 0 ? "+" : ""}${st.move} move` : ""} · ${c.inventory[k] ?? 0} in stores. ${esc(ITEMS[k].desc)}`); }).join("")}</div>
-          <p class="muted">Their usual armor, taken from stores when they deploy (if there's one left). The uniform under it, ${esc(uni.name)}, is worn by everyone.</p>`;
-        case "uniform": return `<div class="eqstats">${stat("HP", `+${uni.hp}`)}${stat("Armor", `+${uni.points}`)}</div><p class="muted">${esc(uni.name)}: worn by every operative under any armor. Better uniforms come from Equipment research and apply to everyone at once.</p>`;
-        case "sidearm": return `<div class="eqstats">${stat("Damage", SIDEARM.dmg.join("–"))}${stat("Aim", String(SIDEARM.aim))}</div><p class="muted">${esc(SIDEARM.name)}: fired automatically when the main weapon is empty. Everyone carries one.</p>`;
-        default: {
-          const i = Number((eqSlot ?? "").slice(4));
-          if (!eqSlot?.startsWith("item") || i >= slots) return `<p class="muted">Click a slot to see it and change what goes in it.</p>`;
-          const carry = (Object.keys(ITEMS) as ItemId[]).filter(k => !ITEMS[k].armor && ((c.inventory[k] ?? 0) > 0 || g.items[i] === k));
-          return `<div class="eqopts">${pickCard("data-kititem", "", !g.items[i], "Empty", "Nothing in this slot.")}
-            ${carry.map(k => pickCard("data-kititem", k, g.items[i] === k, ITEMS[k].name, `${esc(ITEMS[k].desc)} · ${c.inventory[k] ?? 0} in stores${HEAVY.includes(k) ? " · heavy armor only" : ""}`, HEAVY.includes(k) && g.armor !== "armor_heavy" ? "Heavy weapons need heavy plate in the armor slot." : "")).join("")}</div>
-            <p class="muted">Items are built in the workshop. Used ones are gone; unused ones come back to stores.</p>`;
+  /** An operative's personnel file, beside them in the barracks: only what has to be read as text. Their kit is
+   *  changed in the Armory, and their face and build show on the figure itself. */
+  function dossier(o: Operative) {
+    const pair = perkChoices(o), tw = canTherapy(c, o), bad = o.traits.filter(t => TRAITS[t].bad), ms = maxSanOf(o), next = RANK_XP[o.rank + 1], fh = fieldHp(o);
+    const needs = (promotionDue(o) && !o.cls) || !!pair;
+    const dtab = needs ? "perks" : dosTab;
+    const tabs: [string, string][] = [["record", "Record"], ["perks", needs ? "Promotion ▲" : "Perks & traits"], ["look", "Appearance"], ["admin", "Admin"]];
+    const bar = (label: string, v: number, max: number, cls: string) => `<div class="fbar ${cls}"><span>${label}</span><b>${v}/${max}</b><i style="--v:${Math.max(0, Math.min(1, v / max))}"></i></div>`;
+    const body = (() => {
+      switch (dtab) {
+        case "perks": return `
+          ${promotionDue(o) && !o.cls ? `<p><b>Choose a class.</b> It decides the abilities they learn from here on.</p>
+            <div class="classpick">${(Object.keys(CLASSES) as ClassId[]).map(k => `<button type="button" class="classopt" data-class="${k}">
+              <b>${CLASSES[k].name}</b><span class="muted">${CLASSES[k].role}</span>
+              <span class="specs">Starts with ${PERKS[CLASSES[k].base].name}: ${esc(PERKS[CLASSES[k].base].desc)}</span>
+              <span class="specs">Later: ${CLASSES[k].choices.map(p => p.map(x => PERKS[x].name).join(" or ")).join(" · ")}</span></button>`).join("")}</div>` : ""}
+          ${pair ? `<p><b>Choose a perk for ${RANKS[o.rank]}.</b></p>
+            <div class="classpick two">${pair.map(p => `<button type="button" class="classopt" data-perk="${p}"><b>${PERKS[p].name}</b><span class="muted">${esc(PERKS[p].desc)}</span></button>`).join("")}</div>` : ""}
+          ${o.cls ? `<ol class="tree">
+              <li><b>${PERKS[CLASSES[o.cls].base].name}</b> <span class="muted">${esc(PERKS[CLASSES[o.cls].base].desc)}</span></li>
+              ${CLASSES[o.cls].choices.map((p, i) => { const got = o.perks[i + 1]; return `<li>${RANKS[i + 2]}: ${got ? `<b>${PERKS[got].name}</b> <span class="muted">${esc(PERKS[got].desc)}</span>` : `<span class="muted">${p.map(x => PERKS[x].name).join(" or ")}${o.rank >= i + 2 ? " (choose above)" : ""}</span>`}</li>`; }).join("")}
+              ${[5, 6].map(r => `<li>${RANKS[r]}: <span class="${o.rank >= r ? "" : "muted"}">${RANK_BONUS[r]}</span></li>`).join("")}
+            </ol>` : !promotionDue(o) ? `<p class="muted">No class yet: they choose one on their first promotion.</p>` : ""}
+          <div class="label" style="margin-top:10px">Traits</div>
+          ${o.traits.length ? `<ul class="traits">${o.traits.map(t => `<li class="${TRAITS[t].bad ? "bad" : "good"}"><b>${TRAITS[t].name}</b>: ${esc(TRAITS[t].desc)} <span class="muted">${esc(TRAITS[t].how)}</span>
+            ${TRAITS[t].bad && !o.busy ? `<span class="muted">Treatable at Psychological services.</span>` : ""}</li>`).join("")}</ul>
+            ${bad.length && tw ? `<p class="muted">${esc(tw)}</p>` : ""}` : `<p class="muted">None yet. Traits come from what happens to them on missions.</p>`}
+          ${o.cls && !o.busy ? `<p class="muted">Retraining (a new class, keeping their rank) is arranged at the training range.</p>` : ""}`;
+        case "look": {
+          const l = lookOf(o), part = (key: string, label: string, value: string) => `<div class="lookrow"><span>${label}</span><button class="act" type="button" data-look="${key}" data-d="-1" aria-label="Previous ${label.toLowerCase()}">‹</button><b>${esc(value)}</b><button class="act" type="button" data-look="${key}" data-d="1" aria-label="Next ${label.toLowerCase()}">›</button></div>`;
+          return `<p class="muted">Changes show on them in the room as you make them.</p>` + part("sex", "Sex", SEX_NAMES[o.sex ?? "m"]) + part("skin", "Skin tone", `${l.skin + 1} of ${SKIN.length}`) + part("hair", "Hair", HAIR_STYLES[l.hair]) + part("hairColor", "Hair colour", `${l.hairColor + 1} of ${HAIR_COLORS.length}`)
+            + (o.sex === "f" ? "" : part("facial", "Facial hair", FACIAL[l.facial])) + part("scar", "Scar", l.scar ? "Yes" : "No") + (o.unit && HEADGEAR[o.unit] ? part("headgear", "Headgear", l.headgear ? HEADGEAR[o.unit]![0] : "None") : "")
+            + `<p class="muted">Helmets and suit hoods replace the headgear when armor is worn: set that in the Armory.</p>`;
         }
+        case "admin": {
+          const tw2 = trainerWhy(c, o);
+          return `<div class="label">Rename</div><div class="renamegrid">
+              <label class="specs" for="renameName">Full name</label><input id="renameName" maxlength="40" value="${esc(o.name)}">
+              <label class="specs" for="renameNick">Nickname</label><input id="renameNick" maxlength="16" value="${esc(o.nick ?? "")}" placeholder="${o.rank >= NICK_RANK ? "none" : "given at Corporal"}">
+              <label class="specs" for="renameCall">Callsign</label><input id="renameCall" maxlength="12" value="${esc(o.call)}">
+              <span></span><button class="act" type="button" id="renameBtn">Save</button></div>
+            <p class="specs">Task force: <b>${esc(TF_NAMES[tfOf(o)])}</b> (for good, from hiring). ${esc(TF_DESC[tfOf(o)])}</p>
+            ${o.busy ? "" : `<div class="label" style="margin-top:10px">Retire</div><p class="muted">${tw2 ? `${esc(tw2)} They can still leave with an honourable discharge.` : "As a trainer at the range, new recruits arrive as Privates First Class while they're there."}</p>
+              <div class="row"><button class="act" type="button" data-retire="${o.id}">${tw2 ? "Honourable discharge" : "Retire as a trainer"}</button></div>`}`;
+        }
+        default: return `
+          ${o.busy ? `<p class="warn">${o.busy.kind === "therapy" ? "In therapy" : o.busy.kind === "travel" ? "Flying home" : o.busy.kind === "contract" ? "On contract" : "Retraining"}: ${plural(o.busy.daysLeft, "day")} left. Can't deploy until then.</p>` : ""}
+          <div class="fbars">${bar("Field HP", fh.hp, fh.max, "hp")}${bar("Sanity", o.san, ms, o.san <= ms * 0.3 ? "low" : "san")}${bar("Fatigue", o.fatigue ?? 0, 100, (o.fatigue ?? 0) >= FATIGUE.tired ? "low" : "fat")}${next !== undefined ? bar("XP", o.xp, next, "xp") : ""}</div>
+          <dl class="fstats"><dt>Aim</dt><dd>${aimOf(o)}</dd><dt>Blink</dt><dd>${Math.round(blinkFullOf(o) * 100)}%</dd><dt>Missions</dt><dd>${o.missions}</dd><dt>Kills</dt><dd>${o.kills}</dd><dt>Wounded</dt><dd>${o.wounds ?? 0}×</dd><dt>Sealed</dt><dd>${o.seals ?? 0}</dd></dl>
+          ${fh.why ? `<p class="specs">Field HP: ${esc(fh.why)}</p>` : ""}
+          ${o.injury && o.injury.until > c.day ? `<p class="warn">${esc(o.injury.name)} until ${dateText(o.injury.until)}</p>` : ""}
+          <p class="specs">Fatigue: ${tiredness(o)}; tired at ${FATIGUE.tired}, can't deploy at ${FATIGUE.exhausted}; −${FATIGUE.restPerDay} a day at Site-19${countOperational(c, "psych") ? `, −${FATIGUE.restPsych} more with psychological services` : ""}.</p>
+          ${o.unit ? `<p class="specs">Recruited from the ${esc(UNITS[o.unit].name)} (${esc(UNITS[o.unit].country)}) · ${LEANS[UNITS[o.unit].lean]}${o.bio ? ` · nationality ${esc(nationalityOf(o.bio.home))}` : ""}</p>` : ""}
+          ${o.bio ? `<p class="muted">Age ${o.bio.age + Math.floor((c.day - 1) / 365)}, from ${esc(o.bio.home)}. ${esc(o.bio.story)}</p>` : ""}
+          ${o.faced?.length ? `<p class="specs">Faced ${esc(o.faced.join(", "))}</p>` : ""}
+          ${o.medals?.length ? `<ul class="traits">${o.medals.map(m => `<li class="good"><b>${MEDALS[m].name}</b>: ${esc(MEDALS[m].bonus)} <span class="muted">${esc(MEDALS[m].how)}</span></li>`).join("")}</ul>` : ""}
+          ${bondsOf(o).length || o.lostBonds?.length ? `<p class="specs">Bonds: ${bondsOf(o).map(b => { const m = c.roster.find(x => x.id === b.id); return m ? `${BOND_NAMES[b.level]} with <b>${esc(m.name)}</b>${m.alive ? "" : " (fallen)"} (${b.n} missions together)` : ""; }).filter(Boolean).join("; ")}${o.lostBonds?.length ? `${bondsOf(o).length ? "; " : ""}lost: ${o.lostBonds.map(esc).join(", ")}` : ""}</p>` : ""}`;
       }
     })();
-    const fh = fieldHp(o);
-    return `<div class="label" style="margin-top:10px">Equipment · field HP ${fh.hp}/${fh.max}${fh.why ? ` (${esc(fh.why)})` : ""}</div>
-      <div class="eqgrid">
-        ${tile("weapon", "Primary weapon", gun.name, `${gun.dmg.join("–")} dmg · ${gun.mag} rounds`, t)}
-        ${tile("attachment", "Attachment", o.attachment ? ATTACHMENTS[o.attachment].name : "None", "", o.attachment ? "attachment" : "empty")}
-        ${tile("ammo", "Ammunition", o.ammoType ? AMMO[o.ammoType].name : "Standard ball", "", "ammo")}
-        ${tile("armor", "Armor", g.armor ? ITEMS[g.armor].name : "None", g.armor ? `+${armorStats(g.armor, c.armorTier).hp} HP` : "", g.armor || "empty")}
-        ${tile("uniform", "Uniform", uni.name, uni.hp ? `+${uni.hp} HP` : "", "uniform")}
-        ${tile("sidearm", "Sidearm", SIDEARM.name, "", "pistol")}
-        ${Array.from({ length: slots }, (_, i) => tile(`item${i}`, `Utility ${i + 1}`, g.items[i] ? ITEMS[g.items[i] as ItemId].name : "Empty", "", g.items[i] || "empty")).join("")}
-      </div>
-      <div class="eqdetail">${detail}</div>`;
-  }
-
-  function opDetail() {
-    const o = c.roster.find(x => x.id === opSel && x.alive);
-    if (!o) return "";
-    const pair = perkChoices(o), tw = canTherapy(c, o), rw = canRetrain(c, o);
-    const bad = o.traits.filter(t => TRAITS[t].bad);
-    return `<div class="card plan">
-      <div class="label">${esc(o.call)} · ${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}</div>
-      <div class="row" style="align-items:center">${portraitSvg(lookOf(o), o.unit, 88)}<h3 class="fac">${esc(fieldName(o))}</h3></div>
-      ${o.busy ? `<p class="warn">${o.busy.kind === "therapy" ? "In therapy" : o.busy.kind === "travel" ? "Flying home" : "Retraining"}: ${plural(o.busy.daysLeft, "day")} left. Can't deploy until then.</p>` : ""}
-      ${o.unit ? `<div class="specs">Recruited from the ${esc(UNITS[o.unit].name)} (${esc(UNITS[o.unit].country)}) · ${LEANS[UNITS[o.unit].lean]}${o.bio ? ` · nationality ${esc(nationalityOf(o.bio.home))}` : ""}</div>` : ""}
-      <div class="specs">Sex: ${SEX_NAMES[o.sex ?? "m"]}</div>
-      ${o.bio ? `<p class="muted">Age ${o.bio.age + Math.floor((c.day - 1) / 365)}, from ${esc(o.bio.home)}. ${esc(o.bio.story)}</p>` : ""}
-      <div class="specs">Service: ${plural(o.missions, "mission")} · ${plural(o.kills, "kill")} · wounded ${o.wounds ?? 0}× · ${(o.seals ?? 0) === 1 ? "1 anomaly" : `${o.seals ?? 0} anomalies`} sealed${o.faced?.length ? ` · faced ${esc(o.faced.join(", "))}` : ""}</div>
-      ${o.medals?.length ? `<ul class="traits">${o.medals.map(m => `<li class="good"><b>${MEDALS[m].name}</b>: ${esc(MEDALS[m].bonus)} <span class="muted">${esc(MEDALS[m].how)}</span></li>`).join("")}</ul>` : ""}
-      ${o.busy ? "" : (() => { const tw = trainerWhy(c, o); return `<details class="archived"><summary>Retire</summary>
-        <p class="muted">${tw ? `${esc(tw)} They can still leave with an honourable discharge.` : "As a trainer at the range, new recruits arrive as Privates First Class while they're there."}</p>
-        <div class="row"><button class="act" type="button" data-retire="${o.id}">${tw ? "Honourable discharge" : "Retire as a trainer"}</button></div></details>`; })()}
-      <details class="archived" ${lookOpen ? "open" : ""}><summary>Appearance</summary>
-        ${(() => { const l = lookOf(o), part = (key: string, label: string, value: string) => `<div class="row"><span class="specs" style="min-width:90px">${label}</span><button class="act" type="button" data-look="${key}" data-d="-1" aria-label="Previous ${label.toLowerCase()}">‹</button><span style="min-width:110px">${esc(value)}</span><button class="act" type="button" data-look="${key}" data-d="1" aria-label="Next ${label.toLowerCase()}">›</button></div>`;
-          return part("sex", "Sex", SEX_NAMES[o.sex ?? "m"]) + part("skin", "Skin tone", `${l.skin + 1} of ${SKIN.length}`) + part("hair", "Hair", HAIR_STYLES[l.hair]) + part("hairColor", "Hair colour", `${l.hairColor + 1} of ${HAIR_COLORS.length}`)
-            + (o.sex === "f" ? "" : part("facial", "Facial hair", FACIAL[l.facial])) + part("scar", "Scar", l.scar ? "Yes" : "No") + (o.unit && HEADGEAR[o.unit] ? part("headgear", "Headgear", l.headgear ? HEADGEAR[o.unit]![0] : "None") : ""); })()}
-      </details>
-      <p class="specs">Fatigue ${o.fatigue ?? 0}/100 (${tiredness(o)}; tired at ${FATIGUE.tired}, can't deploy at ${FATIGUE.exhausted}; −${FATIGUE.restPerDay} a day at Site-19${countOperational(c, "psych") ? `, −${FATIGUE.restPsych} more with psychological services` : ""})${o.injury && o.injury.until > c.day ? ` · <span class="warn">${esc(o.injury.name)} until ${dateText(o.injury.until)}</span>` : ""}</p>
-      ${bondsOf(o).length || o.lostBonds?.length ? `<p class="specs">Bonds: ${bondsOf(o).map(b => { const m = c.roster.find(x => x.id === b.id); return m ? `${BOND_NAMES[b.level]} with <b>${esc(m.name)}</b>${m.alive ? "" : " (fallen)"} (${b.n} missions together)` : ""; }).filter(Boolean).join("; ")}${o.lostBonds?.length ? `${bondsOf(o).length ? "; " : ""}lost: ${o.lostBonds.map(esc).join(", ")}` : ""}</p>` : ""}
-      <p class="specs">Task force: <b>${esc(TF_NAMES[tfOf(o)])}</b> (for good, from hiring). ${esc(TF_DESC[tfOf(o)])}</p>
-      <details class="archived"><summary>Rename</summary><div class="row">
-        <label class="specs" for="renameName">Full name</label><input id="renameName" maxlength="40" value="${esc(o.name)}">
-        <label class="specs" for="renameNick">Nickname</label><input id="renameNick" maxlength="16" value="${esc(o.nick ?? "")}" placeholder="${o.rank >= NICK_RANK ? "none" : "given at Corporal"}">
-        <label class="specs" for="renameCall">Callsign</label><input id="renameCall" maxlength="12" value="${esc(o.call)}">
-        <button class="act" type="button" id="renameBtn">Save</button></div></details>
-      ${promotionDue(o) && !o.cls ? `<p><b>Choose a class.</b> It decides the abilities they learn from here on.</p>
-        <div class="classpick">${(Object.keys(CLASSES) as ClassId[]).map(k => `<button type="button" class="classopt" data-class="${k}">
-          <b>${CLASSES[k].name}</b><span class="muted">${CLASSES[k].role}</span>
-          <span class="specs">Starts with ${PERKS[CLASSES[k].base].name}: ${esc(PERKS[CLASSES[k].base].desc)}</span>
-          <span class="specs">Later: ${CLASSES[k].choices.map(p => p.map(x => PERKS[x].name).join(" or ")).join(" · ")}</span></button>`).join("")}</div>` : ""}
-      ${pair ? `<p><b>Choose a perk for ${RANKS[o.rank]}.</b></p>
-        <div class="classpick two">${pair.map(p => `<button type="button" class="classopt" data-perk="${p}"><b>${PERKS[p].name}</b><span class="muted">${esc(PERKS[p].desc)}</span></button>`).join("")}</div>` : ""}
-      ${o.cls ? `<div class="label" style="margin-top:10px">Perk tree</div>
-        <ol class="tree">
-          <li><b>${PERKS[CLASSES[o.cls].base].name}</b> <span class="muted">${esc(PERKS[CLASSES[o.cls].base].desc)}</span></li>
-          ${CLASSES[o.cls].choices.map((p, i) => {
-            const got = o.perks[i + 1];
-            return `<li>${RANKS[i + 2]}: ${got ? `<b>${PERKS[got].name}</b> <span class="muted">${esc(PERKS[got].desc)}</span>` : `<span class="muted">${p.map(x => PERKS[x].name).join(" or ")}${o.rank >= i + 2 ? " (choose above)" : ""}</span>`}</li>`;
-          }).join("")}
-          ${[5, 6].map(r => `<li>${RANKS[r]}: <span class="${o.rank >= r ? "" : "muted"}">${RANK_BONUS[r]}</span></li>`).join("")}
-        </ol>` : ""}
-      <div class="label" style="margin-top:10px">Traits</div>
-      ${o.traits.length ? `<ul class="traits">${o.traits.map(t => `<li class="${TRAITS[t].bad ? "bad" : "good"}"><b>${TRAITS[t].name}</b>: ${esc(TRAITS[t].desc)} <span class="muted">${esc(TRAITS[t].how)}</span>
-        ${TRAITS[t].bad && !o.busy ? `<span class="muted">Treatable at Psychological services.</span>` : ""}</li>`).join("")}</ul>
-        ${bad.length && tw ? `<p class="muted">${esc(tw)}</p>` : ""}` : `<p class="muted">None yet. Traits come from what happens to them on missions.</p>`}
-      ${equipment(o)}
-      ${o.cls && !o.busy ? `<p class="muted">Retraining (a new class, keeping their rank) is arranged at the training range.</p>` : ""}
-    </div>`;
-  }
-
-  function opRow(o: Operative) {
-    const next = RANK_XP[o.rank + 1], heal = healPerDay(c);
-    const days = Math.ceil((o.maxHp - o.hp) / heal);
-    const status = o.busy ? `<span class="flag">${o.busy.kind === "therapy" ? "Therapy" : o.busy.kind === "travel" ? "In transit" : "Retraining"} · ${plural(o.busy.daysLeft, "day")}</span>`
-      : injured(c, o) ? `<span class="flag bad">${esc(o.injury!.name)} · ${plural(o.injury!.until - c.day, "day")}</span>`
-      : tiredness(o) === "exhausted" ? `<span class="flag bad">Exhausted · ${plural(Math.ceil(((o.fatigue ?? 0) - FATIGUE.exhausted + 1) / FATIGUE.restPerDay), "day")}</span>`
-      : promotionDue(o) ? `<span class="flag stare">Promotion</span>`
-      : o.hp < o.maxHp ? `<span class="flag bad">Wounded · ${plural(days, "day")}</span>`
-      : tiredness(o) === "tired" ? `<span class="flag stare">Tired</span>` : `<span class="flag">Ready</span>`;
-    const ms = maxSanOf(o);
-    return `<button type="button" class="oprow ${opSel === o.id ? "sel" : ""}" data-op="${o.id}">
-      <span class="tag">${portraitSvg(lookOf(o), o.unit, 40)}<br>${esc(o.call)}</span>
-      <span class="nm">${esc(fieldName(o))} <span class="muted">${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}</span></span>
-      ${status}
-      <span class="bars">
-        ${(() => { const f = fieldHp(o); return `<span title="${f.why ? `Field HP: ${esc(f.why)}` : "No armor or uniform bonus"}">HP ${f.hp}/${f.max}${f.why ? ` <span class="muted">(+${f.max - o.maxHp} gear)</span>` : ""}<span class="meter" style="--c: var(--mtf)"><span style="width:${(f.hp / f.max) * 100}%"></span></span></span>`; })()}
-        <span>SAN ${o.san}<span class="meter" style="--c: ${o.san <= ms * 0.3 ? "var(--alert)" : "var(--manila)"}"><span style="width:${(o.san / ms) * 100}%"></span></span></span>
-        <span>Aim ${aimOf(o)}</span>
-        <span>Blink ${Math.round(blinkFullOf(o) * 100)}%</span>
-        <span>XP ${o.xp}${next !== undefined ? `/${next}` : ""}</span>
-        <span>${plural(o.missions, "mission")} · ${plural(o.kills, "kill")}</span>
-        ${o.traits.map(t => `<span class="flag ${TRAITS[t].bad ? "bad" : ""}">${TRAITS[t].name}</span>`).join("")}
-      </span>
-    </button>`;
+    return `<header class="filehead">${portraitSvg(lookOf(o), o.unit, 64)}<div><span class="eyebrow">${esc(o.call)} · ${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}</span><h3>${esc(fieldName(o))}</h3>
+        <span class="specs">${SEX_NAMES[o.sex ?? "m"]}${o.unit ? ` · ${esc(UNITS[o.unit].country)}` : ""} · ${esc(TF_NAMES[tfOf(o)])}</span></div>
+        <button type="button" class="x" data-op="${o.id}" aria-label="Close file">×</button></header>
+      <nav class="ftabs">${tabs.map(([k, l]) => `<button type="button" class="${dtab === k ? "on" : ""}" data-dostab="${k}" aria-pressed="${dtab === k}">${l}</button>`).join("")}</nav>
+      <div class="fbody">${body}</div>
+      <footer class="ffoot"><button type="button" class="act primary" data-gotoarmory="${o.id}">Kit them out in the Armory</button></footer>`;
   }
 
   // ---------- events ----------
@@ -1512,7 +1453,27 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       flashMsg = ""; tab = "site"; speed = 0; render();
     });
     root.querySelectorAll<HTMLElement>("[data-hire]").forEach(b => b.onclick = () => { const k = c.recruits?.find(x => x.id === b.dataset.hire); if (k) change(() => hireCandidate(c, k, b.dataset.hiretf === "eta10" ? "eta10" : "e11")); });
-    root.querySelectorAll<HTMLElement>("[data-op]").forEach(b => b.onclick = () => { opSel = opSel === b.dataset.op ? null : b.dataset.op!; lookOpen = false; render(); });
+    root.querySelectorAll<HTMLElement>("[data-op]").forEach(b => b.onclick = () => { if (opSel !== b.dataset.op) dosTab = "record"; opSel = opSel === b.dataset.op ? null : b.dataset.op!; lookOpen = false; archive = null; reframe = true; render(); });
+    // the barracks and the armory
+    root.querySelectorAll<HTMLElement>("[data-dostab]").forEach(b => b.onclick = () => { dosTab = b.dataset.dostab!; reframe = false; render(); });
+    root.querySelectorAll<HTMLElement>("[data-archive]").forEach(b => b.onclick = () => { archive = archive === b.dataset.archive ? null : b.dataset.archive!; if (archive) opSel = null; reframe = true; render(); });
+    const toArmory = (id?: string) => { if (id) opSel = id; eqSlot = null; tab = "armory"; try { localStorage.setItem("site19-tab", tab); } catch { /* fine */ } render(); };
+    root.querySelectorAll<HTMLElement>("[data-gotoarmory]").forEach(b => b.onclick = () => {
+      const stage = root.querySelector<HTMLElement>("[data-stage=barracks]");
+      if (stage && !b.dataset.gotoarmory) leaveToward(stage, "barracks", -BARRACKS_ROOM.w / 2 + 90, -BARRACKS_ROOM.d / 2, () => toArmory());
+      else toArmory(b.dataset.gotoarmory);
+    });
+    root.querySelectorAll<HTMLElement>("[data-gotobarracks]").forEach(b => b.onclick = () => { tab = "personnel"; reframe = true; try { localStorage.setItem("site19-tab", tab); } catch { /* fine */ } render(); });
+    root.querySelectorAll<HTMLElement>("[data-armop]").forEach(b => b.onclick = () => { opSel = b.dataset.armop!; eqSlot = null; render(); });
+    root.querySelectorAll<HTMLElement>("[data-shelfitem]").forEach(b => b.onclick = () => {
+      const o = c.roster.find(x => x.id === opSel) ?? c.roster.find(x => x.alive); if (!o) return;
+      const g = gearOf(o.id), slots = o.perks.includes("field_kit") ? 3 : 2, item = b.dataset.shelfitem as ItemId;
+      let i = eqSlot?.startsWith("item") ? Number(eqSlot.slice(4)) : -1;
+      if (i < 0) i = Array.from({ length: slots }, (_, k) => k).find(k => !g.items[k]) ?? -1;
+      if (i < 0) { eqSlot = "item0"; flashMsg = ""; render(); return; }   // every slot full: pick which one to swap
+      opSel = o.id; eqSlot = `item${i}`;
+      change(() => { g.items[i] = g.items[i] === item ? "" : item; });
+    });
     const opNow = () => c.roster.find(x => x.id === opSel)!;
     root.querySelectorAll<HTMLElement>("[data-class]").forEach(b => b.onclick = () => change(() => chooseClass(c, opNow(), b.dataset.class as ClassId)));
     root.querySelectorAll<HTMLElement>("[data-perk]").forEach(b => b.onclick = () => change(() => choosePerk(c, opNow(), b.dataset.perk as PerkId)));
@@ -1523,7 +1484,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     root.querySelectorAll<HTMLElement>("[data-post]").forEach(b => b.onclick = () => { const g = c.guards.find(x => x.id === b.dataset.post); if (g) change(() => postGuard(c, g, b.dataset.station!)); });
     root.querySelectorAll<HTMLElement>("[data-rescat]").forEach(b => b.onclick = () => { resCat = b.dataset.rescat as ResearchCat; render(); });
     root.querySelectorAll<HTMLElement>("[data-eqslot]").forEach(b => b.onclick = () => { eqSlot = eqSlot === b.dataset.eqslot ? null : b.dataset.eqslot!; render(); });
-    root.querySelectorAll<HTMLElement>("[data-fitatt]").forEach(b => b.onclick = () => change(() => fitAttachment(c, opNow(), b.dataset.fitatt as AttachmentId | "")));
+    root.querySelectorAll<HTMLElement>("[data-fitatt]").forEach(b => b.onclick = () => { if (tab === "armory") eqSlot = null; change(() => fitAttachment(c, opNow(), b.dataset.fitatt as AttachmentId | "")); });
     root.querySelectorAll<HTMLElement>("[data-loadammo]").forEach(b => b.onclick = () => change(() => loadAmmo(c, opNow(), b.dataset.loadammo as AmmoId | "")));
     root.querySelectorAll<HTMLElement>("[data-kitarmor]").forEach(b => b.onclick = () => change(() => { const g = gearOf(opNow().id); g.armor = b.dataset.kitarmor as ItemId | ""; if (g.armor !== "armor_heavy") g.items = g.items.map(i => (i && HEAVY.includes(i) ? "" : i)); }));
     root.querySelectorAll<HTMLElement>("[data-kititem]").forEach(b => b.onclick = () => change(() => { gearOf(opNow().id).items[Number((eqSlot ?? "item0").slice(4))] = b.dataset.kititem as ItemId | ""; }));
