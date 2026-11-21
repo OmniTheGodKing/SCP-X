@@ -20,7 +20,7 @@
 /* ------------------------------------------------ 3D room */
 .stage .viewport { position: absolute; inset: 0; perspective: 1100px; perspective-origin: 50% 42%; overflow: hidden; cursor: grab; }
 .stage.dragging .viewport { cursor: grabbing; }
-.stage .cam { position: absolute; left: 50%; top: 60%; width: 0; height: 0; transform-style: preserve-3d; }
+.stage .cam { position: absolute; left: 50%; top: 53%; width: 0; height: 0; transform-style: preserve-3d; }
 .stage .cam.glide { transition: transform .75s cubic-bezier(.25, .75, .2, 1); }
 .stage .cam.glide .ent { transition: transform .75s cubic-bezier(.25, .75, .2, 1); }
 .stage .cam > * { position: absolute; }
