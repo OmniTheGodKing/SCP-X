@@ -13,7 +13,7 @@ or `.svg`). More specific keys are tried first, so you can ship one generic file
 
 `<era>` is one of `1950s`, `1960s`, `1970s`, `1980s`.
 
-## Soldier layers (full-body figure, frame 160 × 320, feet at y 312, facing the viewer)
+## Soldier layers (full-body figure, frame 200 × 320, feet at y 312, centred on x 100, facing the viewer)
 
 Layers are drawn bottom to top. A file replaces only its own layer.
 
@@ -36,6 +36,14 @@ Faces stay procedural (they come from each operative's saved look) until a head-
 Hardpoints are given per weapon profile in `src/ui/stage/weapon.ts`; a supplied weapon image should keep the
 receiver top, muzzle, magazine well, trigger and stock butt near the same points, or those numbers should be
 updated alongside it.
+
+## Department heads (waist-up portrait, frame 200 × 240, transparent background)
+
+| Key | Person |
+| --- | --- |
+| `character/bell` | Dr. Catherine Bell, Director of Research (Research tab) |
+| `character/russo` | Vincent Russo, Chief Engineer (Site-19 tab) |
+| `character/carter` | Krista Carter, Chief of Operations (Command tab) |
 
 ## 3D
 

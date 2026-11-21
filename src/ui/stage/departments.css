@@ -1,0 +1,68 @@
+/* Department rooms at the head of Command, Research and Site-19: the head of the department in their room, what they
+   have to say, and the work under way as things to click. */
+.dept { --lamp: 255, 214, 150; position: relative; display: grid; grid-template-columns: 170px minmax(220px, 330px) minmax(0, 1fr); align-items: end; gap: 0 18px;
+  min-height: 236px; margin: 10px 0 14px; padding: 0 18px 0 8px; overflow: hidden; isolation: isolate; border: 1px solid #000; box-shadow: 0 0 0 1px var(--line), 0 14px 30px rgba(0, 0, 0, .45); }
+.dept .deptroom { position: absolute; inset: 0; z-index: -1; }
+.dept.era-1960s, .dept.era-1980s { --lamp: 226, 238, 255; }
+/* operations: a dim room lit by its displays */
+.dept-ops .deptroom { background: radial-gradient(ellipse 50% 90% at 70% 10%, rgba(80, 170, 160, .18), transparent 70%), repeating-linear-gradient(90deg, rgba(0, 0, 0, .25) 0 2px, transparent 2px 120px), linear-gradient(#1a2326, #0d1214 70%, #080a0b); }
+/* the lab: pale tile under hard light */
+.dept-lab .deptroom { background: radial-gradient(ellipse 60% 80% at 40% 0%, rgba(var(--lamp), .25), transparent 70%), repeating-linear-gradient(0deg, rgba(0, 0, 0, .18) 0 1px, transparent 1px 22px), repeating-linear-gradient(90deg, rgba(0, 0, 0, .18) 0 1px, transparent 1px 22px), linear-gradient(#56625f, #3a4442 62%, #262c2b 62%, #1b1f1e); }
+/* the workshop: block wall and sodium light */
+.dept-shop .deptroom { background: radial-gradient(ellipse 50% 80% at 60% 0%, rgba(255, 170, 80, .22), transparent 70%), repeating-linear-gradient(0deg, rgba(0, 0, 0, .3) 0 2px, transparent 2px 30px), repeating-linear-gradient(90deg, rgba(0, 0, 0, .2) 0 2px, transparent 2px 64px), linear-gradient(#4a4238, #322c25 66%, #1c1a17 66%, #121110); }
+.dept .advisor { position: relative; align-self: end; }
+.dept .advisor-svg, .dept .advisor-art { display: block; width: 170px; height: 204px; object-fit: contain; filter: drop-shadow(0 0 18px rgba(0, 0, 0, .6)); }
+.dept .nameplate { position: absolute; left: 6px; right: 6px; bottom: 8px; padding: 4px 8px; background: rgba(8, 10, 12, .86); border-left: 3px solid var(--manila); display: grid; }
+.dept .nameplate b { font-size: 13px; color: #e7e0cf; } .dept .nameplate span { font: 10.5px var(--font-mono); color: #9aa1a3; text-transform: uppercase; letter-spacing: .08em; }
+.dept .remark { align-self: center; position: relative; background: linear-gradient(rgba(255, 255, 255, .05), rgba(0, 0, 0, .05)), #e2d3ad; color: #2a241a; padding: 12px 14px; box-shadow: 0 10px 24px rgba(0, 0, 0, .55); transform: rotate(-.6deg); display: grid; gap: 6px; }
+.dept .remark::before { content: ""; position: absolute; left: -10px; top: 18px; border: 10px solid transparent; border-right-color: #e2d3ad; border-left: 0; }
+.dept .remark .eyebrow { color: #6d6250; }
+.dept .remark p { margin: 0; font-size: 14.5px; line-height: 1.4; }
+.dept .remark .act { justify-self: start; background: #2a241a; color: #efe4c4; border-color: #2a241a; }
+.dept .remark.tone-urgent { border-left: 5px solid #a3301e; } .dept .remark.tone-grave { border-left: 5px solid #2a241a; } .dept .remark.tone-good { border-left: 5px solid #2f5a35; }
+.dept .stations { align-self: stretch; display: flex; flex-wrap: wrap; align-content: center; gap: 10px; padding: 14px 0; }
+.dept .stations button { font: inherit; cursor: pointer; }
+.dept .quiet { margin: 0; color: #9aa1a3; font: 12.5px var(--font-mono); }
+.dept small { font-size: 11.5px; color: #9aa1a3; }
+/* operations stations */
+.dept .plotboard { position: relative; flex: 1 1 340px; display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; min-height: 150px; padding: 26px 12px 12px; background: #5a4630; box-shadow: inset 0 0 0 6px #3a2c1c, inset 0 0 30px rgba(0, 0, 0, .5); }
+.dept .boardtitle { position: absolute; left: 12px; top: 6px; font: 600 10.5px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: #e9dfb6; }
+.dept .pin { position: relative; width: 150px; display: grid; gap: 2px; text-align: left; padding: 10px 8px 7px; background: #e9e2cc; color: #1f1a12; border: 0; transform: rotate(var(--r)); box-shadow: 0 4px 8px rgba(0, 0, 0, .5); }
+.dept .pin::before { content: ""; position: absolute; left: 50%; top: -4px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: #b5463b; box-shadow: 0 2px 2px rgba(0, 0, 0, .5); }
+.dept .pin b { font: 700 11px var(--font-mono); } .dept .pin span { font-size: 12px; line-height: 1.2; } .dept .pin small { color: #6d6250; }
+.dept .pin:hover { transform: rotate(0) translateY(-2px); }
+.dept .pin.k-breach, .dept .pin.k-raid, .dept .pin.k-riot, .dept .pin.k-emergency { background: #f0d2c8; }
+.dept .display { flex: 0 1 180px; min-height: 100px; display: grid; align-content: end; gap: 2px; padding: 10px; text-align: left; position: relative; overflow: hidden; color: #bfe6dc; border: 6px solid #22282b; background: radial-gradient(ellipse at 50% 40%, #1d4a44, #0b1a18 80%); box-shadow: inset 0 0 20px rgba(0, 0, 0, .8), 0 0 18px rgba(80, 200, 180, .15); }
+.dept .display b { font: 600 14px var(--font-mono); text-shadow: 0 0 6px rgba(120, 230, 200, .6); } .dept .display small { color: #8cc7b9; }
+.dept .display.squad b { font-size: 26px; }
+.dept .display .scan { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .25) 0 1px, transparent 1px 3px), conic-gradient(from 0deg at 50% 45%, rgba(120, 230, 200, .25), transparent 25%); }
+.dept .display:hover { border-color: #3a4448; }
+/* laboratory stations */
+.dept .bench { position: relative; width: 170px; display: grid; gap: 2px; padding: 46px 10px 10px; text-align: left; background: linear-gradient(#d8dcd8, #b9bfbb); color: #1b1f1e; border: 0; box-shadow: 0 6px 12px rgba(0, 0, 0, .5), inset 0 -5px 0 #8d958f; }
+.dept .bench b { font-size: 13px; line-height: 1.2; } .dept .bench small { color: #4a5250; }
+.dept .flask { position: absolute; left: 12px; top: 6px; width: 34px; height: 36px; border: 2px solid rgba(40, 60, 70, .7); border-radius: 4px 4px 14px 14px; background: rgba(200, 230, 240, .35); overflow: hidden; }
+.dept .flask i { position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--v) * 100%); background: linear-gradient(#7fd0b8, #3f9a84); }
+.dept .flask.amber i { background: linear-gradient(#e3b04b, #a0701e); }
+.dept .bench .staff, .dept .bench .stools { position: absolute; right: 10px; top: 12px; display: flex; gap: 3px; }
+.dept .bench .staff i { width: 9px; height: 18px; border-radius: 5px 5px 2px 2px; background: #f4f1e8; box-shadow: 0 0 0 1px #8d958f; }
+.dept .bench .stools i { width: 10px; height: 10px; border-radius: 50%; background: #5a5f63; }
+.dept .bench.idle { background: linear-gradient(#8f9894, #6f7773); } .dept .bench.idle small, .dept .bench.idle b { color: #1b1f1e; }
+.dept button.bench:hover { filter: brightness(1.08); transform: translateY(-2px); }
+/* workshop stations */
+.dept .job { position: relative; width: 170px; display: grid; gap: 2px; padding: 48px 10px 10px; text-align: left; background: linear-gradient(#6b5a40, #4e3f2a); color: #f0e4c8; border: 0; box-shadow: 0 6px 12px rgba(0, 0, 0, .55); }
+.dept .job small { color: #d8c8a0; }
+.dept .job .scaffold { position: absolute; left: 10px; right: 10px; top: 10px; height: 28px; background: repeating-linear-gradient(90deg, #c9a63b 0 3px, transparent 3px 22px), repeating-linear-gradient(0deg, #c9a63b 0 3px, transparent 3px 14px); opacity: .9; }
+.dept .job .scaffold i { position: absolute; left: 0; bottom: 0; top: 0; width: calc(var(--v) * 100%); background: rgba(150, 150, 140, .75); }
+.dept .job .box { position: absolute; left: 12px; top: 10px; width: 40px; height: 28px; background: linear-gradient(#8a6d40, #5e4524); box-shadow: inset 0 0 0 2px #3a2a14; }
+.dept .job .box::after { content: ""; position: absolute; left: 0; right: 0; top: 11px; height: 4px; background: #3a2a14; }
+.dept .job:hover { filter: brightness(1.12); transform: translateY(-2px); }
+.dept .stations > * { transition: transform .15s, filter .15s; }
+@media (max-width: 860px) {
+  .dept { grid-template-columns: 110px minmax(0, 1fr); padding-right: 10px; }
+  .dept .advisor-svg, .dept .advisor-art { width: 110px; height: 132px; }
+  .dept .nameplate { position: static; }
+  .dept .stations { grid-column: 1 / -1; padding-top: 4px; }
+  .dept .remark::before { display: none; }
+}
+.flash { animation: flash-card 1.4s ease-out; }
+@keyframes flash-card { 0%, 30% { box-shadow: 0 0 0 3px var(--manila); } 100% { box-shadow: 0 0 0 0 transparent; } }

@@ -80,7 +80,7 @@ export function barracksTarget(c: Campaign, opSel: string | null): Cam {
   const narrow = typeof window !== "undefined" && window.innerWidth < 760;
   const spot = layout(c).spots.find(s => s.o.id === opSel);
   if (spot) return { yaw: spot.x > 0 ? -6 : 6, pitch: -4, dist: narrow ? 60 : -200, fx: spot.x + (narrow ? 0 : 150), fy: narrow ? -120 : -170, fz: spot.z };
-  return { yaw: 0, pitch: -6, dist: narrow ? 700 : -60, fx: 0, fy: -215, fz: 0 };
+  return { yaw: 0, pitch: -6, dist: narrow ? 380 : -60, fx: 0, fy: narrow ? -170 : -215, fz: narrow ? -120 : 0 };
 }
 
 export function barracksHtml(q: QuartersCtx) {

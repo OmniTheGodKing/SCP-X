@@ -27,6 +27,7 @@ import { MEDALS } from "../data/bios";
 import { LEANS, QUALITY, UNITS, nationalityOf } from "../data/units";
 import { FACIAL, HAIR_BY_SEX, HAIR_COLORS, HAIR_STYLES, HEADGEAR, LOOK_PARTS, SEX_NAMES, SKIN, fitLook, rollLook } from "../data/looks";
 import { portraitSvg } from "./portrait";
+import { commandBand, engineeringBand, researchBand } from "./departments";
 import { armoryHtml, barracksHtml, barracksTarget, BARRACKS_ROOM, type QuartersCtx } from "./quarters";
 import { leaveToward, wireStage } from "./stage/scene";
 import { INSPECTION, inspectionChecks, inspectionSoon } from "../campaign/inspection";
@@ -518,7 +519,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
 
   function commandTab() {
     const inc = c.incidents.find(i => i.id === planning) || null;
-    return `<div class="hubgrid">
+    return `${commandBand(c)}<div class="hubgrid">
     <section class="col">
       ${c.roster.some(promotionDue) ? `<div class="card plan"><div class="label">Promotions</div>
         <p>${c.roster.filter(promotionDue).map(o => `<b>${esc(o.call)} ${esc(o.name)}</b>`).join(", ")} ${c.roster.filter(promotionDue).length > 1 ? "are" : "is"} waiting to choose ${c.roster.filter(promotionDue).some(o => !o.cls) ? "a class or perk" : "a perk"}.</p>
@@ -910,7 +911,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     const offer = c.research.offer, insp = c.research.inspired;
     const bt = Object.keys(PROJECTS).filter(id => PROJECTS[id].breakthrough && !has(c, id) && offered(c, id));
     const s = scp173();
-    return `<div class="hubgrid">
+    return `${researchBand(c)}<div class="hubgrid">
     <section class="col">
       <div class="card">
         <div class="label">Research · ${c.researchers} researchers, ${researchersFree(c)} unassigned · lab space for ${researcherCapacity(c)}</div>
@@ -1041,7 +1042,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       rows.push(`<div class="level"><div class="lvl">Level ${level + 1}${level === 0 ? "<span>surface</span>" : ""}</div>${slots.join("")}</div>`);
     }
     const exWhy = canExcavate(c);
-    return `<div class="hubgrid site">
+    return `${engineeringBand(c)}<div class="hubgrid site">
     <section class="col">
       <div class="card">
         <div class="label">Site-19 cross-section</div>
@@ -1464,6 +1465,13 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       else toArmory(b.dataset.gotoarmory);
     });
     root.querySelectorAll<HTMLElement>("[data-gotobarracks]").forEach(b => b.onclick = () => { tab = "personnel"; reframe = true; try { localStorage.setItem("site19-tab", tab); } catch { /* fine */ } render(); });
+    root.querySelectorAll<HTMLElement>("[data-resfocus]").forEach(b => b.onclick = () => {
+      const id = b.dataset.resfocus!, find = () => root.querySelector<HTMLElement>(`[data-assign="${id}"]`)?.closest<HTMLElement>(".proj") ?? null;
+      let card = find();
+      if (!card) { resCat = researchCat(id); render(); card = find(); }   // it's under another category tab
+      if (!card) return;
+      card.scrollIntoView({ behavior: "smooth", block: "center" }); card.classList.remove("flash"); void card.offsetWidth; card.classList.add("flash");
+    });
     root.querySelectorAll<HTMLElement>("[data-armop]").forEach(b => b.onclick = () => { opSel = b.dataset.armop!; eqSlot = null; render(); });
     root.querySelectorAll<HTMLElement>("[data-shelfitem]").forEach(b => b.onclick = () => {
       const o = c.roster.find(x => x.id === opSel) ?? c.roster.find(x => x.alive); if (!o) return;
