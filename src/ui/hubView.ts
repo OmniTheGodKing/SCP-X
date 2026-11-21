@@ -1345,7 +1345,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     const ms = mtfsOf(c), cap = deployCap(c), max = squadRosterMax(c);
     const lamp = (o: Operative) => { const t = o.busy ? "away" : injured(c, o) || tiredness(o) === "exhausted" ? "bad" : o.hp < o.maxHp || tiredness(o) === "tired" ? "warn" : "ok"; return `<i class="olamp t-${t}"></i>`; };
     const moveSel = (o: Operative) => `<select data-sqmove="${o.id}" aria-label="Assign ${esc(o.name)}">${ms.flatMap(m => m.squads.map(sq => `<option value="${sq.id}" ${o.squad === sq.id ? "selected" : ""}>${esc(m.designation)} · ${esc(sq.name)}</option>`)).join("")}<option value="" ${o.squad ? "" : "selected"}>Reserve</option></select>`;
-    const row = (o: Operative) => `<li>${lamp(o)}<b>${esc(o.call)}</b> ${esc(fieldName(o))} <span class="muted">${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}${o.injury && o.injury.until > c.day ? ` · ${esc(o.injury.name)}` : o.busy ? ` · away ${o.busy.daysLeft} d` : ""}</span>${moveSel(o)}</li>`;
+    const row = (o: Operative) => `<li>${lamp(o)}<b>${esc(o.call)}</b><span class="who">${esc(fieldName(o))} <span class="muted">${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}${o.injury && o.injury.until > c.day ? ` · ${esc(o.injury.name)}` : o.busy ? ` · away ${o.busy.daysLeft} d` : ""}</span></span>${moveSel(o)}</li>`;
     const reserve = c.roster.filter(o => o.alive && (!o.squad || !squadOfOp(c, o)));
     const hist = (c.history ?? []).filter(h => h.cat === "deployment").slice(-5).reverse();
     const kit = eligibleKit(c).map(i => `${ITEMS[i].name}: ${c.inventory[i] ?? 0}`).join(" · ");

@@ -317,7 +317,8 @@
 .stage .pfile select { font: 12px var(--font-mono); padding: 4px; background: #f4efe0; border: 1px solid rgba(60, 45, 20, .4); color: #2a241a; }
 .stage .orglist { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 13px; }
 .stage .orglist li { display: grid; grid-template-columns: 10px auto 1fr auto; gap: 6px; align-items: center; }
-.stage .orglist li .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage .orglist li .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage .orglist li select { width: 190px; }
 .stage .olamp { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .stage .olamp.t-ok { background: #3f8a4a; } .stage .olamp.t-warn { background: #c48a1e; } .stage .olamp.t-bad { background: #a3301e; } .stage .olamp.t-away { background: #7a7f84; }
 .stage .pfile .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
