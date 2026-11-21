@@ -36,15 +36,22 @@ export type Hardpoint = "optic" | "muzzle" | "mag" | "trigger" | "butt";
 export const HARDPOINT_OF: Record<AttachmentId, Hardpoint> = { scope: "optic", sights: "optic", suppressor: "muzzle", bayonet: "muzzle", extmag: "mag", trigger: "trigger", stock: "butt" };
 export const HARDPOINT_NAMES: Record<Hardpoint, string> = { optic: "Sight rail", muzzle: "Muzzle", mag: "Magazine well", trigger: "Trigger group", butt: "Butt" };
 
+/** Hardpoints measured on the photographs in art/weapon (prepared by scripts/prep-weapon-art.py), where they
+ *  differ from the drawn profile's. Only used when that model's photo is present. */
+const PHOTO_HP: Record<string, Partial<Record<Hardpoint, [number, number]>>> = {};
+
 /** Where each hardpoint sits in the 400 × 120 frame. */
 export function hardpoints(modelId: string, type: WeaponType): Record<Hardpoint, [number, number]> {
   const p = profileOf(modelId, type), B = 48;
+  const fix = asset(`weapon/${modelId}`) ? PHOTO_HP[modelId] ?? {} : {};
   return {
+    ...{
     optic: [(p.rx[0] + p.rx[1]) / 2, B - 16],
     muzzle: [p.muz - 6, B],
     mag: [p.magX ?? (p.rx[0] + 30), B + 26],
     trigger: [p.trig, B + 16],
     butt: [p.butt + 12, B + 12],
+    }, ...fix,
   };
 }
 
@@ -135,7 +142,14 @@ export function weaponBody(modelId: string, type: WeaponType, o: WeaponDraw = {}
   else if (a === "trigger") att.push(`<circle cx="${p.trig - 6}" cy="${B + 4}" r="2.2" fill="#d2b25c"/>`);
 
   const art = asset(`weapon/${modelId}`);
-  const body = art ? `<image href="${art}" x="0" y="0" width="400" height="120"/>` : parts.join("");
+  if (art) {
+    // a photograph: the refit and the extended magazine are marked over it, since they aren't in the picture
+    const [mx, my] = hp.mag, [, oy] = hp.optic;
+    if (a === "extmag") att.unshift(`<rect x="${mx - 9}" y="${my + 4}" width="18" height="16" rx="2" fill="#2a2e33" stroke="#0d0f11"/><path d="M${mx - 7} ${my + 9} h14" stroke="#8d969e" stroke-width=".8" opacity=".5"/>`);
+    if (tier >= 3) att.unshift(Array.from({ length: Math.floor((p.muz - p.rx[1] - 30) / 9) }, (_, i) => `<rect x="${p.rx[1] + 10 + i * 9}" y="${oy + 11}" width="4" height="9" rx="1" fill="#b8733a" stroke="#5a3218" stroke-width=".6"/>`).join(""));
+    if (tier === 2) att.unshift(`<rect x="${p.rx[0] + 8}" y="${oy + 14}" width="34" height="5" fill="#c8b48a" opacity=".9"/><text x="${p.rx[0] + 10}" y="${oy + 18.2}" font-size="4.5" fill="#1b1e22" font-family="monospace" font-weight="700">SCP-F</text>`);
+  }
+  const body = art ? `<image href="${art}" x="0" y="0" width="400" height="120" preserveAspectRatio="none"/>` : parts.join("");
   return `${defs}<g class="wpn-body">${body}</g><g class="wpn-att">${att.join("")}</g>`;
 }
 
