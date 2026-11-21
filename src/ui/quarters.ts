@@ -246,7 +246,7 @@ export function armoryHtml(q: QuartersCtx) {
       <div class="shelf ${itemSlot >= 0 ? "picking" : ""}" aria-label="Kit shelf">${itemSlot >= 0 ? `<span class="shelfhint">Choose kit for slot ${itemSlot + 1}</span>` : `<span class="shelfhint dim">Kit shelf</span>`}${shelf}</div></div>
     </div>
     <div class="stagehud top"><div class="roomtitle"><span class="eyebrow">Site-19 · Level 2 · Armory</span><b>${esc(o.call)} · ${esc(fieldName(o))}</b></div>
-      <nav class="squadbar" aria-label="Choose an operative">${team.map(x => { const st = statusOf(c, x); return `<button type="button" class="sq ${x.id === o.id ? "on" : ""}" data-armop="${x.id}" aria-pressed="${x.id === o.id}">${portraitSvg(lookOf(x), x.unit, 40)}<span>${esc(x.call)}</span><i class="lamp t-${st.tone}"></i></button>`; }).join("")}</nav>
+      <nav class="squadbar" aria-label="Choose an operative">${team.map(x => { const st = statusOf(c, x); return `<button type="button" class="sq ${x.id === o.id ? "on" : ""}" data-armsel="${x.id}" aria-pressed="${x.id === o.id}">${portraitSvg(lookOf(x), x.unit, 40)}<span>${esc(x.call)}</span><i class="lamp t-${st.tone}"></i></button>`; }).join("")}</nav>
       <button type="button" class="hudbtn" data-gotobarracks>Back to the barracks</button></div>
 
   </section>`;

@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build && node scripts/artifact.mjs",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "test": "node tests/run.cjs",
+    "test:unit": "node tests/run.cjs unit",
+    "test:e2e": "node tests/run.cjs e2e"
   },
   "license": "CC-BY-SA-3.0",
   "devDependencies": {

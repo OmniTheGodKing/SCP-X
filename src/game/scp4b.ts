@@ -1,6 +1,7 @@
 // Phase 4B: SCP-096, SCP-012, SCP-939, SCP-035 and SCP-682 on the tactical map, and the shared "eyes down" rule.
 // Each one is the mission's anomaly (S.scp); S.statue is the anomaly itself, except for SCP-939, whose instances are
 // hostile units of their own. See docs/ROADMAP.md, "4B as specified", for the rules this follows.
+import { rnd } from "../core/rng";
 import { DIRS, L, TS, area, cheb, doorShut, inContainer, passable, tileAt, FULL, HALF, PART, WINDOW, type Pt } from "../core/grid";
 import { blastStructure, linkFrom } from "../core/grid";
 import { damage, kill } from "./combat";
@@ -12,7 +13,7 @@ export const isNewScp = (id?: string) => !!id && (NEW_SCPS as readonly string[])
 /** Research finished on the new anomalies, carried into the mission. */
 export const r4b = (id: string) => !!S.setup.mods.r4b?.includes(id);
 const st = () => S.statue;
-const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+const pick = <T>(a: T[]) => a[Math.floor(rnd() * a.length)];
 const carries = (u: Unit, id: string) => !!u.items?.some(i => i.id === id && i.uses > 0);
 const useUp = (u: Unit, id: string) => { const it = u.items?.find(i => i.id === id && i.uses > 0); if (it) it.uses--; };
 const suited = (u: Unit) => u.armorKind === "hazmat" || u.armorKind === "leadsuit" || u.armorKind === "contsuit";
@@ -107,7 +108,7 @@ async function phase096() {
   if (S.hooded || S.sealed || !d.alive) return;
   if (!S.rage) {
     // it shifts where it sits now and then, which moves its face
-    if (Math.random() < 0.2) { d.facing = rand(0, 7); if (seen(d.x, d.y)) log("SCP-096 shifts where it sits, still weeping. Its face is turned another way.", "key"); }
+    if (rnd() < 0.2) { d.facing = rand(0, 7); if (seen(d.x, d.y)) log("SCP-096 shifts where it sits, still weeping. Its face is turned another way.", "key"); }
     return;
   }
   const all = marked();
@@ -170,7 +171,7 @@ function compel012() {
     if (u.compelled !== undefined || u.eyesDown || u.downed || u.record || u.host || !u.alive || u.saved || u.restrained) continue;
     if (cheb(u.x, u.y, d.x, d.y) > reach012() || !canSee(u, d.x, d.y)) continue;
     const p = 0.3 + Math.max(0, 50 - u.san) * 0.005;
-    if (Math.random() >= p) continue;
+    if (rnd() >= p) continue;
     u.compelled = S.turn; u.overwatch = false; u.staring = false;
     log(`${who(u)} can't look away from the score. They start walking toward it.`, "bad");
     if (isTeam(u)) highlight(2, "#d8bf86");
@@ -223,7 +224,7 @@ async function phase939() {
   const pack = voices();
   if (!pack.length) return;
   // one of them speaks with someone else's voice
-  if (Math.random() < 0.5) {
+  if (rnd() < 0.5) {
     const v = pick(pack), people = [...team().filter(m => m.side === "mtf"), ...S.units.filter(u => u.side === "civilian" && u.alive && !u.saved && !u.record)];
     if (people.length) {
       const as = pick(people), tag = r4b("voice_analysis") ? " (mimicry?)" : "";
@@ -243,7 +244,7 @@ async function phase939() {
     if (!near.length) {
       const m = S.mem.get("939-" + v.id), goal: Pt | null = m && S.turn - m.turn <= 2 ? [m.x, m.y] : null;
       const path = goal ? pathTo(v.x, v.y, (x, y) => cheb(x, y, goal[0], goal[1]) <= 0 || (x === goal[0] && y === goal[1]), passable)
-        : pathTo(v.x, v.y, (x, y) => passable(x, y) && Math.random() < 0.08, passable);
+        : pathTo(v.x, v.y, (x, y) => passable(x, y) && rnd() < 0.08, passable);
       if (path) for (const [x, y] of path.slice(0, 6)) {
         if (someoneAt(x, y, v)) break;
         v.facing = facingTo(x - v.x, y - v.y); v.x = x; v.y = y;
@@ -326,7 +327,7 @@ function reach035() {
   const near = humans().filter(u => !u.downed && !u.record && cheb(u.x, u.y, m.x, m.y) <= 2 && !suited(u)).sort((a, b) => cheb(a.x, a.y, m.x, m.y) - cheb(b.x, b.y, m.x, m.y));
   const u = near[0];
   if (!u) return;
-  if (Math.random() < 0.5 + Math.max(0, 50 - u.san) * 0.01) possess(u);
+  if (rnd() < 0.5 + Math.max(0, 50 - u.san) * 0.01) possess(u);
   else log(`${who(u)} feels the urge to pick up the mask, and doesn't.`, "key");
 }
 export const caseTargets = (u: Unit) => {
@@ -334,7 +335,7 @@ export const caseTargets = (u: Unit) => {
   return maskOnFloor() && u.side === "mtf" && carries(u, "case") && cheb(u.x, u.y, m.x, m.y) <= 1 ? [m] : [];
 };
 export function caseMask(u: Unit) {
-  if (!suited(u) && !r4b("sealed_handling") && Math.random() < 0.2) {
+  if (!suited(u) && !r4b("sealed_handling") && rnd() < 0.2) {
     log(`${full(u)} reaches for the mask and stops. They lift it to their face instead.`, "bad");
     possess(u); return;
   }

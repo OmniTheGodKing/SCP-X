@@ -1,9 +1,10 @@
 // Site-19's researchers and engineers as people, the way XCOM names its scientists and engineers: a name, a face, a
 // field or trade, a line about who they are. The counts c.researchers and c.engineers stay the source of truth for
 // the rules; this list keeps a person behind every one of them, and remembers the ones who were lost.
+import { rnd } from "../core/rng";
 import { CULTURES, fullName, type Culture } from "../data/names";
 import { rollLook, type Look } from "../data/looks";
-import type { Branch } from "./research";
+import { fitAssignments, type Branch } from "./research";
 import { log, type Campaign } from "./campaign";
 
 export type StaffKind = "researcher" | "engineer";
@@ -51,14 +52,14 @@ const BIO_E = [
   "Keeps a notebook of every door at Site-19 and which ones stick.", "Talks to the generators. They seem to listen.",
   "Built the first cell door that held. Is proud of it, quietly.", "Hums while welding. Everyone has stopped complaining.",
 ];
-const pick = <T>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
+const pick = <T>(xs: T[]) => xs[Math.floor(rnd() * xs.length)];
 const CULTURE_POOL: Culture[] = ["us", "us", "us", "uk", "uk", "fr", "de", "it", "hu", "pl", "nl", "se", "il", "ru"];
 
 export function newPerson(c: Campaign, kind: StaffKind, loan?: string): Person {
   const used = new Set([...(c.people ?? []).map(p => p.name), ...c.roster.map(o => o.name)]);
-  const sex: "m" | "f" = Math.random() < (kind === "researcher" ? 0.35 : 0.15) ? "f" : "m";
+  const sex: "m" | "f" = rnd() < (kind === "researcher" ? 0.35 : 0.15) ? "f" : "m";
   const culture = pick(CULTURE_POOL.filter(k => CULTURES[k]));
-  const id = `${kind[0]}${c.day}-${Math.floor(Math.random() * 1e6)}`;
+  const id = `${kind[0]}${c.day}-${Math.floor(rnd() * 1e6)}`;
   const base = fullName(culture, sex, used);
   return {
     id, kind, sex, look: rollLook(id, sex), since: c.day, loan,
@@ -103,9 +104,9 @@ export function losePeople(c: Campaign, kind: StaffKind, n: number, how: string,
   for (let i = 0; i < n; i++) {
     const here = present(c, kind);
     if (!here.length) break;
-    const p = here.find(x => x.name === who) ?? here[Math.floor(Math.random() * here.length)];
+    const p = here.find(x => x.name === who) ?? here[Math.floor(rnd() * here.length)];
     c.people = c.people!.filter(x => x !== p);
-    if (kind === "researcher") c.researchers = Math.max(0, c.researchers - 1); else c.engineers = Math.max(0, c.engineers - 1);
+    if (kind === "researcher") { c.researchers = Math.max(0, c.researchers - 1); fitAssignments(c); } else c.engineers = Math.max(0, c.engineers - 1);
     (c.staffLost ??= []).unshift({ name: p.name, kind, day: c.day, how, field: p.field, trade: p.trade });
     out.push(p.name);
   }
@@ -117,7 +118,7 @@ export function sendAway(c: Campaign, kind: StaffKind, id?: string): Person | nu
   const p = (id ? present(c, kind).find(x => x.id === id) : undefined) ?? present(c, kind)[0];
   if (!p) return null;
   p.away = true;
-  if (kind === "researcher") c.researchers--; else c.engineers--;
+  if (kind === "researcher") { c.researchers--; fitAssignments(c); } else c.engineers--;
   return p;
 }
 export function bringBack(c: Campaign, kind: StaffKind, id?: string) {
@@ -131,7 +132,7 @@ export const fieldBoost = (c: Campaign, branch: Branch) =>
   present(c, "researcher").some(p => p.field && FIELDS[p.field].branches.includes(branch)) ? 1 + FIELD_BONUS : 1;
 export const hasTrade = (c: Campaign, t: Trade) => present(c, "engineer").some(p => p.trade === t);
 /** A name to put on a job: one of the people of that kind at Site-19 now. */
-export const someone = (c: Campaign, kind: StaffKind) => { syncStaff(c); const h = present(c, kind); return h.length ? h[Math.floor(Math.random() * h.length)].name : null; };
+export const someone = (c: Campaign, kind: StaffKind) => { syncStaff(c); const h = present(c, kind); return h.length ? h[Math.floor(rnd() * h.length)].name : null; };
 export function announceHire(c: Campaign, p: Person) {
   log(c, p.kind === "researcher" ? `${p.name} (${FIELDS[p.field!].name.toLowerCase()}) joins the research staff. ${p.bio}` : `${p.name}, ${TRADES[p.trade!].name.toLowerCase()}, joins the engineering staff. ${p.bio}`, "good");
 }

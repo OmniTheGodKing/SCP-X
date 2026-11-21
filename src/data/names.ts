@@ -1,5 +1,6 @@
 // Full names for operatives and guards: a given name and a family name from the same culture, in that culture's
 // usual order and forms (Gurkha given names with Bahadur and Kumari, Dutch family names with "de" and "van").
+import { rnd } from "../core/rng";
 export type Culture = "us" | "uk" | "maori" | "fr" | "es" | "hu" | "de" | "it" | "gurkha" | "il" | "dk" | "nl" | "ph" | "be" | "no"
   | "se" | "pl" | "cz" | "ru" | "pt" | "ng" | "za" | "lb" | "pk";
 
@@ -36,7 +37,7 @@ export const CULTURES: Record<Culture, Pool> = {
   pk: { family: ["Iqbal"], m: ["Muhammad", "Imran", "Tariq"], f: ["Ayesha", "Fatima", "Zainab"] },
 };
 
-const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+const pick = <T>(a: T[]) => a[Math.floor(rnd() * a.length)];
 /** The family name: the last word, keeping particles like "de" or "van" and compound Gurkha given names out of it. */
 export const familyOf = (name: string) => {
   const words = name.trim().split(/\s+/);

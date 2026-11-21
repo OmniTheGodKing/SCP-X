@@ -1,15 +1,18 @@
 // Debug menu for testing. Opens with the backtick key, or a button when the page URL has ?debug.
 // Anything it does to a campaign marks that save as a debug save.
+import { campaignState, forceRng, rnd } from "../core/rng";
+import { checkInvariants } from "../campaign/invariants";
+import { projection } from "../campaign/forecast";
 import { NICK_RANK, giveNick, RANK_XP, RANKS, advanceDay, dateText, gainIntel, log, maxSanOf, pendingBreach, startRiot, type Campaign } from "../campaign/campaign";
-import { tickConstruction } from "../campaign/base";
-import { PROJECTS, projectDays, tickResearch } from "../campaign/research";
-import { captureNow, firstSighting, resurface, startBreach, wreckFacility } from "../campaign/containment";
+import { engineersFree, tickConstruction } from "../campaign/base";
+import { PROJECTS, projectDays, researchersFree, tickResearch } from "../campaign/research";
+import { breachRisk, captureNow, firstSighting, resurface, startBreach, wreckFacility } from "../campaign/containment";
 import { addExposure, locateCell, spawnCoverup, locateIntel } from "../campaign/world";
 import { newGuard, startRaid, type Alert } from "../campaign/security";
 import { inspect } from "../campaign/inspection";
 import { lostTeam, siteEmergency, siteOf } from "../campaign/taskforces";
 import { spawnLead, tickLeads, type LeadKind } from "../campaign/leads";
-import { addThreat, monthlyChaos, sabotage, tickChaos } from "../campaign/chaos";
+import { PLANS, addThreat, monthlyChaos, planScores, sabotage, tickChaos } from "../campaign/chaos";
 import { addStanding, crisis, issueDirectives, newOffer, receive } from "../campaign/council";
 import type { ScpId } from "../game/types";
 import { STAFF_EVENTS, monthlyStaff, type StaffEventId } from "../campaign/staff";
@@ -24,6 +27,8 @@ export interface DebugHost {
   screen: () => "hub" | "mission";
   /** Save and redraw the hub after a change. */
   refresh: () => void;
+  /** Open the tactical lab (Tactical overhaul T6.2). */
+  lab?: () => void;
 }
 
 const START = Date.UTC(1951, 5, 1);
@@ -62,8 +67,34 @@ export function mountDebug(host: DebugHost) {
       ${inMission ? missionPanel() : hubPanel(c)}`;
   }
 
+  /** Strategic overhaul E3: a read-only look at the campaign's state: what the rules think right now. Nothing here
+   *  changes the campaign, so opening it doesn't mark the save as a debug save. */
+  function inspector(c: Campaign) {
+    const inv = checkInvariants(c), pr = projection(c, 90), scores = planScores(c);
+    const held = c.scps.filter(s => s.status === "contained" || s.status === "breach");
+    const pct = (p: number) => `${(p * 100).toFixed(p < 0.01 ? 2 : 1)}%`;
+    return `<details class="dbg-group dbg-inspect" open><summary class="label">Strategic inspector · ${inv.length ? `<span class="warn">${inv.length} invariant error${inv.length > 1 ? "s" : ""}</span>` : "invariants hold"}</summary>
+      <table class="dbg-table">
+        <tr><th>Day</th><td>${c.day} (${dateText(c.day)})</td><th>Seed state</th><td>${campaignState() >>> 0}</td></tr>
+        <tr><th>Funds</th><td>$${c.funds}k · ${pr.monthlyNet >= 0 ? "+" : "−"}$${Math.abs(pr.monthlyNet)}k a month${pr.debtDay !== undefined ? ` · <span class="warn">debt ${dateText(pr.debtDay)}</span>` : ""}</td><th>Standing</th><td>${c.council.standing}</td></tr>
+        <tr><th>Exposure</th><td>${c.exposure} (${REGION_IDS.map(r => `${r} ${c.regions[r].exposure}${c.regions[r].collapsed ? "×" : ""}`).join(", ")})</td><th>Agenda</th><td>${c.chaos.threat} · moles ${c.chaos.moles}</td></tr>
+        <tr><th>Staff</th><td>${c.researchers} researchers (${researchersFree(c)} free) · ${c.engineers} engineers (${engineersFree(c)} free) · ${c.dclass} D-Class</td><th>Morale</th><td>${c.morale}</td></tr>
+      </table>
+      <div class="label">Breach risk per day (over 30 days)</div>
+      <ul class="dbg-list">${held.map(s => { const r = breachRisk(c, s); return `<li>${esc(s.name)}: ${pct(r.p)} (${pct(1 - Math.pow(1 - r.p, 30))}) · ${esc(r.why.join("; "))}</li>`; }).join("") || "<li>Nothing held.</li>"}</ul>
+      <div class="label">Insurgency: what each operation is worth to it now</div>
+      <ul class="dbg-list">${scores.map(x => `<li>${esc(PLANS[x.kind].name)} (${x.kind}): ${x.score} · ${esc(x.why)}${x.region ? ` · ${x.region}` : ""}</li>`).join("")}</ul>
+      <div class="label">Planned operations</div>
+      <ul class="dbg-list">${c.chaos.plans.map(p => `<li>${esc(PLANS[p.kind].name)} · due day ${p.due}${p.known ? "" : " · unidentified"}${p.locked ? " · locked" : ""}${p.why ? ` · ${esc(p.why)}` : ""}</li>`).join("") || "<li>None.</li>"}</ul>
+      <div class="label">Invariants</div>
+      <ul class="dbg-list">${inv.map(e => `<li class="warn">${esc(e)}</li>`).join("") || "<li>All hold.</li>"}</ul>
+    </details>`;
+  }
+
   function hubPanel(c: Campaign) {
     return [
+      inspector(c),
+      group("Tactical lab", btn("lab", "Open the tactical lab")),
       group("Resources", btn("funds", "+$500k") + btn("intel", "+5 Intel") + btn("amnestics", "+5 amnestics") + btn("dclass", "+4 D-Class") + btn("engineers", "+2 engineers") + btn("researchers", "+2 researchers") + btn("guards", "+2 guards")),
       group("Time", btn("d1", "+1 day") + btn("d7", "+7 days") + btn("d30", "+30 days") + btn("d365", "+1 year")
         + `<label class="dbg-field">Jump to year <select data-dbg-year>${Array.from({ length: 25 }, (_, i) => 1951 + i).map(y => `<option ${y === new Date(START + (c.day - 1) * 864e5).getUTCFullYear() ? "selected" : ""}>${y}</option>`).join("")}</select></label>`),
@@ -111,6 +142,7 @@ export function mountDebug(host: DebugHost) {
       }
     };
     switch (id) {
+      case "lab": panel.hidden = true; host.lab?.(); return false;
       case "funds": c.funds += 500; break;
       case "intel": gainIntel(c, 5); break;
       case "amnestics": c.amnestics += 5; break;
@@ -133,7 +165,7 @@ export function mountDebug(host: DebugHost) {
       case "materials": for (const m of ["ciWeapons", "prisoners", "intelTotal", "tissue", "survivors"] as const) c.materials[m] = (c.materials[m] ?? 0) + 5; break;
       case "offer": {
         const pool = Object.keys(PROJECTS).filter(p => PROJECTS[p].breakthrough && !c.research.done.includes(p));
-        if (pool.length) c.research.offer = { id: pool[Math.floor(Math.random() * pool.length)], until: c.day + 30 }; else note = "Every breakthrough is done.";
+        if (pool.length) c.research.offer = { id: pool[Math.floor(rnd() * pool.length)], until: c.day + 30 }; else note = "Every breakthrough is done.";
         break;
       }
       case "unlockall":
@@ -169,7 +201,7 @@ export function mountDebug(host: DebugHost) {
       case "nu7": c.tf.nu7 = true; break;
       case "lostteam": lostTeam(c); break;
       case "emerg": siteEmergency(c); break;
-      case "emerg-scp": { const s = siteOf(c, "Site-17"); if (!s.holds.includes("049")) s.holds.push("049"); const r = Math.random; Math.random = () => 0.1; try { siteEmergency(c); } finally { Math.random = r; } break; }
+      case "emerg-scp": { const s = siteOf(c, "Site-17"); if (!s.holds.includes("049")) s.holds.push("049"); forceRng(0.1); try { siteEmergency(c); } finally { forceRng(null); } break; }
       case "agents": c.tf.agents += 2; break;
       case "land": if (c.outbound) c.outbound.arrive = c.day + (c.hour ?? 0) / 24; break;
       case "th-20": addThreat(c, -20, "debug"); break;

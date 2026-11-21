@@ -1,4 +1,5 @@
 import { homeRegion } from "./org";
+import { rnd } from "../core/rng";
 import { fieldMap } from "../data/maps";
 // The Chaos Insurgency as one organization: a single worldwide agenda that advances while its cells and operations go
 // unchecked (like XCOM 2's Avatar Project), monthly operations Site-19 can find and disrupt (like dark events), a named
@@ -11,13 +12,13 @@ import { cultureOfFamily, fullName } from "../data/names";
 import { dateText, log, yearOf, type Campaign, type Incident } from "./campaign";
 import { addStanding } from "./council";
 import { chronicle } from "./history";
-import { addExposure, isContacted, locateCellFor, travelDays } from "./world";
-import { FACILITIES, operational } from "./base";
-import { scpName, startBreach, wreckFacility } from "./containment";
-import { startRaid } from "./security";
+import { addExposure, isContacted, locateCellFor, regionFunding, travelDays } from "./world";
+import { FACILITIES, isContainment, operational, powerShort } from "./base";
+import { gocInterest, scpName, startBreach, wreckFacility } from "./containment";
+import { guardsAlive, startRaid, unposted } from "./security";
 
-const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
-const pick = <T>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
+const rand = (a: number, b: number) => a + Math.floor(rnd() * (b - a + 1));
+const pick = <T>(xs: T[]) => xs[Math.floor(rnd() * xs.length)];
 
 export type PlanKind = "hijack" | "agitate" | "mole" | "infiltrate" | "raid" | "sabotage" | "arm";
 export interface Plan {
@@ -30,6 +31,8 @@ export interface Plan {
   locked?: boolean;
   /** What Site-19 believes about when it happens: a span of days that holds the real date somewhere inside it. */
   win?: [number, number];
+  /** Strategic overhaul D4: why the Insurgency chose it (the weakness it means to use), as Site-19's analysts read it. */
+  why?: string;
 }
 export interface Commander { name: string; rank: string; seen: number; escapes: number; since: number; alive: boolean; fate?: string }
 export interface Inquiry { id: string; day: number; scp: string; cause: "accident" | "anomalous" | "sabotage"; known: boolean }
@@ -106,7 +109,7 @@ export const planActive = (c: Campaign, kind: PlanKind, r?: RegionId) => c.chaos
 /** Which specialists Insurgent teams field: snipers and demolition men from 25, officers always, charms when armed. */
 export function ciRoles(c: Campaign): { sniper: boolean; demo: boolean; officer: boolean; charm: boolean } {
   const t = c.chaos.threat, armed = planActive(c, "arm");
-  return { sniper: t >= 25 || armed, demo: t >= 25 || armed, officer: yearOf(c.day) >= 1952 || t >= 20, charm: armed || (t >= 45 && Math.random() < 0.4) };
+  return { sniper: t >= 25 || armed, demo: t >= 25 || armed, officer: yearOf(c.day) >= 1952 || t >= 20, charm: armed || (t >= 45 && rnd() < 0.4) };
 }
 export const threatExtra = (c: Campaign) => (c.chaos.threat >= 70 ? 2 : c.chaos.threat >= 40 ? 1 : 0) + (planActive(c, "arm") ? 1 : 0);
 
@@ -115,7 +118,7 @@ const RANKS = ["Captain", "Major", "Colonel"];
 const FAMILIES = ["Reyes", "Novak", "Petrov", "Haddad", "Whitlock", "Duarte", "Lindqvist", "Varga"];
 function newCommander(c: Campaign): Commander {
   const fam = pick(FAMILIES);
-  const cmd: Commander = { name: fullName(cultureOfFamily(fam), Math.random() < 0.8 ? "m" : "f", new Set()), rank: pick(RANKS), seen: 0, escapes: 0, since: c.day, alive: true };
+  const cmd: Commander = { name: fullName(cultureOfFamily(fam), rnd() < 0.8 ? "m" : "f", new Set()), rank: pick(RANKS), seen: 0, escapes: 0, since: c.day, alive: true };
   chronicle(c, "insurgency", `Intelligence names a new Insurgency field commander: ${cmd.rank} ${cmd.name}.`);
   log(c, `Intercepted orders name the Insurgency's new field commander: ${cmd.rank} ${cmd.name}. Expect to meet them.`, "key", "command");
   return cmd;
@@ -125,7 +128,7 @@ export function commanderJoins(c: Campaign, inc: Incident) {
   const k = c.chaos;
   if (!k.commander?.alive || !inc.insurgents) return false;
   if (inc.kind !== "strike" && inc.kind !== "raid" && inc.kind !== "retaliation" && inc.kind !== "escort") return false;
-  return !!inc.plan || Math.random() < 0.3;
+  return !!inc.plan || rnd() < 0.3;
 }
 /** After a mission the commander was in: killed, taken, or away again. Returns a debrief line. */
 export function commanderFate(c: Campaign, fate: "killed" | "captured" | "escaped"): string {
@@ -147,15 +150,41 @@ export function commanderFate(c: Campaign, fate: "killed" | "captured" | "escape
 }
 
 // ---------- plans ----------
+/** Strategic overhaul D4: what each operation is worth to the Insurgency this month, from Site-19's weaknesses and the
+ *  Insurgency's own strength (its agenda), with the reason. Pure, so the developer inspector can show it. */
+export interface PlanScore { kind: PlanKind; score: number; why: string; region?: RegionId }
+export function planScores(c: Campaign): PlanScore[] {
+  const k = c.chaos, t = k.threat;
+  const posted = guardsAlive(c).length - unposted(c).length;
+  const held = c.base.facilities.filter(f => isContainment(f.type) && c.scps.some(s => s.wingId === f.id && s.status === "contained")).length;
+  const fronts = REGION_IDS.filter(r => isContacted(c, r) && !c.regions[r].collapsed).map(r => ({ r, pay: regionFunding(c, r) })).sort((a, b) => b.pay - a.pay);
+  const prisoners = c.materials.prisoners ?? 0, staff = c.researchers + c.engineers + guardsAlive(c).length;
+  const sightings = c.incidents.filter(i => i.scpId && i.first).length + c.incidents.filter(i => i.kind === "escort").length;
+  const out: PlanScore[] = [];
+  const add = (kind: PlanKind, score: number, why: string[], region?: RegionId) => out.push({ kind, score, why: why.filter(Boolean).join("; ") || "opportunity", region });
+  add("raid", 1 + (posted < 4 ? 3 : posted < 6 ? 1 : 0) + (c.outbound ? 3 : 0) + (c.alert === "normal" ? 1 : 0) + (t >= 30 ? 1 : -2),
+    [posted < 6 ? `only ${posted} guards at their posts` : "", c.outbound ? "Epsilon-11 is away from Site-19" : "", c.alert === "normal" ? "Site-19 is on normal alert" : "", t < 30 ? "" : "the cells are strong enough to try"]);
+  add("sabotage", 1 + held + (powerShort(c) ? 2 : 0) + k.moles * 2,
+    [held ? `${held} occupied containment wing${held > 1 ? "s" : ""} to crack open` : "", powerShort(c) ? "Site-19 is short of power" : "", k.moles ? "a mole inside to plant the charge" : ""]);
+  add("agitate", 1 + ((c.morale ?? 60) < 50 ? 2 : 0) + (c.dclass >= 8 ? 1 : 0),
+    [(c.morale ?? 60) < 50 ? `D-Class morale is low (${c.morale})` : "", c.dclass >= 8 ? `${c.dclass} D-Class in the block` : ""]);
+  if (k.moles < 2) add("mole", 2 + (posted < 4 ? 1 : 0) + (staff >= 14 ? 1 : 0), [staff >= 14 ? `a staff of ${staff} to hide in` : "", posted < 4 ? "thin security" : ""]);
+  if (fronts.length) add("infiltrate", 1 + Math.round(fronts[0].pay / 20), [`${REGIONS[fronts[0].r].front} is the richest front ($${fronts[0].pay}k a month)`], fronts[0].r);
+  add("hijack", 1 + Math.min(3, sightings) + (t >= 40 ? 1 : 0), [sightings ? `${sightings} anomal${sightings > 1 ? "ies" : "y"} out in the field to intercept` : ""]);
+  add("arm", 1 + (t >= 50 ? 2 : 0) + (prisoners ? 1 : 0),
+    [t >= 50 ? "the agenda is far enough along to arm the cells" : "", prisoners ? `Site-19 holds ${prisoners} of their people` : ""]);
+  return out.sort((a, b) => b.score - a.score);
+}
+
 function newPlans(c: Campaign) {
   const k = c.chaos;
   k.plans = k.plans.filter(p => p.due >= c.day);
   const open = REGION_IDS.filter(r => !c.regions[r].collapsed);
-  const kinds = (Object.keys(PLANS) as PlanKind[]).filter(p => p !== "mole" || k.moles < 2).sort(() => Math.random() - 0.5).slice(0, 3);
-  const made: Plan[] = kinds.map(kind => {
-    const front = kind === "infiltrate" ? pick(REGION_IDS.filter(r => isContacted(c, r) && !c.regions[r].collapsed)) : undefined;
+  // the three operations worth most this month, with some uncertainty in how the Insurgency weighs them
+  const chosen = planScores(c).map(s => ({ ...s, roll: s.score + rnd() * 2 })).sort((a, b) => b.roll - a.roll).slice(0, 3);
+  const made: Plan[] = chosen.map(({ kind, why, region }) => {
     const due = c.day + rand(14, 24);
-    return { id: "p" + k.nextPlan++, kind, region: front ?? (kind === "raid" || kind === "sabotage" || kind === "mole" || kind === "agitate" ? homeRegion(c) : pick(open)), due, known: true,
+    return { id: "p" + k.nextPlan++, kind, why, region: region ?? (kind === "raid" || kind === "sabotage" || kind === "mole" || kind === "agitate" ? homeRegion(c) : pick(open)), due, known: true,
       win: [Math.max(c.day + 7, due - rand(3, 8)), due + rand(3, 8)] as [number, number] };
   });
   // like guerrilla operations: each operation's cell is located, and the three strikes arrive together. Answering one
@@ -236,7 +265,7 @@ export function sabotage(c: Campaign, text: string) {
   const targets = c.base.facilities.filter(f => operational(f) && f.type !== "command");
   if (!targets.length) return;
   const wing = targets.find(f => FACILITIES[f.type].grade !== undefined && c.scps.some(s => s.wingId === f.id && s.status === "contained" && !s.id.match(/^(500|914|005)$/)));
-  const f = wing && Math.random() < 0.5 ? wing : pick(targets);
+  const f = wing && rnd() < 0.5 ? wing : pick(targets);
   const occ = c.scps.find(s => s.wingId === f.id && s.status === "contained");
   if (occ && f === wing) { c.chaos.pendingCause = "sabotage"; startBreach(c, occ, "Containment alarm."); c.chaos.pendingCause = undefined; return; }
   wreckFacility(c, f, text, true);
@@ -271,8 +300,8 @@ export function investigateBreach(c: Campaign, id: string) {
  *  Returns what happened, or null if neither got there first. */
 export function rivalTakes(c: Campaign, inc: Incident): string | null {
   if (yearOf(c.day) < 1952 && !inc.first) return null;
-  const gru = (inc.region === "europe" || inc.region === "east_asia") && Math.random() < 0.4;
-  const goc = !gru && Math.random() < 0.3;
+  const gru = (inc.region === "europe" || inc.region === "east_asia") && rnd() < 0.4;
+  const goc = !gru && rnd() < 0.15 + gocInterest(c, inc.region);   // D4: drawn by exposure
   if (!gru && !goc) return null;
   const who = gru ? "GRU Division \"P\"" : "The Global Occult Coalition";
   const what = gru ? `${who} got to ${scpName(inc.scpId)} first and took it east. The Soviets have it now.` : `${who} reached ${scpName(inc.scpId)} before the Foundation and destroyed it.`;
@@ -288,7 +317,7 @@ export function tickChaos(c: Campaign) {
   for (const p of k.plans.filter(x => c.day >= x.due)) execute(c, p);
   if (!k.commander && c.day >= (k.nextCommander ?? 40)) k.commander = newCommander(c);
   // a mole does damage now and then
-  if (k.moles && Math.random() < 0.012 * k.moles) sabotage(c, "Something in the site failed in a way it shouldn't have.");
+  if (k.moles && rnd() < 0.012 * k.moles) sabotage(c, "Something in the site failed in a way it shouldn't have.");
 }
 export function monthlyChaos(c: Campaign) {
   addThreat(c, 1 + c.chaos.moles, "a month of Insurgency recruitment");

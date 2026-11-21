@@ -2,6 +2,7 @@
 // Site → MTF → Squad → Operative. Each has a persistent id separate from the name shown, so a site or a squad can be
 // renamed without breaking anything. The site's position on the globe drives travel, logistics, supply costs and
 // secrecy; the squads drive who can deploy, what specialist kit they may carry and how they fare without the player.
+import { rnd } from "../core/rng";
 import type { Campaign, Operative } from "./campaign";
 import { LAND, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { MTF_CONFIG, SPECIALTIES, SPECIALIST_ITEMS, SPECS, type SpecId, type SpecialtyId } from "../data/mtf";
@@ -31,7 +32,7 @@ export const activeForceTitle = () => activeMtf ? `${activeMtf.designation} "${a
  *  is written with a non-breaking hyphen ("Epsilon\u201111"), so it keeps its real name. */
 export function localizeText(t: string) {
   if (activeMtf) t = t.replace(/Epsilon-11 ["“]Nine-Tailed Fox["”]/g, `${activeMtf.designation} "${activeMtf.name}"`).replace(/Epsilon-11(?!\d)/g, activeMtf.designation);
-  if (active !== LEGACY_SITE) t = t.replace(/Site-19(?![\w-])/g, active.designation);
+  if (active !== LEGACY_SITE) t = t.replace(/Site-19(?![\w-])/g, active.designation).replace(/site-19(?![\w-])/g, active.designation.toLowerCase());
   return t;
 }
 /** Point the text helpers at a campaign: call on load, on a new campaign and when its site or MTF is founded. */
@@ -54,7 +55,7 @@ export function onLand(lon: number, lat: number) {
   return LAND.some(r => inRing(lon, lat, r) || inRing(lon + 360, lat, r) || inRing(lon - 360, lat, r));
 }
 /** A random point on land, from a seeded or ordinary random source. */
-export function randomLand(rand: () => number = Math.random): [number, number] {
+export function randomLand(rand: () => number = rnd): [number, number] {
   for (let i = 0; i < 2000; i++) {
     const lon = Math.round((-170 + rand() * 345) * 10) / 10, lat = Math.round((-50 + rand() * 120) * 10) / 10;
     if (onLand(lon, lat)) return [lon, lat];

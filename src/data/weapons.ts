@@ -55,22 +55,48 @@ export const startingModels = (): Record<WeaponType, string> =>
 
 export interface TypeInfo { name: string; desc: string; move: number; crit: number; }
 export const TYPES: Record<WeaponType, TypeInfo> = {
-  rifle:    { name: "Service rifle",  move: 0,  crit: 0,  desc: "The all-rounder." },
-  marksman: { name: "Marksman rifle", move: 0,  crit: 0,  desc: "No long-range penalty, −20 aim within 3 tiles, and firing takes both actions." },
-  shotgun:  { name: "Shotgun",        move: 0,  crit: 10, desc: "+20 aim within 3 tiles, falls off fast beyond 6, +10% crit." },
-  mg:       { name: "Machine gun",    move: -1, crit: 0,  desc: "−1 move. Overwatch shots lose only 5 aim, and suppression is −40." },
-  carbine:  { name: "Carbine",        move: 1,  crit: 0,  desc: "+1 move." },
-  smg:      { name: "Submachine gun", move: 1,  crit: 0,  desc: "+1 move, +15 aim within 3 tiles, and firing doesn't end the turn." },
+  rifle:    { name: "Service rifle",  move: 0,  crit: 0,  desc: "The all-rounder: +10 aim up close, steady out to 12 tiles, then falls off." },
+  marksman: { name: "Marksman rifle", move: 0,  crit: 0,  desc: "Best far off: +10 aim from 12 to 20 tiles, −20 within 3, and firing takes both actions." },
+  shotgun:  { name: "Shotgun",        move: 0,  crit: 10, desc: "+20 aim within 3 tiles, falls off fast beyond 6 (aim and damage), +10% crit." },
+  mg:       { name: "Machine gun",    move: -1, crit: 0,  desc: "−1 move. Steady across the middle distances; overwatch shots lose only 5 aim." },
+  carbine:  { name: "Carbine",        move: 1,  crit: 0,  desc: "+1 move. Good up close and out to about 9 tiles." },
+  smg:      { name: "Submachine gun", move: 1,  crit: 0,  desc: "+1 move, +15 aim within 3 tiles but weak past 7 (aim and damage), and firing doesn't end the turn." },
 };
 
 /** Aim change from distance for each weapon type. */
-export function rangeMod(type: WeaponType, dist: number): [string, number] | null {
-  switch (type) {
-    case "marksman": return dist <= 3 ? ["Too close for a scope", -20] : null;
-    case "shotgun": return dist <= 3 ? ["Point blank", 20] : dist > 6 ? ["Out of shotgun range", -Math.round((dist - 6) * 10)] : null;
-    case "smg": return dist <= 3 ? ["Close range", 15] : dist > 6 ? ["Long range", -Math.round((dist - 6) * 6)] : null;
-    default: return dist <= 3 ? ["Close range", 10] : dist > 7 ? ["Long range", -Math.round((dist - 7) * 4)] : null;
+/**
+ * Accuracy by distance for each weapon type (Tactical overhaul T4.1), as points [tiles, aim modifier] joined by
+ * straight lines, flat beyond the last point. Each class has a range it is good at: shotguns and SMGs up close,
+ * marksman rifles far off, rifles and carbines in between, machine guns steady across the middle.
+ */
+export const RANGE_CURVES: Record<WeaponType, [number, number][]> = {
+  rifle:    [[1, 10], [3, 10], [5, 5], [8, 0], [12, 0], [16, -10], [22, -22], [30, -38]],
+  marksman: [[1, -25], [3, -20], [5, -5], [8, 5], [12, 10], [20, 10], [30, 5]],
+  shotgun:  [[1, 25], [3, 20], [5, 5], [7, -10], [10, -30], [14, -50]],
+  smg:      [[1, 20], [3, 15], [5, 5], [7, -5], [10, -20], [14, -35]],
+  carbine:  [[1, 15], [3, 12], [6, 3], [9, 0], [13, -10], [18, -24]],
+  mg:       [[1, 5], [4, 5], [8, 0], [12, -5], [18, -18], [26, -32]],
+};
+/** The aim modifier for a weapon type at a distance in tiles. */
+export function rangeAim(type: WeaponType, dist: number): number {
+  const c = RANGE_CURVES[type];
+  if (dist <= c[0][0]) return c[0][1];
+  for (let i = 1; i < c.length; i++) if (dist <= c[i][0]) {
+    const [d0, a0] = c[i - 1], [d1, a1] = c[i];
+    return Math.round(a0 + (a1 - a0) * (dist - d0) / (d1 - d0));
   }
+  return c[c.length - 1][1];
+}
+export function rangeMod(type: WeaponType, dist: number): [string, number] | null {
+  const a = rangeAim(type, dist);
+  if (!a) return null;
+  return [a > 0 ? `Range: ${dist < 6 ? "close" : "good"}` : `Range: ${dist >= 12 ? "long" : "poor"}`, a];
+}
+/** Damage lost at range: shotguns past 6 tiles lose 1 per 3 tiles; SMGs past 9 lose 1 (Tactical overhaul T4.3). */
+export function rangeDamage(type: WeaponType, dist: number): number {
+  if (type === "shotgun" && dist > 6) return -Math.ceil((dist - 6) / 3);
+  if (type === "smg" && dist > 9) return -1;
+  return 0;
 }
 
 export const CLASS_WEAPONS: Record<ClassId, [WeaponType, WeaponType]> = {

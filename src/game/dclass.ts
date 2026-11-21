@@ -1,4 +1,5 @@
 // D-Class who are loose in the wing run for the exit; operatives can bring them into the work detail.
+import { rnd } from "../core/rng";
 import { DIRS, L, bfs, canStep, cheb, pathTo } from "../core/grid";
 import type { Unit } from "./types";
 import { sightFrom } from "../core/sight";
@@ -13,8 +14,8 @@ async function civilianPhase() {
     if (c.researcher) { await researcherMove(c); continue; }
     if (!c.spooked && S.concealed) {
       // nobody has noticed the team yet: civilians go about their business
-      const [dx, dy] = DIRS[Math.floor(Math.random() * DIRS.length)];
-      if (Math.random() < 0.5 && canStep(c.x, c.y, dx, dy) && !occupied(c.x + dx, c.y + dy, c)) await moveUnit(c, [[c.x + dx, c.y + dy]]);
+      const [dx, dy] = DIRS[Math.floor(rnd() * DIRS.length)];
+      if (rnd() < 0.5 && canStep(c.x, c.y, dx, dy) && !occupied(c.x + dx, c.y + dy, c)) await moveUnit(c, [[c.x + dx, c.y + dy]]);
       continue;
     }
     if (!c.spooked) {
@@ -24,8 +25,8 @@ async function civilianPhase() {
         c.spooked = true;
         if (seen(c.x, c.y)) log(`${c.name} ${spotted ? "spots the team" : "hears gunfire"} and runs.`, c.witness ? "bad" : "");
       } else {
-        const [dx, dy] = DIRS[Math.floor(Math.random() * DIRS.length)];
-        if (Math.random() < 0.5 && canStep(c.x, c.y, dx, dy) && !occupied(c.x + dx, c.y + dy, c)) await moveUnit(c, [[c.x + dx, c.y + dy]]);
+        const [dx, dy] = DIRS[Math.floor(rnd() * DIRS.length)];
+        if (rnd() < 0.5 && canStep(c.x, c.y, dx, dy) && !occupied(c.x + dx, c.y + dy, c)) await moveUnit(c, [[c.x + dx, c.y + dy]]);
         continue;
       }
     }

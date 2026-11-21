@@ -1,5 +1,6 @@
 // Personnel files: where an operative comes from and a line of who they were before the Foundation,
 // and the medals they can earn. Each medal carries a small permanent bonus.
+import { rnd } from "../core/rng";
 
 const US = [
   "Scranton, Pennsylvania", "Duluth, Minnesota", "Mobile, Alabama", "Butte, Montana", "Lowell, Massachusetts", "Tulsa, Oklahoma",
@@ -44,11 +45,11 @@ const CW_ONLY = [
   "Served with the Commonwealth Division in Korea, at the Imjin River.",
 ];
 
-const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+const pick = <T>(a: T[]) => a[Math.floor(rnd() * a.length)];
 /** A hometown and a story that fits it (a little over two in three are American). */
 export function rollBio() {
-  const us = Math.random() < 0.7;
-  return { home: pick(us ? US : COMMONWEALTH), age: 22 + Math.floor(Math.random() * 17), story: pick([...ANY, ...(us ? US_ONLY : CW_ONLY)]) };
+  const us = rnd() < 0.7;
+  return { home: pick(us ? US : COMMONWEALTH), age: 22 + Math.floor(rnd() * 17), story: pick([...ANY, ...(us ? US_ONLY : CW_ONLY)]) };
 }
 
 export type MedalId = "sealed_in" | "iron_nerve" | "purple_heart" | "survivor" | "distinguished";

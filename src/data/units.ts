@@ -1,3 +1,4 @@
+import { rnd } from "../core/rng";
 import type { TraitId } from "./classes";
 import { fullName, type Culture } from "./names";
 
@@ -83,7 +84,7 @@ const ANZ = ["Auckland", "Wellington", "Rotorua"];
 function cultureFor(unit: UnitId, home: string): Culture {
   const last = home.split(", ").pop()!;
   if (unit === "legion") return LEGION_HOMES[last] ?? "fr";
-  if ((unit === "nzsas") && ANZ.some(t => home.startsWith(t)) && Math.random() < 0.4) return "maori";
+  if ((unit === "nzsas") && ANZ.some(t => home.startsWith(t)) && rnd() < 0.4) return "maori";
   return UNITS[unit].names;
 }
 
@@ -93,15 +94,15 @@ export interface Candidate { id: string; name: string; nationality: string; unit
 /** Traits a candidate can bring with them (a quarter of candidates have one). */
 const START_TRAITS: TraitId[] = ["steady", "hardened", "steady", "twitchy", "nightmares"];
 
-const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+const pick = <T>(a: T[]) => a[Math.floor(rnd() * a.length)];
 export const unitsOpen = (year: number, liaison = false) => (Object.keys(UNITS) as UnitId[]).filter(u => UNITS[u].from <= year && (liaison || !UNITS[u].liaison));
 
 /** A fresh candidate from one of the units recruiting this year. Family names already in use are skipped where possible. */
 export function rollCandidate(id: string, year: number, used: Set<string>, liaison = false, better = false): Candidate {
   const unit = pick(unitsOpen(year, liaison)), u = UNITS[unit];
-  const sex: "m" | "f" = Math.random() < 0.35 ? "f" : "m", home = pick(u.homes);
-  const r = Math.random(), quality = r < (better ? 0.35 : 0.6) ? 0 : r < (better ? 0.8 : 0.9) ? 1 : 2;
-  return { id, name: fullName(cultureFor(unit, home), sex, used), nationality: nationalityOf(home), unit, quality, sex, aimBase: 62 + Math.floor(Math.random() * 13),
-    home, age: 22 + Math.floor(Math.random() * 15), story: pick(u.stories),
-    trait: quality === 2 ? "steady" : Math.random() < 0.25 ? pick(START_TRAITS) : undefined };
+  const sex: "m" | "f" = rnd() < 0.35 ? "f" : "m", home = pick(u.homes);
+  const r = rnd(), quality = r < (better ? 0.35 : 0.6) ? 0 : r < (better ? 0.8 : 0.9) ? 1 : 2;
+  return { id, name: fullName(cultureFor(unit, home), sex, used), nationality: nationalityOf(home), unit, quality, sex, aimBase: 62 + Math.floor(rnd() * 13),
+    home, age: 22 + Math.floor(rnd() * 15), story: pick(u.stories),
+    trait: quality === 2 ? "steady" : rnd() < 0.25 ? pick(START_TRAITS) : undefined };
 }

@@ -1,5 +1,7 @@
 // Chaos Insurgency AI: hold SCP-173 with their eyes when they see it, fight from cover,
 // and push toward the Foundation team.
+import { planPod, scamperPath, tacticalTurn, threats, type Plan } from "./ai";
+import { rnd } from "../core/rng";
 import { commanderFlees, demoBreach } from "./ciTactics";
 import { L, area, bfs, cheb, floorOf, nearContainer, passable, pathTo } from "../core/grid";
 import { sightFrom } from "../core/sight";
@@ -62,11 +64,7 @@ export async function activatePod(pod: number, why: string) {
   if (why === "spotted" && S.concealed) breakConcealment("an Insurgent spotted the team");
   if (S.setup.kind === "breach") { reveal("ci"); log("Chaos Insurgency strike team moving in.", "bad"); }
   else if (members.some(r => seen(r.x, r.y))) log(`An Insurgency fire team is alerted${why === "heard" ? " by the noise" : why === "hit" ? " by the attack" : ""} and scrambles for cover.`, "bad");
-  const known = knownTargets();
-  for (const r of members) {
-    const spot = bestSpot(r, known.length ? known : team());
-    if (spot) await moveUnit(r, spot);
-  }
+  for (const r of members) await scamper(r);
 }
 
 /** During the player's turn: any pod that just saw the team, heard shots or was hit scrambles at once. */
@@ -95,16 +93,20 @@ export async function raiderPhase(checkEnd: () => boolean) {
         if (best >= 0 && toward[best] < toward[r.y * L.W + r.x]) await moveUnit(r, pathTo(res, best % L.W, (best / L.W) | 0) || []);
       }
       if (seen(heard.x, heard.y) || members.some(r => seen(r.x, r.y))) log("Insurgents move to check on a noise.", "bad");
-    } else for (const r of members) if (Math.random() < 0.4) {
+    } else for (const r of members) if (rnd() < 0.4) {
       const res = bfs([[r.x, r.y]], 2, (x, y) => occupied(x, y, r));
       const opts: number[] = [];
       for (let i = 0; i < L.W * L.H; i++) if (res.dist[i] > 0 && area(i % L.W, (i / L.W) | 0) === area(r.x, r.y)) opts.push(i);
-      if (opts.length) { const i = opts[Math.floor(Math.random() * opts.length)]; await moveUnit(r, pathTo(res, i % L.W, (i / L.W) | 0) || []); }
+      if (opts.length) { const i = opts[Math.floor(rnd() * opts.length)]; await moveUnit(r, pathTo(res, i % L.W, (i / L.W) | 0) || []); }
     }
     // a patrol that walks into the team's sight gives itself away next turn; one that sees the team now raises the alarm
     const late = alarm(S.units.filter(u => u.side === "raider" && podOf(u) === pod));
     if (late === "spotted") { await activatePod(pod, late); if (checkEnd()) return; }
   }
+  // Tactical overhaul T5.2: each pod's coordinator picks a focus, a suppressor and flankers for this turn
+  plans.clear();
+  const ts = threats();
+  for (const pod of new Set(alive("raider").filter(podActive).map(podOf))) plans.set(pod, planPod(alive("raider").filter(r => podOf(r) === pod && !r.downed && podActive(r)), ts));
   for (const r of alive("raider")) {
     if (!podActive(r) || !r.alive || !alive("mtf").length || isPanicked(r)) continue;
     if (S.trophy?.includes(r.id)) continue;   // GRU-P carriers only carry
@@ -114,7 +116,7 @@ export async function raiderPhase(checkEnd: () => boolean) {
     if (isBlind(r)) { if (seen(r.x, r.y)) log("A blinded Insurgent stumbles and can't fire."); continue; }
     r.ap = 2; r.overwatch = false;
     if (await commanderFlees(r)) { if (checkEnd()) return; continue; }
-    await raiderAct(r);
+    await raiderAct(r, checkEnd);
     if (checkEnd()) return;
   }
 }
@@ -144,37 +146,24 @@ function holdControl(r: Unit) {
 }
 const controlTiles = (): [number, number][] => { const c = L.def.control!; const out: [number, number][] = []; for (let y = c[1]; y <= c[3]; y++) for (let x = c[0]; x <= c[2]; x++) if (passable(x, y)) out.push([x, y]); return out; };
 
-/** The best place within reach to fight from: in cover, flanking if possible, at a middling distance. */
-function bestSpot(r: Unit, t: Spot[]) {
-  const res = bfs([[r.x, r.y]], 5, (x, y) => occupied(x, y, r));
-  if (!t.length) return null;
-  const md = bfs(t.map(m => [m.x, m.y] as [number, number]), 999).dist;
-  const st = S.statue;
-  let bestT: [number, number] | null = null, bestScore = -1e9;
-  for (let i = 0; i < L.W * L.H; i++) {
-    if (res.dist[i] < 0) continue;
-    const x = i % L.W, y = (i / L.W) | 0;
-    let sc = 0;
-    const sees = t.filter(m => sightFrom(x, y, m.x, m.y));
-    if (sees.length) {
-      sc += 12 + Math.min(...sees.map(m => coverAgainst(x, y, m.x, m.y))) * 1.2;
-      for (const m of sees) if (coverAgainst(m.x, m.y, x, y) === 0) sc += 18;
-    }
-    const pd = md[i] < 0 ? 40 : md[i];
-    sc -= Math.abs(pd - 6) * 4;
-    if (!S.sealed && st.alive && cheb(st.x, st.y, x, y) <= 2) sc -= 40;
-    // on an escort, the truck is what they came for
-    if (S.setup.kind === "raid" && S.liftOpen && L.def.control) sc -= Math.min(...controlTiles().map(([cx, cy]) => cheb(cx, cy, x, y) + (floorOf(cy) !== floorOf(y) ? 30 : 0))) * 7;
-    else if (S.setup.convoy && truck()) sc -= cheb(truck()!.x, truck()!.y, x, y) * 7;
-    else if (S.setup.kind === "escort" || S.setup.kind === "raid") sc -= Math.min(...L.contTiles.filter(([, cy]) => floorOf(cy) === 0).map(([cx, cy]) => cheb(cx, cy, x, y))) * 7;
-    sc -= res.dist[i] * 0.5 + Math.random() * 3;
-    if (sc > bestScore) { bestScore = sc; bestT = [x, y]; }
-  }
-  if (!bestT || (bestT[0] === r.x && bestT[1] === r.y)) return null;
-  return pathTo(res, bestT[0], bestT[1]) || null;
+/** Tactical overhaul T5: how far a spot is from what this mission's Insurgents are after (a penalty the AI subtracts),
+ *  or null when they're just fighting. */
+function missionGoal(): ((x: number, y: number) => number) | null {
+  if (S.setup.kind === "raid" && S.liftOpen && L.def.control) return (x, y) => Math.min(...controlTiles().map(([cx, cy]) => cheb(cx, cy, x, y) + (floorOf(cy) !== floorOf(y) ? 30 : 0))) * 7;
+  if (S.setup.convoy && truck()) return (x, y) => cheb(truck()!.x, truck()!.y, x, y) * 7;
+  if (S.setup.kind === "escort" || S.setup.kind === "raid") { const c = L.contTiles.filter(([, cy]) => floorOf(cy) === 0); if (c.length) return (x, y) => Math.min(...c.map(([cx, cy]) => cheb(cx, cy, x, y))) * 7; }
+  // on an attack they know roughly where the team is even before seeing anyone
+  if (S.setup.kind === "retaliation" && !threats().length) return (x, y) => Math.min(...team().map(m => Math.hypot(m.x - x, m.y - y))) * 2;
+  return null;
 }
-
-async function raiderAct(r: Unit) {
+/** Scamper (XCOM): an alerted Insurgent dashes to the best spot within one move, for free. */
+async function scamper(r: Unit) {
+  const p = scamperPath(r, threats(), missionGoal());
+  if (p?.length) await moveUnit(r, p);
+}
+const plans = new Map<number, Plan>();
+const planFor = (r: Unit): Plan => plans.get(podOf(r)) ?? { flankers: [] };
+async function raiderAct(r: Unit, checkEnd: () => boolean) {
   for (let guard = 0; guard < 4 && r.ap > 0 && r.alive; guard++) {
     const t = team();
     if (!t.length) return;
@@ -205,27 +194,10 @@ async function raiderAct(r: Unit) {
       if (shot && shot.s.chance >= 20) { r.ap = 0; await fire(r, shot.m, false); }
       return;
     }
-    if (r.gun && r.gun.ammo < 1) { r.gun.ammo = r.gun.mag; r.ap--; if (seen(r.x, r.y)) log(`An Insurgent reloads their ${r.gun.name}.`); continue; }
-    let best: { m: Unit; s: ReturnType<typeof shotInfo>; score: number } | null = null;
-    // in a retaliation, the locals are targets too
-    const targets = S.setup.kind === "retaliation" ? [...t, ...alive("civilian")] : t;
-    for (const m of targets) if (canShoot(r, m)) {
-      const s = shotInfo(r, m);
-      const score = s.chance + (m.side === "mtf" ? 10 : 0) - (m.side === "civilian" ? 15 : 0);
-      if (!best || score > best.score) best = { m, s, score };
-    }
-    if (best && (best.s.chance >= 45 || (r.ap === 1 && best.s.chance >= 20))) { r.ap = 0; await fire(r, best.m, false); return; }
-    // a sniper with no good shot settles in and watches; a sapper with nothing to shoot opens a wall
-    if (r.role === "sniper" && (best || r.ap === 1)) { r.ap = 0; r.overwatch = true; if (seen(r.x, r.y)) log(`${r.name} settles in on overwatch.`, "bad"); return; }
+    // Tactical overhaul T5: everything else is the utility AI on the shared rules
+    const best = team().some(m => canShoot(r, m));
     if (!best && demoBreach(r)) return;
-    const known = knownTargets();
-    // on a raid or an ambush they know where they're going even before they've seen anyone
-    const path = known.length ? bestSpot(r, known) : S.setup.kind === "raid" || S.setup.kind === "escort" || S.setup.kind === "retaliation" ? bestSpot(r, team()) : null;
-    if (!path) {
-      if (best && best.s.chance >= 20) { r.ap = 0; await fire(r, best.m, false); }
-      return;
-    }
-    r.ap--;
-    await moveUnit(r, path);
+    await tacticalTurn(r, planFor(r), missionGoal(), checkEnd);
+    return;
   }
 }

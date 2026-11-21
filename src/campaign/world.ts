@@ -1,3 +1,4 @@
+import { rnd } from "../core/rng";
 import { fieldMap } from "../data/maps";
 // The world outside Site-19: regional exposure and Foundation fronts, travel, cover-ups,
 // Insurgency cells and amnestics.
@@ -26,8 +27,8 @@ export const locateIntel = (c: Campaign) => (has(c, "codebooks") ? 2 : LOCATE_IN
 export const coverDoses = (c: Campaign) => has(c, "classb_amnestics") ? 1 : COVER_STORY.amnestics;
 export const AMNESTIC_DAYS = 5, AMNESTICS_PER_LAB = 10;
 
-const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
-const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+const rand = (a: number, b: number) => a + Math.floor(rnd() * (b - a + 1));
+const pick = <T>(a: T[]) => a[Math.floor(rnd() * a.length)];
 
 export const newRegions = (start: number): Record<RegionId, RegionState> =>
   Object.fromEntries(REGION_IDS.map(r => [r, { exposure: start, collapsed: false, ...(r === HOME ? {} : { contact: false }) }])) as Record<RegionId, RegionState>;
@@ -135,7 +136,7 @@ export function spawnCoverup(c: Campaign, at?: RegionId, quiet = false): Inciden
   const inc = newIncident(c, {
     kind: "coverup", region: r, map: fieldMap("coverup"), scpId: "",
     what: `${(st => st[0].toUpperCase() + st.slice(1))(pick(STORIES))}, ${town}`,
-    expires: c.day + travelDays(c, r) + 4, insurgents: Math.random() < 0.5 ? 0 : rand(1, 2), witnesses: rand(3, 5), civilians: rand(1, 3),
+    expires: c.day + travelDays(c, r) + 4, insurgents: rnd() < 0.5 ? 0 : rand(1, 2), witnesses: rand(3, 5), civilians: rand(1, 3),
   });
   if (!quiet) log(c, `${inc.title}. Witnesses need amnestics before the story spreads. Respond within ${inc.expires - c.day} days.`, "bad", "command");
   return inc;

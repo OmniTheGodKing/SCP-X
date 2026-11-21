@@ -42,6 +42,9 @@ export type MissionKind = "breach" | "manhunt" | "coverup" | "strike" | "escort"
 export type Phase = "player" | "anomaly" | "hand" | "subjects" | "over";
 
 export interface Unit {
+  /** Tactical overhaul T3: the turn this unit last moved, and last fired (movement and muzzle flashes are easier to spot). */
+  movedTurn?: number;
+  firedTurn?: number;
   /** An object anomaly (SCP-500, 914, 005): it just sits there until someone carries it off. */
   object?: boolean;
   id: string;
@@ -155,6 +158,8 @@ export interface Unit {
   bleed?: number;
   stabilized?: boolean;
   suppressedUntil?: number;
+  /** Tactical overhaul T4.6: who is suppressing them (moving draws that unit's shot). */
+  suppressedBy?: string;
   markedUntil?: number;
   overwatchShots?: number;
   /** Per-mission and per-turn ability bookkeeping. */
@@ -230,6 +235,10 @@ export interface MissionMods {
   alarms?: boolean; }
 
 export interface MissionSetup {
+  /** Seed for the mission's own random stream (Tactical overhaul T0): the same seed and orders replay the same fight. */
+  seed?: number;
+  /** A tactical lab sandbox (T6.2): never ends on its own. */
+  lab?: boolean;
   kind: MissionKind;
   /** Which anomaly a breach or manhunt is about (SCP-173 if not set). */
   scp?: ScpId;
@@ -245,6 +254,9 @@ export interface MissionSetup {
   weather?: import("../data/weather").Weather;
   /** Breaches: researchers caught in the wing, and how many D-Class are in the block to get loose. */
   researchers?: number;
+  /** Strategic overhaul D1: the names of the Site-19 researchers caught in the wing, so a death in the mission is
+   *  that person's death in the campaign. */
+  researcherNames?: string[];
   strayPool?: number;
   witnesses: number;
   civilians: number;
@@ -313,6 +325,8 @@ export interface MissionResult {
   /** Breaches: researchers brought out and lost; loose D-Class killed and escaped. */
   researchersRescued: number;
   researchersLost: number;
+  /** The names of the researchers lost, when the setup named them. */
+  researcherNamesLost?: string[];
   straysLost: number;
   straysEscaped: number;
   /** SCP-610: operatives lost to infection, and whether the core was burned out. */
@@ -353,6 +367,8 @@ export interface MissionResult {
 export interface Mem { x: number; y: number; turn: number; }
 
 export interface MissionState {
+  /** Tactical overhaul T3: what the team makes of each other unit this moment (1 detected, 2 identified; absent: unseen). */
+  perceived?: Map<string, 1 | 2>;
   setup: MissionSetup;
   /** Whether SCP-173 is in this mission at all. */
   has173: boolean;

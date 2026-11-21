@@ -1,6 +1,7 @@
 // Staff incidents: small things that go wrong (or right) among the people who run Site-19. About
 // once a month one comes up on the Command tab with two choices, each with a clear cost. Left
 // unanswered for a week, the second choice (usually letting it go) is taken for you.
+import { rnd } from "../core/rng";
 import { earn, spend } from "./ledger";
 import { bringBack, losePeople, sendAway } from "./people";
 import { ITEMS, type ItemId } from "./research";
@@ -12,7 +13,7 @@ interface Choice { label: string; why?: (c: Campaign, e: StaffEvent) => string |
 interface EventDef { title: string; when: (c: Campaign) => boolean; setup?: (c: Campaign, e: StaffEvent) => void; text: (c: Campaign, e: StaffEvent) => string; choices: [Choice, Choice]; }
 
 export const STAFF_ANSWER_DAYS = 7, LAX_DAYS = 30, LEAVE_DAYS = 10;
-const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+const pick = <T>(a: T[]) => a[Math.floor(rnd() * a.length)];
 const op = (c: Campaign, e: StaffEvent) => c.roster.find(o => o.id === e.who);
 const guard = (c: Campaign, e: StaffEvent) => c.guards.find(g => g.id === e.who);
 const opName = (c: Campaign, e: StaffEvent) => { const o = op(c, e); return o ? `${o.call} ${o.name}` : "The operative"; };
@@ -29,7 +30,7 @@ export const STAFF_EVENTS: Record<StaffEventId, EventDef> = {
         const p = sendAway(c, "researcher"); (c.away ??= []).push({ kind: "researcher", back: c.day + LEAVE_DAYS });
         return `${p?.name ?? "The researcher"} is on leave for ${LEAVE_DAYS} days.`; } },
       { label: "Keep them working (30% chance they quit)", run: c => {
-        if (Math.random() < 0.3) { const [who] = losePeople(c, "researcher", 1, "quit after a breakdown"); return `A week later ${who ?? "the researcher"} handed in their badge and left. They didn't say goodbye.`; }
+        if (rnd() < 0.3) { const [who] = losePeople(c, "researcher", 1, "quit after a breakdown"); return `A week later ${who ?? "the researcher"} handed in their badge and left. They didn't say goodbye.`; }
         return "The researcher held together. Nobody mentions the test again."; } },
     ],
   },
@@ -120,7 +121,7 @@ export const STAFF_EVENTS: Record<StaffEventId, EventDef> = {
 
 /** On the first of the month: maybe something comes up. */
 export function monthlyStaff(c: Campaign, force?: StaffEventId) {
-  if (c.staffEvent || (!force && Math.random() >= 0.6)) return;
+  if (c.staffEvent || (!force && rnd() >= 0.6)) return;
   const ids = (Object.keys(STAFF_EVENTS) as StaffEventId[]).filter(id => STAFF_EVENTS[id].when(c));
   const id = force ?? (ids.length ? pick(ids) : null);
   if (!id) return;

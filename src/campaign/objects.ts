@@ -1,5 +1,6 @@
 // What Site-19 can do with the Safe-class objects it holds: SCP-500's pills and SCP-914's refining.
 // (SCP-005's effect is passive: see applyResult and Lock studies.)
+import { rnd } from "../core/rng";
 import { TRAITS } from "../data/classes";
 import { ITEMS, has, type ItemId } from "./research";
 import { log, maxSanOf, type Campaign, type Operative } from "./campaign";
@@ -45,8 +46,8 @@ export function refine(c: Campaign, from: ItemId) {
   const r = refineRecipes(c).find(x => x.from === from)!;
   c.lastRefine = c.day;
   c.inventory[from] = (c.inventory[from] ?? 1) - 1;
-  if (Math.random() < (has(c, "very_fine") ? 0.1 : 0.2)) {
-    log(c, `SCP-914 took the ${ITEMS[from].name} and returned ${["a lump of warm slag", "a tangle of copper wire", "something that hums when nobody is looking at it"][Math.floor(Math.random() * 3)]}. It goes in the incinerator.`, "bad");
+  if (rnd() < (has(c, "very_fine") ? 0.1 : 0.2)) {
+    log(c, `SCP-914 took the ${ITEMS[from].name} and returned ${["a lump of warm slag", "a tangle of copper wire", "something that hums when nobody is looking at it"][Math.floor(rnd() * 3)]}. It goes in the incinerator.`, "bad");
     return;
   }
   c.inventory[r.to] = (c.inventory[r.to] ?? 0) + 1;

@@ -1,4 +1,5 @@
 import { homeRegion } from "./org";
+import { rnd } from "../core/rng";
 import { fieldMap } from "../data/maps";
 // Anomalies held at Site-19: daily breach risk, cell cleaning, breaches, and escapes.
 import { earn, spend } from "./ledger";
@@ -50,7 +51,7 @@ export interface ScpRecord {
   resurfaceDay?: number;
 }
 
-const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
+const rand = (a: number, b: number) => a + Math.floor(rnd() * (b - a + 1));
 
 export const wingOf = (c: Campaign, s: ScpRecord) => c.base.facilities.find(f => f.id === s.wingId) || null;
 export const occupantOf = (c: Campaign, f: Facility) => c.scps.find(s => s.wingId === f.id) || null;
@@ -103,7 +104,7 @@ export function startBreach(c: Campaign, s: ScpRecord, cause: string) {
     insurgents: Math.min(3, rand(0, 1) + Math.floor((c.day - 1) / 120)),
     region: homeRegion(c), map: "wingC",
     // what really caused it is only known if someone looks into it afterwards
-    cause: c.chaos.pendingCause ?? (c.chaos.moles && Math.random() < 0.3 ? "sabotage" : ANOMALOUS_CAUSE.includes(s.id) ? (Math.random() < 0.5 ? "anomalous" : "accident") : "accident"),
+    cause: c.chaos.pendingCause ?? (c.chaos.moles && rnd() < 0.3 ? "sabotage" : ANOMALOUS_CAUSE.includes(s.id) ? (rnd() < 0.5 ? "anomalous" : "accident") : "accident"),
   };
   // an object can't get out of its cell: if its cell is opened, it's because Insurgents came for it
   if (isInert(s)) {
@@ -111,7 +112,7 @@ export function startBreach(c: Campaign, s: ScpRecord, cause: string) {
     inc.insurgents = Math.max(3, inc.insurgents); inc.cause = "sabotage";
   }
   // SCP-035 held at Site-19 whispers to the staff: an "accident" elsewhere is anomalous half the time
-  if (inc.cause === "accident" && s.id !== "035" && c.scps.some(x => x.id === "035" && x.status === "contained") && Math.random() < 0.5) inc.cause = "anomalous";
+  if (inc.cause === "accident" && s.id !== "035" && c.scps.some(x => x.id === "035" && x.status === "contained") && rnd() < 0.5) inc.cause = "anomalous";
   c.nextIncident++;
   c.incidents.push(inc);
   openInquiry(c, inc);
@@ -147,7 +148,7 @@ function breachKnockOn(c: Campaign, s: ScpRecord, wing: Facility) {
   } else if (s.id === "682") {
     wreckFacility(c, wing, "SCP-682 tore its own cell apart getting out.", false);
     const near = neighbors(c, wing).filter(f => !f.wrecked);
-    if (near.length && Math.random() < 0.5) wreckFacility(c, near[rand(0, near.length - 1)], "SCP-682 smashed through into the next facility.");
+    if (near.length && rnd() < 0.5) wreckFacility(c, near[rand(0, near.length - 1)], "SCP-682 smashed through into the next facility.");
   }
 }
 
@@ -194,7 +195,7 @@ export function wreckFacility(c: Campaign, f: Facility, text: string, wrecked = 
   if (f.type === "generator") reachMilestone(c, "power_failure");
   log(c, `${text} The ${nameInText(f.type)} on level ${f.level + 1} is ${f.wrecked ? "wrecked and has to be rebuilt" : "damaged and out of action until repaired"}. ${damageEffect(c, f)}`, "bad", "site");
   const occ = occupantOf(c, f);
-  if (occ?.status === "contained" && !isInert(occ) && Math.random() < POWER.wreckBreach) startBreach(c, occ, "The damage cracked its cell open.");
+  if (occ?.status === "contained" && !isInert(occ) && rnd() < POWER.wreckBreach) startBreach(c, occ, "The damage cracked its cell open.");
 }
 
 /** Every day: generators can fail (1% a month, 3% next to a damaged facility, plus winter storms at 2%), and
@@ -203,15 +204,15 @@ function tickPower(c: Campaign) {
   const gens = c.base.facilities.filter(f => f.type === "generator" && operational(f));
   for (const g of gens) {
     const near = neighbors(c, g).some(n => n.disabled);
-    if (Math.random() < (near ? POWER.genFailNear : POWER.genFail) / 30) { wreckFacility(c, g, near ? "Damage next door spread into a generator and it shorted out." : "A generator fault: a turbine bearing seized."); return; }
+    if (rnd() < (near ? POWER.genFailNear : POWER.genFail) / 30) { wreckFacility(c, g, near ? "Damage next door spread into a generator and it shorted out." : "A generator fault: a turbine bearing seized."); return; }
   }
   const month = dateOf(c.day).getUTCMonth();
-  if ((month === 11 || month <= 1) && gens.length && Math.random() < POWER.storm / 30) {
+  if ((month === 11 || month <= 1) && gens.length && rnd() < POWER.storm / 30) {
     wreckFacility(c, gens[rand(0, gens.length - 1)], "A winter storm brought the lines down and burned out a generator.");
     return;
   }
   if (!unpowered(c)) return;
-  for (const s of c.scps) if (s.status === "contained" && !isInert(s) && Math.random() < POWER.cascade) startBreach(c, s, "The cell's locks failed when the power went.");
+  for (const s of c.scps) if (s.status === "contained" && !isInert(s) && rnd() < POWER.cascade) startBreach(c, s, "The cell's locks failed when the power went.");
 }
 
 /** Wings an anomaly can be rushed into in an emergency: its own is damaged or has no power. */
@@ -263,7 +264,7 @@ export function tickContainment(c: Campaign) {
         log(c, "SCP-939 hasn't been fed. It spends the night calling the guards by name over the intercom (−5 sanity for every guard).", "bad", "site");
       }
       if (c.cleaningOrder && routineOverdue(c, s) && !canClean(c, s)) clean(c, s, `A routine ${routineOf(s)!.name.toLowerCase()}`);
-      if (Math.random() < breachRisk(c, s).p) startBreach(c, s, "Containment alarm.");
+      if (rnd() < breachRisk(c, s).p) startBreach(c, s, "Containment alarm.");
     } else if (s.status === "away") {
       if (c.day >= (s.returnDay ?? 0)) comeBack(c, s);
     } else if (s.status === "loose") {
@@ -300,9 +301,20 @@ export function resolveScp(c: Campaign, inc: Incident, recovered: boolean) {
   const s = c.scps.find(x => x.id === inc.scpId);
   if (!s) return;
   if (recovered) {
-    s.status = "contained";
-    s.maintenance = Math.max(s.maintenance, 60);
+    // Strategic overhaul D: back into its own wing if that still stands, is free and is strong enough, otherwise the
+    // first free wing that will hold it. With none, Site-17 holds it until one opens (an anomaly that was never at
+    // Site-19, or whose wing was torn down or taken, used to be marked contained in no wing at all).
+    const own = c.base.facilities.find(f => f.id === s.wingId);
+    const ownOk = own && isContainment(own.type) && operational(own) && (FACILITIES[own.type].grade ?? 0) >= CLASS_GRADE[s.cls] && !c.scps.some(o => o !== s && o.wingId === own.id && (o.status === "contained" || o.status === "breach"));
+    const to = ownOk ? own : freeWings(c, s.cls)[0];
     s.resurfaceDay = undefined;
+    if (!to) {
+      s.status = "away"; s.wingId = ""; s.returnDay = c.day + 10; s.maintenance = 100;
+      log(c, `${s.name} is recovered, but Site-19 has no free ${s.cls}-grade wing. Site-17 holds it until one is ready.`, "key", "site");
+      return;
+    }
+    s.status = "contained"; s.wingId = to.id;
+    s.maintenance = Math.max(s.maintenance, 60);
   } else {
     goDark(c, s, "The team couldn't stop it.", inc.kind === "recovery" ? REGIONS[inc.region].towns.find(t => inc.title.includes(t)) ?? REGIONS[inc.region].name : "Site-19");
   }
@@ -336,29 +348,29 @@ function clean(c: Campaign, s: ScpRecord, what: string) {
   s.lastCleaned = c.day; s.maintenance = 100;
   if (!r) return;
   spend(c, r.cost, "upkeep", `${r.name}: ${s.name}`);
-  if (r.crew === "dclass" && !has(c, "auto_cleaning") && Math.random() < CLEAN_RISK) { c.dclass--; dclassDied(c, 1); log(c, `${what} of ${s.name}'s cell went wrong: both watchers blinked at once and the D-Class cleaning was killed.`, "bad"); }
-  if (s.id === "049" && Math.random() < 0.03) { const [who] = losePeople(c, "researcher", 1, `"cured" by ${s.name} during an interview`); log(c, `During ${s.name}'s interview it decided ${who ?? "the researcher"} was ill, and cured them. They are dead. It apologised.`, "bad", "site"); }
+  if (r.crew === "dclass" && !has(c, "auto_cleaning") && rnd() < CLEAN_RISK) { c.dclass--; dclassDied(c, 1); log(c, `${what} of ${s.name}'s cell went wrong: both watchers blinked at once and the D-Class cleaning was killed.`, "bad"); }
+  if (s.id === "049" && rnd() < 0.03) { const [who] = losePeople(c, "researcher", 1, `"cured" by ${s.name} during an interview`); log(c, `During ${s.name}'s interview it decided ${who ?? "the researcher"} was ill, and cured them. They are dead. It apologised.`, "bad", "site"); }
   // Phase 4B: the folder check goes wrong now and then; SCP-035 sometimes talks its way out of the case
-  if (s.id === "012" && Math.random() < 0.03) log(c, `During the folder check on ${s.name}, the researcher slipped off the blindfold and started to write. They were pulled out with their hands cut open and won't work for a while.`, "bad", "site");
+  if (s.id === "012" && rnd() < 0.03) log(c, `During the folder check on ${s.name}, the researcher slipped off the blindfold and started to write. They were pulled out with their hands cut open and won't work for a while.`, "bad", "site");
   if (s.id === "035") {
     log(c, `${s.name}'s interview left the researcher shaken: it knew things about them it shouldn't.`, "", "site");
-    if (Math.random() < 0.03) startBreach(c, s, "Someone opened the case. It had asked them very nicely.");
+    if (rnd() < 0.03) startBreach(c, s, "Someone opened the case. It had asked them very nicely.");
   }
 }
 
 /** D-Class work in the cell while operatives watch. `mult` scales the danger; `breach` is an extra
  *  chance the work itself lets it loose. Returns false if it ended in a breach. */
-export function cellWork(c: Campaign, s: ScpRecord, watchers: Guard[], what: string, mult = 1, dclass = 1, breach = 0) {
+export function cellWork(c: Campaign, s: ScpRecord, watchers: Guard[], what: string, mult = 1, dclass = 1, breach = 0, fail?: string) {
   const risk = Math.min(0.95, workRisk(watchers) * mult);
   for (const o of watchers) o.san = Math.max(0, o.san - 8);
   const names = watchers.length ? `two D-Class and guard${watchers.length > 1 ? "s" : ""} ${watchers.map(o => o.name).join(" and ")}` : "the two D-Class watching";
   const crew = dclass > 1 ? `one of the ${dclass} D-Class inside` : "the D-Class inside";
-  if (Math.random() < risk) {
+  if (rnd() < risk) {
     c.dclass--; dclassDied(c, 1);
-    log(c, `During ${what}, ${names} blinked at the same moment. SCP-173 killed ${crew}.`, "bad");
-    if (Math.random() < 0.3) { startBreach(c, s, "It got past the door."); return false; }
+    log(c, fail ? `During ${what}, ${fail}. ${crew[0].toUpperCase() + crew.slice(1)} died.` : `During ${what}, ${names} blinked at the same moment. SCP-173 killed ${crew}.`, "bad");
+    if (rnd() < 0.3) { startBreach(c, s, "It got past the door."); return false; }
   } else log(c, `${what[0].toUpperCase() + what.slice(1)}: done, watched by ${names}.`, "good");
-  if (breach && Math.random() < breach) { startBreach(c, s, `Something went wrong during ${what}.`); return false; }
+  if (breach && rnd() < breach) { startBreach(c, s, `Something went wrong during ${what}.`); return false; }
   return true;
 }
 
@@ -430,7 +442,7 @@ export function firstSighting(c: Campaign, id: ScpId) {
     appeared: c.day, expires: c.day + travelDays(c, region) + 4,
     insurgents: rand(0, 2), region, map: fieldMap("recovery"), civilians: rand(3, 4),
     // in Europe and East Asia the Soviets' anomalous unit may already be on the ground
-    gru: (region === "europe" || region === "east_asia") && Math.random() < 0.5,
+    gru: (region === "europe" || region === "east_asia") && rnd() < 0.5,
   };
   if (inc.gru) inc.insurgents = rand(2, 3);
   gocMaybe(c, inc);
@@ -464,10 +476,14 @@ function firstContact(c: Campaign, inc: Incident, caught: boolean) {
   }
 }
 
-/** Phase 4C: from 1953 a sighting has a 1 in 5 chance that the Global Occult Coalition is there for it instead (not for
+/** Strategic overhaul D4: how likely the Global Occult Coalition is to go after an anomaly in a region. The GOC destroys
+ *  what threatens to expose the anomalous, so its interest follows the region's exposure. */
+export const gocInterest = (c: Campaign, r: RegionId) => Math.min(0.4, 0.1 + (c.regions[r]?.exposure ?? 0) / 200);
+/** Phase 4C: from 1953 a sighting has a chance that the Global Occult Coalition is there for it instead (not for
  *  SCP-939's pack, which has nothing for them to blow up in one place). */
 function gocMaybe(c: Campaign, inc: Incident) {
-  if (dateOf(c.day).getUTCFullYear() < 1953 || inc.scpId === "939" || Math.random() >= 0.2) return;
+  // Strategic overhaul D4: the GOC goes where the public is closest to seeing something; 10% at no exposure, up to 40%
+  if (dateOf(c.day).getUTCFullYear() < 1953 || inc.scpId === "939" || rnd() >= gocInterest(c, inc.region)) return;
   inc.goc = true; inc.gru = false; inc.insurgents = rand(3, 4);
   inc.title = `${inc.title} (GOC present)`;
 }

@@ -1,6 +1,7 @@
 // An object anomaly (SCP-500) can't escape: its "breach" is Insurgents trying to steal it. The mission is won by putting
 // every Insurgent down, and lost if they carry it out, in which case it is gone to the Insurgency.
 const { chromium } = require('playwright');
+const { GAME_URL, OUT } = require('./lib.cjs');
 const close = async p => { while (await p.$('#noticeOk')) await p.click('#noticeOk').catch(() => {}); };
 const dbg = async (p, k) => { await p.evaluate(() => document.activeElement?.blur?.()); await p.keyboard.press('`'); await p.click(`[data-dbg="${k}"]`); await p.click('[data-dbg="close"]').catch(() => {}); await close(p); };
 const results = [];
@@ -8,13 +9,13 @@ const check = (name, ok, detail) => results.push(`${ok ? 'PASS' : 'FAIL'} ${name
 async function theft(b) {
   const p = await b.newPage({ viewport: { width: 1300, height: 1000 } });
   const errs = []; p.on('pageerror', e => errs.push(e.message + ' ' + (e.stack || '').split('\n')[1]));
-  await p.goto('file:///home/user/scp-x/dist/index.html?legacy'); await p.evaluate(() => localStorage.clear()); await p.reload();
+  await p.goto(GAME_URL); await p.evaluate(() => localStorage.clear()); await p.reload();
   await p.evaluate(() => { const c = window.__site19.campaign; c.day = 400; c.tutorial = false;
     Object.assign(c.scps[0], { id: '500', name: 'SCP-500', title: 'Panacea', cls: 'Safe' }); });
   await dbg(p, 's-breach');
   const camp = await p.evaluate(() => { const c = window.__site19.campaign, i = c.incidents.find(i => i.kind === 'breach');
     return { id: i?.id, title: i?.title, ins: i?.insurgents, log: c.log?.slice?.(-3) }; });
-  await p.click('[data-tab="command"]'); await p.click(`[data-plan="${camp.id}"]`); await p.click('#launchBtn'); await p.waitForTimeout(400);
+  await p.click('[data-tab="command"]'); await require("./lib.cjs").planIncident(p, camp.id); await p.click('#launchBtn'); await p.waitForTimeout(400);
   return { p, errs, camp, E: (f, a) => p.evaluate(f, a) };
 }
 (async () => {
@@ -25,7 +26,7 @@ async function theft(b) {
     const s = await E(() => { const S = window.__site19.mission;
       return { scp: S.scp, has173: S.has173, name: S.statue.name, object: !!S.statue.object, alive: S.statue.alive, raiders: S.units.filter(u => u.side === 'raider' && u.alive).length, brief: S.log.map(l => l.text).find(t => /object/.test(t)) ?? document.body.innerText.match(/It's an object[^.]*\./)?.[0] }; });
     check('the mission has SCP-500 as an object, not SCP-173', s.scp === '500' && !s.has173 && s.name === 'SCP-500' && s.object && s.alive && s.raiders >= 3, s);
-    await p.screenshot({ path: '/tmp/claude-0/-home-user-scp-x/54b8bb60-76e9-5ac7-87cb-a04ccc4cc055/scratchpad/theft.png' });
+    await p.screenshot({ path: OUT + '/theft.png' });
     // put every Insurgent down: the incident is closed and SCP-500 is back in its cell
     const won = await E(async () => { const A = window.__site19, S = A.mission;
       for (const u of S.units) if (u.side === 'raider') u.alive = false;

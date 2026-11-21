@@ -1,4 +1,5 @@
 // Tile grid, movement rules and pathfinding for the current mission map.
+import { rnd } from "./rng";
 
 export const TS = 32;           // tile size in pixels
 export const R = 9;             // the old sight radius; now only a reference for short-range checks (Phase 4I)
@@ -8,6 +9,8 @@ export const WALL = 0, FLOOR = 1, HALF = 2, FULL = 3, EXIT = 4, CONT = 5, STEEL 
 /** Phase 4I structure: doors with a kind and a state, windows, and what can be destroyed. */
 export type DoorKind = "standard" | "security" | "containment" | "emergency";
 export type DoorState = "open" | "closed" | "locked" | "breached" | "destroyed";
+/** The order the tactical lab cycles a door through. */
+export const DOOR_STATES_CYCLE: DoorState[] = ["open", "closed", "locked", "destroyed"];
 export interface Door { kind: DoorKind; state: DoorState }
 export interface Glass { kind: "ordinary" | "reinforced"; broken: boolean }
 export type Tile = number;
@@ -61,6 +64,8 @@ export class Level {
   readonly link = new Map<number, number>();
   /** Link ends only the team can use (a lift worked from inside), until something opens them. */
   readonly closedLinks = new Set<number>();
+  /** Damage taken by cover so far (tiles not listed are undamaged). */
+  readonly coverHp = new Map<number, number>();
 
   constructor(readonly def: MapDef) {
     this.W = def.rows[0].length;
@@ -83,7 +88,7 @@ export class Level {
       const x = i % this.W, y = (i / this.W) | 0;
       const near = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => def.area(x + dx, y + dy));
       const kind: DoorKind = near.some(a => /containment cell/.test(a)) ? "containment" : def.reinforced ? "security" : "standard";
-      const r = Math.random();
+      const r = rnd();
       const state: DoorState = kind === "containment" ? "closed" : r < 0.06 ? "breached" : r < 0.53 ? "open" : "closed";
       this.door.set(i, { kind, state });
     }
@@ -103,15 +108,15 @@ export let L: Level;
 export function useLevel(level: Level) { L = level; }
 
 export const tileAt = (x: number, y: number): Tile => (x < 0 || y < 0 || x >= L.W || y >= L.H) ? WALL : L.grid[y][x];
-// Breachers with Bulldozer vault desks: while planning their move, half cover counts as passable.
-let vaulting = false;
-export function setVault(on: boolean) { vaulting = on; }
-/** Tiles that cost 2 to move into (floor corroded by SCP-106). */
-let slow: Set<number> = new Set();
-export function setSlow(tiles: Set<number>) { slow = tiles; }
+/** How a particular mover paths (Tactical overhaul T2.2: passed explicitly, no more module-level flags).
+ *  vault: Bulldozer breachers vault desks, so half cover counts as walkable for them; links: the team can work the
+ *  closed lifts from inside; slow: tiles that cost 2 to enter (floor corroded by SCP-106). */
+export interface PathOpts { vault?: boolean; links?: boolean; slow?: Set<number> }
 const doorAt = (x: number, y: number) => (x < 0 || y < 0 || x >= L.W || y >= L.H) ? undefined : L.door.get(y * L.W + x);
 export const doorShut = (x: number, y: number) => { const d = doorAt(x, y); return !!d && (d.state === "closed" || d.state === "locked"); };
-export const passable = (x: number, y: number) => { const t = tileAt(x, y); return (t === FLOOR && doorAt(x, y)?.state !== "locked") || t === EXIT || t === CONT || (vaulting && t === HALF); };
+export const passable = (x: number, y: number) => { const t = tileAt(x, y); return (t === FLOOR && doorAt(x, y)?.state !== "locked") || t === EXIT || t === CONT; };
+/** Passable for a particular mover: a vaulting breacher also crosses desks. */
+export const walkable = (x: number, y: number, o?: PathOpts) => passable(x, y) || (!!o?.vault && tileAt(x, y) === HALF);
 /** Blocks sight: walls, full cover, steel, partitions, and shut doors. Windows are transparent. */
 export const opaque = (x: number, y: number) => { const t = tileAt(x, y); return t === WALL || t === FULL || t === STEEL || t === PART || doorShut(x, y); };
 /** Blocks a bullet: anything opaque, and reinforced glass while it holds. Ordinary glass shatters and lets it through. */
@@ -134,12 +139,27 @@ export function breakGlass(x: number, y: number) {
 export function blastStructure(x: number, y: number, power: number): string | null {
   if (x <= 0 || y <= 0 || x >= L.W - 1 || y >= L.H - 1) return null;
   const t = tileAt(x, y), i = y * L.W + x, d = L.door.get(i);
-  if (t === HALF) { L.grid[y][x] = FLOOR; bump(); return "cover"; }
+  if (t === HALF) { L.grid[y][x] = FLOOR; L.coverHp.delete(i); bump(); return "cover"; }
+  // Tactical overhaul T4.7: a grenade knocks a pillar or crate down to half cover; a rocket clears it
+  if (t === FULL) { L.grid[y][x] = power >= 2 ? FLOOR : HALF; L.coverHp.delete(i); bump(); return "cover"; }
   if (d && d.state !== "destroyed") { d.state = "destroyed"; bump(); return "door"; }
   if (t === PART) { L.grid[y][x] = FLOOR; bump(); return "partition"; }
   if (t === WINDOW) { return breakGlass(x, y) ? "window" : null; }
   if (t === WALL && power >= 2 && !L.def.reinforced) { L.grid[y][x] = FLOOR; bump(); return "wall"; }
   return null;
+}
+/** Hit points of cover (Tactical overhaul T4.7): a desk or drum takes 3 rounds, a pillar or crate 6. */
+export const COVER_HP: Record<number, number> = { [HALF]: 3, [FULL]: 6 };
+/** Rounds that strike cover wear it down: a crate shot to pieces becomes half cover, half cover becomes rubble.
+ *  Returns what it became ("half", "gone") when it changes, else null. */
+export function damageCover(x: number, y: number, n = 1): "half" | "gone" | null {
+  const t = tileAt(x, y), i = y * L.W + x;
+  if (!(t in COVER_HP)) return null;
+  const hp = (L.coverHp.get(i) ?? COVER_HP[t]) - n;
+  if (hp > 0) { L.coverHp.set(i, hp); return null; }
+  L.coverHp.delete(i);
+  if (t === FULL) { L.grid[y][x] = HALF; bump(); return "half"; }
+  L.grid[y][x] = FLOOR; bump(); return "gone";
 }
 export const inContainer = (x: number, y: number) => tileAt(x, y) === CONT;
 export const nearContainer = (x: number, y: number) =>
@@ -150,24 +170,22 @@ export const d2 = (ax: number, ay: number, bx: number, by: number) => (ax - bx) 
 export const cheb = (ax: number, ay: number, bx: number, by: number) => Math.max(Math.abs(ax - bx), Math.abs(ay - by));
 
 export const DIRS: Pt[] = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
-export function canStep(x: number, y: number, dx: number, dy: number) {
-  if (!passable(x + dx, y + dy)) return false;
-  if (dx && dy && (!passable(x + dx, y) || !passable(x, y + dy))) return false;
+export function canStep(x: number, y: number, dx: number, dy: number, o?: PathOpts) {
+  if (!walkable(x + dx, y + dy, o)) return false;
+  if (dx && dy && (!walkable(x + dx, y, o) || !walkable(x, y + dy, o))) return false;
   return true;
 }
 
 export interface Reach { dist: Int16Array; prev: Int16Array; }
-// The team works closed lifts from inside; set while planning a team member's move.
-let linkAccess = false;
-export function setLinkAccess(on: boolean) { linkAccess = on; }
-/** Where a link end leads, if it can be used right now. */
-export const linkFrom = (i: number) => (L.closedLinks.has(i) && !linkAccess) ? undefined : L.link.get(i);
+/** Where a link end leads, if this mover can use it right now (a closed lift only from inside: `links`). */
+export const linkFrom = (i: number, links = false) => (L.closedLinks.has(i) && !links) ? undefined : L.link.get(i);
 
-export function bfs(starts: Pt[], maxD: number, blocked?: (x: number, y: number) => boolean): Reach {
+export function bfs(starts: Pt[], maxD: number, blocked?: (x: number, y: number) => boolean, o: PathOpts = {}): Reach {
   const { W, H } = L;
   const dist = new Int16Array(W * H).fill(-1), prev = new Int16Array(W * H).fill(-1);
   const q: number[] = [];
   for (const [sx, sy] of starts) { dist[sy * W + sx] = 0; q.push(sy * W + sx); }
+  const slow = o.slow ?? new Set<number>();
   if (slow.size) {
     // with slow tiles on the map, a simple Dijkstra (the map is small enough to scan for the next tile)
     const done = new Uint8Array(W * H);
@@ -178,13 +196,13 @@ export function bfs(starts: Pt[], maxD: number, blocked?: (x: number, y: number)
       done[i] = 1;
       const d = dist[i], x = i % W, y = (i / W) | 0;
       for (const [dx, dy] of DIRS) {
-        if (!canStep(x, y, dx, dy)) continue;
+        if (!canStep(x, y, dx, dy, o)) continue;
         const ni = (y + dy) * W + x + dx, nd = d + (slow.has(ni) ? 2 : 1);
         if (nd > maxD || done[ni] || (dist[ni] !== -1 && dist[ni] <= nd) || (blocked && blocked(x + dx, y + dy))) continue;
         dist[ni] = nd; prev[ni] = i;
       }
-      const li = linkFrom(i);
-      if (li !== undefined && d + 1 <= maxD && !done[li] && (dist[li] === -1 || dist[li] > d + 1) && passable(li % W, (li / W) | 0) && !(blocked && blocked(li % W, (li / W) | 0))) { dist[li] = d + 1; prev[li] = i; }
+      const li = linkFrom(i, o.links);
+      if (li !== undefined && d + 1 <= maxD && !done[li] && (dist[li] === -1 || dist[li] > d + 1) && walkable(li % W, (li / W) | 0, o) && !(blocked && blocked(li % W, (li / W) | 0))) { dist[li] = d + 1; prev[li] = i; }
     }
     return { dist, prev };
   }
@@ -193,14 +211,14 @@ export function bfs(starts: Pt[], maxD: number, blocked?: (x: number, y: number)
     if (d >= maxD) continue;
     const x = i % W, y = (i / W) | 0;
     for (const [dx, dy] of DIRS) {
-      if (!canStep(x, y, dx, dy)) continue;
+      if (!canStep(x, y, dx, dy, o)) continue;
       const ni = (y + dy) * W + x + dx;
       if (dist[ni] !== -1 || (blocked && blocked(x + dx, y + dy))) continue;
       dist[ni] = d + 1; prev[ni] = i; q.push(ni);
     }
     // Phase 4C: a stair, lift or ladder end leads to its other end
-    const li = linkFrom(i);
-    if (li !== undefined && dist[li] === -1 && passable(li % W, (li / W) | 0) && !(blocked && blocked(li % W, (li / W) | 0))) { dist[li] = d + 1; prev[li] = i; q.push(li); }
+    const li = linkFrom(i, o.links);
+    if (li !== undefined && dist[li] === -1 && walkable(li % W, (li / W) | 0, o) && !(blocked && blocked(li % W, (li / W) | 0))) { dist[li] = d + 1; prev[li] = i; q.push(li); }
   }
   return { dist, prev };
 }

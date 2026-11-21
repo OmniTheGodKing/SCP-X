@@ -7,7 +7,7 @@ const { chromium } = require('playwright');
   await p.evaluate(() => { localStorage.clear(); }); await p.reload(); await p.waitForTimeout(300);
   await p.evaluate(() => { const c = window.__site19.campaign; c.inventory = { frag: 2 };
     c.scps[0].status = 'breach'; c.incidents.push({ id: 'incX', kind: 'breach', scpId: '173', title: 'Incident 900: SCP-173 breach, test', appeared: c.day, expires: c.day, insurgents: 3, region: 'east_us', map: 'wingC' }); });
-  await p.click('[data-tab=site]'); await p.click('[data-tab=command]'); await p.click('[data-plan="incX"]');
+  await p.click('[data-tab=site]'); await p.click('[data-tab=command]'); await require('./lib.cjs').planIncident(p, 'incX');
   await p.selectOption('#gear-op1-0', 'frag');
   await p.click('#launchBtn'); await p.waitForTimeout(400);
   // bring Epsilon-11 in now through the debug menu, then stage everyone where the old test expects them

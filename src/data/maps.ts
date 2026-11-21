@@ -1,3 +1,4 @@
+import { rnd } from "../core/rng";
 import type { MapDef } from "../core/grid";
 
 // Heavy Containment Zone, wing C: three north rooms, a long corridor, and three south rooms.
@@ -463,5 +464,5 @@ const FIELD_MAPS: Record<FieldKind, (keyof typeof MAPS)[]> = {
   outbreak: ["town", "farm", "church"], coverup: ["town", "farm", "church", "rail"], retaliation: ["town", "farm", "church", "rail"],
   strike: ["port", "port", "ship", "rail", "church"],
 };
-export const fieldMap = (kind: FieldKind) => { const m = FIELD_MAPS[kind]; return m[Math.floor(Math.random() * m.length)] as "town"; };
+export const fieldMap = (kind: FieldKind) => { const m = FIELD_MAPS[kind]; return m[Math.floor(rnd() * m.length)] as "town"; };
 

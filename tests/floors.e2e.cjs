@@ -2,19 +2,20 @@
 // can't until it forces it; the floor switcher; a forced lift opening the way down instead of ending the raid; and the
 // Insurgents winning by holding containment control.
 const { chromium } = require('playwright');
-const SP = '/tmp/claude-0/-home-user-scp-x/54b8bb60-76e9-5ac7-87cb-a04ccc4cc055/scratchpad/';
+const { GAME_URL, OUT } = require('./lib.cjs');
+const SP = OUT + '/';
 const close = async p => { while (await p.$('#noticeOk')) await p.click('#noticeOk').catch(() => {}); };
 const results = [];
 const check = (name, ok, detail) => results.push(`${ok ? 'PASS' : 'FAIL'} ${name}${detail !== undefined ? ' :: ' + JSON.stringify(detail) : ''}`);
 (async () => {
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1300, height: 1300 } });
   const errs = []; p.on('pageerror', e => errs.push(e.message + ' ' + (e.stack || '').split('\n')[1]));
-  await p.goto('file:///home/user/scp-x/dist/index.html?legacy'); await p.evaluate(() => localStorage.clear()); await p.reload();
+  await p.goto(GAME_URL); await p.evaluate(() => localStorage.clear()); await p.reload();
   await p.evaluate(() => { const c = window.__site19.campaign; c.day = 400; c.tutorial = false; c.alert = 'full'; });
   await p.evaluate(() => document.activeElement?.blur?.()); await p.keyboard.press('`'); await p.click('[data-dbg="raid"]'); await p.click('[data-dbg="close"]'); await close(p);
   await p.click('[data-tab="command"]');
   const id = await p.evaluate(() => window.__site19.campaign.incidents.find(i => i.kind === 'raid').id);
-  await p.click(`[data-plan="${id}"]`); await p.click('#launchBtn'); await p.waitForTimeout(400);
+  await require("./lib.cjs").planIncident(p, id); await p.click('#launchBtn'); await p.waitForTimeout(400);
   const E = (f, a) => p.evaluate(f, a);
 
   const setup = await E(() => { const A = window.__site19, S = A.mission, G = A.grid;

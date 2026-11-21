@@ -1,6 +1,7 @@
 // Enemies start away from the team's drop-off and out of its sight (playtest change after 4G): on every field map
 // and wing C, a strike starts with no Insurgent visible to the team and none within 8 steps of it.
 const { chromium } = require('playwright');
+const { GAME_URL, OUT } = require('./lib.cjs');
 const close = async p => { while (await p.$('#noticeOk')) await p.click('#noticeOk').catch(() => {}); };
 const dbg = async (p, k) => { await p.evaluate(() => document.activeElement?.blur?.()); await p.keyboard.press('`'); await p.click(`[data-dbg="${k}"]`); await p.click('[data-dbg="close"]').catch(() => {}); await close(p); };
 (async () => {
@@ -8,14 +9,14 @@ const dbg = async (p, k) => { await p.evaluate(() => document.activeElement?.blu
   const errs = []; p.on('pageerror', e => errs.push(e.message));
   const rows = [];
   for (const map of ['wingC', 'town', 'farm', 'port', 'dblock', 'gate', 'rail', 'church', 'lab', 'ship']) for (let run = 0; run < 3; run++) {
-    await p.goto('file:///home/user/scp-x/dist/index.html?legacy'); await p.evaluate(() => localStorage.clear()); await p.reload();
+    await p.goto(GAME_URL); await p.evaluate(() => localStorage.clear()); await p.reload();
     await p.evaluate(() => { const c = window.__site19.campaign; c.tutorial = false; c.day = 400; });
     await dbg(p, 'strike'); await p.click('[data-tab="command"]');
     const id = await p.evaluate(([m, r]) => { const c = window.__site19.campaign; const i = c.incidents.find(i => i.kind === 'strike'); i.map = m; i.night = false; i.weather = 'clear'; i.insurgents = r === 2 ? 8 : i.insurgents; return i.id; }, [map, run]);
-    await p.click(`[data-plan="${id}"]`);
+    await require('./lib.cjs').planIncident(p, id);
     await p.click('#launchBtn'); await p.waitForTimeout(300);
     if (await p.evaluate(() => !!window.__site19.campaign.outbound)) { await dbg(p, 'land'); await p.waitForTimeout(300); }
-    await (await p.$('#cv')).screenshot({ path: '/tmp/claude-0/-home-user-scp-x/54b8bb60-76e9-5ac7-87cb-a04ccc4cc055/scratchpad/map-' + map + '.png' });
+    await (await p.$('#cv')).screenshot({ path: OUT + '/map-' + map + '.png' });
     rows.push(await p.evaluate(m => {
       const A = window.__site19, S = A.mission, G = A.grid;
       const team = S.units.filter(u => u.side === 'mtf' && u.alive), foes = S.units.filter(u => u.side === 'raider' && u.alive);

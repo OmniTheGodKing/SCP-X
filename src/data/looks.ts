@@ -2,7 +2,14 @@
 // drawing style can be replaced later (and the same data can dress the 3D models in Phase 4).
 import type { UnitId } from "./units";
 
-export interface Look { skin: number; hair: number; hairColor: number; facial: number; scar: boolean; headgear: boolean; }
+export interface Look {
+  skin: number; hair: number; hairColor: number; facial: number; scar: boolean; headgear: boolean;
+  /** Presentation overhaul P3 (optional, so older saves read as the defaults): face shape, jacket, accessory. */
+  face?: number; coat?: number; accessory?: number;
+}
+export const FACES = ["Oval", "Square", "Long"];
+export const COATS = ["HBT fatigues", "M1943 field jacket"];
+export const ACCESSORIES = ["None", "Spectacles", "Cigarette", "Neck scarf"];
 export const SKIN = ["#f1d3bc", "#e3b48e", "#c98e63", "#a86b45", "#7c4a2c", "#55321e"];
 export const HAIR_COLORS = ["#1d1a17", "#3b2a1e", "#6a4a2c", "#8e4a26", "#c9a45c", "#9a958c"];
 export const HAIR_STYLES = ["Crew cut", "Side part", "Swept back", "Shaved", "Bun", "Bob", "Victory rolls"];
@@ -15,7 +22,7 @@ export function fitLook(l: Look, sex: "m" | "f" = "m"): Look {
   return { ...l, hair: ok.includes(l.hair) ? l.hair : ok[0], facial: sex === "f" ? 0 : l.facial };
 }
 export const FACIAL = ["None", "Moustache", "Beard", "Stubble"];
-export const LOOK_PARTS = { skin: SKIN.length, hair: HAIR_STYLES.length, hairColor: HAIR_COLORS.length, facial: FACIAL.length } as const;
+export const LOOK_PARTS = { skin: SKIN.length, hair: HAIR_STYLES.length, hairColor: HAIR_COLORS.length, facial: FACIAL.length, face: FACES.length, coat: COATS.length, accessory: ACCESSORIES.length } as const;
 
 /** Headgear by unit, as worn in the period: [name, colour] (no entry: bareheaded). */
 export const HEADGEAR: Partial<Record<UnitId, [string, string]>> = {

@@ -2,16 +2,17 @@
 // a unit standing diagonally beside a window sees into the room beyond in a cone, and still can't see through the
 // solid wall beside it. Built on wing C's corridor in a live mission.
 const { chromium } = require('playwright');
+const { GAME_URL, OUT } = require('./lib.cjs');
 const close = async p => { while (await p.$('#noticeOk')) await p.click('#noticeOk').catch(() => {}); };
 const dbg = async (p, k) => { await p.evaluate(() => document.activeElement?.blur?.()); await p.keyboard.press('`'); await p.click(`[data-dbg="${k}"]`); await p.click('[data-dbg="close"]').catch(() => {}); await close(p); };
 (async () => {
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1300, height: 900 } });
   const errs = []; p.on('pageerror', e => errs.push(e.message));
-  await p.goto('file:///home/user/scp-x/dist/index.html?legacy'); await p.evaluate(() => localStorage.clear()); await p.reload();
+  await p.goto(GAME_URL); await p.evaluate(() => localStorage.clear()); await p.reload();
   await p.evaluate(() => { const c = window.__site19.campaign; c.tutorial = false; c.day = 400; });
   await dbg(p, 'strike'); await p.click('[data-tab="command"]');
   const id = await p.evaluate(() => { const c = window.__site19.campaign; const i = c.incidents.find(i => i.kind === 'strike'); i.map = 'wingC'; return i.id; });
-  await p.click(`[data-plan="${id}"]`); for (const op of ['op1', 'op2']) await p.click(`[data-pick="${op}"]`).catch(() => {});
+  await require('./lib.cjs').planIncident(p, id); for (const op of ['op1', 'op2']) await p.click(`[data-pick="${op}"]`).catch(() => {});
   await p.click('#launchBtn'); await p.waitForTimeout(300);
   if (await p.evaluate(() => !!window.__site19.campaign.outbound)) { await dbg(p, 'land'); await p.waitForTimeout(300); }
   const r = await p.evaluate(() => {
@@ -32,7 +33,10 @@ const dbg = async (p, k) => { await p.evaluate(() => document.activeElement?.blu
     const shot = A.fireLine(vx, vy, win - 3, row + 2);
     return { a, win, viewer: [vx, vy], seen, behind, shot };
   });
-  const ok = !r.error && r.seen.filter(s => s[2]).length >= 5 && r.behind.every(s => !s[2]) && !!r.shot;
+  // Tactical overhaul T1: the cone is now the real geometric one through a one-tile window, from the viewer's eye at
+  // the centre of their tile: (9,10), (10,10), (11,9) and (12,10) are inside it; (8,10) and (10,9) are past its edge
+  const inCone = [[9, 10], [10, 10], [11, 9], [12, 10]];
+  const ok = !r.error && inCone.every(([x, y]) => r.seen.some(s => s[0] === x && s[1] === y && s[2])) && r.behind.every(s => !s[2]) && !!r.shot;
   console.log(ok ? 'PASS' : 'FAIL', 'diagonal sight through a window, none through the wall beside it ::', JSON.stringify(r));
   // after a move, an operative turns to the nearest enemy in sight (not the way they walked)
   const f = await p.evaluate(async () => {

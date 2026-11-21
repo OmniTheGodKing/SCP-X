@@ -1,4 +1,5 @@
 import { homeRegion, qualifiedFor } from "./org";
+import { freshSeed, rnd, setCampaignSeed } from "../core/rng";
 import { fieldMap } from "../data/maps";
 // Site-19 between missions: the roster, time passing, funding, public exposure and incidents.
 import { earn, spend, type Ledger } from "./ledger";
@@ -6,7 +7,7 @@ import { tickContracts, type ContractState } from "./contracts";
 import { tickLeads, type LeadsState } from "./leads";
 import { DIFFICULTIES, diffOf, type Difficulty, type NewCampaignOptions } from "./difficulty";
 import { FATIGUE, afterMission, bondsOf, restDay, tiredness } from "./condition";
-import { announceHire, hirePerson, losePeople, someone, syncStaff, type Lost, type Person } from "./people";
+import { announceHire, FIELDS, hirePerson, losePeople, someone, syncStaff, type Lost, type Person } from "./people";
 import { TF_BONUS, eta10Call, GOGGLES, NU7, canBringAmnestics, canBringResearcher, canCallNu7, nu7Troopers, otherSiteOutcome, scanOutcome, SPECIALIST, tfOf } from "./taskforces";
 import { newTf, tickTf, type TaskForce, type TfState } from "./taskforces";
 import { pickNick, withNick } from "../data/nicknames";
@@ -37,7 +38,8 @@ import { tickInspection } from "./inspection";
 import { buildReport, type Report } from "./reports";
 import { missionWeather, nightAt, tickGeo, type FieldOp } from "./geo";
 import { newsFor } from "./news";
-import { CLASS_WEAPONS, WEAPON_TIERS, model, startingModels, type AmmoId, type AttachmentId, type WeaponType } from "../data/weapons";
+import { ATTACHMENTS, CLASS_WEAPONS, WEAPON_TIERS, model, startingModels, type AmmoId, type AttachmentId, type WeaponType } from "../data/weapons";
+import { fits } from "../data/mounts";
 
 // The US Army's enlisted ladder as it stood in 1951 (Staff Sergeant was dropped in 1948 and came back in 1958).
 export const RANKS = ["Private", "Private First Class", "Corporal", "Sergeant", "Sergeant First Class", "Master Sergeant", "Sergeant Major"];
@@ -184,12 +186,16 @@ export interface Incident {
 
 export interface Prisoner { name: string; days: number; intel: number; }
 
-export interface SiteLogEntry { day: number; text: string; kind: string; }
+/** One entry in the site log. Strategic overhaul H: each carries a severity (routine, important, critical) and, for
+ *  critical ones, the screen to go to. */
+export interface SiteLogEntry { day: number; text: string; kind: string; sev?: "routine" | "important" | "critical"; tab?: HubTab }
 
 /** Which armor (an armor item id, or "" for none) and items an operative takes. */
 export interface Loadout { opId: string; armor: ItemId | ""; items: ItemId[]; }
 
 export interface Campaign {
+  /** The campaign's random stream state, saved with it (Tactical overhaul T0). */
+  rng?: number;
   version: 24;
   /** A squad in the air on its way to an incident: the mission waits for it to land (times are days, hours as
    *  fractions). */
@@ -393,12 +399,14 @@ export function startRetrain(c: Campaign, o: Operative) {
 
 const NAMES = ["Okafor", "Lindqvist", "Reyes", "Haddad", "Novak", "Tanaka", "Mbeki", "Sorensen", "Ortiz", "Kowalski", "Achterberg", "Nwosu", "Petrov", "Duarte", "Iqbal", "Varga", "Castellanos", "Whitlock", "Abara", "Morozova"];
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 || w.endsWith("Class") ? "" : "s"}`;
-const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
+const rand = (a: number, b: number) => a + Math.floor(rnd() * (b - a + 1));
 
 export type HubTab = "command" | "world" | "site" | "research" | "personnel";
 /** Log an entry. Passing a tab also pauses the running clock and shows it as a notice. */
 export function log(c: Campaign, text: string, kind = "", pause?: HubTab) {
-  c.log.unshift({ day: c.day, text, kind });
+  // critical entries stop the clock and pop up; results and orders are important; the rest is routine
+  const sev = pause ? "critical" : kind === "bad" || kind === "good" || kind === "key" ? "important" : "routine";
+  c.log.unshift({ day: c.day, text, kind, sev, ...(pause ? { tab: pause } : {}) });
   if (pause) (c.notices ??= []).push({ text, tab: pause, kind });
   if (c.log.length > 100) c.log.pop();
 }
@@ -430,12 +438,13 @@ export function makeOperative(c: Campaign, given?: string): Operative {
   const used = new Set([...c.roster.map(o => familyOf(o.name)), ...(c.retired ?? []).map(r => familyOf(r.name))]);
   const name = given ?? fullName(cultureOfFamily(NAMES.find(n => !used.has(n)) ?? "Callahan"), "m", used);
   const n = c.nextOp++;
-  const steady = has(c, "psych_screening") && Math.random() < 0.25;
+  const steady = has(c, "psych_screening") && rnd() < 0.25;
   const trained = trainersActive(c) > 0;
   return { sanBonus: has(c, "psych_screening") ? 10 : 0, id: "op" + n, name, call: `E11-${String(n).padStart(2, "0")}`, rank: trained ? 1 : 0, xp: trained ? RANK_XP[1] : 0, hp: 7, maxHp: 7, san: 100, aimBase: rand(64, 74), missions: 0, kills: 0, alive: true, perks: [], traits: steady ? ["steady"] : [], breakdowns: 0, bio: newBio(), medals: [], wounds: 0, seals: 0, faced: [] };
 }
 
 export function newCampaign(opts: NewCampaignOptions = { difficulty: "agent", ironman: false, tutorial: false }): Campaign {
+  setCampaignSeed(opts.seed ?? freshSeed());
   const base = startingBase();
   const wing = base.facilities.find(f => f.type === "cont_euclid")!;
   const c: Campaign = {
@@ -555,6 +564,7 @@ export function advanceDay(c: Campaign) {
     monthlyCouncil(c);
     monthlyChaos(c);
   }
+  reconcileAttachments(c);   // a research upgrade can change the issued model overnight
   checkOver(c);
   return c.incidents.length > incidentsBefore || c.log.length !== logBefore || !!c.over;
 }
@@ -585,7 +595,7 @@ function tickMorale(c: Campaign) {
   const rec = c.base.facilities.some(f => f.type === "barracks" && f.recreation && operational(f));
   c.morale = Math.max(0, Math.min(100, (c.morale ?? MORALE.start) + (full > 0.8 ? -2 : full < 0.6 ? 1 : 0) + (rec ? 1 : 0)));
   // below 30 the block can riot: up to 5% a day at 0
-  if (c.morale < MORALE.riotBelow && c.dclass >= 3 && !c.incidents.some(i => i.kind === "riot") && Math.random() < (MORALE.riotBelow - c.morale) / 600) startRiot(c);
+  if (c.morale < MORALE.riotBelow && c.dclass >= 3 && !c.incidents.some(i => i.kind === "riot") && rnd() < (MORALE.riotBelow - c.morale) / 600) startRiot(c);
 }
 export function startRiot(c: Campaign) {
   const inc: Incident = { id: "inc" + c.nextIncident, kind: "riot", scpId: "", region: homeRegion(c), map: "dblock", appeared: c.day, expires: c.day, insurgents: 0,
@@ -649,15 +659,28 @@ export function weaken(c: Campaign, inc: Incident) {
 // ---------- weapons ----------
 export const weaponOptions = (o: Operative): WeaponType[] => o.cls ? CLASS_WEAPONS[o.cls] : ["rifle"];
 export const weaponOf = (o: Operative): WeaponType => o.weapon && weaponOptions(o).includes(o.weapon) ? o.weapon : weaponOptions(o)[0];
-export function setWeapon(c: Campaign, o: Operative, t: WeaponType) { if (weaponOptions(o).includes(t)) o.weapon = t; }
+export function setWeapon(c: Campaign, o: Operative, t: WeaponType) { if (weaponOptions(o).includes(t)) { o.weapon = t; reconcileAttachments(c); } }
+/** Presentation overhaul P4: an attachment the operative's current weapon can't take (after a change of weapon, a new
+ *  model from research, or in an older save) goes back to stores, never lost. Returns who had one returned. */
+export function reconcileAttachments(c: Campaign): string[] {
+  const back: string[] = [];
+  for (const o of c.roster) if (o.attachment && !fits(c.models[weaponOf(o)], o.attachment)) {
+    c.attachments[o.attachment] = (c.attachments[o.attachment] ?? 0) + 1;
+    back.push(`${o.name}'s ${ATTACHMENTS[o.attachment].name.toLowerCase()}`);
+    o.attachment = undefined;
+  }
+  if (back.length && c.log) log(c, `Back to stores: ${back.join(", ")}: it doesn't fit the weapon now issued.`, "key");
+  return back;
+}
 export function fitAttachment(c: Campaign, o: Operative, a: AttachmentId | "") {
   if (a && !(c.attachments[a] ?? 0)) return;
+  if (a && !fits(c.models[weaponOf(o)], a)) return;   // P4: only what the weapon can take
   if (o.attachment) c.attachments[o.attachment] = (c.attachments[o.attachment] ?? 0) + 1;
   o.attachment = a || undefined;
   if (a) c.attachments[a]!--;
 }
 export function gunFor(c: Campaign, o: Operative) {
-  const t = weaponOf(o), m = model(c.models[t]), a = o.attachment;
+  const t = weaponOf(o), m = model(c.models[t]), a = o.attachment && fits(m.id, o.attachment) ? o.attachment : undefined;
   const tier = WEAPON_TIERS[c.weaponTier ?? 1];
   const mag = m.mag + (a === "extmag" ? 1 : 0), extra = (t === "rifle" && has(c, "bt_barrels") ? 1 : 0) + tier.dmg;
   return { name: tier.name ? `${tier.name} ${m.name}` : m.name, type: t, dmg: [m.dmg[0] + extra, m.dmg[1] + extra] as [number, number], mag, ammo: mag, aim: m.aim + tier.aim,
@@ -743,8 +766,17 @@ export function hireEngineer(c: Campaign) {
   announceHire(c, hirePerson(c, "engineer"));
 }
 
+/** Strategic overhaul D1: who is working in an anomaly's wing when it breaches. Researchers in the anomaly's field
+ *  first (they study it), then the longest-serving; nobody on leave. Deterministic: no dice. */
+export function inTheWing(c: Campaign, scpId: string | undefined, n: number): string[] {
+  syncStaff(c);
+  const branch = scpId ? `SCP-${scpId}` : "";
+  const here = (c.people ?? []).filter(p => p.kind === "researcher" && !p.away);
+  const studies = (p: Person) => !!p.field && (FIELDS[p.field].branches as string[]).includes(branch);
+  return here.sort((a, b) => Number(studies(b)) - Number(studies(a)) || a.since - b.since || a.id.localeCompare(b.id)).slice(0, n).map(p => p.name);
+}
 /** Extra people sent along: a field researcher, an amnestics specialist, Nu-7 on call. */
-const pickName = (xs: string[]) => xs[Math.floor(Math.random() * xs.length)];
+const pickName = (xs: string[]) => xs[Math.floor(rnd() * xs.length)];
 export interface Extras { researcher?: boolean; amnestics?: boolean; nu7?: boolean }
 export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCount: number, extras: Extras = {}): MissionSetup {
   // the armoury mole's leak: the next Insurgents met know what our rounds can get through
@@ -800,7 +832,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     hp: 6, maxHp: 6, san: 70, maxSan: 70, aim: 55, blinkFull: 0.12, armor: 0, hasArmor: false, items: [], perks: [], traits: [],
     gun: { name: "M1 Carbine", type: "carbine" as const, dmg: [2, 4] as [number, number], mag: 5, ammo: 5, aim: 0 }, armorHp: 0 })) : [];
   return {
-    kind, scp: (inc.scpId || "173") as ScpId, map: inc.map, amnestics,
+    kind, scp: (inc.scpId || "173") as ScpId, map: inc.map, amnestics, seed: (rnd() * 4294967296) >>> 0,
     night: away ? true : nightAt(c, inc), weather: missionWeather(c, inc),
     site: inc.site, records: away ? 2 : undefined, survivors: inc.kind === "rescue" ? inc.survivors : undefined,
     survivorName: inc.kind === "rescue" ? `${(inc.team ?? "Lost team").split(" ")[0]} operative` : undefined, hazard: inc.hazard,
@@ -808,7 +840,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     severity: inc.kind === "outbreak" ? c.outbreak?.severity ?? 2 : undefined,
     rioters: inc.kind === "riot" ? riotSize(c) : undefined,
     // a breach at Site-19 catches researchers in the wing and opens the D-Class block
-    researchers: kind === "breach" ? Math.min(c.researchers, rand(1, 3)) : away ? inc.survivors ?? 2 : 0, strayPool: kind === "breach" ? c.dclass : 0, guards: away ? siteGuards : sec.first, lateGuards: sec.late, mtfTurn: kind === "raid" ? raidArrival(c) : mtfArrival(c, inc), liftCount: kind === "raid" ? onStation(c, squad.length) : undefined, roadTurn: kind === "raid" ? mtfArrival(c) : undefined, witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
+    ...(n => ({ researchers: n, researcherNames: kind === "breach" ? inTheWing(c, inc.scpId, n) : undefined }))(kind === "breach" ? Math.min(c.researchers, rand(1, 3)) : away ? inc.survivors ?? 2 : 0), strayPool: kind === "breach" ? c.dclass : 0, guards: away ? siteGuards : sec.first, lateGuards: sec.late, mtfTurn: kind === "raid" ? raidArrival(c) : mtfArrival(c, inc), liftCount: kind === "raid" ? onStation(c, squad.length) : undefined, roadTurn: kind === "raid" ? mtfArrival(c) : undefined, witnesses: inc.witnesses ?? 0, civilians: inc.civilians ?? 0,
     incidentId: inc.id, title: inc.title.split(": ")[1] || inc.title, insurgents: Math.max(0, Math.max(0, inc.insurgents - (inc.weakened ?? 0)) + (inc.insurgents && inc.kind !== "breach" ? threatExtra(c) + diffOf(c).insurgents : 0)), squad, dclass,
     enemyAim: diffOf(c).aim, tutorial: !!c.tutorial?.on && !c.tutorial.seen.includes("mission"),
     ciRoles: inc.kind === "breach" || inc.kind === "riot" || inc.kind === "outbreak" || inc.kind === "coverup" ? undefined : ciRoles(c),
@@ -906,7 +938,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     if (r.aftercare) o.aftercareUntil = c.day + 7;
     // what happened to them may leave a mark: each trigger sticks half the time
     const earned: TraitId[] = [];
-    const roll = (t: TraitId, hit: boolean) => { if (hit && !o.traits.includes(t) && Math.random() < 0.5) { o.traits.push(t); earned.push(t); } };
+    const roll = (t: TraitId, hit: boolean) => { if (hit && !o.traits.includes(t) && rnd() < 0.5) { o.traits.push(t); earned.push(t); } };
     roll("nightmares", s.witnessed >= 2 || !!o.refusedRetire);
     roll("twitchy", s.panics > 0);
     roll("gunshy", s.minHp <= 2);
@@ -919,7 +951,8 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   c.dclass += r.dReturned;
   // breach losses among the staff: researchers, and D-Class from the block
   const other = inc?.kind === "rescue" || inc?.kind === "emergency";   // these people belong to another site
-  if (r.researchersLost && !other) { const who = losePeople(c, "researcher", r.researchersLost, `lost in the wing during ${name}`); lines.push(`${who.length ? who.join(" and ") : plural(r.researchersLost, "researcher")} didn't make it out of the wing.`); }
+  if (r.researchersLost && !other) { const how = `lost in the wing during ${name}`, named = r.researcherNamesLost ?? [];
+    const who = [...named.flatMap(n => losePeople(c, "researcher", 1, how, n)), ...losePeople(c, "researcher", Math.max(0, r.researchersLost - named.length), how)]; lines.push(`${who.length ? who.join(" and ") : plural(r.researchersLost, "researcher")} didn't make it out of the wing.`); }
   if (inc && other) lines.push(...otherSiteOutcome(c, inc, r));
   if (r.researchersRescued && !other) {
     lines.push(`${plural(r.researchersRescued, "researcher")} brought out alive. The team takes heart (+${5 * r.researchersRescued} sanity).`);
@@ -1007,7 +1040,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   }
   // a capture far from home has to get back: the convoy may be ambushed on the way (XCOM-style follow-up)
   const capture = r.win && inc && inc.kind === "recovery" && inc.scpId;
-  const ambush = capture && travelDays(c, inc!.region) > 0 && r.squad.some(s => s.alive && !s.absent) && Math.random() < (planActive(c, "hijack") ? 1 : 0.3);
+  const ambush = capture && travelDays(c, inc!.region) > 0 && r.squad.some(s => s.alive && !s.absent) && rnd() < (planActive(c, "hijack") ? 1 : 0.3);
   // the squad flies home from abroad
   const away = inc ? travelDays(c, inc.region) : 0;
   if (away && r.squad.some(s => s.alive) && !ambush) {
@@ -1044,7 +1077,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     lines.push(msg); log(c, msg, "bad", "command");
   }
   // the Insurgency punishes towns that helped the Foundation
-  if (capture && Math.random() < 0.25) (c.retaliations ??= []).push({ region: inc!.region, day: c.day + rand(3, 10) });
+  if (capture && rnd() < 0.25) (c.retaliations ??= []).push({ region: inc!.region, day: c.day + rand(3, 10) });
   const report = buildReport(c, inc, r);
   (c.archive ??= []).unshift(report);
   chronicle(c, "deployment", `${name}, ${report.title}: ${r.win ? "closed" : "failed"} at ${report.location}. ${report.personnel.length ? `Sent: ${report.personnel.join(", ")}.` : ""}${inc?.briefed ? ` Briefed beforehand: ${inc.briefed}` : ""}${r.insurgentsTotal ? ` Found: ${r.insurgentsTotal} Insurgents.` : ""}`, { report: report.number });

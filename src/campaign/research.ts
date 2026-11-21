@@ -1,5 +1,6 @@
 // Research projects, SCP-173 tests and the equipment they unlock.
 import { eligibleKit } from "./org";
+import { rnd } from "../core/rng";
 import { earn, spend } from "./ledger";
 import { announceHire, fieldBoost, hasTrade, hirePerson, TRADE_CHANCE } from "./people";
 import { countOperational, engineersFree } from "./base";
@@ -16,8 +17,8 @@ export const MATERIALS: Record<MaterialId, string> = {
   ciWeapons: "Insurgency weapons recovered", prisoners: "Insurgents taken prisoner", intelTotal: "Intel gathered",
   tissue: "SCP-049-2 tissue samples", survivors: "people back from SCP-106's pocket dimension", outbreaks: "SCP-610 outbreaks seen", charms: "anomalous charms taken from the Insurgency",
 };
-export type TestId = "endurance" | "material" | "movement";
-import type { ItemId } from "../game/types";
+export type TestId = "endurance" | "material" | "movement" | "interview049" | "bait106" | "image096" | "score012" | "voice939" | "fluid035" | "tissue682";
+import type { ItemId, ScpId } from "../game/types";
 export type { ItemId };
 
 export interface ProjectDef {
@@ -178,7 +179,15 @@ export const PROJECTS: Record<string, ProjectDef> = {
   backup_gen:         { name: "Backup generators", branch: "Site", days: 25, cost: 60, afterMilestone: "power_failure", desc: "Containment wings get their own backup supply: a power shortage no longer doubles breach risk or lets cells fail." },
 };
 
-export interface TestDef { name: string; cost: number; days: number; risk: number; breach: number; dclass: number; desc: string; notes: string[]; }
+export interface TestDef {
+  name: string; cost: number; days: number; risk: number; breach: number; dclass: number; desc: string; notes: string[];
+  /** Strategic overhaul D2: the anomaly it is run on (SCP-173 when unset). */
+  scp?: ScpId;
+  /** What goes wrong when the cell work goes wrong, in place of SCP-173's blink. */
+  fail?: string;
+}
+/** A finished experiment on an anomaly speeds every project in its research branch by this much. */
+export const STUDY_BONUS = 0.25;
 export const TESTS: Record<TestId, TestDef> = {
   endurance: { name: "Observation endurance test", cost: 20, days: 5, risk: 1, breach: 0, dclass: 1, notes: ["blink", "mind"],
     desc: "Staff take turns holding SCP-173's gaze while a D-Class sits in the cell. Measures how long people can stare before they slip." },
@@ -186,7 +195,30 @@ export const TESTS: Record<TestId, TestDef> = {
     desc: "A D-Class scrapes samples from its surface while it is watched. Close contact doubles the danger." },
   movement:  { name: "Controlled movement trial", cost: 50, days: 12, risk: 4, breach: 0.2, dclass: 2, notes: ["hunt", "hear"],
     desc: "Everyone blinks on purpose while two D-Class stand at marked distances, and the team measures how far it gets. Dangerous, and it can end in a breach." },
+  // Strategic overhaul D2: one experiment for each of the other anomalies Site-19 can hold. Each fills in the file
+  // and, once done, speeds that anomaly's research branch.
+  interview049: { scp: "049", name: "Structured interview", cost: 25, days: 6, risk: 1, breach: 0.03, dclass: 1, notes: [],
+    fail: "SCP-049 reached through the bars and touched the D-Class across the table", desc: "A researcher questions SCP-049 through the bars about \"the Pestilence\" while a D-Class sits across the table as the subject it asks to examine. Its answers are transcribed for the file." },
+  bait106: { scp: "106", name: "Bait-cycle timing", cost: 40, days: 10, risk: 2, breach: 0.08, dclass: 1, notes: [],
+    fail: "SCP-106 took the D-Class through the floor before the lights came up", desc: "A D-Class is lowered into the lead-lined cell on a timed signal so the team can clock how long SCP-106 takes to rise to bait. The timing drives every procedure for it." },
+  image096: { scp: "096", name: "Image exposure protocol", cost: 30, days: 8, risk: 2, breach: 0.1, dclass: 1, notes: [],
+    fail: "a D-Class glimpsed a photograph's corner, and SCP-096 began to scream", desc: "Photographs of SCP-096's face are scrambled, cropped and shown to a hooded subject under strict procedure, to learn which images set it off. A single mistake ends the test." },
+  score012: { scp: "012", name: "Score transcription", cost: 20, days: 6, risk: 1, breach: 0, dclass: 1, notes: [],
+    fail: "the D-Class reached the score before the guards did, and opened a vein to write", desc: "The unfinished score is copied by a D-Class behind a mirror and a blindfold, one bar a day, so researchers can study the composition without anyone being drawn to finish it." },
+  voice939: { scp: "939", name: "Vocal mimicry recording", cost: 35, days: 8, risk: 2, breach: 0.06, dclass: 1, notes: [],
+    fail: "an instance called out in a guard's own voice, and the D-Class opened the inner door", desc: "Microphones in the cell record what the instances say and whose voices they borrow. A D-Class inside gives them someone to talk to." },
+  fluid035: { scp: "035", name: "Containment fluid assay", cost: 30, days: 8, risk: 1, breach: 0.04, dclass: 1, notes: [],
+    fail: "the D-Class taking the sample put the mask on", desc: "Samples of the corrosive fluid that weeps from SCP-035 are taken from its case by a D-Class in a suit, to learn what the case and the suits need to withstand." },
+  tissue682: { scp: "682", name: "Regeneration sampling", cost: 60, days: 14, risk: 3, breach: 0.15, dclass: 2, notes: [],
+    fail: "SCP-682 came out of the acid early and the D-Class at the sample port were the first thing it reached", desc: "Tissue is cut from SCP-682 while it lies dissolved in the acid tank and studied as it grows back. The most dangerous work at Site-19." },
 };
+/** The anomaly an experiment is run on. */
+export const testScp = (t: TestId): ScpId => TESTS[t].scp ?? "173";
+/** The research branch an experiment's anomaly belongs to. */
+export const testBranch = (t: TestId) => `SCP-${testScp(t)}` as Branch;
+/** Research in a branch goes faster once an experiment on its anomaly is finished (SCP-173's tests excepted: they open projects instead). */
+export const studyBoost = (c: Campaign, b: Branch) =>
+  (Object.keys(TESTS) as TestId[]).some(t => TESTS[t].scp && testBranch(t) === b && c.research.tests.includes(t)) ? 1 + STUDY_BONUS : 1;
 
 export interface ItemDef { name: string; cost: number; days: number; uses: number | null; armor?: boolean; desc: string; }
 /** What each armor gives at the researched vest tier: light, medium and heavy versions, and the special suits. */
@@ -382,17 +414,23 @@ export function hireResearcher(c: Campaign) {
 }
 
 /** One day of research and workshop production. */
+/** Researchers beyond those on staff or beyond lab space (a lab was damaged, someone left) stop working on the newest
+ *  assignments. Called whenever staff or labs are lost, as well as each day. */
+export function fitAssignments(c: Campaign) {
+  const r = c.research;
+  while (researchersAssigned(c) > Math.min(c.researchers, researcherCapacity(c))) {
+    const k = Object.keys(r.assigned).reverse().find(k => r.assigned[k] > 0);
+    if (!k) break;
+    r.assigned[k]--;
+  }
+}
 export function tickResearch(c: Campaign) {
   const r = c.research;
   announceResearch(c);
-  // researchers beyond lab space (a lab was damaged) stop working on the newest assignments
-  while (researchersAssigned(c) > Math.min(c.researchers, researcherCapacity(c))) {
-    const k = Object.keys(r.assigned).reverse().find(k => r.assigned[k] > 0)!;
-    r.assigned[k]--;
-  }
+  fitAssignments(c);
   for (const [id, n] of Object.entries(r.assigned)) {
     if (!n) continue;
-    r.progress[id] = (r.progress[id] || 0) + n * (testOf(id) ? 1 : fieldBoost(c, PROJECTS[id].branch));
+    r.progress[id] = (r.progress[id] || 0) + n * (testOf(id) ? 1 : fieldBoost(c, PROJECTS[id].branch) * studyBoost(c, PROJECTS[id].branch));
     if (testOf(id)) { if (r.progress[id] >= projectDays(c, id)) finishTest(c, testOf(id)!); continue; }
     if (r.progress[id] >= projectDays(c, id)) {
       r.done.push(id); delete r.assigned[id];
@@ -410,7 +448,7 @@ export function tickResearch(c: Campaign) {
   }
   const working = countOperational(c, "workshop") > 0;
   for (const o of [...c.orders]) {
-    if (o.daysLeft > 1 && hasTrade(c, "machinist") && Math.random() < TRADE_CHANCE) o.daysLeft--;
+    if (o.daysLeft > 1 && hasTrade(c, "machinist") && rnd() < TRADE_CHANCE) o.daysLeft--;
     if (!working) break;
     if (--o.daysLeft <= 0) {
       c.orders = c.orders.filter(x => x !== o);
@@ -477,7 +515,7 @@ export function canOrderAmmo(c: Campaign, a: AmmoId): string | null {
 }
 export function orderAmmo(c: Campaign, a: AmmoId) {
   if (canOrderAmmo(c, a)) return;
-  spend(c, ATTACHMENT_COST.cost, "workshop", "Attachment");
+  spend(c, ATTACHMENT_COST.cost, "workshop", "Special ammunition");
   c.orders.push({ ammo: a, daysLeft: ATTACHMENT_COST.days });
 }
 export function canOrderAttachment(c: Campaign, a: AttachmentId): string | null {
@@ -489,7 +527,7 @@ export function canOrderAttachment(c: Campaign, a: AttachmentId): string | null 
 }
 export function orderAttachment(c: Campaign, a: AttachmentId) {
   if (canOrderAttachment(c, a)) return;
-  spend(c, ATTACHMENT_COST.cost, "workshop", "Special ammunition");
+  spend(c, ATTACHMENT_COST.cost, "workshop", "Attachment");
   c.orders.push({ attachment: a, daysLeft: ATTACHMENT_COST.days });
 }
 
@@ -519,13 +557,13 @@ export function order(c: Campaign, item: ItemId) {
 }
 
 // ---------- breakthroughs and inspirations (War of the Chosen) ----------
-const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
+const rand = (a: number, b: number) => a + Math.floor(rnd() * (b - a + 1));
 /** On the first of each month: maybe offer a breakthrough, maybe inspire a project; and expire old ones. */
 export function monthlyResearch(c: Campaign) {
   const r = c.research;
   if (r.offer && r.offer.until < c.day && !r.paid.includes(r.offer.id)) { log(c, `${PROJECTS[r.offer.id].name} is no longer on offer.`); r.offer = undefined; }
   if (r.inspired && r.inspired.until < c.day && !r.paid.includes(r.inspired.id)) r.inspired = undefined;
-  if (!r.offer && Math.random() < 0.5) {
+  if (!r.offer && rnd() < 0.5) {
     const pool = Object.keys(PROJECTS).filter(id => PROJECTS[id].breakthrough && !has(c, id));
     if (pool.length) {
       const id = pool[rand(0, pool.length - 1)];
@@ -533,7 +571,7 @@ export function monthlyResearch(c: Campaign) {
       log(c, `${PROJECTS[id].name} is on offer for 30 days: ${PROJECTS[id].desc}`, "good", "research");
     }
   }
-  if (!r.inspired && Math.random() < 0.4) {
+  if (!r.inspired && rnd() < 0.4) {
     const pool = Object.keys(PROJECTS).filter(id => !PROJECTS[id].breakthrough && !has(c, id) && !projectLock(c, id) && !r.paid.includes(id));
     if (pool.length) {
       const id = pool[rand(0, pool.length - 1)];
@@ -549,6 +587,7 @@ export function canTest(c: Campaign, s: ScpRecord, t: TestId): string | null {
   if (c.research.tests.includes(t)) return "Already done.";
   if (c.research.testing) return c.research.testing.id === t ? "Under way." : `The ${TESTS[c.research.testing.id].name.toLowerCase()} is already under way.`;
   if (!countOperational(c, "lab")) return "Needs a working research lab.";
+  if (s.id !== testScp(t)) return `That test is for SCP-${testScp(t)}.`;
   if (s.status !== "contained") return `${s.name} isn't in its cell.`;
   if (researchersFree(c) < 1) return "Needs a free researcher.";
   if (c.dclass < d.dclass) return `Needs ${d.dclass} D-Class.`;
@@ -568,14 +607,14 @@ function finishTest(c: Campaign, t: TestId) {
   const r = c.research, d = TESTS[t], key = testKey(t);
   const ids = r.testing?.watchers ?? [], watching = c.guards.filter(g => g.alive && ids.includes(g.id));
   delete r.assigned[key]; delete r.progress[key]; r.testing = undefined;
-  const s = c.scps.find(x => x.id === "173");
+  const id = testScp(t), s = c.scps.find(x => x.id === id);
   c.dclass += d.dclass;   // the D-Class held back for it
-  if (!s || s.status !== "contained") { log(c, `The ${d.name.toLowerCase()} was called off: SCP-173 isn't in its cell. The money is spent.`, "bad", "research"); return; }
-  const ok = cellWork(c, s, watching, `the ${d.name.toLowerCase()}`, d.risk, d.dclass, d.breach);
+  if (!s || s.status !== "contained") { log(c, `The ${d.name.toLowerCase()} was called off: SCP-${id} isn't in its cell. The money is spent.`, "bad", "research"); return; }
+  const ok = cellWork(c, s, watching, `the ${d.name.toLowerCase()}`, d.risk, d.dclass, d.breach, d.fail);
   if (ok) {
     r.tests.push(t);
     for (const n of d.notes) if (!c.knownNotes.includes(n)) c.knownNotes.push(n);
-    log(c, `${d.name} complete. SCP-173's file has been updated and new research is available.`, "good", "research");
+    log(c, d.scp ? `${d.name} complete. ${s.name}'s file has been updated, and research in its branch goes ${Math.round(STUDY_BONUS * 100)}% faster.` : `${d.name} complete. SCP-173's file has been updated and new research is available.`, "good", "research");
   }
 }
 

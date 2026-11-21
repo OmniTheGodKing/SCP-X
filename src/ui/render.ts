@@ -1,8 +1,9 @@
 // Draws the tactical map, units, sightlines, previews and effects onto the mission canvas.
+import { movePreview } from "../game/preview";
 import { CONT, DRUM, EXIT, FULL, HALF, L, STEEL, TS, WALL, area, floorOf, inContainer, passable, pathTo, tileAt, type Pt } from "../core/grid";
 import { sightFrom } from "../core/sight";
 import { canShoot, activeGun, center, coverAgainst, shotInfo } from "../game/combat";
-import { S, canAct, canSee, isPanicked, isTeam, seen, team, unitAt } from "../game/state";
+import { S, canAct, canSee, isPanicked, isTeam, seen, team, teamPerception, unitAt } from "../game/state";
 import { blastArea, dragOptions, moveCost, reachFor, throwOptions } from "../game/turn";
 import { abilityTargets } from "../game/abilities";
 import type { Unit } from "../game/types";
@@ -31,6 +32,8 @@ export const view = { floor: 0 };
 /** The rows the screen shows: the floor on view, or the whole map. */
 export function viewRows() { const f = L.def.floors?.[view.floor]; return f ? { y0: f.y0, h: f.y1 - f.y0 + 1 } : { y0: 0, h: L.H }; }
 
+/** The tactical lab draws its overlays here, over the map and units (Tactical overhaul T6.2). */
+export const overlayHook: { fn: ((ctx: CanvasRenderingContext2D, now: number) => void) | null } = { fn: null };
 export function createRenderer(cv: HTMLCanvasElement) {
   const ctx = cv.getContext("2d")!;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -250,6 +253,14 @@ export function createRenderer(cv: HTMLCanvasElement) {
     ctx.fillStyle = u.side === "raider" || u.side === "zombie" ? C.alert : "#9cd0a6"; ctx.fillRect(cx - w / 2, cy - 19, w * frac, 2);
   }
 
+  /** A detected but unidentified contact: a dark figure with a question mark, nothing more. */
+  function drawContact(u: Unit, now: number) {
+    const p = placeOf(u, now);
+    ctx.fillStyle = "rgba(20,24,28,0.75)"; ctx.beginPath(); ctx.arc(p.x, p.y + 2, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(p.x, p.y - 9, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#9aa3ab"; ctx.lineWidth = 1.2; ctx.setLineDash([2, 2]); ctx.beginPath(); ctx.arc(p.x, p.y, 14, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    badge(ctx, p.x + 10, p.y + 10, "?", "#9aa3ab");
+  }
   function drawUnit(u: Unit, now: number) {
     const p = placeOf(u, now), cx = p.x, cy = p.y;
     const hurt = Math.max(0, 1 - (now - p.a.hit) / 280), flash = now - p.a.fired < 110, bob = p.moving ? Math.sin(now / 35) * 0.8 : 0;
@@ -597,12 +608,15 @@ export function createRenderer(cv: HTMLCanvasElement) {
       if (!u.alive || u.saved || u.carriedBy) continue;
       if (!isTeam(u) && !seen(u.x, u.y) && !u.restrained) continue;
       if (hidden939(u)) continue;
+      // Tactical overhaul T3: someone the team can only make out as a shape is drawn as one
+      if (!isTeam(u) && !u.restrained && teamPerception(u) === 1) { drawContact(u, now); continue; }
       drawUnit(u, now);
       // Phase 4B markers: eyes on the floor, compelled by SCP-012, marked by SCP-096
       const pp = placeOf(u, now);
       if (u.eyesDown) tag("EYES DOWN", pp.x, pp.y + 20, C.ok);
       if (u.compelled !== undefined) tag("COMPELLED", pp.x, pp.y + 20, C.alert);
       if (isTarget(u)) tag("MARKED", pp.x, pp.y - 26, C.alert);
+      if ((u.suppressedUntil ?? -1) >= S.turn) tag("SUPPRESSED", pp.x, pp.y + 20, C.alert);
     }
 
     // smoke
@@ -635,7 +649,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
 
     // every enemy the selected operative can shoot right now shows its hit chance (hovering one gives the detail)
     if (playing && sel && sel.side === "mtf" && sel.ap > 0 && !S.mode) {
-      for (const r of S.units) if (r.side === "raider" && r.alive && !r.downed && seen(r.x, r.y) && canShoot(sel, r) && !(S.hover && S.hover.x === r.x && S.hover.y === r.y)) {
+      for (const r of S.units) if ((r.side === "raider" || (!isTeam(r) && teamPerception(r) === 1)) && r.alive && !r.downed && seen(r.x, r.y) && canShoot(sel, r) && !(S.hover && S.hover.x === r.x && S.hover.y === r.y)) {
         const [rx, ry] = center(r); tag(`${shotInfo(sel, r).chance}%`, rx, ry + 19, C.manila);
       }
     }
@@ -675,10 +689,21 @@ export function createRenderer(cv: HTMLCanvasElement) {
         ctx.fillStyle = "#f2e6c9"; ctx.font = "500 12px IBM Plex Mono, monospace"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
         ctx.fillText(`${s.chance}%`, bxL + 5, by - 18);
         ctx.fillStyle = "#b9b2a2"; ctx.font = "10px IBM Plex Mono, monospace"; ctx.fillText(line2, bxL + 5, by - 5);
+      } else if (tu && !isTeam(tu) && (tu.side === "raider" || teamPerception(tu) === 1) && seen(hv.x, hv.y) && sel.side === "mtf" && sel.ap > 0) {
+        // in view but no line of fire: say so, and show the line that's blocked
+        const [ax, ay] = center(sel), [bx, by] = center(tu);
+        ctx.setLineDash([3, 4]); ctx.strokeStyle = "rgba(170,178,186,0.7)"; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); ctx.setLineDash([]);
+        tag("NO LINE OF FIRE", bx, by - 22, C.alert);
       } else if (res && !tu) {
         const d = res.dist[hv.y * L.W + hv.x];
         if (d > 0) {
-          drawPath(center(sel), pathTo(res, hv.x, hv.y) || [], moveCost(sel, d) === 1 ? C.mtf : C.manila);
+          const path = pathTo(res, hv.x, hv.y) || [];
+          drawPath(center(sel), path, moveCost(sel, d) === 1 ? C.mtf : C.manila);
+          // Tactical overhaul T6.3: the preview asks the real rules, with the operative placed where they'd stand
+          const pv = movePreview(sel, hv.x, hv.y, path), lane = pv.lane, canHit = pv.threats;
+          if (lane) { ctx.strokeStyle = C.alert; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(lane[0] * TS + TS / 2, lane[1] * TS + TS / 2, 9, 0, Math.PI * 2); ctx.stroke(); tag("OVERWATCH", lane[0] * TS + TS / 2, lane[1] * TS + TS + 7, C.alert); }
+          if ((sel.suppressedUntil ?? -1) >= S.turn && sel.suppressedBy) tag("SUPPRESSED: MOVING DRAWS FIRE", hv.x * TS + TS / 2, hv.y * TS + TS + 18, C.alert);
           ctx.strokeRect(hv.x * TS + 3, hv.y * TS + 3, TS - 6, TS - 6);
           if (known) {
             const eyes = sightFrom(hv.x, hv.y, st.x, st.y);
@@ -690,16 +715,18 @@ export function createRenderer(cv: HTMLCanvasElement) {
             tag(eyes ? "EYES ON" : "NO LOS", hv.x * TS + TS / 2, hv.y * TS + TS + 7, eyes ? C.ok : C.alert);
           }
           // threats at the destination: visible Insurgents who could shoot this tile, and whether any of them flank it
-          const threats = S.units.filter(r => r.side === "raider" && r.alive && !r.downed && seen(r.x, r.y) && sightFrom(r.x, r.y, hv.x, hv.y));
+          const threats = canHit;
           if (threats.length) {
-            const flanked = threats.some(r => coverAgainst(hv.x, hv.y, r.x, r.y) === 0);
+            const flanked = pv.flankedBy.length > 0;
             tag(`${threats.length} CAN SEE${flanked ? " · FLANKED" : ""}`, hv.x * TS + TS / 2, hv.y * TS - 8, flanked ? C.alert : C.manila);
             for (const r of threats) { const [rx, ry] = center(r); ctx.setLineDash([2, 4]); ctx.strokeStyle = coverAgainst(hv.x, hv.y, r.x, r.y) === 0 ? "rgba(215,91,71,0.7)" : "rgba(216,191,134,0.45)"; ctx.lineWidth = 1;
               ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(hv.x * TS + TS / 2, hv.y * TS + TS / 2); ctx.stroke(); ctx.setLineDash([]); }
           } else if (S.units.some(r => r.side === "raider" && r.alive && !r.downed && seen(r.x, r.y))) tag("NOT SEEN", hv.x * TS + TS / 2, hv.y * TS - 8, C.ok);
-          const shields = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => { const t = tileAt(hv.x + dx, hv.y + dy); return t === HALF || t === FULL || t === WALL || t === STEEL; });
-          for (const [dx, dy] of shields) {
-            const fullCover = tileAt(hv.x + dx, hv.y + dy) !== HALF;
+          // cover on each side, from the geometry kernel (walls, crates, desks, window sills, partitions, shut doors)
+          const sides = pv.sides, dirs: [number, number][] = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+          for (const k of [0, 1, 2, 3]) {
+            if (!sides[k]) continue;
+            const [dx, dy] = dirs[k], fullCover = sides[k] >= 40;
             ctx.fillStyle = fullCover ? C.mtf : C.manila;
             const cx = hv.x * TS + TS / 2 + dx * 12, cy = hv.y * TS + TS / 2 + dy * 12;
             ctx.fillRect(cx - (dy ? 6 : 2), cy - (dx ? 6 : 2), dy ? 12 : 4, dx ? 12 : 4);
@@ -743,6 +770,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
       ctx.strokeRect((dx - 1) * TS + 2, (dy - 1) * TS + 2, TS * 3 - 4, TS * 3 - 4); ctx.setLineDash([]);
       tag("DROP ZONE", dx * TS + TS / 2, (dy - 1) * TS - 4, C.alert);
     }
+    overlayHook.fn?.(ctx, now);
     drawWeather(now);
 
     S.effects = S.effects.filter(e => now - e.t0 < e.dur);

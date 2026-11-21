@@ -10,14 +10,16 @@ import { letGuardsHandle } from "./campaign/security";
 import { scpName } from "./campaign/containment";
 import { pendingBreach } from "./campaign/campaign";
 import { createMission } from "./game/mission";
+import { endMission, forceRng } from "./core/rng";
+import * as geom from "./core/geom";
 import { S } from "./game/state";
 import type { MissionKind, MissionResult, MissionSetup } from "./game/types";
 import { mountHub, openTab } from "./ui/hubView";
 import { L } from "./core/grid";
 import { fireLine, sightFrom } from "./core/sight";
 import { blastStructure, openDoor, opaque, passable } from "./core/grid";
-import { canShoot, fire, lineOfFire, moveUnit } from "./game/combat";
-import { canSee, computeVis } from "./game/state";
+import { canShoot, coverAgainst, fire, lineOfFire, moveUnit, shotInfo } from "./game/combat";
+import { canSee, computeVis, pace } from "./game/state";
 import { emitNoise, settleFacing } from "./game/noise";
 import { endTurn, reachFor } from "./game/turn";
 import * as scp4b from "./game/scp4b";
@@ -25,6 +27,11 @@ import { generateTown } from "./data/towngen";
 import { mountMission } from "./ui/missionView";
 import { esc } from "./ui/util";
 import { mountDebug } from "./ui/debug";
+import { dispatch, type Command } from "./campaign/commands";
+import { directorsBriefing } from "./campaign/briefing";
+import { checkInvariants } from "./campaign/invariants";
+import { openLab } from "./ui/lab";
+import { movePreview } from "./game/preview";
 import { transition } from "./ui/audio";
 import { mountMenu } from "./ui/menu";
 import { mountDebrief, mountMtfFound, mountSitePick } from "./ui/founding";
@@ -81,7 +88,8 @@ function launch(setup: MissionSetup, inc: Incident, after?: (r: MissionResult) =
   createMission(setup);
   screen = "mission";
   let result: MissionResult | null = null;
-  mountMission(root, () => { transition.returnHome(); if (after && result) { after(result); return; } openTab("world", "reg:" + inc.region); showHub(); }, r => {
+  mountMission(root, () => { endMission(); transition.returnHome(); if (after && result) { after(result); return; } openTab("world", "reg:" + inc.region); showHub(); }, r => {
+    endMission();
     result = r;
     const d = applyResult(campaign, r);
     saveCampaign(campaign);
@@ -195,9 +203,21 @@ function showHub() {
   scp4b,
   // Phase 4C
   generateTown,
+  // Tactical overhaul T0: force every gameplay roll to one value (null to stop), for tests
+  rng: { force: forceRng },
+  // Tactical overhaul T1: the geometry kernel itself
+  geom,
+  // T5/T6: pacing (headless skips animation waits) and the cover rule
+  pace, coverAgainst, shotInfo,
+  movePreview,
+  // Strategic overhaul: the validated command layer, the briefing and the invariants, for the strategy tests
+  dispatch: (cmd: Command) => dispatch(campaign, cmd), briefing: () => directorsBriefing(campaign), invariants: () => checkInvariants(campaign),
   // Phase 5: the organization, site geography and hands-off deployments, for the acceptance tests
   org, autoteam, research: researchMod, security: securityMod,
 };
 
-mountDebug({ campaign: () => campaign, screen: () => screen, refresh: () => { saveCampaign(campaign); if (screen === "hub") showHub(); } });
-if (LEGACY) showHub(); else showMenu();
+function showLab() { screen = "mission"; openLab(root, () => { endMission(); showHub(); }); }
+mountDebug({ campaign: () => campaign, screen: () => screen, refresh: () => { saveCampaign(campaign); if (screen === "hub") showHub(); }, lab: showLab });
+// the tactical lab can be opened straight from the address: …/index.html#lab; ?legacy skips the title screen
+if (location.hash === "#lab") showLab(); else if (LEGACY) showHub(); else showMenu();
+window.addEventListener("hashchange", () => { if (location.hash === "#lab") showLab(); });

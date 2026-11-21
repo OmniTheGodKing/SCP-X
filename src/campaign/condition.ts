@@ -1,5 +1,6 @@
 // How an operative is holding up between missions (Phase 3K): fatigue that builds with every deployment and wears off
 // with rest, serious injuries that keep someone off the roster for weeks, and bonds formed by going in together.
+import { rnd } from "../core/rng";
 import type { Campaign, Operative } from "./campaign";
 import type { MissionResult } from "../game/types";
 import { countOperational } from "./base";
@@ -12,10 +13,10 @@ const INJURIES = [
   { name: "Broken arm", days: [18, 28] }, { name: "Cracked ribs", days: [12, 20] }, { name: "Gunshot wound to the leg", days: [20, 32] },
   { name: "Concussion", days: [10, 16] }, { name: "Shrapnel in the back", days: [16, 26] }, { name: "Torn shoulder", days: [14, 24] },
 ];
-const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
+const rand = (a: number, b: number) => a + Math.floor(rnd() * (b - a + 1));
 /** A serious injury: off the roster until it heals, whatever their HP says. The medical bay shortens it. */
 export function injure(c: Campaign, o: Operative): string {
-  const k = INJURIES[Math.floor(Math.random() * INJURIES.length)];
+  const k = INJURIES[Math.floor(rnd() * INJURIES.length)];
   const days = Math.round(rand(k.days[0], k.days[1]) * (countOperational(c, "medical") ? 0.7 : 1));
   o.injury = { name: k.name, until: c.day + days };
   return `${o.call} ${o.name} is seriously hurt: ${k.name.toLowerCase()}, out for ${days} days${countOperational(c, "medical") ? " (shortened by the medical bay)" : ""}.`;
@@ -52,7 +53,7 @@ export function afterMission(c: Campaign, r: MissionResult): string[] {
     const lv = bondLevel(a.o.bonds?.[dead.o.id] ?? 0);
     if (!lv) continue;
     a.o.san = Math.max(1, a.o.san - 10 * lv);
-    if (lv >= 2 && !a.o.traits.includes("nightmares") && Math.random() < 0.5) a.o.traits.push("nightmares");
+    if (lv >= 2 && !a.o.traits.includes("nightmares") && rnd() < 0.5) a.o.traits.push("nightmares");
     (a.o.lostBonds ??= []).push(dead.o.name);
     out.push(`${a.o.name} lost ${dead.o.name}, ${BOND_NAMES[lv].toLowerCase() === "comrades" ? "a comrade" : "someone close"}. It shows.`);
   }

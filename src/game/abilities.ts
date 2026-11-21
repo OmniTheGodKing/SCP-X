@@ -1,4 +1,8 @@
 // Class abilities used during a mission. Each has a target rule, a cost and an effect.
+import { suppress } from "./combat";
+import { emitNoise } from "./noise";
+import { payAbility } from "./actions";
+import { coverSides } from "../core/geom";
 import { DIRS, DRUM, FULL, HALF, L, STEEL, WALL, cheb, passable, tileAt } from "../core/grid";
 import { hasPerk, spend, usesLeft } from "./perks";
 import { maxSanOf } from "./profiles";
@@ -53,7 +57,8 @@ export const ABILITIES: AbilityDef[] = [
 
 const UNIVERSAL: AbilityId[] = ["cutradio", "secure", "dose", "lockdown", "doors", "siren", "calm", "restrain", "pickup", "drop", "exfil", "hunker", "recover", "restore", "scan", "hood", "lead096", "score", "shake", "casemask"];
 const onExit = (u: Unit) => L.exitMap[u.y * L.W + u.x] === 0;
-const hasCover = (u: Unit) => DIRS.some(([dx, dy]) => { const t = tileAt(u.x + dx, u.y + dy); return t === WALL || t === FULL || t === HALF || t === STEEL || t === DRUM; });
+/** Cover beside them on some side (Tactical overhaul T2.1: from the geometry kernel's obstacles). */
+const hasCover = (u: Unit) => coverSides(u.x, u.y).some(v => v > 0);
 const knows = (u: Unit, p: AbilityId) => UNIVERSAL.includes(p)
   ? u.side === "mtf" && abilityTargets(u, p).length > 0 && (p !== "dose" || S.amnestics > 0)
   : hasPerk(u, p as PerkId);
@@ -107,6 +112,7 @@ export function abilityCheck(u: Unit | null, p: AbilityId): string | null {
   const d = def(p);
   if (d.uses && usesLeft(u, p, d.uses(u)) < 1) return "No uses left this mission.";
   if (u.ap < cost(u, p)) return "No actions left this turn.";
+  if (p === "suppression" && u.gun && u.gun.ammo < 2) return "Suppression needs 2 rounds in the magazine.";
   if (!abilityTargets(u, p).length) return d.target === "enemy" ? "No enemy in sight." : d.target === "downed" ? "Nobody downed next to them." : d.target === "panicked" ? "Nobody panicking next to them." : d.target === "ally" ? "Nobody next to them needs it." : null;
   return null;
 }
@@ -143,7 +149,7 @@ export function useAbility(u: Unit, p: AbilityId, t: Unit) {
   const c = cost(u, p);
   if (p === "medkit" && c === 0) spend(u, "cm" + S.turn);
   if (d.uses) spend(u, p);
-  u.ap = d.endsTurn ? 0 : u.ap - c;
+  payAbility(u, c, !!d.endsTurn);
   S.mode = null; S.ability = null;
   switch (p) {
     case "medkit":
@@ -166,8 +172,10 @@ export function useAbility(u: Unit, p: AbilityId, t: Unit) {
       break;
     case "suppression": {
       const hit = [t, ...(hasPerk(u, "wall_of_fire") ? alive("raider").filter(r => r !== t && cheb(r.x, r.y, t.x, t.y) <= 2) : [])];
-      for (const r of hit) r.suppressedUntil = S.turn;
-      log(`${full(u)} lays down suppressing fire: ${hit.length} Insurgent${hit.length > 1 ? "s" : ""} pinned (−30 aim on their next shots).`, "good");
+      // Tactical overhaul T4.6: XCOM 2 suppression. Pinned through their next turn: −30 aim, no overwatch, and if
+      // they move, the suppressor gets a shot at them. It ends if the suppressor moves. Costs 2 rounds.
+      suppress(u, hit);
+      log(`${full(u)} lays down suppressing fire: ${hit.length} Insurgent${hit.length > 1 ? "s" : ""} pinned (−30 aim, no overwatch; moving draws ${u.call || u.name}'s fire).`, "good");
       break;
     }
     case "mark_target":

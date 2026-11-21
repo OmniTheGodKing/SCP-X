@@ -3,6 +3,29 @@
 Work runs in phases. Nothing in a phase is built until it has been laid out and agreed.
 Order and contents are open to change.
 
+## Strategic overhaul (in progress; see docs/STRATEGIC_OVERHAUL_PROGRESS.md)
+
+Done:
+- A validated command layer.
+- Log severity, and the Director's Briefing as a decision queue.
+- A strategic design system (`docs/UI_STYLE_GUIDE.md`), with the Site-19 and Command screens rebuilt on it.
+- Site-19's named researchers in breach missions, with deaths carried back into the campaign.
+- Experiments on every held anomaly.
+- A 90-day money forecast.
+- An Insurgency that picks operations from Site-19's weaknesses, and a GOC drawn by exposure.
+- Work and crews naming engineers on jobs.
+- Onboarding with Chief of Operations Krista Carter.
+- A strategic inspector.
+- Deterministic simulations with invariants over four simulated years.
+- An end-to-end campaign browser test.
+
+Remaining:
+- Balance tuning confirmed by playtesting (the simulation findings are in the progress record).
+- Painted room interiors and portraits.
+- A fuller History archive.
+- Any 3D renderer (the layout is ready for one: facilities have stable ids and level and slot positions).
+- A campaign ending.
+
 ## Done
 
 - Tactical layer: SCP-173 AI, staring and blinking, dragging, sealing, cover and sight, classes, perks, traits, weapons, armor, grenades, Insurgency AI.
@@ -1348,7 +1371,7 @@ default); enemy turns have a Normal/Fast setting. Both settings sit in the Sound
 - What exact funding amounts, upkeep targets, and event frequency produce healthy campaign pacing? Determine through campaign testing.
 - Which additional SCPs, mission types, and progression systems belong in the final Phase 4 scope beyond the existing 4B–4D proposals?
 
-### 4J: XCOM-style tactical combat foundation (proposed; awaiting approval)
+### 4J: XCOM-style tactical combat foundation (built; see "4J as built" below)
 
 Requested after the 4C playtests: stop fixing sightlines, doorways, range, cover and accuracy one bug at a time, audit
 the whole tactical layer, and rebuild it as one coherent XCOM-style system. References studied: OpenXcom's
@@ -1500,6 +1523,25 @@ gear (breaching charge, ballistic shield) are built on J5 to J7, so 4J goes befo
 **Kept as decided earlier:** vision is all round, as in XCOM 2 (facing affects reaction shots, not sight). Hearing
 stays as built.
 
+#### 4J as built (done except J8; verified in source and by tests)
+
+Built in the tactical overhaul session (authorised by the owner to implement without approval between tasks). The full
+record, decisions and remaining work are in `docs/TACTICAL_OVERHAUL_PROGRESS.md`; the audit and plan behind it are
+`SCP_X_COMPREHENSIVE_AUDIT.md` and `SCP_X_XCOM_IMPROVEMENT_ROADMAP.md`.
+
+- **Test foundation:** a portable test runner (`npm test`), headless rule tests, seeded gameplay randomness with
+  cosmetic randomness kept separate, and save fixtures.
+- **J0, the tactical lab:** `index.html#lab` or the debug panel.
+- **J1, the geometry kernel:** one obstacle model, one trace, step-out peeks, body exposure, and line of fire on the
+  same geometry. Measured: 0 "can see but can't shoot" on real maps outside reinforced glass.
+- **J2, cover and flanking** read off the line of fire.
+- **J3, perception and light:** unseen, detected or identified; a light map; smoke density.
+- **J4, accuracy and damage:** range curves, grazes, damage falloff.
+- **J5, reactions:** one reaction system, and XCOM 2 suppression.
+- **J6, destructible cover.**
+- **J7, the enemy AI:** a utility AI with pod coordination.
+- **Not done:** J8 (elevation).
+
 ## Phase 4 order
 
 Priority by priority; each part is finished and verified before the next starts. Decided by the user (4F moved ahead
@@ -1510,7 +1552,8 @@ of 4I and 4G after 4E):
 4. 4I tactical map geometry, visibility, facing, firing and sound (done; the foundation 4G builds on).
 5. 4G tactical combat life and presentation (done).
 6. 4B more anomalies (done), 4C maps and mission variety (done).
-7. 4J XCOM-style tactical combat foundation (proposed), then 4H combat variety and progression on top of it.
+7. 4J XCOM-style tactical combat foundation (done except J8, elevation), then 4H combat variety and progression on
+   top of it.
 8. 4D campaign story and endgame last.
 
 ## Phase 5: 3D, XCOM style
