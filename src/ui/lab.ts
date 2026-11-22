@@ -6,7 +6,10 @@
 import { DOOR_STATES_CYCLE, FLOOR, FULL, HALF, L, PART, STEEL, WALL, WINDOW, DRUM, EXIT, CONT, TS, bump, tileAt, passable, type DoorState } from "../core/grid";
 import { COVER_FULL, FIRE, SIGHT, STEP_OUT, coverSides, setSmoke, eyePoints, obstacleAt, trace, bestView as kernelView } from "../core/geom";
 import { SIGHT_MAX } from "../core/sight";
-import { createSandbox, makeSandboxUnit, type SandboxSpec, type SandboxUnit } from "../game/sandbox";
+import { SPECIALTIES, type SpecialtyId } from "../data/mtf";
+import { EQUIP, KITS } from "../data/specialties";
+import { ITEMS } from "../campaign/research";
+import { createSandbox, makeSandboxUnit, sandboxGun, type SandboxSpec, type SandboxUnit } from "../game/sandbox";
 import { S, computeVis, hooks, isTeam, unitAt } from "../game/state";
 import { canShoot, fire, shotInfo, suppress } from "../game/combat";
 import { perceive, lightAt, peeks, IDENTIFIED, DETECTED } from "../game/perception";
@@ -32,11 +35,72 @@ const lab = {
   tool: "inspect" as Tool,
   viewer: "" as string,
   gun: "rifle" as WeaponType,
+  trial: undefined as TrialSpec | undefined,
   show: { perception: true, peeks: true, line: true, cover: true, overwatch: true, light: false, reach: false, ai: false },
 };
 
 const open = (w: number, h: number) => Array.from({ length: h }, (_, y) => Array.from({ length: w }, (_, x) => (x === 0 || y === 0 || x === w - 1 || y === h - 1) ? "#" : ".").join(""));
 const put = (rows: string[], x: number, y: number, c: string) => { rows[y] = rows[y].slice(0, x) + c + rows[y].slice(x + 1); };
+// ---- Version 12: the specialty trial ----
+/** One fixed situation every squad specialty can be measured against: a shut door into a defended room, a structural
+ *  wall that only demolitions opens, a fuel drum, a burning patch of SCP-610 growth with a wounded operative beside it,
+ *  SCP-106 corrosion, an Insurgent machine gun in the far room and an exit behind the squad. Same seed every run. */
+export interface TrialSpec { specialty: SpecialtyId; stage: number; }
+export function trialSpec(specialty: SpecialtyId, stage: number): SandboxSpec & { trial: TrialSpec } {
+  const rows = open(26, 16);
+  for (let y = 1; y < 15; y++) { put(rows, 8, y, "#"); put(rows, 18, y, "#"); }
+  put(rows, 8, 7, "+"); put(rows, 18, 11, "+"); put(rows, 18, 4, "p");
+  put(rows, 1, 7, "E"); put(rows, 1, 8, "E");
+  for (const [x, y, c] of [[11, 5, "h"], [11, 9, "h"], [14, 7, "H"], [10, 8, "D"], [20, 6, "h"]] as [number, number, string][]) put(rows, x, y, c);
+  return {
+    rows, seed: 1951, doors: { "8,7": "closed", "18,11": "closed" }, trial: { specialty, stage },
+    units: [
+      { side: "mtf", x: 3, y: 6, name: "Keane" }, { side: "mtf", x: 3, y: 8, name: "Esposito" }, { side: "mtf", x: 5, y: 6, name: "Stirling" }, { side: "mtf", x: 5, y: 8, name: "Kaminski" },
+      { side: "mtf", x: 21, y: 12, name: "Garnier (wounded)", hp: 4 },
+      { side: "raider", x: 15, y: 5 }, { side: "raider", x: 15, y: 9 }, { side: "raider", x: 21, y: 7, gun: "mg" },
+    ],
+  };
+}
+const TRIAL_FLESH: [number, number][] = [[20, 13], [21, 13], [22, 13], [22, 12], [23, 12], [23, 13], [22, 14], [23, 14]];
+/** Give the squad its specialty, stage, certification and shared kit, and lay out the hazards. */
+function applyTrial(t: TrialSpec) {
+  const W = L.W, sp = SPECIALTIES[t.specialty], certified = KITS[t.specialty].certified;
+  S.setup.mtfRules = true;
+  const pool = certified.filter(i => !ITEMS[i].armor && (EQUIP[i]?.year ?? 0) <= 1951)
+    .map(i => ({ id: i, uses: EQUIP[i]?.major ? 2 : i === "field_tags" ? 2 : 1, shared: true as const }));
+  const suit = certified.find(i => i === "contsuit" || i === "hazmat");
+  const team = S.units.filter(u => u.side === "mtf");
+  team.forEach((u, n) => {
+    Object.assign(u, { squadId: "TRIAL", specialty: t.specialty, stage: t.stage, qualified: true, mtfSpec: sp.spec, items: [...pool] });
+    if (suit) { u.armorKind = suit; u.hasArmor = true; }
+    if (t.specialty === "heavyinf") { u.armorKind = "armor_heavy"; u.hasArmor = true; u.armor = 1; }
+    if (t.specialty === "heavyweapons" && n === 0) u.gun = sandboxGun("mg");
+  });
+  const hurt = team.find(u => u.name.startsWith("Garnier"));
+  if (hurt) { hurt.downed = true; hurt.hp = 0; hurt.bleed = 5; hurt.items = []; }
+  for (const [x, y] of TRIAL_FLESH) S.flesh.add(y * W + x);
+  S.fires.set(13 * W + 23, S.turn + 99);
+  for (const [x, y] of [[12, 12], [13, 12], [12, 13]]) S.corroded.add(y * W + x);
+  S.techUsed = []; S.clues = 0; S.samples = 0; S.collateral = 0;
+  lab.trial = t;
+  computeVis();
+}
+/** What the trial measures, read from the mission as it stands. */
+function trialCard() {
+  const t = lab.trial; if (!t) return "";
+  const team = S.units.filter(u => u.side === "mtf"), foes = S.units.filter(u => u.side === "raider");
+  const hurt = team.find(u => u.name.startsWith("Garnier"));
+  const fit = team.filter(u => u !== hurt);
+  const kit = fit[0]?.items?.filter(i => i.shared).map(i => `${i.id.replace(/_/g, " ")} ${i.uses}`).join(", ") || "none";
+  return `<div style="margin:6px 0;padding:6px;border:1px solid #6b5a2a;border-radius:4px">
+    <b>Specialty trial</b>: ${esc(SPECIALTIES[t.specialty].name)}, stage ${t.stage}<br>
+    Turn ${S.turn} · squad HP ${fit.reduce((a, u) => a + (u.alive ? u.hp : 0), 0)}/${fit.reduce((a, u) => a + u.maxHp, 0)} · down ${fit.filter(u => !u.alive || u.downed).length}<br>
+    Insurgents out ${foes.filter(u => !u.alive || u.downed).length}/${foes.length} · pinned ${foes.filter(u => (u.suppressedUntil ?? -1) >= S.turn).length}<br>
+    Wounded operative: ${!hurt ? "?" : hurt.saved ? "<b>extracted</b>" : !hurt.alive ? "bled out" : hurt.carriedBy ? "being carried" : `down, ${hurt.bleed ?? 3} turns left`}${hurt?.infectedTurn !== undefined ? " · infected" : ""}<br>
+    Growth tiles ${S.flesh.size} · fires ${S.fires.size} · infected ${team.filter(u => u.infectedTurn !== undefined).length}<br>
+    Techniques used ${S.techUsed?.length ?? 0} · clues ${S.clues ?? 0} · samples ${S.samples ?? 0} · collateral ${S.collateral ?? 0}<br>
+    Kit left: ${esc(kit)}</div>`;
+}
 function preset(name: string): SandboxSpec {
   switch (name) {
     case "hallway": { const rows = ["#".repeat(44), "#" + ".".repeat(42) + "#", "#" + ".".repeat(42) + "#", "#".repeat(44)]; return { rows, units: [{ side: "mtf", x: 1, y: 1 }, { side: "raider", x: 41, y: 2 }] }; }
@@ -50,11 +114,12 @@ function preset(name: string): SandboxSpec {
       return { rows, outdoors: true, night: true, units: [{ side: "mtf", x: 2, y: 6 }, { side: "raider", x: 14, y: 5 }, { side: "raider", x: 33, y: 6 }] }; }
     case "dugin": { const rows = open(24, 18); put(rows, 11, 5, "H"); for (const x of [6, 17]) put(rows, x, 11, "H");
       return { rows, units: [{ side: "mtf", x: 11, y: 4 }, { side: "raider", x: 9, y: 13, gun: "mg" }, { side: "raider", x: 13, y: 13 }] }; }
+    case "trial": return trialSpec("breach", 1);
     default: { const rows = open(20, 14); for (const [x, y, c] of [[6, 5, "H"], [13, 8, "h"], [9, 10, "h"], [15, 4, "H"]] as [number, number, string][]) put(rows, x, y, c);
       return { rows, units: [{ side: "mtf", x: 3, y: 3 }, { side: "raider", x: 16, y: 10 }] }; }
   }
 }
-export const PRESETS: [string, string][] = [["room", "Open room"], ["hallway", "Long hallway"], ["crates", "Crates (the owner's drawings)"], ["doorway", "Doorway and corners"], ["windows", "Windows and a partition"], ["night", "Night field"], ["dugin", "Dug-in operative vs a pod"]];
+export const PRESETS: [string, string][] = [["trial", "Specialty trial (same map, seed and enemies)"], ["room", "Open room"], ["hallway", "Long hallway"], ["crates", "Crates (the owner's drawings)"], ["doorway", "Doorway and corners"], ["windows", "Windows and a partition"], ["night", "Night field"], ["dugin", "Dug-in operative vs a pod"]];
 
 // ---- reading the map back into a scenario ----
 const CHAR: Record<number, string> = { [WALL]: "#", [FLOOR]: ".", [HALF]: "h", [FULL]: "H", [EXIT]: "E", [CONT]: "C", [STEEL]: "S", [DRUM]: "D", [PART]: "p" };
@@ -100,6 +165,8 @@ function paint(x: number, y: number, c: string) {
 export function openLab(root: HTMLElement, onExit: () => void, spec?: SandboxSpec) {
   const sc = spec ?? load() ?? preset("room");
   createSandbox(sc);
+  lab.trial = undefined;
+  const tr = (sc as { trial?: TrialSpec }).trial; if (tr) applyTrial(tr);
   lab.viewer = S.units.find(u => u.side === "mtf")?.id ?? S.units[0]?.id ?? "";
   mountMission(root, () => { teardown(); onExit(); }, () => "");
   const panel = document.createElement("div");
@@ -210,6 +277,10 @@ export function openLab(root: HTMLElement, onExit: () => void, spec?: SandboxSpe
     panel.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center"><b>Tactical lab</b><button class="act" id="labExit" type="button">Exit</button></div>
       <p style="margin:4px 0;opacity:.8">Every number here comes from the game's own rules. Hover a tile or unit to inspect it.</p>
+      <div style="margin:4px 0">Trial squad <select id="labTrialSp">${(Object.keys(SPECIALTIES) as SpecialtyId[]).map(k => `<option value="${k}" ${lab.trial?.specialty === k ? "selected" : ""}>${esc(SPECIALTIES[k].name)}</option>`).join("")}</select>
+        <select id="labTrialSt">${[0, 1, 2, 3].map(n => `<option value="${n}" ${(lab.trial?.stage ?? 1) === n ? "selected" : ""}>${["Authorized", "Drilled", "Proficient", "Veteran"][n]}</option>`).join("")}</select>
+        <button class="act" type="button" id="labTrialGo">${lab.trial ? "Restart trial" : "Run trial"}</button></div>
+      <div id="labTrial">${trialCard()}</div>
       <label>Scenario <select id="labPreset"><option value="">Load preset…</option>${PRESETS.map(([k, n]) => `<option value="${k}">${esc(n)}</option>`).join("")}</select></label>
       <div style="display:flex;flex-wrap:wrap;gap:3px;margin:6px 0">${TOOLS.map(([k, n]) => `<button class="act ${t === k ? "on" : ""}" style="padding:2px 6px;font-size:11px" type="button" data-tool="${esc(k)}">${esc(n)}</button>`).join("")}</div>
       <label>New units carry <select id="labGun">${["rifle", "marksman", "shotgun", "mg", "carbine", "smg"].map(g => `<option ${g === lab.gun ? "selected" : ""}>${g}</option>`).join("")}</select></label>
@@ -231,6 +302,7 @@ export function openLab(root: HTMLElement, onExit: () => void, spec?: SandboxSpe
       <textarea id="labJson" hidden style="width:100%;height:120px;margin-top:6px"></textarea>`;
     const q = (id: string) => panel.querySelector<HTMLElement>("#" + id)!;
     q("labExit").onclick = () => { teardown(); onExit(); };
+    q("labTrialGo").onclick = () => { const sp = (q("labTrialSp") as HTMLSelectElement).value as SpecialtyId, st = Number((q("labTrialSt") as HTMLSelectElement).value); teardown(); openLab(root, onExit, trialSpec(sp, st)); };
     panel.querySelectorAll<HTMLElement>("[data-tool]").forEach(b => b.onclick = () => { lab.tool = b.dataset.tool as Tool; refresh(); });
     panel.querySelectorAll<HTMLInputElement>("[data-show]").forEach(b => b.onchange = () => { (lab.show as Record<string, boolean>)[b.dataset.show!] = b.checked; });
     (q("labGun") as HTMLSelectElement).onchange = e => { lab.gun = (e.target as HTMLSelectElement).value as WeaponType; };
@@ -253,7 +325,7 @@ export function openLab(root: HTMLElement, onExit: () => void, spec?: SandboxSpe
   }
   // the panel follows the hover and every change in the mission
   const prevUpdate = hooks.update;
-  hooks.update = () => { prevUpdate(); const box = panel.querySelector("#labInfo"); if (box) box.innerHTML = info(); };
+  hooks.update = () => { prevUpdate(); const box = panel.querySelector("#labInfo"); if (box) box.innerHTML = info(); const tc = panel.querySelector("#labTrial"); if (tc) tc.innerHTML = trialCard(); };
   function teardown() { tapHook.fn = null; overlayHook.fn = null; panel.remove(); }
   refresh();
 }

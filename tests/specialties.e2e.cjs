@@ -266,6 +266,13 @@ const L = require('./lib.cjs');
   if (board) await p.screenshot({ path: require('path').join(L.OUT, 'v12-board.png') });
   check(board && board.n >= 2 && board.techs >= 2 && /Proficient|Drilled|Authorized|Veteran/.test(board.text), 'the organization board shows each squad\'s stage, techniques and kit', board);
 
+  // the tactical lab's specialty trial: the same map, seed and enemies for every specialty
+  await p.goto(L.GAME_URL.replace('?legacy', '#lab')); await p.waitForTimeout(400);
+  const trial = {};
+  for (const sp of ['breach', 'incendiary', 'heavyweapons']) { await p.selectOption('#labTrialSp', sp); await p.click('#labTrialGo'); await p.waitForTimeout(150);
+    trial[sp] = await E(() => { const S = window.__site19.mission; return { seed: S.setup.seed, at: S.units.filter(u => u.alive).map(u => u.x + ',' + u.y).join(' '), spec: S.units[0].specialty, kit: S.units[0].items.length, card: !!document.querySelector('#labTrial b') }; }); }
+  const tv = Object.values(trial);
+  check(tv.every(t => t.seed === 1951 && t.at === tv[0].at && t.card && t.kit > 0) && new Set(tv.map(t => t.spec)).size === 3, 'the specialty trial runs each specialty on identical ground', trial);
   check(!errs.length, 'no page errors', errs);
   R.done(); await b.close();
 })();
