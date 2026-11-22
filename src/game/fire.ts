@@ -2,6 +2,7 @@
 // crates and flesh, and sets off fuel drums. SCP-610's flesh spreads every turn from its core;
 // anyone left standing on it without an intact containment suit is infected, and anyone infected
 // turns into one of its instances 5 turns later, for good. Only fire can kill the core.
+import { blocksFire, blocksFlesh, burnCordon, fleshSafe } from "./squadtech";
 import { rnd } from "../core/rng";
 import { DIRS, DRUM, FLOOR, HALF, L, STEEL, TS, WALL, area, cheb, passable, tileAt } from "../core/grid";
 import { damage } from "./combat";
@@ -17,7 +18,8 @@ export const onFlesh = (x: number, y: number) => S.flesh.has(idx(x, y));
 const wet = () => S.setup.weather === "rain" || S.setup.weather === "storm";
 export function ignite(x: number, y: number, turns = FIRE_TURNS - (wet() ? 1 : 0)) {
   const t = tileAt(x, y);
-  if (t === WALL || t === STEEL) return;
+  if (t === WALL || t === STEEL || blocksFire(idx(x, y))) return;
+  burnCordon(idx(x, y));
   if (t === DRUM) { explodeDrum(x, y); return; }
   // the core is wet with blood: fire on it goes out after a turn
   const last = S.turn + (S.core && S.core.x === x && S.core.y === y ? 1 : turns);
@@ -77,7 +79,7 @@ export function spreadFlesh() {
   const edge: number[] = [];
   for (const i of S.flesh) {
     const x = i % L.W, y = (i / L.W) | 0;
-    for (const [dx, dy] of DIRS) { const nx = x + dx, ny = y + dy, n = idx(nx, ny); if (passable(nx, ny) && !S.flesh.has(n) && !burning(nx, ny)) edge.push(n); }
+    for (const [dx, dy] of DIRS) { const nx = x + dx, ny = y + dy, n = idx(nx, ny); if (passable(nx, ny) && !S.flesh.has(n) && !burning(nx, ny) && !blocksFlesh(n)) edge.push(n); }
   }
   for (let k = S.setup.severity ?? 1; k > 0 && edge.length; k--) S.flesh.add(edge.splice(rand(0, edge.length - 1), 1)[0]);
 }
@@ -92,7 +94,7 @@ export function infect(u: Unit, how: string) {
 /** At the end of a turn: anyone standing on flesh without a sealed suit is infected. */
 export function fleshContact() {
   for (const u of S.units.filter(u => u.alive && !u.saved && !u.carriedBy && u.side !== "anomaly" && !u.flesh && onFlesh(u.x, u.y)))
-    if (!sealedSuit(u)) infect(u, "contact with the flesh");
+    if (!sealedSuit(u) && !fleshSafe(u)) infect(u, "contact with the flesh");
 }
 /** A melee hit from an instance: always infects without a suit, and tears a suit 60% of the time. */
 export function fleshBite(v: Unit) {

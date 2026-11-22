@@ -1,6 +1,7 @@
 // Movement rules shared by the team and the enemy AI (Tactical overhaul T2.2). One move allowance, one way of saying
 // who may path where, and one reach calculation, so the blue and amber tiles the player sees and the moves the AI
 // weighs come from the same rules.
+import { moveAdjust } from "./squadtech";
 import { HALF, L, bfs, tileAt, type PathOpts, type Reach } from "../core/grid";
 import { TYPES } from "../data/weapons";
 import { hasPerk } from "./perks";
@@ -9,7 +10,7 @@ import { S, isTeam } from "./state";
 import type { Unit } from "./types";
 
 /** Tiles one action of movement covers. A dash (both actions) covers twice this. */
-export const moveOf = (u: Unit) => Math.max(1, prof(u).move + (u.gun ? TYPES[u.gun.type].move : 0) + (u.moveBonus ?? 0) - (u.carrying ? 1 : 0) - (S.setup.weather === "snow" ? 1 : 0));
+export const moveOf = (u: Unit) => u.emplaced ? 0 : Math.max(1, moveAdjust(u) + prof(u).move + (u.gun ? TYPES[u.gun.type].move : 0) + (u.moveBonus ?? 0) - (u.carrying ? 1 : 0) - (S.setup.weather === "snow" ? 1 : 0));
 /** Actions a move of d steps costs: 1 within the move allowance, 2 beyond it (a dash). */
 export const moveCost = (u: Unit, d: number) => d <= moveOf(u) ? 1 : 2;
 

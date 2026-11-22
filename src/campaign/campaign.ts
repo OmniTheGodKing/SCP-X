@@ -1,4 +1,5 @@
-import { homeRegion, qualifiedFor } from "./org";
+import { homeRegion, qualifiedFor, recordMastery, squadById, squadOfOp, squadStage, tickOrg } from "./org";
+import { EQUIP, KITS, SQUAD_BALANCE } from "../data/specialties";
 import { freshSeed, rnd, setCampaignSeed } from "../core/rng";
 import { fieldMap } from "../data/maps";
 // Site-19 between missions: the roster, time passing, funding, public exposure and incidents.
@@ -75,6 +76,8 @@ export interface Operative {
    *  site for the opening mission only. */
   squad?: string;
   loan?: boolean;
+  /** Version 12: squad specialties this operative is certified in. Kept when they change squads. */
+  quals?: import("../data/mtf").SpecialtyId[];
   /** The kit they take on missions by default: armor and item slots (taken from stores when they deploy). */
   kit?: { armor: ItemId | ""; items: (ItemId | "")[] };
   /** Given on making Corporal; the player can change it. */
@@ -485,6 +488,7 @@ export const monthlyFunding = (c: Campaign) => councilGrant(c) + frontsFunding(c
 /** Advance one day. Returns true if something happened that needs the player's attention. */
 export function advanceDay(c: Campaign) {
   if (c.over) return false;
+  tickOrg(c);
   // with a squad in the air, anything at Site-19 is Site Security's problem
   answerWhileAway(c);
   // a breach is answered on the spot: time stands still until it's dealt with
@@ -798,6 +802,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
       rankShort: RANK_SHORT[o.rank], maxSan: maxSanOf(o), aim: aimOf(o) + (has(c, "marksmanship") ? 5 : 0) + (tfOf(o) === "e11" ? TF_BONUS.e11Aim : 0), blinkFull: blinkFullOf(o), medals: [...(o.medals ?? [])],
       armor: st.points + uni.points, hasArmor: !!kind || uni.points > 0, armorKind: kind || undefined, armorHp: st.hp + uni.hp, moveBonus: st.move + (o.fleet ? 1 : 0), items: items.map(id => ({ id, uses: ITEMS[id].uses ?? 1 })),
       cls: o.cls, perks: [...o.perks], traits: [...o.traits], gun: gunFor(c, o), goggles: tfOf(o) === "eta10", bonds: undefined as Record<string, number> | undefined,
+      ...squadFields(c, o),
     };
   }).map(m => {
     if (m.goggles) m.aim += GOGGLES.aim;
@@ -832,6 +837,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     hp: 6, maxHp: 6, san: 70, maxSan: 70, aim: 55, blinkFull: 0.12, armor: 0, hasArmor: false, items: [], perks: [], traits: [],
     gun: { name: "M1 Carbine", type: "carbine" as const, dmg: [2, 4] as [number, number], mag: 5, ammo: 5, aim: 0 }, armorHp: 0 })) : [];
   return {
+    mtfRules: !!c.mtfs, kit: c.mtfs ? drawSquadKit(c, loadouts.map(l => c.roster.find(x => x.id === l.opId)).filter((o): o is Operative => !!o)) : undefined,
     kind, scp: (inc.scpId || "173") as ScpId, map: inc.map, amnestics, seed: (rnd() * 4294967296) >>> 0,
     night: away ? true : nightAt(c, inc), weather: missionWeather(c, inc),
     site: inc.site, records: away ? 2 : undefined, survivors: inc.kind === "rescue" ? inc.survivors : undefined,
@@ -882,6 +888,7 @@ export interface Debrief { lines: string[]; promotions: string[]; }
 export function applyResult(c: Campaign, r: MissionResult): Debrief {
   const lines: string[] = [], promotions: string[] = [];
   const inc = c.incidents.find(i => i.id === r.incidentId);
+  squadDebrief(c, r, inc, lines);
   c.incidents = c.incidents.filter(i => i.id !== r.incidentId);
   c.activeIncident = undefined;
   const name = inc ? inc.title.split(":")[0] : "Incident";
@@ -1115,4 +1122,46 @@ export function resolveInterrupted(c: Campaign) {
   if (inc?.transfer) log(c, transferFought(c, inc.transfer, false), "bad");
   else if (inc?.scpId) resolveScp(c, inc, false);
   checkOver(c);
+}
+
+// ---------- Version 12: the deployed squad's specialty, its kit pool, and what comes home ----------
+/** What a soldier brings of their squad into the mission: its id, specialty (not while retraining), stage, MTF
+ *  family, their own certification and the Veteran branch. */
+function squadFields(c: Campaign, o: Operative) {
+  const at = squadOfOp(c, o);
+  if (!at) return {};
+  const sq = at.squad, training = (sq.retrainUntil ?? 0) > c.day;
+  return { squadId: sq.id, specialty: training ? undefined : sq.specialty, stage: squadStage(sq), mtfSpec: at.mtf.spec, qualified: (o.quals ?? []).includes(sq.specialty), branch: sq.branch };
+}
+/** The squad's shared specialist kit for this mission, taken from site stores: what its specialty is certified for,
+ *  at most 2 major bundles (3 at Proficient) and one of each smaller item (2 at Proficient). Specialty never
+ *  creates stock (design T04). */
+export function drawSquadKit(c: Campaign, ops: Operative[]) {
+  const kit: Partial<Record<ItemId, number>> = {};
+  const squads = [...new Set(ops.map(o => squadOfOp(c, o)).filter(x => !!x && !((x.squad.retrainUntil ?? 0) > c.day)))];
+  for (const at of squads) {
+    const sq = at!.squad, stage = squadStage(sq), cert = KITS[sq.specialty].certified.filter(i => EQUIP[i] && !ITEMS[i].armor && (EQUIP[i]!.year <= yearOf(c.day)));
+    if (!ops.some(o => o.squad === sq.id && (o.quals ?? []).includes(sq.specialty))) continue;   // nobody certified to use it
+    let majors = SQUAD_BALANCE.kitMajors + (stage >= 2 ? SQUAD_BALANCE.kitMajorsProficient : 0);
+    for (const i of cert) {
+      const stock = c.inventory[i] ?? 0, cap = EQUIP[i]!.major ? majors : stage >= 2 ? 2 : 1;
+      const n = Math.min(stock, cap); if (n <= 0) continue;
+      kit[i] = (kit[i] ?? 0) + n; c.inventory[i] = stock - n;
+      if (EQUIP[i]!.major) majors -= n;
+    }
+  }
+  return kit;
+}
+function squadDebrief(c: Campaign, r: MissionResult, inc: Incident | undefined, lines: string[]) {
+  const back = Object.entries(r.kitLeft ?? {}).filter(([, n]) => (n ?? 0) > 0);
+  // Biological Containment doctrine: on an outbreak, cordon kits and suits are sometimes salvaged
+  for (const [i, n] of back) c.inventory[i as ItemId] = (c.inventory[i as ItemId] ?? 0) + (n ?? 0);
+  if (back.length) lines.push(`Squad kit back in stores: ${back.map(([i, n]) => `${n} × ${ITEMS[i as ItemId].name}`).join(", ")}.`);
+  if (inc?.kind === "outbreak" && r.techSquads?.some(id => squadById(c, id)?.mtf.spec === "bio") && rnd() < 0.2) { c.inventory.cordon_kit = (c.inventory.cordon_kit ?? 0) + 1; lines.push("Biological Containment doctrine: a cordon kit is salvaged."); }
+  if (r.techSquads?.length && r.win) { recordMastery(c, r.techSquads); lines.push(`Specialty mastery: ${r.techSquads.map(id => squadById(c, id)?.squad.name).filter(Boolean).join(", ")} +1.`); }
+  const recon = r.techSquads?.some(id => squadById(c, id)?.mtf.spec === "recon") ? 1 : 0;
+  const intel = Math.min(4, (r.clues ?? 0)) + (r.clues ? recon : 0);
+  if (intel) { gainIntel(c, intel); lines.push(`Observations and surveys: +${intel} Intel.`); }
+  if (r.samples) { addMaterial(c, "tissue", r.samples); lines.push(`${r.samples} sealed sample${r.samples > 1 ? "s" : ""} of SCP-610 tissue for the lab.`); }
+  if (r.collateral) { addExposure(c, inc?.region ?? homeRegion(c), 2 * r.collateral); lines.push(`Demolition damage: +${2 * r.collateral} exposure.`); }
 }

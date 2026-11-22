@@ -8,7 +8,8 @@ import { flightOut } from "./world";
 import { reportOf } from "./geo";
 import { forfeitGroup } from "./council";
 import { tfOf } from "./taskforces";
-import { squadAway, squadOfOp } from "./org";
+import { recordMastery, squadAway, squadOfOp, type Squad } from "./org";
+import { KITS } from "../data/specialties";
 import { SPECIALTIES } from "../data/mtf";
 import { ITEMS } from "./research";
 import { chronicle } from "./history";
@@ -58,7 +59,19 @@ export function assessTeam(c: Campaign, inc: Incident, ops: Operative[]): Assess
   // what their squad is trained for, against this kind of incident
   const sq = ops[0] ? squadOfOp(c, ops[0])?.squad : undefined;
   const sp = sq ? SPECIALTIES[sq.specialty] : undefined;
-  if (sp) add(`${sp.name} training`, (sp.strengths[inc.kind] ?? -0.04) * (sq!.retrainUntil && sq!.retrainUntil > c.day ? 0.4 : 1));
+  // Version 12: the squad's capability tags against this incident's objectives (design 26.6), each only with the
+  // kit actually in stores and the squad not retraining. Not a "specialty match" bonus: a tag either opens a route to
+  // the objective or it doesn't.
+  let primaryCap = 0.92;
+  if (sq) {
+    const caps = capabilities(c, sq, ops), obj = OBJECTIVES[inc.kind] ?? { primary: [], people: [] };
+    const p = obj.primary.filter(t => caps.includes(t)), q = obj.people.filter(t => caps.includes(t));
+    const stage = (sq.mastery ?? 0) >= 3 || (sq.drilled ?? 0) >= 1 ? 0.04 : 0;
+    if (p.length) add(`${sp!.name}: ${p.map(tagName).join(", ")}`, 0.18 + stage);
+    else if (obj.required) { primaryCap = 0.15; add(`${sp!.name} has no way to ${obj.required}`, -0.1); }
+    if (q.length) add(`${sp!.name}: ${q.map(tagName).join(", ")} (people)`, 0.12);
+    for (const [tag, why, v] of obj.risks ?? []) if (caps.includes(tag)) add(why, v);
+  }
   // the kit that matters for this incident, carried by the team (from their kits and what's in stores)
   const carried = (i: ItemId) => ops.some(o => o.kit?.armor === i || o.kit?.items.includes(i)) && (c.inventory[i] ?? 0) > 0;
   const armored = ops.filter(o => o.kit?.armor && (c.inventory[o.kit.armor] ?? 0) > 0).length;
@@ -85,9 +98,9 @@ export function assessTeam(c: Campaign, inc: Incident, ops: Operative[]): Assess
   const threat = THREAT[inc.kind === "outbreak" ? "610" : inc.scpId];
   if (threat && (inc.kind === "recovery" || inc.kind === "outbreak" || inc.kind === "emergency")) add("The anomaly", -threat);
   const total = f.reduce((a, [, v]) => a + v, 0);
-  const primary = Math.max(0.05, Math.min(0.92, 0.25 + total));
+  const primary = Math.max(0.05, Math.min(primaryCap, 0.25 + total));
   // the people side leans on training for rescue, evacuation and recovery more than on firepower
-  const peopleBonus = sp && ["recovery", "hazrecovery", "tracking", "quarantine", "decon"].includes(sq!.specialty) ? 0.15 : 0;
+  const peopleBonus = 0;
   const people = Math.max(0.1, Math.min(0.95, 0.4 + total * 0.6 + peopleBonus));
   return { primary, people, factors: f };
 }
@@ -146,13 +159,57 @@ export function resolveTeam(c: Campaign, inc: Incident) {
   else if (win && dead >= 2) outcome = "Contained at significant cost";
   else if (win) outcome = "Partial success";
   else if (peopleOk && (inc.kind === "rescue" || inc.kind === "recovery" || inc.kind === "outbreak" || inc.kind === "emergency")) { outcome = "People saved, containment failed"; addExposure(c, inc.region, -2); extra = " The survivors are out; the threat is not dealt with."; }
-  else if (spec && ["surveillance", "tracking", "forwardrecon", "infiltration"].includes(spec)) { outcome = "Intelligence gathered, no capture"; gainIntel(c, 2); extra = " They came back with 2 Intel."; }
+  else if (sq && capabilities(c, sq.squad, ops).some(t => ["can_provide_sustained_observation", "can_read_evidence", "can_scout_route", "can_move_silently"].includes(t))) { outcome = "Intelligence gathered, no capture"; gainIntel(c, 2); extra = " They came back with 2 Intel."; }
   else if (!win && !peopleOk) { outcome = "Failed intervention, the threat escalates"; addExposure(c, inc.region, 6); c.chaos.threat = Math.min(100, c.chaos.threat + (ins ? 3 : 0)); extra = " Exposure in the region rises by 6."; }
   else outcome = "Failed intervention";
   // an incendiary team that burns out an outbreak takes buildings with it
   if (inc.kind === "outbreak" && win && spec === "incendiary") { addExposure(c, inc.region, 3); extra += " The fires took nearby buildings: +3 exposure."; }
+  // heavy and demolition work wins fights and costs secrecy
+  if (win && sq && capabilities(c, sq.squad, ops).some(t => t === "can_breach_structural_wall" || t === "can_emplace_mg") && (inc.kind === "strike" || inc.kind === "retaliation")) { addExposure(c, inc.region, 2); extra += " Heavy weapons and charges were heard for miles: +2 exposure."; }
+  // the squad's kit used on the job comes out of stores
+  if (sq) for (const t of capabilities(c, sq.squad, ops)) { const i = TAG_ITEM[t]; if (i && (c.inventory[i] ?? 0) > 0 && ITEMS[i].uses === 1) c.inventory[i]!--; }
+  if (sq && win) recordMastery(c, [sq.squad.id]);
   // specialist kit carried in is spent, and gear on the dead is lost
   for (const o of ops) for (const i of o.kit?.items ?? []) if (i && ITEMS[i as ItemId]?.uses === 1 && (c.inventory[i as ItemId] ?? 0) > 0 && rnd() < 0.6) c.inventory[i as ItemId]!--;
   chronicle(c, "deployment", `${team} answered ${inc.title.split(": ")[1] ?? inc.title} without you: ${outcome}.${dead ? ` ${dead} killed.` : ""}`);
   log(c, `After-action, ${inc.title.split(": ")[1] ?? inc.title}: ${team}, ${outcome.toLowerCase()}.${extra} ${debrief.lines.join(" ")}`, win ? "good" : "bad", "command");
 }
+
+// ---------- Version 12 capability tags (design 26.6) ----------
+/** Kit a tag depends on: no stock, no capability. Tags not listed need only training. */
+const TAG_ITEM: Record<string, ItemId> = {
+  can_breach_door: "breach_charge", can_erect_barrier: "barricade", can_reduce_spread: "cordon_kit", can_burn_infected_tile: "flamer", can_firebreak: "firebreak_kit",
+  can_decontaminate: "decon_agent", can_recover_contaminated_sample: "sample_case", can_breach_structural_wall: "demo_charge", can_fortify: "sandbags", can_carry_two_person: "stretcher",
+};
+/** What a squad can actually do on this deployment: its specialty's tags, each with its kit in stores, none while
+ *  retraining, and none unless someone sent is certified. */
+export function capabilities(c: Campaign, sq: Squad, ops: Operative[]): string[] {
+  if ((sq.retrainUntil ?? 0) > c.day) return [];
+  if (!ops.some(o => o.squad === sq.id && (o.quals ?? []).includes(sq.specialty))) return [];
+  return KITS[sq.specialty].tags.filter(t => !TAG_ITEM[t] || (c.inventory[TAG_ITEM[t]] ?? 0) > 0 || (t === "can_burn_infected_tile" && (c.inventory.incendiary ?? 0) > 0));
+}
+const TAG_NAMES: Record<string, string> = {
+  can_breach_door: "breaching charges", can_coordinated_entry: "coordinated entry", can_erect_barrier: "barriers", can_hold_line: "holding a line", can_carry_two_person: "stretcher teams",
+  can_secure_transfer: "secure transfers", can_suppress_lane: "suppressing lanes", can_emplace_mg: "emplaced guns", can_reduce_spread: "isolation lines", can_burn_infected_tile: "burning infected ground",
+  can_firebreak: "firebreaks", can_decontaminate: "decontamination", can_recover_contaminated_sample: "sealed samples", can_protected_extraction: "protected extraction", can_anchor: "braced positions",
+  can_assault: "assault under fire", can_breach_structural_wall: "demolition", can_clear_obstacle: "obstacle clearance", can_fortify: "field fortification", can_restore_device: "repairs",
+  can_move_silently: "silent movement", can_covert_access: "covert access", can_provide_sustained_observation: "observation", can_confirm_target: "confirmed targets", can_read_evidence: "reading sign",
+  can_scout_route: "route survey", can_designate_insertion: "insertion points",
+};
+const tagName = (t: string) => TAG_NAMES[t] ?? t;
+/** What each kind of incident's objectives accept (design 26.6): capabilities that open a route to the primary
+ *  objective, ones that help the people side, the capability without which the primary objective is out of reach,
+ *  and capabilities that carry a risk there. */
+const OBJECTIVES: Partial<Record<Incident["kind"], { primary: string[]; people: string[]; required?: string; risks?: [string, string, number][] }>> = {
+  outbreak: { primary: ["can_burn_infected_tile", "can_reduce_spread"], people: ["can_carry_two_person", "can_protected_extraction", "can_secure_transfer", "can_recover_contaminated_sample"], required: "burn or contain SCP-610's growth",
+    risks: [["can_breach_structural_wall", "Demolition spreads the growth's debris", -0.05]] },
+  strike: { primary: ["can_breach_door", "can_coordinated_entry", "can_breach_structural_wall", "can_assault", "can_emplace_mg", "can_suppress_lane", "can_covert_access"], people: ["can_anchor", "can_hold_line"] },
+  retaliation: { primary: ["can_hold_line", "can_erect_barrier", "can_emplace_mg", "can_suppress_lane", "can_fortify", "can_assault"], people: ["can_carry_two_person", "can_secure_transfer"] },
+  escort: { primary: ["can_hold_line", "can_erect_barrier", "can_fortify", "can_emplace_mg"], people: ["can_carry_two_person"] },
+  rescue: { primary: ["can_read_evidence", "can_scout_route", "can_carry_two_person", "can_secure_transfer"], people: ["can_carry_two_person", "can_protected_extraction", "can_secure_transfer"] },
+  recovery: { primary: ["can_read_evidence", "can_provide_sustained_observation", "can_secure_transfer", "can_recover_contaminated_sample"], people: ["can_carry_two_person"],
+    risks: [["can_breach_structural_wall", "Explosives near an anomaly", -0.05]] },
+  coverup: { primary: ["can_move_silently", "can_covert_access", "can_provide_sustained_observation"], people: ["can_secure_transfer"],
+    risks: [["can_breach_structural_wall", "Demolitions draw attention at a cover-up", -0.1], ["can_emplace_mg", "Machine guns draw attention at a cover-up", -0.08]] },
+  emergency: { primary: ["can_restore_device", "can_breach_door", "can_decontaminate", "can_scout_route"], people: ["can_carry_two_person", "can_secure_transfer", "can_protected_extraction"] },
+};

@@ -13,7 +13,7 @@ const dbg = async (p, k) => { await p.evaluate(() => document.activeElement?.blu
 /** A fresh game in a new page, local storage cleared. */
 async function fresh(b, viewport = { width: 1300, height: 1000 }) {
   const p = await b.newPage({ viewport });
-  const errs = []; p.on('pageerror', e => errs.push(e.message + ' ' + (e.stack || '').split('\n')[1]));
+  const errs = []; p.on('pageerror', e => errs.push(e.message + ' ' + (e.stack || '').split('\n').slice(1, 4).join(' | ')));
   await p.goto(GAME_URL); await p.evaluate(() => localStorage.clear()); await p.reload();
   return { p, errs, E: (f, a) => p.evaluate(f, a) };
 }

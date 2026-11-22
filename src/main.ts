@@ -38,6 +38,9 @@ import { mountDebrief, mountMtfFound, mountSitePick } from "./ui/founding";
 import { beginOpening, closeOpening, openingIncident, openingLoadouts } from "./campaign/opening";
 import { bindCampaign } from "./campaign/org";
 import * as org from "./campaign/org";
+import * as squadtech from "./game/squadtech";
+import * as gridMod from "./core/grid";
+import * as campaignMod from "./campaign/campaign";
 import * as autoteam from "./campaign/autoteam";
 import * as researchMod from "./campaign/research";
 import * as securityMod from "./campaign/security";
@@ -214,6 +217,8 @@ function showHub() {
   dispatch: (cmd: Command) => dispatch(campaign, cmd), briefing: () => directorsBriefing(campaign), invariants: () => checkInvariants(campaign),
   // Phase 5: the organization, site geography and hands-off deployments, for the acceptance tests
   org, autoteam, research: researchMod, security: securityMod,
+  // Version 12: squad techniques in a mission
+  squadtech, campaignMod, gridMod,
 };
 
 function showLab() { screen = "mission"; openLab(root, () => { endMission(); showHub(); }); }

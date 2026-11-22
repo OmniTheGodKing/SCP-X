@@ -45,6 +45,8 @@ import { portraitSvg } from "./portrait";
 import { armoryHtml, barracksHtml, barracksTarget, BARRACKS_ROOM, type QuartersCtx } from "./quarters";
 import { leaveToward, wireStage } from "./stage/scene";
 import { commandBand, engineeringBand, researchBand } from "./departments";
+import { canDrill, chooseBranch, drillSquad, equipStatus, squadStage, type Squad } from "../campaign/org";
+import { KITS, SQUAD_BALANCE, TECHS } from "../data/specialties";
 import { addSquad, assignToSquad, bindCampaign, canAddSquad, eligibleKit, localizeText, retrainSquad, siteOf19, specUnlock, squadRosterMax, mtfsOf, squadMembers, squadAway, squadOfOp, deployCap, qualifiedFor } from "../campaign/org";
 import { MTF_CONFIG, SPECIALTIES, SPECS, type SpecialtyId } from "../data/mtf";
 import { INSPECTION, inspectionChecks, inspectionSoon } from "../campaign/inspection";
@@ -1793,7 +1795,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
             <div class="sqhead"><input data-sqname="${sq.id}" value="${esc(sq.name)}" maxlength="24" aria-label="Squad name"><button type="button" class="act" data-sqrename="${sq.id}">Rename</button>
               <select data-sqspec="${sq.id}" aria-label="Squad specialty">${SPECS[m.spec].specialties.map(id => `<option value="${id}" ${sq.specialty === id ? "selected" : ""}>${esc(SPECIALTIES[id].name)}</option>`).join("")}</select></div>
             <p class="specs">${mem.length}/${max} on the roster · ${mem.filter(o => deployable(c, o)).length} fit to deploy${away ? ` · <b>${esc(away)}</b>` : ""}${re ? ` · <span class="warn">retraining, ${sq.retrainUntil! - c.day} d: specialist kit unusable</span>` : ""}</p>
-            <p class="muted">${esc(SPECIALTIES[sq.specialty].desc)} Changing specialty takes ${MTF_CONFIG.retrainDays} days of retraining.</p>
+            <p class="muted">${esc(SPECIALTIES[sq.specialty].desc)} Retraining into another specialty takes about ${SQUAD_BALANCE.retrainDays} days at the training range; people keep the certifications they have.</p>
+            ${squadCapabilities(sq, mem)}
             <ul class="orglist">${mem.map(row).join("") || `<li class="muted">Nobody assigned.</li>`}</ul>
           </div>`; }).join("")}
         ${(() => { const why = canAddSquad(c, m); return `<div class="row"><input id="newSq-${m.id}" maxlength="24" placeholder="New squad name"><select id="newSqSpec-${m.id}">${SPECS[m.spec].specialties.map(id => `<option value="${id}">${esc(SPECIALTIES[id].name)}</option>`).join("")}</select><button type="button" class="act" data-addsq="${m.id}" ${why ? `disabled title="${esc(why)}"` : ""}>Raise a squad · $${MTF_CONFIG.squadCost}k</button>${why ? `<span class="muted">${esc(why)}</span>` : ""}</div>`; })()}
@@ -1804,6 +1807,22 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       <section class="orgmtf"><h4>Another MTF</h4><p class="muted">${next.map(x => `${esc(SPECS[x.sp].name)}: ${x.why ? esc(x.why) : "unlocked"}`).join(" · ")}</p>
         <div class="row"><button type="button" class="act" data-newmtf ${newWhy ? `disabled title="${esc(newWhy)}"` : ""}>Charter another MTF · $${MTF_CONFIG.mtfCost}k</button>${newWhy ? `<span class="muted">${esc(newWhy)}</span>` : ""}</div></section>
       </div>`;
+  }
+
+  /** Version 12: what a squad's specialty lets it do, how far it has come, and what it costs, on the organization board. */
+  function squadCapabilities(sq: Squad, mem: Operative[]) {
+    const k = KITS[sq.specialty], stage = squadStage(sq), cert = mem.filter(o => (o.quals ?? []).includes(sq.specialty)).length;
+    const next = SQUAD_BALANCE.stageOps[Math.min(3, stage + 1)], drillWhy = canDrill(c, sq);
+    const tech = (id: string) => { const t = TECHS[id]; return `<li class="${t.incomplete ? "incomplete" : ""}"><b>${esc(t.name)}</b> <span class="specs">${t.ap} action${t.ap > 1 ? "s" : ""}${t.cooldown ? ` · squad cooldown ${t.cooldown}` : ""}${t.participants > 1 ? ` · ${t.participants} people` : ""}${t.consumes ? ` · uses ${esc(ITEMS[t.consumes].name.toLowerCase())}` : ""}</span><br><span class="muted">${esc(t.desc)}</span>${t.incomplete ? `<br><span class="warn">Not built yet: ${esc(t.incomplete)}</span>` : ""}</li>`; };
+    return `<div class="sqcap">
+      <div class="sqstage"><b>${SQUAD_BALANCE.stageNames[stage]}</b> <span class="specs">stage ${stage} · ${sq.mastery ?? 0} specialist operations${stage < 3 ? ` (next stage at ${next})` : ""} · ${cert}/${mem.length} certified${(sq.drillUntil ?? 0) > c.day ? ` · drilling, ${sq.drillUntil! - c.day} d` : ""}</span>
+        <button type="button" class="act" data-drill="${sq.id}" ${drillWhy ? `disabled title="${esc(drillWhy)}"` : ""}>Squad drill</button>${drillWhy ? `<span class="muted">${esc(drillWhy)}</span>` : ""}</div>
+      ${stage >= 3 && !sq.branch ? `<div class="row"><span class="specs">Veteran branch:</span><button type="button" class="act" data-branch="${sq.id}" data-b="speed">Operational speed</button><button type="button" class="act" data-branch="${sq.id}" data-b="reliability">Reliability</button></div>` : sq.branch ? `<p class="specs">Veteran branch: ${sq.branch === "speed" ? "operational speed (techniques recover a turn sooner)" : "reliability (a quarter of kit uses come free)"}</p>` : ""}
+      <ul class="techs">${k.techs.map(tech).join("")}</ul>
+      <p class="${stage >= 1 ? "" : "muted"}"><b>${esc(k.passive.name)}</b>${stage >= 1 ? "" : " (from Drilled)"}: ${esc(k.passive.desc)}${k.passive.incomplete ? ` <span class="warn">${esc(k.passive.incomplete)}</span>` : ""}</p>
+      <p class="${stage >= 2 ? "" : "muted"}"><b>Grade 2</b>${stage >= 2 ? "" : " (from Proficient)"}: ${esc(k.grade2)}</p>
+      <p class="muted"><b>Kit:</b> ${k.certified.map(i => { const st = equipStatus(c, mem.find(o => (o.quals ?? []).includes(sq.specialty)) ?? mem[0], i); return `${esc(ITEMS[i].name)} ${c.inventory[i] ?? 0} in stores${st.ok || st.kind === "stock" ? "" : ` (${esc(st.reason!)})`}`; }).join(" · ") || "ordinary weapons and gear"}. <b>Hands-off:</b> ${esc(k.worldMap)} <b>Tradeoff:</b> ${esc(k.tradeoff)}</p>
+    </div>`;
   }
 
   /** The wall archive opened from the barracks: site staff, retired operatives, the memorial. */
@@ -2134,6 +2153,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     root.querySelectorAll<HTMLElement>("[data-sqrename]").forEach(b => b.onclick = () => { const sq = mtfsOf(c).flatMap(m => m.squads).find(x => x.id === b.dataset.sqrename), v = root.querySelector<HTMLInputElement>(`[data-sqname="${b.dataset.sqrename}"]`)?.value.trim(); if (sq && v) change(() => { sq.name = v; }); });
     root.querySelectorAll<HTMLElement>("[data-addsq]").forEach(b => b.onclick = () => { const m = mtfsOf(c).find(x => x.id === b.dataset.addsq); if (!m) return; const nm = root.querySelector<HTMLInputElement>(`#newSq-${m.id}`)?.value ?? "", sp = root.querySelector<HTMLSelectElement>(`#newSqSpec-${m.id}`)?.value as SpecialtyId; change(() => { const why = addSquad(c, m, nm, sp); if (why) flashMsg = why; }); });
     root.querySelectorAll<HTMLElement>("[data-newmtf]").forEach(b => b.onclick = () => act.newMtf());
+    root.querySelectorAll<HTMLElement>("[data-drill]").forEach(b => b.onclick = () => { const sq = mtfsOf(c).flatMap(m => m.squads).find(x => x.id === b.dataset.drill); if (sq) change(() => { const why = drillSquad(c, sq); if (why) flashMsg = why; }); });
+    root.querySelectorAll<HTMLElement>("[data-branch]").forEach(b => b.onclick = () => { const sq = mtfsOf(c).flatMap(m => m.squads).find(x => x.id === b.dataset.branch); if (sq) change(() => chooseBranch(sq, b.dataset.b as "speed" | "reliability")); });
     root.querySelectorAll<HTMLElement>("[data-dostab]").forEach(b => b.onclick = () => { dosTab = b.dataset.dostab!; reframe = false; render(); });
     root.querySelectorAll<HTMLElement>("[data-archive]").forEach(b => b.onclick = () => { archive = archive === b.dataset.archive ? null : b.dataset.archive!; if (archive) opSel = null; reframe = true; render(); });
     const toArmory = (id?: string) => { if (id) opSel = id; eqSlot = null; tab = "armory"; try { localStorage.setItem("site19-tab", tab); } catch { /* fine */ } render(); };

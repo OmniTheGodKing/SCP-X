@@ -1,4 +1,5 @@
 // How perks and traits change things during a mission.
+import { sightAdjust } from "./squadtech";
 import { WEATHER_SIGHT } from "../data/weather";
 import { SIGHT_MAX } from "../core/sight";
 import { S } from "./state";
@@ -17,7 +18,7 @@ export const rangeOf = (u: Unit) => {
   const w = S?.setup.weather ? WEATHER_SIGHT[S.setup.weather] ?? SIGHT_MAX : SIGHT_MAX;
   let r = Math.min(w, S?.setup.night ? NIGHT_SIGHT - (w < SIGHT_MAX ? 2 : 0) : SIGHT_MAX);
   if (r < SIGHT_MAX) r += (hasPerk(u, "keen_eyes") ? 3 : 0) + (u.side === "mtf" && S ? S.setup.mods.sightBonus ?? 0 : 0);
-  return Math.max(MIN_RANGE, r);
+  return Math.max(MIN_RANGE, r + (S ? sightAdjust(u) : 0));
 };
 export const usesLeft = (u: Unit, key: string, max: number) => max - (u.used?.[key] ?? 0);
 export function spend(u: Unit, key: string) { u.used = u.used || {}; u.used[key] = (u.used[key] ?? 0) + 1; }

@@ -73,7 +73,7 @@ const check = (ok, what, detail = '') => { results.push(ok); console.log(ok ? 'P
   // 18. specialist kit and training
   const kit = await C(() => { const A = window.__site19, c = A.campaign, o = A.org; const [s1, s2] = c.mtfs[0].squads; const a = c.roster.find(x => x.squad === s1.id), r = c.roster.find(x => !x.squad);
     const before = { charge: o.qualifiedFor(c, a, 'breach_charge'), barricade: o.qualifiedFor(c, a, 'barricade'), reserve: r ? o.qualifiedFor(c, r, 'breach_charge') : 'n/a', rifleKit: o.qualifiedFor(c, a, 'frag') };
-    o.retrainSquad(c, s1, 'security'); const during = o.qualifiedFor(c, a, 'barricade'); const d0 = c.day; c.day += 15; const after = o.qualifiedFor(c, a, 'barricade'); c.day = d0; o.retrainSquad(c, s1, 'breach'); s1.retrainUntil = undefined;
+    const range = { type: 'training', daysLeft: 0, x: -9, y: -9 }; const hadRange = c.base.facilities.some(f => f.type === 'training' && f.daysLeft === 0 && !f.disabled); if (!hadRange) c.base.facilities.push(range); o.retrainSquad(c, s1, 'security'); const during = o.qualifiedFor(c, a, 'barricade'); const d0 = c.day; c.day += 15; o.tickOrg(c); const after = o.qualifiedFor(c, a, 'barricade'); c.day = d0; o.retrainSquad(c, s1, 'breach'); s1.retrainUntil = undefined; if (!hadRange) c.base.facilities.splice(c.base.facilities.indexOf(range), 1);
     return { before, during, after, workshop: A.research.unlockedItems(c).includes('breach_charge') }; });
   check(!kit.before.charge && !!kit.before.barricade && !!kit.before.reserve && !kit.before.rifleKit && !!kit.during && !kit.after && kit.workshop, '18. specialist kit follows squad training and retraining; ordinary kit stays open', kit);
 

@@ -8,7 +8,7 @@ import { RANKS, dateOf, fieldName, gunFor, lookOf, promotionDue, weaponOf, weapo
 import { injured, tiredness } from "../campaign/condition";
 import { ARMOR_KINDS, ARMOR_TIERS, ITEMS, armorStats, uniformOf, type ItemId } from "../campaign/research";
 import { tfOf } from "../campaign/taskforces";
-import { qualifiedFor, squadOfOp } from "../campaign/org";
+import { equipStatus, qualifiedFor, squadOfOp } from "../campaign/org";
 import { SPECIALTIES } from "../data/mtf";
 import { CLASSES } from "../data/classes";
 import { AMMO, ATTACHMENTS, SIDEARM, TYPES, model, type AmmoId, type AttachmentId } from "../data/weapons";

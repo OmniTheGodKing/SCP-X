@@ -1,4 +1,6 @@
 // Class abilities used during a mission. Each has a target rule, a cost and an effect.
+import { techKnown, techTargets, techWhy, runTech } from "./squadtech";
+import { TECH_ABILITIES } from "../data/specialties";
 import { suppress } from "./combat";
 import { emitNoise } from "./noise";
 import { payAbility } from "./actions";
@@ -53,19 +55,31 @@ export const ABILITIES: AbilityDef[] = [
   { perk: "score", label: "Secure the score", target: "scp4b", desc: "Eyes down, next to SCP-012: close the lined folder over it. That's the mission." },
   { perk: "shake", label: "Shake them out of it", target: "scp4b", desc: "Pull someone compelled by SCP-012 away from it. They lose 10 sanity and stop." },
   { perk: "casemask", label: "Case the mask", target: "scp4b", desc: "Next to SCP-035 on the floor: lock it in the lead-lined case. Without a suit, there's a 20% chance it takes you instead." },
+  // Version 12 squad techniques that act on people or the user (the ones placed on a tile go through the item bar)
+  ...TECH_ABILITIES.map(t => ({ perk: t.id as AbilityId, label: t.name, desc: t.desc, target: (t.target === "enemy" ? "enemy" : "self") as AbilityDef["target"] })),
 ];
 
+/** Why a technique has nothing to act on, said plainly. */
+const TECH_NOT_NOW: Record<string, string> = {
+  sq_coordinated_entry: "Stand beside a shut door.", sq_covert_access: "Stand beside a shut door.", sq_hold_line: "Needs a squadmate beside them on overwatch.",
+  sq_two_person_evac: "Carry someone with a squadmate beside you.", sq_secure_transfer: "Carry someone onto an exit tile.", sq_covering_lane: "Needs a loaded weapon.",
+  sq_suppression_shift: "They have to be suppressing someone already, with another enemy in sight.", sq_anchor: "Needs cover beside them and body armor.",
+  sq_emplace: "Needs a machine gun.", sq_pack: "The gun isn't emplaced.", sq_interdiction: "Emplace the gun first, with 4 rounds.", sq_restore: "Stand beside a destroyed door.",
+  sq_observation_post: "Needs cover beside them.", sq_confirm_target: "No enemy in sight.", sq_read_sign: "No fresh sign here: trails are left where enemies have moved.",
+  sq_mark_trail: "Needs fresh sign beside them and field tags.", sq_safe_clearance: "Stand beside a fuel drum.",
+};
 const UNIVERSAL: AbilityId[] = ["cutradio", "secure", "dose", "lockdown", "doors", "siren", "calm", "restrain", "pickup", "drop", "exfil", "hunker", "recover", "restore", "scan", "hood", "lead096", "score", "shake", "casemask"];
 const onExit = (u: Unit) => L.exitMap[u.y * L.W + u.x] === 0;
 /** Cover beside them on some side (Tactical overhaul T2.1: from the geometry kernel's obstacles). */
 const hasCover = (u: Unit) => coverSides(u.x, u.y).some(v => v > 0);
-const knows = (u: Unit, p: AbilityId) => UNIVERSAL.includes(p)
+const isTech = (p: AbilityId) => typeof p === "string" && p.startsWith("sq_");
+const knows = (u: Unit, p: AbilityId) => isTech(p) ? techKnown(u, p) : UNIVERSAL.includes(p)
   ? u.side === "mtf" && abilityTargets(u, p).length > 0 && (p !== "dose" || S.amnestics > 0)
   : hasPerk(u, p as PerkId);
 export const abilitiesOf = (u: Unit | null) => u ? ABILITIES.filter(a => knows(u, a.perk)) : [];
 const def = (p: AbilityId) => ABILITIES.find(a => a.perk === p)!;
-export const abilityName = (p: AbilityId) => UNIVERSAL.includes(p) ? def(p).label : PERKS[p as PerkId].name;
-export const abilityDesc = (p: AbilityId) => UNIVERSAL.includes(p) ? def(p).desc! : PERKS[p as PerkId].desc;
+export const abilityName = (p: AbilityId) => UNIVERSAL.includes(p) || isTech(p) ? def(p).label : PERKS[p as PerkId].name;
+export const abilityDesc = (p: AbilityId) => UNIVERSAL.includes(p) || isTech(p) ? def(p).desc! : PERKS[p as PerkId].desc;
 const adjacent = (a: Unit, b: Unit) => cheb(a.x, a.y, b.x, b.y) <= 1;
 const carries = (u: Unit, id: string) => !!u.items?.some(i => i.id === id);
 const within = (a: Unit, b: Unit, r: number) => cheb(a.x, a.y, b.x, b.y) <= r && (r <= 1 || canSee(a, b.x, b.y));
@@ -74,6 +88,7 @@ const freeHeal = (u: Unit) => hasPerk(u, "combat_medic") && !(u.used?.["cm" + S.
 const cost = (u: Unit, p: AbilityId) => p === "run_and_gun" || p === "drop" ? 0 : p === "lockdown" || p === "restore" ? 2 : p === "medkit" && freeHeal(u) ? 0 : 1;
 
 export function abilityTargets(u: Unit, p: AbilityId): Unit[] {
+  if (isTech(p)) return techTargets(u, p);
   const d = def(p);
   switch (d.target) {
     case "captive": return S.units.filter(a => a.side === "raider" && a.alive && a.downed && !a.secured && within(u, a, carries(u, "restraints") ? 2 : 1));
@@ -109,6 +124,7 @@ export function abilityTargets(u: Unit, p: AbilityId): Unit[] {
 
 export function abilityCheck(u: Unit | null, p: AbilityId): string | null {
   if (!u || !knows(u, p)) return "Select someone with that ability.";
+  if (isTech(p)) return techWhy(u, p) ?? (techTargets(u, p).length ? null : TECH_NOT_NOW[p] ?? "Nothing to use it on here.");
   const d = def(p);
   if (d.uses && usesLeft(u, p, d.uses(u)) < 1) return "No uses left this mission.";
   if (u.ap < cost(u, p)) return "No actions left this turn.";
@@ -144,6 +160,11 @@ export function startAbility(p: AbilityId, flash: (t: string) => void) {
 }
 
 export function useAbility(u: Unit, p: AbilityId, t: Unit) {
+  if (isTech(p)) {
+    if (abilityCheck(u, p) || !techTargets(u, p).includes(t)) return;
+    S.mode = null; S.ability = null;
+    runTech(u, p, t); hooks.update(); return;
+  }
   const d = def(p);
   if (abilityCheck(u, p) || !abilityTargets(u, p).includes(t)) return;
   const c = cost(u, p);

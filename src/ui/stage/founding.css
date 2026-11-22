@@ -53,3 +53,4 @@
 .found .asg { display: flex; gap: 2px; } .found .asg button { padding: 5px 8px; background: transparent; border: 1px solid rgba(60, 45, 20, .35); font: 11px var(--font-mono); cursor: pointer; color: #2a241a; max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .found .asg button.on { background: #2a241a; color: #efe4c4; }
 .found .fbg { display: none; }
+.found .reqbox { display: flex; gap: 8px; align-items: center; font-size: 14px; margin-top: 6px; }

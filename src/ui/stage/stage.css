@@ -324,3 +324,11 @@
 .stage .pfile .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .stage .shelfitem.unqual { opacity: .4; }
 .stage .tape.reserve { border-color: #7a7f84; color: #7a7f84; }
+
+/* Version 12: squad capabilities on the organization board */
+.stage .sqcap { display: grid; gap: 4px; padding-top: 4px; border-top: 1px dashed rgba(60, 45, 20, .3); font-size: 12.5px; }
+.stage .sqcap p { margin: 0; }
+.stage .sqstage { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.stage .sqstage b { font: 400 15px var(--font-display); }
+.stage .techs { margin: 0; padding-left: 16px; display: grid; gap: 3px; }
+.stage .techs li.incomplete { opacity: .7; }

@@ -6,10 +6,26 @@ import { rnd } from "../core/rng";
 import type { Campaign, Operative } from "./campaign";
 import { LAND, REGIONS, REGION_IDS, type RegionId } from "../data/regions";
 import { MTF_CONFIG, SPECIALTIES, SPECIALIST_ITEMS, SPECS, type SpecId, type SpecialtyId } from "../data/mtf";
+import { EQUIP, SQUAD_BALANCE } from "../data/specialties";
+import { ITEMS } from "./research";
 import type { ItemId } from "../game/types";
 
 export interface Site { id: string; designation: string; name: string; lon: number; lat: number; region: RegionId; founded: number; }
-export interface Squad { id: string; name: string; specialty: SpecialtyId; /** Retraining into a new specialty until this day. */ retrainUntil?: number; }
+export interface Squad {
+  id: string; name: string; specialty: SpecialtyId;
+  /** Retraining into a new specialty until this day; drilling (a training module) until this day. */
+  retrainUntil?: number;
+  drillUntil?: number;
+  /** The stage a drill in progress will reach. */
+  drillTo?: number;
+  /** Version 12 squad progression, separate from soldiers' experience: operations in which the squad used its
+   *  specialty, the stage reached through training modules, the Veteran branch, and mastery archived from earlier
+   *  specialties (kept, not erased). */
+  mastery?: number;
+  drilled?: number;
+  branch?: "speed" | "reliability";
+  archived?: Partial<Record<SpecialtyId, number>>;
+}
 export interface Mtf { id: string; designation: string; name: string; spec: SpecId; founded: number; squads: Squad[]; }
 /** Where a new campaign is: the opening mission, founding the site, founding the first MTF, or running (unset). */
 export type Phase = "opening" | "site" | "mtf";
@@ -157,25 +173,86 @@ export function squadAway(c: Campaign, squadId: string) {
   return null;
 }
 
-/** May this operative carry this item? Ordinary kit is open to anyone; specialist kit needs a squad whose specialty
- *  trains for it, and a squad still retraining into it isn't qualified yet. Saves without MTFs keep the old rules. */
-export function qualifiedFor(c: Campaign, o: Operative | undefined, item: ItemId): string | null {
-  if (!SPECIALIST_ITEMS.includes(item) || !c.mtfs) return null;
-  const sq = o ? squadOfOp(c, o)?.squad : undefined;
-  if (!sq) return `${item === "breach_charge" ? "Breaching charges" : "Barricades"} need a squad trained for them.`;
-  if (!SPECIALTIES[sq.specialty].kit.includes(item)) return `${sq.name} (${SPECIALTIES[sq.specialty].name}) isn't trained for this.`;
-  if (sq.retrainUntil && sq.retrainUntil > c.day) return `${sq.name} is still retraining (${sq.retrainUntil - c.day} days).`;
+/** Why an operative can't take an item: the first of year, authorization, squad certification, personal
+ *  qualification, retraining and stock that fails (design 26.0: qualification != authorization != stock). Ordinary kit
+ *  is open to anyone. Saves without MTFs keep the old rules. */
+export interface EquipCheck { ok: boolean; reason?: string; kind?: "year" | "authorization" | "certification" | "qualification" | "training" | "stock"; }
+export function equipStatus(c: Campaign, o: Operative | undefined, item: ItemId, needStock = false): EquipCheck {
+  const meta = EQUIP[item];
+  if (meta && meta.year > yearNow(c)) return { ok: false, kind: "year", reason: `Not issued until ${meta.year}.` };
+  if (!c.mtfs || !SPECIALIST_ITEMS.includes(item)) return needStock && !(c.inventory[item] ?? 0) ? { ok: false, kind: "stock", reason: "None in stores." } : { ok: true };
+  const at = o ? squadOfOp(c, o) : undefined;
+  if (!at) return { ok: false, kind: "certification", reason: "Specialist kit goes with a squad trained for it; this operative is in the reserve." };
+  if (meta?.specs && !meta.specs.includes(at.mtf.spec)) return { ok: false, kind: "authorization", reason: `${SPECS[at.mtf.spec].name} MTFs aren't authorized for it.` };
+  const sq = at.squad;
+  if (!SPECIALTIES[sq.specialty].kit.includes(item)) return { ok: false, kind: "certification", reason: `${sq.name} (${SPECIALTIES[sq.specialty].name}) isn't certified for it.` };
+  if (sq.retrainUntil && sq.retrainUntil > c.day) return { ok: false, kind: "training", reason: `${sq.name} is still retraining (${sq.retrainUntil - c.day} days).` };
+  if (o && !(o.quals ?? []).includes(sq.specialty)) return { ok: false, kind: "qualification", reason: `${o.name} isn't certified in ${SPECIALTIES[sq.specialty].name} yet: a squad drill at the range certifies them.` };
+  if (needStock && !(c.inventory[item] ?? 0)) return { ok: false, kind: "stock", reason: "None in stores: the workshop builds it." };
+  return { ok: true };
+}
+/** The reason an operative can't carry an item, or null (kept for the planning screen and deployment). */
+export const qualifiedFor = (c: Campaign, o: Operative | undefined, item: ItemId): string | null => { const r = equipStatus(c, o, item); return r.ok ? null : r.reason!; };
+/** Specialist kit any squad is certified for, so the workshop can build it. */
+export const eligibleKit = (c: Campaign): ItemId[] => [...new Set(allSquads(c).flatMap(x => SPECIALTIES[x.squad.specialty].kit.filter(i => (EQUIP[i]?.year ?? 0) <= yearNow(c))))];
+const yearNow = (c: Campaign) => new Date(Date.UTC(1951, 5, 1) + (c.day - 1) * 86400000).getUTCFullYear();
+
+// ---------------------------------------------------------------- squad progression (design 26.5)
+
+/** Stage reached: from operations in which the squad used its specialty, or a training module, whichever is higher. */
+export function squadStage(sq: Squad): number {
+  const ops = sq.mastery ?? 0, B = SQUAD_BALANCE.stageOps;
+  const byOps = ops >= B[3] ? 3 : ops >= B[2] ? 2 : ops >= B[1] ? 1 : 0;
+  return Math.max(byOps, Math.min(SQUAD_BALANCE.drillMaxStage, sq.drilled ?? 0));
+}
+const trainingRange = (c: Campaign) => c.base.facilities.some(f => f.type === "training" && f.daysLeft === 0 && !f.disabled);
+/** A training module at the range: certifies everyone in the squad in its specialty and, up to Proficient, raises
+ *  its stage. The squad is unavailable while it drills. */
+export function canDrill(c: Campaign, sq: Squad): string | null {
+  if (!trainingRange(c)) return "Needs a working training range.";
+  if ((sq.drillUntil ?? 0) > c.day || (sq.retrainUntil ?? 0) > c.day) return "Already in training.";
+  if (squadAway(c, sq.id)) return "The squad is deployed.";
+  const next = Math.min(SQUAD_BALANCE.drillMaxStage, squadStage(sq) + 1), cost = SQUAD_BALANCE.drillCost[next] ?? 0;
+  if (squadStage(sq) >= SQUAD_BALANCE.drillMaxStage && squadMembers(c, sq.id).every(o => (o.quals ?? []).includes(sq.specialty))) return "Further stages come from field operations.";
+  if (c.funds < Math.max(10, cost)) return `Needs $${Math.max(10, cost)}k.`;
   return null;
 }
-/** Specialist kit any squad is qualified for, so the workshop can build it. */
-export const eligibleKit = (c: Campaign): ItemId[] => [...new Set(allSquads(c).flatMap(x => SPECIALTIES[x.squad.specialty].kit.filter(i => SPECIALIST_ITEMS.includes(i))))];
+export function drillSquad(c: Campaign, sq: Squad) {
+  const why = canDrill(c, sq); if (why) return why;
+  const stage = squadStage(sq), next = Math.min(SQUAD_BALANCE.drillMaxStage, stage + 1), cost = Math.max(10, SQUAD_BALANCE.drillCost[next] ?? 0);
+  c.funds -= cost;
+  sq.drillUntil = c.day + Math.max(2, SQUAD_BALANCE.drillDays[next] ?? 3);
+  sq.drillTo = next;   // the stage lands when the drill finishes (tickOrg)
+  for (const o of squadMembers(c, sq.id)) o.busy ??= { kind: "retrain", daysLeft: sq.drillUntil - c.day };
+  return null;
+}
+/** Called each day: training that has finished certifies the squad's people. */
+export function tickOrg(c: Campaign) {
+  for (const { squad } of allSquads(c)) {
+    for (const k of ["retrainUntil", "drillUntil"] as const) {
+      const until = squad[k];
+      if (until && until <= c.day) {
+        for (const o of squadMembers(c, squad.id)) o.quals = [...new Set([...(o.quals ?? []), squad.specialty])];
+        if (k === "drillUntil" && squad.drillTo) { squad.drilled = Math.max(squad.drilled ?? 0, squad.drillTo); squad.drillTo = undefined; }
+        squad[k] = undefined;
+      }
+    }
+  }
+}
+/** A squad's completed mission: if its people actually used specialty techniques, the squad gains mastery. */
+export function recordMastery(c: Campaign, squadIds: string[]) {
+  for (const id of squadIds) { const sq = squadById(c, id)?.squad; if (sq) sq.mastery = (sq.mastery ?? 0) + 1; }
+}
+export function chooseBranch(sq: Squad, b: "speed" | "reliability") { if (squadStage(sq) >= 3 && !sq.branch) sq.branch = b; }
 
 export function specialtiesFor(spec: SpecId) { return SPECS[spec].specialties; }
 
 let nextId = 0;
 const newId = (p: string) => `${p}-${Date.now().toString(36)}${(nextId++).toString(36)}`;
 
-export interface MtfDraft { designation: string; name: string; spec: SpecId; squads: { name: string; specialty: SpecialtyId; members: string[] }[]; }
+export interface MtfDraft { designation: string; name: string; spec: SpecId; squads: { name: string; specialty: SpecialtyId; members: string[] }[]; /** Buy each squad's starter kit from funds (default yes). */ requisition?: boolean; }
+/** What the starter requisition for a draft would cost. */
+export const requisitionCost = (d: { squads: { specialty: SpecialtyId }[] }) => d.squads.reduce((a, s) => a + Object.entries(SPECIALTIES[s.specialty].issue).reduce((b, [i, n]) => b + (ITEMS[i as ItemId]?.cost ?? 0) * (n ?? 0), 0), 0);
 export function canFoundMtf(c: Campaign, d: MtfDraft, first = false): string | null {
   if (!d.designation.trim() || !d.name.trim()) return "Give the MTF a designation and a name.";
   if (mtfsOf(c).some(m => m.designation.toLowerCase() === d.designation.trim().toLowerCase())) return "Another MTF already uses that designation.";
@@ -204,8 +281,12 @@ export function foundMtf(c: Campaign, d: MtfDraft, first = false) {
   for (const s of d.squads) {
     const sq: Squad = { id: newId("sq"), name: s.name.trim(), specialty: s.specialty };
     m.squads.push(sq);
-    for (const id of s.members) { const o = c.roster.find(x => x.id === id); if (o) o.squad = sq.id; }
-    for (const [item, n] of Object.entries(SPECIALTIES[s.specialty].issue)) c.inventory[item as ItemId] = (c.inventory[item as ItemId] ?? 0) + (n ?? 0);
+    for (const id of s.members) { const o = c.roster.find(x => x.id === id); if (o) { o.squad = sq.id; o.quals = [...new Set([...(o.quals ?? []), s.specialty])]; } }
+    // the starter requisition is bought, never conjured by choosing a specialty (design T04)
+    if (d.requisition !== false) for (const [item, n] of Object.entries(SPECIALTIES[s.specialty].issue)) {
+      const each = ITEMS[item as ItemId]?.cost ?? 0;
+      for (let k = 0; k < (n ?? 0) && c.funds >= each; k++) { c.funds -= each; c.inventory[item as ItemId] = (c.inventory[item as ItemId] ?? 0) + 1; }
+    }
   }
   (c.mtfs ??= []).push(m);
   return null;
@@ -235,7 +316,14 @@ export function addSquad(c: Campaign, m: Mtf, name: string, specialty: Specialty
 export function retrainSquad(c: Campaign, sq: Squad, specialty: SpecialtyId) {
   const m = mtfsOf(c).find(x => x.squads.includes(sq));
   if (!m || !SPECS[m.spec].specialties.includes(specialty) || sq.specialty === specialty) return "Not a change this squad can make.";
-  sq.specialty = specialty; sq.retrainUntil = c.day + MTF_CONFIG.retrainDays;
+  if (!trainingRange(c)) return "Retraining needs a working training range.";
+  const ms = squadMembers(c, sq.id), qualified = ms.filter(o => (o.quals ?? []).includes(specialty)).length;
+  let days = qualified * 2 >= ms.length && ms.length ? SQUAD_BALANCE.retrainDaysQualified : SQUAD_BALANCE.retrainDays;
+  if (m.spec === "general") days = Math.max(1, Math.round(days * 0.85));   // General Containment doctrine
+  sq.archived = { ...(sq.archived ?? {}), [sq.specialty]: Math.max(sq.archived?.[sq.specialty] ?? 0, sq.mastery ?? 0) };
+  sq.mastery = Math.floor((sq.archived?.[specialty] ?? 0) / 2);   // returning to an old specialty keeps half its mastery
+  sq.drilled = 0; sq.branch = undefined;
+  sq.specialty = specialty; sq.retrainUntil = c.day + days;
   return null;
 }
 export function assignToSquad(c: Campaign, o: Operative, squadId: string | undefined) {

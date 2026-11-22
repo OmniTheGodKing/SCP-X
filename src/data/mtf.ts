@@ -22,7 +22,7 @@ export const MTF_CONFIG = {
   /** A squad's roster can be this many larger than the team it deploys, for rotation and recovery. */
   rosterOver: 3,
   /** Changing a squad's specialty: days of retraining before its specialist kit can be used. */
-  retrainDays: 14,
+  retrainDays: 5,
   /** Raising another squad, and founding another MTF. */
   squadCost: 80,
   mtfCost: 250,
@@ -34,35 +34,30 @@ export interface SpecialtyDef {
   name: string;
   spec: SpecId;
   desc: string;
-  /** Specialist kit only this specialty is trained to carry. */
+  /** Specialist kit this specialty certifies its people for (restricted items only gate on this). */
   kit: ItemId[];
-  /** What the squad is good at when it answers an incident without the player, as weights by incident kind. */
-  strengths: Partial<Record<string, number>>;
-  /** Specialist starting kit issued when the squad is raised. */
+  /** Starter requisition offered when the squad is raised: bought from the site's funds, never free. */
   issue: Partial<Record<ItemId, number>>;
 }
 
+const sp = (name: string, spec: SpecId, desc: string, issue: Partial<Record<ItemId, number>>, kit: ItemId[]): SpecialtyDef => ({ name, spec, desc, issue, kit });
 export const SPECIALTIES: Record<SpecialtyId, SpecialtyDef> = {
-  breach: { name: "Breach Response", spec: "general", desc: "Coordinated entry into dangerous rooms: breaching charges open doors, partitions and ordinary walls on contact.",
-    kit: ["breach_charge"], strengths: { strike: 0.18, breach: 0.15, raid: 0.1, emergency: 0.08 }, issue: { breach_charge: 3 } },
-  security: { name: "Containment Security", spec: "general", desc: "Securing and holding ground: portable barricades become real cover at chokepoints and around containment.",
-    kit: ["barricade"], strengths: { raid: 0.18, retaliation: 0.15, escort: 0.15, breach: 0.08 }, issue: { barricade: 3 } },
-  recovery: { name: "Recovery & Extraction", spec: "general", desc: "Recovering the wounded, civilians and anomalies: restraint kits and medkits, and the training to get people out.",
-    kit: [], strengths: { recovery: 0.18, rescue: 0.2, emergency: 0.12, coverup: 0.08 }, issue: { medkit: 2, restraints: 1 } },
-  fire: { name: "Fire Support", spec: "general", desc: "Covering everyone else: sustained and suppressive fire from machine guns and grenades, covering withdrawals.",
-    kit: [], strengths: { strike: 0.12, retaliation: 0.15, raid: 0.12, escort: 0.1 }, issue: { frag: 2, smoke: 2 } },
-  quarantine: { name: "Quarantine", spec: "bio", desc: "Isolation barriers and containment perimeters around infected ground.", kit: ["barricade", "contsuit"], strengths: { outbreak: 0.22, emergency: 0.1 }, issue: { contsuit: 2 } },
-  incendiary: { name: "Incendiary", spec: "bio", desc: "Flamethrowers and incendiaries that burn out biological contamination, at the risk of everything else catching.", kit: ["flamer", "incendiary"], strengths: { outbreak: 0.28 }, issue: { incendiary: 2 } },
-  decon: { name: "Decontamination", spec: "bio", desc: "Detecting and clearing supported contamination so ground can be used again.", kit: ["hazmat", "contsuit"], strengths: { outbreak: 0.15, emergency: 0.12 }, issue: { hazmat: 2 } },
-  hazrecovery: { name: "Hazardous Recovery", spec: "bio", desc: "Getting people and samples out of contaminated areas in protective gear.", kit: ["hazmat", "contsuit"], strengths: { rescue: 0.15, outbreak: 0.12, recovery: 0.1 }, issue: { hazmat: 2 } },
-  heavyinf: { name: "Heavy Infantry", spec: "heavy", desc: "Heavy armor and direct assaults under fire.", kit: ["armor_heavy"], strengths: { strike: 0.2, raid: 0.15 }, issue: { armor_heavy: 2 } },
-  demolitions: { name: "Demolitions", spec: "heavy", desc: "Explosive entry and structural demolition.", kit: ["breach_charge", "law", "bazooka"], strengths: { strike: 0.18, breach: 0.1 }, issue: { breach_charge: 3 } },
-  heavyweapons: { name: "Heavy Weapons", spec: "heavy", desc: "Support weapons for sustained suppression and anti-materiel fire.", kit: ["bazooka", "law", "flamer"], strengths: { retaliation: 0.2, raid: 0.15 }, issue: { law: 1 } },
-  engineering: { name: "Combat Engineering", spec: "heavy", desc: "Field defenses, obstacles and reinforced positions.", kit: ["barricade", "breach_charge"], strengths: { raid: 0.18, escort: 0.15 }, issue: { barricade: 3 } },
-  infiltration: { name: "Infiltration", spec: "recon", desc: "Concealed movement and approaches that avoid detection.", kit: ["darts"], strengths: { coverup: 0.2, strike: 0.1 }, issue: {} },
-  surveillance: { name: "Surveillance", spec: "recon", desc: "Observation, target identification and sensors.", kit: ["tracker", "camera"], strengths: { recovery: 0.12, coverup: 0.12 }, issue: { camera: 1 } },
-  tracking: { name: "Tracking", spec: "recon", desc: "Following trails to missing people and fleeing targets.", kit: ["tracker"], strengths: { recovery: 0.2, rescue: 0.18 }, issue: {} },
-  forwardrecon: { name: "Forward Recon", spec: "recon", desc: "Scouting locations, routes and hazards ahead of insertion.", kit: ["tracker", "flare"], strengths: { emergency: 0.12, recovery: 0.1, strike: 0.08 }, issue: { flare: 2 } },
+  breach: sp("Breach Response", "general", "Controlled entry into dangerous rooms: breaching charges on doors, partitions and barricades, and two-man coordinated entries.", { breach_charge: 2 }, ["breach_charge"]),
+  security: sp("Containment Security", "general", "Holding ground: portable barriers that are real cover and block the way, and defenders who hold a line on overwatch.", { barricade: 2 }, ["barricade"]),
+  recovery: sp("Recovery & Extraction", "general", "Getting people and objects out: stretcher teams that carry without slowing, and secure handovers at the exit.", { stretcher: 1, medkit: 1 }, ["stretcher"]),
+  fire: sp("Fire Support", "general", "Covering everyone else: lanes of reaction fire that pin, suppression that moves where it's needed, ammunition discipline.", { frag: 1 }, []),
+  quarantine: sp("Quarantine", "bio", "Isolation lines SCP-610's flesh cannot spread through, and suit discipline at the boundary.", { cordon_kit: 2 }, ["cordon_kit"]),
+  incendiary: sp("Incendiary", "bio", "Flamethrowers and fire doctrine against what burns, and firebreaks to keep it where it belongs.", { firebreak_kit: 1 }, ["flamer", "firebreak_kit"]),
+  decon: sp("Decontamination", "bio", "Clearing removable contamination (SCP-106's corrosion, fire) so ground can be used again.", { decon_agent: 2 }, ["decon_agent"]),
+  hazrecovery: sp("Hazardous Recovery", "bio", "Sealed sample retrieval and protected carries through contaminated ground.", { sample_case: 1, stretcher: 1 }, ["sample_case", "stretcher"]),
+  heavyinf: sp("Heavy Infantry", "heavy", "Heavy plate without the usual slowdown, and braced positions suppression can't move.", { armor_heavy: 1 }, []),
+  demolitions: sp("Demolitions", "heavy", "Walls removed on purpose, and fuel drums made safe.", { demo_charge: 2 }, ["demo_charge", "breach_charge"]),
+  heavyweapons: sp("Heavy Weapons", "heavy", "Emplaced machine guns, area interdiction, rocket launchers.", {}, ["bazooka", "law", "flamer"]),
+  engineering: sp("Combat Engineering", "heavy", "Sandbagged full cover and doors rebuilt under fire.", { sandbags: 2 }, ["sandbags"]),
+  infiltration: sp("Infiltration", "recon", "Quiet movement and doors opened without a sound.", {}, []),
+  surveillance: sp("Surveillance", "recon", "Observation posts that see farther and log everything that crosses them, and confirmed sightings as intelligence.", { camera: 1 }, []),
+  tracking: sp("Tracking", "recon", "Reading the trail an enemy or anomaly leaves, and marking it.", { field_tags: 1 }, ["field_tags"]),
+  forwardrecon: sp("Forward Recon", "recon", "Route surveys that mark hazards in sight, and new extraction points.", { field_tags: 1 }, ["field_tags"]),
 };
 
 export interface SpecDef { name: string; desc: string; specialties: SpecialtyId[]; }
@@ -79,4 +74,4 @@ export const GREEK = ["Alpha", "Beta", "Gamma", "Delta", "Zeta", "Eta", "Theta",
 export const TAKEN_DESIGNATIONS = ["Epsilon-11", "Eta-10", "Nu-7", "Alpha-1", "Omega-1"];
 
 /** Every specialist kit item, so ordinary kit stays open to everyone. */
-export const SPECIALIST_ITEMS: ItemId[] = [...new Set(Object.values(SPECIALTIES).flatMap(s => s.kit).filter(i => i === "breach_charge" || i === "barricade"))];
+export const SPECIALIST_ITEMS: ItemId[] = [...new Set(Object.values(SPECIALTIES).flatMap(s => s.kit))];

@@ -1,4 +1,6 @@
 // The mission screen: map, SCP-173 status, squad, actions, containment file and incident log.
+import { PLACED_TECH } from "../game/squadtech";
+import { TECHS } from "../data/specialties";
 import { overwatchCheck } from "../game/actions";
 import { MISSION_STEPS } from "./tutorial";
 import { optionalMet } from "../game/mission";
@@ -34,7 +36,7 @@ const OBJECTIVES = {
 const ITEM_NAMES: Record<ItemId, string> = { armor: "Flak vest", armor_light: "Recon smock", armor_heavy: "Heavy plate", hazmat: "Hazmat suit", leadsuit: "Lead-lined suit",
   contsuit: "Containment suit", incendiary: "Incendiary", flamer: "M2 flamethrower", flare: "Signal flare", eyedrops: "Eye drops", flashbang: "Stun grenade", smoke: "M18 smoke", tracker: "Seismic sensor", frag: "M26 frag", csgas: "CS gas", bazooka: "M20 bazooka", law: "M72 LAW",
   medkit: "Medkit", camera: "Field camera", restraints: "Restraint kit", darts: "Amnestic darts", ward: "Warding charm",
-  hood: "Canvas hood", folder: "Lined folder", noisemaker: "Noisemaker", case: "Lead-lined case", breach_charge: "Breaching charge", barricade: "Portable barricade" };
+  hood: "Canvas hood", folder: "Lined folder", noisemaker: "Noisemaker", case: "Lead-lined case", breach_charge: "Breaching charge", barricade: "Portable barricade", stretcher: "Stretcher", cordon_kit: "Cordon kit", firebreak_kit: "Firebreak kit", decon_agent: "Decon agent", sample_case: "Sample case", demo_charge: "Demolition charge", sandbags: "Sandbags", field_tags: "Field tags" };
 import type { MissionResult, Unit } from "../game/types";
 import { esc, localizeDom } from "./util";
 import { localizeText } from "../campaign/org";
@@ -472,7 +474,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
       if (!throwable) return `<span class="flag">${ITEM_NAMES[it.id]}${it.id === "eyedrops" ? ` ×${it.uses} · used automatically` : " · always on"}</span>`;
       if (it.uses < 1) return "";
       const why = off || (S.mode === "throw" && S.throwing === it ? null : throwCheck(sel, i));
-      return `<button class="act ${S.mode === "throw" && S.throwing === it ? "on" : ""}" type="button" data-item="${i}" ${why ? `disabled title="${esc(why)}"` : ""}>${S.mode === "throw" && S.throwing === it ? "Cancel throw" : `${HEAVY.includes(it.id) ? "Fire" : "Throw"} ${HEAVY.includes(it.id) ? ITEM_NAMES[it.id] : ITEM_NAMES[it.id].toLowerCase()} ×${it.uses}`} <kbd>${i + 1}</kbd></button>`;
+      return `<button class="act ${S.mode === "throw" && S.throwing === it ? "on" : ""}" type="button" data-item="${i}" ${why ? `disabled title="${esc(why)}"` : ""}>${S.mode === "throw" && S.throwing === it ? (PLACED_TECH[it.id] ? "Cancel" : "Cancel throw") : `${HEAVY.includes(it.id) ? "Fire" : PLACED_TECH[it.id] ? "Set" : "Throw"} ${HEAVY.includes(it.id) ? ITEM_NAMES[it.id] : ITEM_NAMES[it.id].toLowerCase()} ×${it.uses}`} <kbd>${i + 1}</kbd></button>`;
     }).join("");
 
     let h = "";
@@ -484,7 +486,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
       else if (S.mode === "doors") h = `<b>Blast doors.</b>\nClick a doorway to seal it (up to ${MAX_SEALED}) or to open a sealed one. Escape to cancel.`;
       else if (S.mode === "lead") h = `<b>${S.scp === "096" ? "The hooded SCP-096 will follow." : "SCP-049 is listening."}</b>\nClick a green tile to lead it there (up to 3 tiles), or press Escape to leave it where it stands.`;
       else if (S.mode === "ability" && S.ability) h = `<b>${esc(full(sel))}: ${abilityName(S.ability)}.</b>\n${esc(abilityDesc(S.ability))} Click a highlighted target.`;
-      else if (S.mode === "throw" && S.throwing) h = `<b>${esc(full(sel))}: choose where to throw the ${ITEM_NAMES[S.throwing.id].toLowerCase()}.</b>\nLit tiles are in range and in sight. It covers the target tile and every tile around it. Throwing ends their turn.`;
+      else if (S.mode === "throw" && S.throwing) h = PLACED_TECH[S.throwing.id] ? `<b>${esc(full(sel))}: ${esc(TECHS[PLACED_TECH[S.throwing.id]!].name)}. Choose a lit tile beside them.</b>\n${esc(TECHS[PLACED_TECH[S.throwing.id]!].desc)}` : `<b>${esc(full(sel))}: choose where to throw the ${ITEM_NAMES[S.throwing.id].toLowerCase()}.</b>\nLit tiles are in range and in sight. It covers the target tile and every tile around it. Throwing ends their turn.`;
       else if (S.mode === "drag") h = `<b>${esc(sel.name)}: choose where to drag SCP-173.</b>\nOrange tiles keep it in someone else's sight the whole way. Dragging ends their turn.`;
       else if (hv && !isTeam(hv) && teamPerception(hv) === 1 && seen(hv.x, hv.y) && !(sel.side === "mtf" && sel.ap > 0 && canShoot(sel, hv))) {
         h = `<b>Unknown contact.</b>\nSomeone or something is there, but nobody can make out who or what at this distance and in this light. Get closer, light it up, or wait for it to move.`;

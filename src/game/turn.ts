@@ -1,4 +1,5 @@
 // Player actions and the turn cycle: your move, SCP-173, the Insurgency, then loose D-Class.
+import { bleedGrace, observe, place, placeCheck, placeOptions, sharedKitFor } from "./squadtech";
 import { blast, blastArea } from "./explosive";
 import { DETECTED, perceive, setHaze } from "./perception";
 import { settleFacing, facingTo, facingName, emitNoise } from "./noise";
@@ -143,11 +144,12 @@ export function startPlayerTurn(first: boolean) {
   syncSmoke();
   if (smokeBefore && !S.smoke.length) log("The smoke clears.");
   for (const u of S.units) if (u.alive && u.downed && !u.stabilized && !first) {
-    u.bleed = (u.bleed ?? 3) - 1;
+    u.bleed = bleedGrace(u) ? (u.bleed ?? 3) : (u.bleed ?? 3) - 1;
     if (u.bleed <= 0) { log(`${full(u)} bled out.`, "bad"); kill(u); }
     else log(`${full(u)} is bleeding out: ${u.bleed} turn${u.bleed > 1 ? "s" : ""} left.`, "bad");
   }
   arrivals(first);
+  observe();
   if (!first) turnInfected();
   for (const m of team()) {
     m.overwatch = false;
@@ -173,7 +175,7 @@ function arrivals(first: boolean) {
     for (const m of r.members) {
       const t = free.shift();
       if (!t) { S.reinforce.push({ turn: S.turn + 1, members: [m], road: r.road, station: r.station }); continue; }
-      S.units.push(spawnMember(m, t[0], t[1], S.setup.mods));
+      S.units.push(spawnMember(m, t[0], t[1], S.setup.mods, sharedKitFor(S.setup)));
       came.push(m.name);
     }
     if (came.length) banner(r.members[0].guard ? "SITE SECURITY ARRIVES" : "EPSILON-11 ON SCENE", "#86c193");
@@ -421,17 +423,8 @@ export const throwRange = (u: Unit) => S.throwing?.id === "bazooka" ? 10 : S.thr
 /** Tiles the unit can throw to: within range and in sight. */
 export function throwOptions(u: Unit) {
   const out = new Set<number>();
-  // a breaching charge goes against an adjacent door, partition, ordinary wall or barricade; a barricade on an
-  // adjacent clear floor tile
-  if (S.throwing && PLACED.includes(S.throwing.id)) {
-    for (const [dx, dy] of DIRS) {
-      const x = u.x + dx, y = u.y + dy, t = tileAt(x, y), i = y * L.W + x, d = L.door.get(i);
-      if (x <= 0 || y <= 0 || x >= L.W - 1 || y >= L.H - 1) continue;
-      if (S.throwing.id === "breach_charge" ? (d && d.state !== "destroyed") || t === PART || t === HALF || (t === WALL && !L.def.reinforced)
-          : t === FLOOR && !d && !S.units.some(v => v.alive && v.x === x && v.y === y)) out.add(i);
-    }
-    return out;
-  }
+  // squad kit placed beside the operative (Version 12): the squad rules say where it can go
+  if (S.throwing && PLACED.includes(S.throwing.id)) return placeOptions(u, S.throwing.id);
   for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++)
     if ((x - u.x) ** 2 + (y - u.y) ** 2 <= throwRange(u) ** 2 && passable(x, y) && canSee(u, x, y)) out.add(y * L.W + x);
   return out;
@@ -443,6 +436,7 @@ export function throwCheck(u: Unit | null, idx: number) {
   const it = u.items?.[idx];
   if (!it || !THROWN.includes(it.id)) return "Nothing to throw in that slot.";
   if (it.uses < 1) return "Used up.";
+  if (PLACED.includes(it.id)) return placeCheck(u, it.id);
   if (u.ap < 1) return "No actions left this turn.";
   if (u.eyesDown) return "They're looking at the floor: look up first (E).";
   return null;
@@ -494,25 +488,15 @@ export function useItem(idx: number, flash: (t: string) => void) {
 }
 
 function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y: number) {
+  if (PLACED.includes(item.id)) {
+    S.mode = null; S.throwing = null; S.pending = null;
+    if (item.id === "breach_charge" || item.id === "demo_charge") { fx({ type: "blast", x: x * TS + TS / 2, y: y * TS + TS / 2, r: item.id === "demo_charge" ? 1.6 : 1.2, dur: 600 }); highlight(5, "#ff9a50"); breakConcealment("an explosion"); }
+    place(u, item, x, y); afterAction(); return;
+  }
   item.uses--; payItem(u, true);
   breakConcealment(item.id === "smoke" ? "a smoke canister hissing" : item.id === "flare" ? "a flare lighting up the area" : item.id === "noisemaker" ? "a noisemaker playing" : "an explosion");
   S.mode = null; S.throwing = null; S.pending = null;
   if (item.id === "noisemaker") { placeLure(u, x, y); return; }
-  if (item.id === "barricade") {
-    L.grid[y][x] = HALF; L.version++;
-    log(`${full(u)} sets up a portable barricade: half cover.`, "key");
-    computeVis(); afterAction(); return;
-  }
-  if (item.id === "breach_charge") {
-    fx({ type: "blast", x: x * TS + TS / 2, y: y * TS + TS / 2, r: 1.2, dur: 600 });
-    highlight(5, "#ff9a50"); emitNoise(x, y, "explosion", u);
-    const what = blastStructure(x, y, 2);
-    log(what ? `${full(u)} blows the breaching charge: ${({ cover: "the barricade", door: "the door", partition: "the partition", window: "the glass", wall: "the wall" } as Record<string, string>)[what]} is gone.` : `${full(u)}'s breaching charge does nothing to that.`, "key");
-    // the blast goes through to whoever is behind it, not back at the team that set it
-    const bx = x + (x - u.x), by = y + (y - u.y);
-    for (const v of S.units.filter(v => v.alive && !v.saved && !isTeam(v) && cheb(v.x, v.y, bx, by) <= 1)) { S.hitKind = "explosive"; damage(v, Math.max(0, 2 - (v.armor ?? 0)), u); }
-    computeVis(); afterAction(); return;
-  }
   const area = blastArea(x, y);
   const inArea = (v: Unit) => area.some(([a, b]) => a === v.x && b === v.y);
   if (item.id === "frag" || item.id === "bazooka" || item.id === "law") {

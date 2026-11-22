@@ -263,6 +263,14 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   case:      { name: "Lead-lined case", cost: 0, days: 0, uses: 1, desc: "Issued for SCP-035: the mask goes in it from the floor." },
   breach_charge: { name: "Breaching charge", cost: 20, days: 1, uses: 1, desc: "Breach Response kit. Set against an adjacent door, partition, barricade or ordinary wall and it's gone; the blast hits whoever is behind it for 2." },
   barricade: { name: "Portable barricade", cost: 15, days: 1, uses: 1, desc: "Containment Security kit. Set up on an adjacent clear floor tile, it's half cover for the rest of the mission." },
+  stretcher: { name: "Stretcher", cost: 10, days: 1, uses: null, desc: "Recovery kit. Folding litter and rescue straps: lets two of a Recovery squad carry someone without slowing down." },
+  cordon_kit: { name: "Cordon kit", cost: 15, days: 1, uses: 1, desc: "Quarantine kit. Wire, stakes and tape for a three-tile isolation line SCP-610's flesh can't spread through." },
+  firebreak_kit: { name: "Firebreak kit", cost: 15, days: 1, uses: 1, desc: "Incendiary kit. Extinguishers and wet sacking: clears a 2×2 strip of fire and keeps flesh and flame out of it for a while." },
+  decon_agent: { name: "Decon agent", cost: 15, days: 1, uses: 1, desc: "Decontamination kit. Wash rig and neutralizer: clears SCP-106's corrosion and fire from a 2×2 area." },
+  sample_case: { name: "Sample case", cost: 20, days: 2, uses: 1, desc: "Hazardous Recovery kit. Seals an SCP-610 sample for research at the site." },
+  demo_charge: { name: "Demolition charge", cost: 30, days: 2, uses: 1, desc: "Demolitions kit. Opens walls, reinforced ones too, but never a containment cell's steel." },
+  sandbags: { name: "Sandbags", cost: 10, days: 1, uses: 1, desc: "Combat Engineering kit. Builds full cover on a tile, or rehangs a blown-out door." },
+  field_tags: { name: "Field tags", cost: 5, days: 1, uses: 2, desc: "Tracking and Forward Recon kit. Marks a trail so it doesn't fade, or an extraction point." },
   tracker:   { name: "Seismic sensor", cost: 50, days: 3, uses: null, desc: "Detects anything within 6 tiles, through walls." },
 };
 /** Vest protection by researched tier. */

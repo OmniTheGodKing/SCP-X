@@ -4,6 +4,8 @@
 import type { Campaign, Operative } from "../campaign/campaign";
 import { RANKS, dateText, fieldName, lookOf } from "../campaign/campaign";
 import { E11, OPENING_SITE, callsignsFor } from "../campaign/opening";
+import { requisitionCost } from "../campaign/org";
+import { KITS, TECHS } from "../data/specialties";
 import { HUBS, bindCampaign, deployCap, foundMtf, foundSite, onLand, randomLand, siteGeo, specUnlock, squadRosterMax, type MtfDraft } from "../campaign/org";
 import { GREEK, MTF_CONFIG, SPECIALTIES, SPECS, TAKEN_DESIGNATIONS, type SpecId, type SpecialtyId } from "../data/mtf";
 import { LAND, REGIONS, REGION_IDS, project } from "../data/regions";
@@ -144,7 +146,7 @@ export function mountMtfFound(root: HTMLElement, c: Campaign, done: () => void, 
   const cap = deployCap(c), max = squadRosterMax(c);
   const free = GREEK.filter(g => !["Epsilon"].includes(g));
   let letter = free[Math.floor(Math.random() * free.length)], number = String(2 + Math.floor(Math.random() * 20));
-  let mname = "", flash = "";
+  let mname = "", flash = "", buyKit = true;
   const squads: { name: string; specialty: SpecialtyId }[] = [{ name: "", specialty: SPECS[specId].specialties[0] }, { name: "", specialty: SPECS[specId].specialties[1] }];
   // a starting split the player can change: the first few to each squad, the rest held in reserve
   const assign = new Map<string, number>(people.map((o, i) => [o.id, i < cap + 1 ? 0 : i < (cap + 1) * 2 ? 1 : -1]));
@@ -170,11 +172,13 @@ export function mountMtfFound(root: HTMLElement, c: Campaign, done: () => void, 
           <span class="mlabel">Squad ${k + 1} · ${counts[k]} of ${max} · deploys ${cap}</span>
           <input data-sqname="${k}" maxlength="24" value="${esc(s.name)}" placeholder="${k ? "e.g. Sentinel" : "e.g. Vanguard"}" aria-label="Squad ${k + 1} name">
           <div class="specs">${spec.specialties.map(id => `<button type="button" class="${s.specialty === id ? "on" : ""}" data-sqspec="${k}" data-id="${id}" aria-pressed="${s.specialty === id}"><b>${esc(SPECIALTIES[id].name)}</b><small>${esc(SPECIALTIES[id].desc)}</small></button>`).join("")}</div>
-          <p class="issue">Specialist issue: ${Object.entries(SPECIALTIES[s.specialty].issue).map(([i, n]) => `${n} × ${esc(ITEMS[i as keyof typeof ITEMS].name)}`).join(", ") || "none"}. Standard rifles, armor and grenades come from the Armory for any squad.</p>
+          <p class="issue"><b>Techniques:</b> ${KITS[s.specialty].techs.map(id => esc(TECHS[id].name) + (TECHS[id].incomplete ? " (not built yet)" : "")).join(", ")}. <b>Drilled:</b> ${esc(KITS[s.specialty].passive.name)}.</p>
+          <p class="issue">Starter requisition (bought from funds): ${Object.entries(SPECIALTIES[s.specialty].issue).map(([i, n]) => `${n} × ${esc(ITEMS[i as keyof typeof ITEMS].name)}`).join(", ") || "nothing extra"}. Standard rifles, armor and grenades come from the Armory for any squad.</p>
         </div>`).join("")}</div>
         <div class="mlabel">Personnel · ${people.length} transferred in · ${[...assign.values()].filter(v => v === -1).length} in reserve</div>
         <ul class="people">${people.map(person).join("")}</ul>
         ${flash ? `<p class="fwarn" role="status">${esc(flash)}</p>` : ""}
+        <label class="reqbox"><input type="checkbox" id="mReq" ${buyKit ? "checked" : ""}> Buy the squads' starter requisition now: $${requisitionCost({ squads })}k of $${c.funds}k</label>
         <div class="frow"><button type="button" class="fbtn primary" id="mFound">Charter ${esc(desig())}${mname ? ` "${esc(mname)}"` : ""}</button>${opts.cancel ? `<button type="button" class="fbtn" id="mCancel">Cancel</button>` : ""}</div>
       </section>
     </main>`;
@@ -183,6 +187,7 @@ export function mountMtfFound(root: HTMLElement, c: Campaign, done: () => void, 
     sel.onchange = () => { letter = sel.value; render(); };
     const sp = root.querySelector<HTMLSelectElement>("#mSpec"); if (sp) sp.onchange = () => { specId = sp.value as SpecId; squads.forEach((q, k) => { q.specialty = SPECS[specId].specialties[k]; }); render(); };
     root.querySelector<HTMLElement>("#mCancel")?.addEventListener("click", () => opts.cancel?.());
+    const rq = root.querySelector<HTMLInputElement>("#mReq"); if (rq) rq.onchange = () => { buyKit = rq.checked; };
     num.onchange = () => { number = num.value.replace(/\D/g, "") || "1"; render(); };
     nm.onchange = () => { mname = nm.value; render(); };
     root.querySelectorAll<HTMLInputElement>("[data-sqname]").forEach(i => i.onchange = () => { squads[Number(i.dataset.sqname)].name = i.value; render(); });
@@ -190,7 +195,7 @@ export function mountMtfFound(root: HTMLElement, c: Campaign, done: () => void, 
     root.querySelectorAll<HTMLElement>("[data-asg]").forEach(b => b.onclick = () => { assign.set(b.dataset.asg!, Number(b.dataset.k)); render(); });
     root.querySelector<HTMLElement>("#mFound")!.onclick = () => {
       if (TAKEN_DESIGNATIONS.includes(desig())) { flash = `${desig()} already exists elsewhere in the Foundation. Pick another.`; render(); return; }
-      const draft: MtfDraft = { designation: desig(), name: mname, spec: specId, squads: squads.map((s, k) => ({ name: s.name, specialty: s.specialty, members: people.filter(o => assign.get(o.id) === k).map(o => o.id) })) };
+      const draft: MtfDraft = { requisition: buyKit, designation: desig(), name: mname, spec: specId, squads: squads.map((s, k) => ({ name: s.name, specialty: s.specialty, members: people.filter(o => assign.get(o.id) === k).map(o => o.id) })) };
       const why = foundMtf(c, draft, first);
       if (why) { flash = why; render(); return; }
       if (first) { callsignsFor(c, draft.designation); c.phase = undefined; }

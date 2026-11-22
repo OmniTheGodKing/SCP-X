@@ -1,4 +1,6 @@
 // Building a mission from what Site-19 sends, and turning its outcome into a result.
+import { sharedKitFor } from "./squadtech";
+import type { Carried, ItemId as KitItem } from "./types";
 import { beginMission, freshSeed, rnd } from "../core/rng";
 import { assignRoles } from "./ciTactics";
 import { FLOOR, WALL, L, Level, bfs, cheb, floorTiles, nearContainer, tileAt, useLevel, type Pt } from "../core/grid";
@@ -27,12 +29,15 @@ const CIVILIANS = ["Mr. Delaney", "Mrs. Kowalczyk", "Earl Pruitt", "Dot Hennesse
 
 let nextSlot = 1;
 /** Puts one squad member (operative or guard) on the map. */
-export function spawnMember(m: SquadMember, x: number, y: number, mods: MissionSetup["mods"]): Unit {
+export function spawnMember(m: SquadMember, x: number, y: number, mods: MissionSetup["mods"], shared: Carried[] = []): Unit {
+  const heavyLoad = m.specialty === "heavyinf" && (m.stage ?? 0) >= 1 && m.armorKind === "armor_heavy" ? 1 : 0;   // Load Management
+  const fuel = m.specialty === "incendiary" && (m.stage ?? 0) >= 1 ? 1 : 0;   // Fuel Handling
   const i = nextSlot++;
   return mk({ id: "m" + i, opId: m.opId, slot: i, side: "mtf", call: m.call, name: m.name, rankShort: m.rankShort, x, y, guard: m.guard,
     hp: m.hp, maxHp: m.maxHp, san: m.san, maxSan: m.maxSan, aim: m.aim, blinkFull: m.blinkFull,
-    armor: m.armor + (m.perks.includes("plated") ? 1 : 0), hasArmor: m.hasArmor, armorKind: m.armorKind, moveBonus: m.moveBonus, blinkMod: mods.blinkBonus,
-    items: m.items.map(it => ({ ...it, uses: it.uses + (m.perks.includes("grenadier") && (it.id === "flashbang" || it.id === "smoke" || it.id === "frag") ? 1 : 0) })),
+    armor: m.armor + (m.perks.includes("plated") ? 1 : 0), hasArmor: m.hasArmor, armorKind: m.armorKind, moveBonus: (m.moveBonus ?? 0) + heavyLoad, blinkMod: mods.blinkBonus,
+    squadId: m.squadId, specialty: m.specialty, stage: m.stage, mtfSpec: m.mtfSpec, qualified: m.qualified, branch: m.branch,
+    items: [...m.items.map(it => ({ ...it, uses: it.uses + (m.perks.includes("grenadier") && (it.id === "flashbang" || it.id === "smoke" || it.id === "frag") ? 1 : 0) + (it.id === "flamer" ? fuel : 0) })), ...(m.squadId ? shared : [])],
     cls: m.cls, perks: [...m.perks], traits: [...m.traits], medals: m.medals, minHp: m.hp, gun: { ...m.gun }, witnessed: 0, panics: 0, streak: 0, bestStreak: 0,
     goggles: m.goggles, specialist: m.specialist, bonds: m.bonds });
 }
@@ -91,7 +96,7 @@ export function createMission(setup: MissionSetup) {
   first.forEach((m, i) => {
     const [x, y] = setup.kind === "escort" && truck.length ? claim(truck) : i < def.squadSpawns.length ? def.squadSpawns[i] : claim(near);
     taken.add(x + "," + y);
-    units.push(spawnMember(m, x, y, setup.mods));
+    units.push(spawnMember(m, x, y, setup.mods, sharedKitFor(setup)));
   });
   // the D-Class work detail starts beside the squad
   setup.dclass.forEach((name, i) => {
@@ -362,7 +367,10 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
   }
   const detail = S.units.filter(u => (u.id.startsWith("d") || u.joined) && !u.stray);
   const strays = S.units.filter(u => u.stray), docs = S.units.filter(u => u.researcher);
+  const kitLeft: Partial<Record<KitItem, number>> = {};
+  for (const k of sharedKitFor(S.setup)) kitLeft[k.id] = (kitLeft[k.id] ?? 0) + Math.max(0, k.uses);
   return {
+    kitLeft, techSquads: [...(S.techSquads ?? [])], clues: S.clues ?? 0, samples: S.samples ?? 0, collateral: S.collateral ?? 0,
     incidentId: S.setup.incidentId,
     win, evacuated,
     turns: S.turn,
@@ -376,7 +384,7 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
     zombiesKilled: S.units.filter(u => u.side === "zombie" && !u.alive).length,
     pocketReturned,
     squad: [...S.units.filter(u => u.opId).map(u => ({ opId: u.opId!, alive: survives(u, win, evacuated), hp: Math.max(1, u.hp), san: u.san, kills: u.kills, sealed: !!u.sealed,
-      hasArmor: !!u.hasArmor, armorKind: u.armorKind, armorHp: S.setup.squad.concat(S.setup.guards ?? [], S.setup.lateGuards ?? []).find(m => m.opId === u.opId)?.armorHp ?? 0, items: (u.items || []).map(i => ({ ...i })),
+      hasArmor: !!u.hasArmor, armorKind: u.armorKind, armorHp: S.setup.squad.concat(S.setup.guards ?? [], S.setup.lateGuards ?? []).find(m => m.opId === u.opId)?.armorHp ?? 0, items: (u.items || []).filter(i => !i.shared).map(i => ({ ...i })),
       witnessed: u.witnessed ?? 0, panics: u.panics ?? 0, minHp: u.minHp ?? u.hp, bestStreak: u.bestStreak ?? 0, returned: u.returned })),
       // anyone still on the way when it ended comes home untouched, with their gear
       ...S.reinforce.flatMap(r => r.members).map(m => ({ opId: m.opId, alive: true, hp: m.hp, san: m.san, kills: 0, sealed: false, hasArmor: m.hasArmor, armorKind: m.armorKind, armorHp: m.armorHp,
