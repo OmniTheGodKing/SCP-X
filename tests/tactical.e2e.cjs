@@ -138,5 +138,75 @@ const inside = (a, vw, vh) => a && a.x >= -1 && a.y >= -1 && a.x + a.w <= vw + 1
     check('trial without page errors', !errs.length, errs);
     await p.close();
   }
+  // deployment card, art pipeline, placed-kit art, animations, era dressing, debrief transition
+  {
+    const { p, errs, E } = await mission(b, 1440, 900);
+    // the deployment card was shown and has gone; the HUD is back
+    const intro = await E(() => ({ card: !!document.querySelector('.intro'), deploying: document.querySelector('main.tac').classList.contains('deploying') }));
+    await p.waitForTimeout(2400);
+    const intro2 = await E(() => ({ card: !!document.querySelector('.intro'), deploying: document.querySelector('main.tac').classList.contains('deploying'), hud: getComputedStyle(document.querySelector('#actionBar')).opacity }));
+    check('transition: a deployment card opens the mission and clears, the HUD fading up after it', !intro2.card && !intro2.deploying && intro2.hud === '1', { intro, intro2 });
+    // the art pipeline: a figure image registered under its key replaces the drawn stand-in
+    const art = await E(async () => {
+      const A = window.__site19, S = A.mission, u = S.units.find(u => u.side === 'mtf' && !u.guard && u.alive && !u.downed);
+      S.selected = null; A.camera.cam.tz = 2; A.camera.focus(u.x * 32 + 16, u.y * 32 + 16, true);
+      const c = document.createElement('canvas'); c.width = 32; c.height = 48; const g = c.getContext('2d'); g.fillStyle = '#ff00ff'; g.fillRect(0, 0, 32, 48);
+      const look = A.sprites.lookFor(u);
+      A.registerArt(`tactical/figure/${look.sprite}`, c.toDataURL());
+      await new Promise(r => setTimeout(r, 900));
+      const cv = document.querySelector('#cv'), k = cv.width / cv.clientWidth, [sx, sy] = A.camera.worldToScreen(u.x * 32 + 16, u.y * 32 + 16 - 14);
+      const d = cv.getContext('2d').getImageData(Math.round(sx * k), Math.round(sy * k), 1, 1).data;
+      return { key: look.sprite, rgb: [d[0], d[1], d[2]] };
+    });
+    check('asset pipeline: a figure image dropped in under its loadout key is drawn instead of the stand-in', art.rgb[0] > 200 && art.rgb[1] < 60 && art.rgb[2] > 200, art);
+    // placed kit is drawn as what it is, on its tile; a prop image replaces it the same way
+    const kit = await E(async () => {
+      const A = window.__site19, S = A.mission, G = A.gridMod, Lv = A.grid, u = S.units.find(u => u.side === 'mtf' && !u.guard && u.alive && !u.downed);
+      Object.assign(u, { specialty: 'engineering', stage: 1, qualified: true, squadId: 'T', ap: 2 });
+      const opts = [...A.squadtech.placeOptions(u, 'sandbags')]; const i = opts.find(k => Lv.grid[Math.floor(k / Lv.W)][k % Lv.W] === G.FLOOR);
+      const x = i % Lv.W, y = Math.floor(i / Lv.W); A.squadtech.place(u, { id: 'sandbags', uses: 1 }, x, y);
+      const placed = S.placedKit?.get(i), cue = S.effects.some(e => e.type === 'cue' && e.cue === 'place');
+      await new Promise(r => setTimeout(r, 120));
+      const kneel = performance.now() - A.sprites.animOf(u.id).place < 1000;
+      const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d'); g.fillStyle = '#00ffff'; g.fillRect(0, 0, 32, 32);
+      A.registerArt('tactical/prop/sandbags', c.toDataURL());
+      u.x = 1; u.y = 1; A.computeVis(); S.vis.fill(1);
+      await new Promise(r => setTimeout(r, 900));
+      const cv = document.querySelector('#cv'), k = cv.width / cv.clientWidth, [sx, sy] = A.camera.worldToScreen(x * 32 + 26, y * 32 + 28);
+      const d = cv.getContext('2d').getImageData(Math.round(sx * k), Math.round(sy * k), 1, 1).data;
+      return { placed, cue, kneel, tile: Lv.grid[y][x] === G.FULL, rgb: [d[0], d[1], d[2]] };
+    });
+    check('placed kit: sandbags are recorded on their tile, drawn there, and the operative kneels to set them', kit.placed === 'sandbags' && kit.tile && kit.cue && kit.kneel && kit.rgb[0] < 60 && kit.rgb[1] > 180 && kit.rgb[2] > 180, kit);
+    // going down is animated, not cut to
+    const fall = await E(async () => { const A = window.__site19, S = A.mission, u = S.units.find(u => u.side === 'mtf' && !u.guard && u.alive && !u.downed && u.x !== 1); u.downed = true; u.bleed = 3;
+      const now = performance.now(), a = A.sprites.fallOf(u, now); await new Promise(r => setTimeout(r, 500)); const b2 = A.sprites.fallOf(u, performance.now()); u.downed = false; return [a, b2]; });
+    check('animation: falling down plays out over a moment', fall[0] < 0.2 && fall[1] === 1, fall);
+    // era: the same corridor is built differently in 1951 and 2015, and the rules' map is untouched by the dressing
+    const era = await E(async () => {
+      const A = window.__site19, S = A.mission, Lv = A.grid, grid0 = JSON.stringify(Lv.grid);
+      const sample = () => { const cv = document.querySelector('#cv'), k = cv.width / cv.clientWidth; let wx = 0, wy = 0; for (let y = 1; y < Lv.H - 1 && !wx; y++) for (let x = 1; x < Lv.W - 1; x++) if (Lv.grid[y][x] === 0 && Lv.grid[y + 1][x] === 1 && Lv.grid[y - 1][x] === 0) { wx = x; wy = y; break; }
+        A.camera.focus(wx * 32 + 16, wy * 32 + 16, true); return [wx, wy]; };
+      const [wx, wy] = sample(); S.vis.fill(1); S.explored.fill(1);
+      const px = async y => { S.setup.year = y; await new Promise(r => setTimeout(r, 700)); const cv = document.querySelector('#cv'), k = cv.width / cv.clientWidth, [sx, sy] = A.camera.worldToScreen(wx * 32 + 16, wy * 32 + 8); const d = cv.getContext('2d').getImageData(Math.round(sx * k), Math.round(sy * k), 1, 1).data; return d[0] + d[1] + d[2]; };
+      const a = await px(1951), b2 = await px(2015); S.setup.year = 1951;
+      return { a, b: b2, same: JSON.stringify(Lv.grid) === grid0 };
+    });
+    check('era: Foundation walls are built from a different palette in 2015 than in 1951, and dressing never changes the grid', era.b > era.a + 30 && era.same, era);
+    // debrief: the field dims behind the report
+    await L.dbg(p, 'win'); await p.waitForTimeout(500);
+    const end = await E(() => ({ ended: document.querySelector('main.tac')?.classList.contains('ended'), overlay: !document.querySelector('#overlay')?.hidden }));
+    check('transition: winning dims the battlefield behind the debrief', end.ended && end.overlay, end);
+    check('environment and transition run without page errors', !errs.length, errs);
+    await p.close();
+  }
+  // an outbreak and an Insurgency-held building are dressed for what they are
+  {
+    const { p, errs, E } = await mission(b, 1440, 900, 'town', 'outbreak');
+    await p.waitForTimeout(400);
+    const ob = await E(() => { const S = window.__site19.mission; return { kind: S.setup.kind, flesh: S.flesh.size }; });
+    await p.screenshot({ path: path.join(L.OUT, 'tactical-outbreak.png') });
+    check('outbreak mission renders with its dressing and growth', ob.kind === 'outbreak' && ob.flesh > 0 && !errs.length, { ob, errs });
+    await p.close();
+  }
   R.done(); await b.close();
 })();

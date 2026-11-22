@@ -14,7 +14,7 @@ import { createFx } from "./fxdraw";
 import { bubbles, createLiving, mist } from "./living";
 import { hidden939, inFace, isDown682, isNewScp, isTarget } from "../game/scp4b";
 import type { Effect } from "../game/types";
-import { setEra, animOf, badge, drawBase, drawFallen, drawPerson, drawRadio, drawRecords, lookFor, noteEffects, placeOf, resetAnims } from "./sprites";
+import { fallOf, setEra, animOf, badge, drawBase, drawFallen, drawPerson, drawRadio, drawRecords, lookFor, noteEffects, placeOf, resetAnims } from "./sprites";
 import { escaping } from "../game/scp173";
 import { detectRange } from "../game/insurgency";
 import { freshBodies, isCalm, isStaggered, leadOptions } from "../game/scp049";
@@ -43,6 +43,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
   // the canvas is the whole battlefield viewport: sized to its box, the camera decides what of the world it shows
   resetCamera();
   let lastW = 0, lastH = 0, lastNow = 0, lastSelId = "", lastFloor = -1;
+  let statueSeenAt = -1; const scrapes: { x: number; y: number; a: number }[] = [];
   const layerScale = Math.max(1, Math.min(3, dpr * 2, 4096 / (L.W * TS), 4096 / (L.H * TS)));
   const backdrop = backdropPattern(ctx);
   function fitCanvas() {
@@ -329,7 +330,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
     const hurt = Math.max(0, 1 - (now - p.a.hit) / 280), flash = now - p.a.fired < 110, bob = p.moving ? Math.sin(now / 35) * 0.8 : 0;
     // Phase 4G: recoil after firing, a duck aside from a near miss, the weapon down while reloading, blood when badly hurt
     const kick = Math.max(0, 1 - (now - p.a.fired) / 140) * 2.6, fl = now - p.a.flinch < 260 ? (now - p.a.flinch) / 260 : 0;
-    const pose = { kick, flinch: fl, reloading: now - p.a.reload < 650, bloodied: u.hp > 0 && u.hp < u.maxHp / 2, seed: u.id.length + u.name.length };
+    const pose = { kick, flinch: fl, reloading: now - p.a.reload < 650, kneel: now - p.a.place < 600 ? (now - p.a.place) / 600 : 0, bloodied: u.hp > 0 && u.hp < u.maxHp / 2, seed: u.id.length + u.name.length };
     if (u.object) {
       // an object in its case: a steel strongbox with a hazard stripe
       ctx.fillStyle = "#5a5f66"; ctx.fillRect(cx - 9, cy - 7, 18, 14);
@@ -376,7 +377,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
       return;
     }
     if (u.side === "mtf" && u.downed) {
-      drawFallen(ctx, cx, cy, p.ang, look, false);
+      { const fk = fallOf(u, now); if (fk < 1) drawPerson(ctx, cx, cy, p.ang, look, { fall: fk }); else drawFallen(ctx, cx, cy, p.ang, look, false); }
       ctx.strokeStyle = u.stabilized ? C.ok : C.alert; ctx.lineWidth = 2.5;
       ctx.beginPath(); ctx.moveTo(cx + 6, cy - 9); ctx.lineTo(cx + 12, cy - 9); ctx.moveTo(cx + 9, cy - 12); ctx.lineTo(cx + 9, cy - 6); ctx.stroke();
       if (!u.stabilized) tag(`${u.bleed}`, cx + 11, cy - 17, C.alert);
@@ -396,7 +397,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
       if (st.length) tag(st.join(" · "), cx, cy + 24, C.manila);
     } else if (u.side === "raider") {
       const col = u.downed ? "#5d5266" : S.activePods.includes(u.pod ?? 0) ? C.raider : "#8a74a0";
-      if (u.downed) { drawFallen(ctx, cx, cy, p.ang, look, false); drawBase(ctx, cx, cy, "diamond", col); }
+      if (u.downed) { const fk = fallOf(u, now); if (fk < 1) drawPerson(ctx, cx, cy, p.ang, look, { fall: fk }); else drawFallen(ctx, cx, cy, p.ang, look, false); drawBase(ctx, cx, cy, "diamond", col); }
       else {
         drawBase(ctx, cx, cy, "diamond", u.role === "commander" ? C.manila : col);
         drawPerson(ctx, cx, cy, p.ang, look, { hurt, flash, bob, ...pose, raised: !!u.overwatch });
@@ -541,7 +542,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
       else if (e.type === "blast") sfx.explosion();
       else if (e.type === "ghost") sfx.scrape();
       else if (e.type === "banner") sfx.sting(e.color === "#86c193");
-      else if (e.type === "cue") ({ reload: sfx.reload, crack: sfx.crack, rise: sfx.rumble, raise: sfx.raise, blink: () => {} })[e.cue]();
+      else if (e.type === "cue") ({ reload: sfx.reload, crack: sfx.crack, rise: sfx.rumble, raise: sfx.raise, blink: () => {}, place: sfx.reload })[e.cue]();
     }, now);
     // Phase 4G: a short shake on a big moment (only with Action highlights on)
     const [ox, oy] = fxr.offset(now, hl);
@@ -605,10 +606,46 @@ export function createRenderer(cv: HTMLCanvasElement) {
       tag(`CORE ${S.core.hp}`, cx, cy - 20, C.alert);
     }
     living.fire(ctx, now);
-    // floor rotted by SCP-106
-    if (S.has106) {
-      ctx.fillStyle = "rgba(28,22,14,0.55)";
-      for (const i of S.corroded) { const x = i % L.W, y = (i / L.W) | 0; if (S.explored[i]) { ctx.beginPath(); ctx.ellipse(x * TS + TS / 2, y * TS + TS / 2, 13, 10, (i % 7) / 3, 0, Math.PI * 2); ctx.fill(); } }
+    // floor rotted by SCP-106: a black, glistening pool that joins its neighbours, slow bubbles rising in it
+    if (S.has106 || S.corroded.size) {
+      for (const i of S.corroded) {
+        const x = i % L.W, y = (i / L.W) | 0; if (!S.explored[i]) continue;
+        const cx = x * TS + TS / 2, cy = y * TS + TS / 2, sk = (i % 7) / 3;
+        ctx.fillStyle = "rgba(22,17,10,0.62)"; ctx.beginPath(); ctx.ellipse(cx, cy, 13, 10, sk, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "rgba(60,48,28,0.55)"; ctx.lineWidth = 3;
+        for (const [dx, dy] of [[1, 0], [0, 1], [1, 1], [-1, 1]]) if (S.corroded.has((y + dy) * L.W + x + dx)) { ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + dx * TS, cy + dy * TS); ctx.stroke(); }
+        ctx.fillStyle = "rgba(140,120,80,0.18)"; ctx.beginPath(); ctx.ellipse(cx - 4, cy - 3, 4, 2, sk, 0, Math.PI * 2); ctx.fill();
+        if (S.vis[i]) { const t = ((now / 1400 + (i % 5) / 5) % 1); ctx.strokeStyle = `rgba(90,74,44,${0.6 * (1 - t)})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(cx + ((i * 7) % 9) - 4, cy + ((i * 3) % 7) - 3, 1 + t * 3, 0, Math.PI * 2); ctx.stroke(); }
+      }
+    }
+    // SCP-610: veins creeping from the growth onto the tiles it can take next turn (only where the team can see)
+    if (S.flesh.size) {
+      for (const i of S.flesh) {
+        const x = i % L.W, y = (i / L.W) | 0; if (!S.vis[i]) continue;
+        const cx = x * TS + TS / 2, cy = y * TS + TS / 2;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, ny = y + dy, k = ny * L.W + nx;
+          if (S.flesh.has(k) || !passable(nx, ny) || !S.vis[k] || (S.cordon?.has(k)) || ((S.firebreak?.get(k) ?? -1) >= S.turn)) continue;
+          const pulse = 0.5 + 0.5 * Math.sin(now / 420 + i);
+          ctx.strokeStyle = `rgba(130,26,34,${0.35 + 0.25 * pulse})`; ctx.lineWidth = 2; ctx.lineCap = "round";
+          ctx.beginPath(); ctx.moveTo(cx + dx * 10, cy + dy * 10); ctx.quadraticCurveTo(cx + dx * 18 + dy * 5, cy + dy * 18 + dx * 5, cx + dx * (20 + 4 * pulse), cy + dy * (20 + 4 * pulse)); ctx.stroke();
+          ctx.lineCap = "butt";
+        }
+      }
+    }
+    // SCP-173: concrete scraped where it was seen to have moved between sightings
+    if (S.has173 && st.alive !== false && !S.sealed) {
+      const k = st.y * L.W + st.x;
+      if (seen(st.x, st.y)) {
+        if (statueSeenAt >= 0 && statueSeenAt !== k) {
+          const ax = statueSeenAt % L.W, ay = (statueSeenAt / L.W) | 0, n = Math.max(Math.abs(st.x - ax), Math.abs(st.y - ay));
+          for (let j = 0; j <= n; j++) { const tx = Math.round(ax + (st.x - ax) * j / Math.max(1, n)), ty = Math.round(ay + (st.y - ay) * j / Math.max(1, n)); if (S.explored[ty * L.W + tx]) scrapes.push({ x: tx, y: ty, a: Math.atan2(st.y - ay, st.x - ax) }); }
+          if (scrapes.length > 80) scrapes.splice(0, scrapes.length - 80);
+        }
+        statueSeenAt = k;
+      }
+      ctx.strokeStyle = "rgba(190,184,170,0.28)"; ctx.lineWidth = 1;
+      for (const sc of scrapes) { const cx = sc.x * TS + TS / 2, cy = sc.y * TS + TS / 2; ctx.save(); ctx.translate(cx, cy); ctx.rotate(sc.a); ctx.beginPath(); for (const o of [-4, 0, 4]) { ctx.moveTo(-12, o); ctx.lineTo(12, o + 1); } ctx.stroke(); ctx.restore(); }
     }
     // the fallen where they lie (the ones SCP-049 could still raise are marked)
     for (const b of S.units.filter(u => !u.alive && !u.saved && !u.carriedBy && !u.taken && u.side !== "anomaly")) {

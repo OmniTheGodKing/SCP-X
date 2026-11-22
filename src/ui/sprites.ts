@@ -2,6 +2,7 @@
 // each unit is drawn while it slides between tiles, which way it faces, when it last fired or was hit.
 // The shapes that identify a side (circle, rounded square, diamond, square) are kept as rings under each figure.
 import { TS } from "../core/grid";
+import { tacImg } from "./tacticalArt";
 import type { Unit } from "../game/types";
 import type { WeaponType } from "../data/weapons";
 
@@ -12,6 +13,8 @@ export interface Look {
   bulky?: boolean; pack?: string; armband?: string; goggles?: boolean; coat?: boolean; fists?: boolean; reach?: boolean;
   /** Operators (tactical overhaul): helmet pattern for the era, camouflage blotches, what they wear over the
    *  uniform, and the kit on their back or hip, all read from the unit's actual loadout. */
+  /** Art keys: the sprite name for this figure's loadout, and its side (see art/tactical/README.md). */
+  sprite?: string; side?: string;
   helmet?: "m1" | "pasgt" | "modern"; camo?: string[]; vest?: "webbing" | "flak" | "plate" | "smock" | "carrier";
   back?: "tanks" | "tube" | "radio" | "stretcher"; hip?: "case" | "charge" | "tags"; nvg?: boolean; shield?: boolean;
 }
@@ -28,7 +31,7 @@ function eraKit(): { body: string; trim: string; helmet: "m1" | "pasgt" | "moder
 }
 
 // ---------- animation state ----------
-interface Anim { x: number; y: number; fromX: number; fromY: number; toX: number; toY: number; t0: number; dur: number; ang: number; fired: number; hit: number; tx: number; ty: number; flinch: number; reload: number }
+interface Anim { x: number; y: number; fromX: number; fromY: number; toX: number; toY: number; t0: number; dur: number; ang: number; fired: number; hit: number; tx: number; ty: number; flinch: number; reload: number; place: number; downAt: number }
 const anims = new Map<string, Anim>();
 let seenEffects = new WeakSet<object>();
 export function resetAnims() { anims.clear(); seenEffects = new WeakSet(); }
@@ -38,7 +41,7 @@ const MOVE_MS = 70;
 export function placeOf(u: Unit, now: number): { x: number; y: number; ang: number; moving: boolean; a: Anim } {
   const tx = u.x * TS + TS / 2, ty = u.y * TS + TS / 2;
   let a = anims.get(u.id);
-  if (!a) { a = { x: tx, y: ty, fromX: tx, fromY: ty, toX: tx, toY: ty, t0: 0, dur: 0, ang: defaultFacing(u), fired: -1e9, hit: -1e9, tx, ty, flinch: -1e9, reload: -1e9 }; anims.set(u.id, a); }
+  if (!a) { a = { x: tx, y: ty, fromX: tx, fromY: ty, toX: tx, toY: ty, t0: 0, dur: 0, ang: defaultFacing(u), fired: -1e9, hit: -1e9, tx, ty, flinch: -1e9, reload: -1e9, place: -1e9, downAt: -1 }; anims.set(u.id, a); }
   if (a.tx !== tx || a.ty !== ty) {
     const dist = Math.hypot(tx - a.x, ty - a.y);
     a.ang = Math.atan2(ty - a.ty, tx - a.tx);
@@ -56,6 +59,13 @@ export function placeOf(u: Unit, now: number): { x: number; y: number; ang: numb
     if (k >= 1) a.dur = 0; else moving = true;
   }
   return { x: a.x, y: a.y, ang: a.ang, moving, a };
+}
+/** How far through falling down someone is (0..1, 1 = on the ground), so going down is seen rather than cut to. */
+export function fallOf(u: Unit, now: number) {
+  const a = anims.get(u.id); if (!a) return 1;
+  if (!u.downed && u.alive) { a.downAt = -1; return 1; }
+  if (a.downAt < 0) a.downAt = now;
+  return Math.min(1, (now - a.downAt) / 380);
 }
 const defaultFacing = (u: Unit) => u.side === "raider" ? Math.PI : u.side === "mtf" ? 0 : Math.PI / 2;
 
@@ -77,9 +87,9 @@ export function noteEffects(effects: readonly Fx[], units: Unit[], onNew?: (e: F
       // a near miss: the target ducks
       const v = nearest(units, e.x!, e.y! + 14, TS * 0.8);
       if (v) { const a = anims.get(v.id); if (a) a.flinch = e.t0; }
-    } else if (e.type === "cue" && e.cue === "reload") {
+    } else if (e.type === "cue" && (e.cue === "reload" || e.cue === "place")) {
       const v = nearest(units, e.x!, e.y!, TS * 0.6);
-      if (v) { const a = anims.get(v.id); if (a) a.reload = e.t0; }
+      if (v) { const a = anims.get(v.id); if (a) { if (e.cue === "reload") a.reload = e.t0; else a.place = e.t0; } }
     }
     onNew?.(e);
   }
@@ -117,11 +127,12 @@ export function lookFor(u: Unit): Look {
     const vest = suited ? undefined : k === "armor_heavy" ? "plate" as const : k === "armor" ? "flak" as const : k === "armor_light" ? "smock" as const : era.vest;
     return { ...suit, skin, weapon: gunType ?? "rifle", bulky: k === "armor_heavy" || (u.armor ?? 0) >= 2, pack: back ? undefined : u.cls === "containment" ? "#3d4a52" : "#4a4632",
       armband: u.cls === "medic" ? "#e8e4d8" : undefined, goggles: u.goggles,
-      helmet: suited ? undefined : era.helmet, camo: suited ? undefined : era.camo, vest, back, hip, nvg: !suited && era.nvg };
+      helmet: suited ? undefined : era.helmet, camo: suited ? undefined : era.camo, vest, back, hip, nvg: !suited && era.nvg,
+      side: "mtf", sprite: `mtf-${suited ? "mask" : era.helmet}-${vest ?? "none"}-${back ?? "none"}` };
   }
   if (u.side === "raider") {
     const role = u.role as string | undefined;
-    const base = { body: h % 2 ? "#2e3528" : "#3a3026", trim: "#1d211a", skin, weapon: (gunType ?? "rifle") as WeaponType };
+    const base = { body: h % 2 ? "#2e3528" : "#3a3026", trim: "#1d211a", skin, weapon: (gunType ?? "rifle") as WeaponType, side: "raider", sprite: `raider-${(u.role as string | undefined) ?? "rifle"}` };
     if (role === "commander") return { ...base, body: "#3b3a2c", head: "beret", headColor: "#7a2430", pack: undefined, armband: "#d8bf86" };
     if (role === "officer") return { ...base, head: "beret", headColor: "#3a4a30" };
     if (role === "sniper") return { ...base, head: "hood", headColor: "#3c4630", weapon: "marksman" };
@@ -149,7 +160,7 @@ const GUN: Record<WeaponType | "pistol", { len: number; w: number; stock?: boole
  *  weapon up and pushed forward (overwatch), `reloading` swaps the barrel for a magazine in the off hand, and
  *  `bloodied` marks the uniform of anyone under half health. */
 export function drawPerson(ctx: CanvasRenderingContext2D, cx: number, cy: number, ang: number, look: Look,
-  o: { hurt?: number; flash?: boolean; bob?: number; alpha?: number; kick?: number; flinch?: number; raised?: boolean; reloading?: boolean; bloodied?: boolean; seed?: number } = {}) {
+  o: { hurt?: number; flash?: boolean; bob?: number; alpha?: number; kick?: number; flinch?: number; raised?: boolean; reloading?: boolean; bloodied?: boolean; seed?: number; kneel?: number; fall?: number } = {}) {
   // A standing figure in three-quarter view: feet on the tile, body rising above it, turned the way the unit faces.
   // Temporary art drawn in layers (shadow, legs, back kit, torso, vest, arms and weapon, head), each a function, so
   // a sprite sheet per layer can replace any of them without touching the rules.
@@ -160,11 +171,21 @@ export function drawPerson(ctx: CanvasRenderingContext2D, cx: number, cy: number
   if (o.kick) { cx -= dx * o.kick; cy -= dy * o.kick * 0.5; }
   if (o.flinch) { cx += Math.sin(o.flinch * Math.PI) * 2.4 * (dx >= 0 ? -1 : 1); }
   const view: "side" | "front" | "back" = dy > 0.72 ? "front" : dy < -0.72 ? "back" : "side";
+  // finished art for this figure, if any: one image per view, feet at the bottom centre
+  const art = look.sprite ? tacImg(`tactical/figure/${look.sprite}/${view}`, `tactical/figure/${look.sprite}`, `tactical/figure/${look.side ?? "mtf"}/${view}`) : null;
   const flip = view === "side" ? (dx >= 0 ? 1 : -1) : (dx >= 0 ? 1 : -1);
   const feetY = cy + 11 + (o.bob ?? 0) * 0.3;
+  if (art) {
+    ctx.fillStyle = "rgba(0,0,0,0.42)"; ctx.beginPath(); ctx.ellipse(cx + 1.5, feetY, 9.5, 3.6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.translate(cx + shake, feetY); if (o.fall) ctx.rotate(o.fall * 1.45 * (dx >= 0 ? -1 : 1)); ctx.scale(view === "side" && dx < 0 ? -1 : 1, 1);
+    ctx.drawImage(art, -16, -46, 32, 48);
+    ctx.restore(); return;
+  }
   // ground shadow
   ctx.fillStyle = "rgba(0,0,0,0.42)"; ctx.beginPath(); ctx.ellipse(cx + 1.5, feetY, 9.5, 3.6, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.translate(cx + shake, feetY); ctx.scale(flip * 1.16, 1.16);
+  ctx.translate(cx + shake, feetY); if (o.fall) ctx.rotate(o.fall * 1.45 * -flip); ctx.scale(flip * 1.16, 1.16);
+  // kneeling to set kit down: the body drops and the weapon dips while the hands work
+  if (o.kneel) { ctx.scale(1, 1 - 0.2 * Math.sin(Math.min(1, o.kneel) * Math.PI)); o = { ...o, reloading: true }; }
   const bulk = look.bulky ? 1.18 : 1, tw = 10 * bulk, hipY = -12, shY = -27, headY = -32;
   const trousers = shade(look.body, -18), boots = "#1b1915";
   const stride = Math.sin(performance.now() / 120) * (o.bob ? 2.2 : 0);

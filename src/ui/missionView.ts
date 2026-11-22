@@ -583,6 +583,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("overlaySheet").innerHTML = debrief(r) + `<button class="act primary" type="button" id="returnBtn">Return to Site-19</button>`;
     localizeDom($("overlaySheet"), localizeText);
     $("overlay").hidden = false;
+    root.querySelector("main.tac")?.classList.add("ended");
     $("returnBtn").onclick = () => { stop(); onReturn(); };
     $("returnBtn").focus();
   };
@@ -697,6 +698,16 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   }
 
   renderLog();
+  // deployment: a title card over the battlefield while the camera settles in, the HUD fading up after it
+  if (!S.setup.lab) {
+    const main = root.querySelector<HTMLElement>("main.tac")!, card = document.createElement("div");
+    card.className = "intro"; card.setAttribute("aria-hidden", "true");
+    const objective = ($("objRule").textContent ?? "").replace(/^Objective\.\s*/, "").split(/(?<=\.)\s/)[0];
+    card.innerHTML = `<div class="eyebrow">${esc(S.setup.year ? String(S.setup.year) : "")} · ${esc(S.setup.site ?? S.setup.title)}</div><h2>${$("mTitle").innerHTML}</h2><p>${esc(objective)}</p>`;
+    main.appendChild(card); main.classList.add("deploying");
+    setTimeout(() => { main.classList.remove("deploying"); card.classList.add("out"); }, 1500);
+    setTimeout(() => card.remove(), 2300);
+  }
   startPlayerTurn(true);
   requestAnimationFrame(loop);
   window.scrollTo(0, 0);

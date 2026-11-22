@@ -18,6 +18,10 @@ export function asset(...keys: string[]): string | null {
   return null;
 }
 export const assetCount = () => byKey.size;
+/** Add or replace an art key at run time (tests, mods, art previews). */
+export function registerAsset(key: string, url: string) { byKey.set(key, url); artVersion++; }
+/** Goes up whenever the art set changes, so cached layers built from it know to redraw. */
+export let artVersion = 0;
 
 /** The decade the facility is dressed for. Site-19 starts in 1951 and modernises as the campaign runs. */
 export type Era = "1950s" | "1960s" | "1970s" | "1980s";

@@ -4,6 +4,8 @@ Anything placed here is bundled automatically and replaces the procedural stand-
 key. No code changes are needed. Keys are the path under `art/` without the extension (`.png`, `.webp`, `.jpg`
 or `.svg`). More specific keys are tried first, so you can ship one generic file and override per decade later.
 
+Battlefield art (figures, floors, walls, props, placed kit) has its own keys: see `art/tactical/README.md`.
+
 ## Rooms (back wall plates, drawn behind the 3D floor and the soldiers)
 
 | Key | Frame |

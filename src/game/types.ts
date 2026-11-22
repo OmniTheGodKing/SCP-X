@@ -211,7 +211,7 @@ export type Effect =
   | { type: "jolt"; t0: number; dur: number; mag: number; color: string }
   | { type: "banner"; t0: number; dur: number; text: string; color: string }
   // a one-off moment with its own look and sound: a reload, SCP-173's crack, SCP-106 rising, SCP-049 raising a body
-  | { type: "cue"; t0: number; dur: number; x: number; y: number; cue: "reload" | "crack" | "rise" | "raise" | "blink" };
+  | { type: "cue"; t0: number; dur: number; x: number; y: number; cue: "reload" | "crack" | "rise" | "raise" | "blink" | "place" };
 
 /** One operative as sent from Site-19. */
 export interface SquadMember {
@@ -472,6 +472,8 @@ export interface MissionState {
    *  squads that used them, clues and samples for the debrief, marks, silent turns, structural collateral. */
   squadCd?: Record<string, number>; cordon?: Set<number>; firebreak?: Map<number, number>;
   trails?: Map<number, { turn: number; dir: number; who: string; tagged?: boolean }>;
+  /** Version 12 kit placed on tiles, for the map's art: what was put where. */
+  placedKit?: Map<number, "barricade" | "sandbags" | "rehung">;
   techUsed?: string[]; techSquads?: string[]; clues?: number; samples?: number; marks?: Set<number>; silent?: Record<string, number>; collateral?: number; observed?: string[];
   sharedKit?: Carried[];
   /** Escorts: the Insurgency got the truck open. */

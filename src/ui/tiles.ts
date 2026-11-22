@@ -3,6 +3,8 @@
 // Kept dark and low in contrast so units, overlays and tags stay readable on top.
 import { CONT, DRUM, EXIT, FULL, HALF, L, PART, STEEL, TS, WALL, WINDOW, area, passable, tileAt, type Level } from "../core/grid";
 import { S } from "../game/state";
+import { tacImg, tacticalArtVersion } from "./tacticalArt";
+import { dressMap, eraId, facilityLook, foundationMap } from "./dressing";
 
 type MapId = "wingC" | "town" | "farm" | "port" | "dblock" | "gate" | "rail" | "church" | "lab" | "ship";
 export type Surface = "asphalt" | "grass" | "dirt" | "concrete" | "wood" | "labtile" | "steel";
@@ -55,7 +57,7 @@ const gridSig = () => { let s = String(L.version) + ":"; for (const row of L.gri
 
 /** The static map layer for the current level, rebuilt only when something on it changed. */
 export function mapLayer(dpr: number): HTMLCanvasElement {
-  const sig = gridSig() + (S.setup.weather ?? "") + (S.setup.night ? "n" : "");
+  const sig = gridSig() + (S.setup.weather ?? "") + (S.setup.night ? "n" : "") + (S.setup.year ?? 1951) + "|" + tacticalArtVersion() + "|" + [...(S.placedKit ?? new Map()).entries()].join(",");
   if (cache && cache.level === L && cache.sig === sig) return cache.cv;
   if (!cache || cache.level !== L) { rubble = new Set(); lastGrid = null; }
   const flat = L.grid.flat();
@@ -135,6 +137,9 @@ function paint(ctx: CanvasRenderingContext2D) {
   for (const l of L.def.links ?? []) for (const [x, y] of [l.a, l.b]) linkTile(ctx, x, y, l.kind);
   for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) { if (tileAt(x, y) === WINDOW) windowTile(ctx, x, y, th.mat); else if (tileAt(x, y) === PART) partition(ctx, x, y); }
 
+  // 4b. period fixtures, hostile installations and outbreak dressing (flat: never cover, never in the way)
+  dressMap(ctx);
+
   // 5. room names stencilled faintly on the floor, and the tile grid so moves can be counted
   roomLabels(ctx, areas);
   ctx.strokeStyle = "rgba(255,255,255,0.045)"; ctx.lineWidth = 1;
@@ -175,6 +180,8 @@ const outdoorish = (m: MapId) => m === "farm" || m === "town" || m === "gate" ||
 // ---------- floors ----------
 function floor(ctx: CanvasRenderingContext2D, x: number, y: number, sf: Surface, map: MapId) {
   const px = x * TS, py = y * TS, n = (k: number) => noise(x, y, k);
+  const art = tacImg(`tactical/floor/${sf}/${eraId(S.setup.year ?? 1951)}`, `tactical/floor/${sf}`);
+  if (art) { ctx.drawImage(art, px, py, TS, TS); return; }
   ctx.fillStyle = SURFACE_BASE[sf]; ctx.fillRect(px, py, TS, TS);
   ctx.save(); ctx.beginPath(); ctx.rect(px, py, TS, TS); ctx.clip();
   switch (sf) {
@@ -305,24 +312,46 @@ export const isOutdoor = (x: number, y: number) => outdoorArea(area(x, y));
 /** Pools of light under each indoor room's ceiling lamps. */
 function lights(ctx: CanvasRenderingContext2D) {
   const warm = S.setup.night ? 0.07 : 0.05;
+  // Foundation sites light by period: bare incandescent bulbs, then fluorescent tubes, then LED panels
+  const fac = foundationMap() ? facilityLook(S.setup.year ?? 1951) : null;
+  const [r, g0, b] = fac ? fac.lamp : [255, 236, 190];
   for (const i of lampSpots()) {
     const cx = (i % L.W) * TS + TS / 2, cy = ((i / L.W) | 0) * TS + TS / 2;
     const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, TS * 3.2);
-    g.addColorStop(0, `rgba(255,236,190,${warm})`); g.addColorStop(1, "rgba(255,236,190,0)");
+    g.addColorStop(0, `rgba(${r},${g0},${b},${fac ? warm * 1.4 : warm})`); g.addColorStop(1, `rgba(${r},${g0},${b},0)`);
     ctx.fillStyle = g; ctx.fillRect(cx - TS * 3.2, cy - TS * 3.2, TS * 6.4, TS * 6.4);
+    if (fac) { ctx.fillStyle = `rgba(${r},${g0},${b},0.22)`; if (fac.lampShape === "round") { ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill(); } else if (fac.lampShape === "tube") ctx.fillRect(cx - 10, cy - 1.5, 20, 3); else ctx.fillRect(cx - 6, cy - 6, 12, 12); }
+  }
+}
+/** A portable barrier a Security squad put up: steel frame, timber planks, warning stripe. */
+function barricadeArt(ctx: CanvasRenderingContext2D, px: number, py: number) {
+  ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.fillRect(px + 3, py + 15, TS - 4, 11);
+  ctx.strokeStyle = "#4a5058"; ctx.lineWidth = 2.4; ctx.beginPath(); ctx.moveTo(px + 4, py + 23); ctx.lineTo(px + 12, py + 9); ctx.moveTo(px + 28, py + 23); ctx.lineTo(px + 20, py + 9); ctx.stroke();
+  ctx.fillStyle = "#7a5a34"; ctx.fillRect(px + 2, py + 10, TS - 4, 5); ctx.fillRect(px + 2, py + 16, TS - 4, 5);
+  ctx.fillStyle = "#e5c23a"; ctx.fillRect(px + 2, py + 10, TS - 4, 1.8); ctx.fillStyle = "#1b1b18"; for (let k = 2; k < TS - 2; k += 6) ctx.fillRect(px + k, py + 10, 3, 1.8);
+}
+/** A sandbag wall an Engineering squad built: two courses of bags, staggered. */
+function sandbagArt(ctx: CanvasRenderingContext2D, px: number, py: number, x: number, y: number) {
+  ctx.fillStyle = "rgba(0,0,0,0.45)"; ctx.fillRect(px + 2, py + 8, TS - 2, TS - 6);
+  for (const [row, off] of [[0, 0], [1, 5], [2, 0]] as [number, number][]) for (let k = -1; k < 3; k++) {
+    const bx = px + off + k * 11 + 6, by = py + 6 + row * 8;
+    if (bx < px - 2 || bx > px + TS + 2) continue;
+    ctx.fillStyle = (k + row + Math.floor(noise(x, y, k + row * 5) * 2)) % 2 ? "#8a7a56" : "#7a6b4a";
+    ctx.beginPath(); ctx.ellipse(bx, by, 6, 3.6, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "rgba(40,32,20,.5)"; ctx.lineWidth = 0.7; ctx.stroke();
   }
 }
 
 // ---------- walls ----------
 function wall(ctx: CanvasRenderingContext2D, x: number, y: number, mat: Material | null, mass: string, map: MapId) {
   const px = x * TS, py = y * TS;
+  if (mat) { const im = tacImg(`tactical/wall/${mat}`); if (im) { ctx.drawImage(im, px, py, TS, TS); return; } }
   if (!mat) {
     // solid ground or roof with nothing open beside it
     ctx.fillStyle = mass; ctx.fillRect(px, py, TS, TS);
     if (THEME[map].under) { ctx.fillStyle = "rgba(255,255,255,0.025)"; for (let k = 0; k < 4; k++) ctx.fillRect(px + noise(x, y, k) * TS, py + noise(x, y, k + 9) * TS, 3, 2); }
     return;
   }
-  const f = FACE[mat], below = tileAt(x, y + 1) !== WALL, faceH = below ? 10 : 0;
+  const f = mat === "concrete" && (map === "wingC" || map === "dblock" || map === "lab") ? facilityLook(S.setup.year ?? 1951).wall : FACE[mat], below = tileAt(x, y + 1) !== WALL, faceH = below ? 10 : 0;
   ctx.fillStyle = f.top; ctx.fillRect(px, py, TS, TS - faceH);
   // the top of the wall: concrete gets panel seams, brick a coping course, timber a beam, metal ribs
   ctx.strokeStyle = f.line; ctx.lineWidth = 1; ctx.beginPath();
@@ -351,7 +380,7 @@ function wall(ctx: CanvasRenderingContext2D, x: number, y: number, mat: Material
   }
   ctx.stroke();
   // Site-19's walls carry a painted band at waist height
-  if (map === "wingC" || map === "dblock") { ctx.fillStyle = "rgba(70,105,90,0.55)"; ctx.fillRect(px, fy + faceH - 4, TS, 4); }
+  if (map === "wingC" || map === "dblock" || map === "lab") { ctx.fillStyle = facilityLook(S.setup.year ?? 1951).band; ctx.fillRect(px, fy + faceH - 4, TS, 4); }
   ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.fillRect(px, fy, TS, 1);
 }
 
@@ -385,6 +414,9 @@ function shadow(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, 
 }
 function halfCover(ctx: CanvasRenderingContext2D, x: number, y: number, a: string, sf: Surface, map: MapId) {
   const px = x * TS, py = y * TS, n = (k: number) => noise(x, y, k);
+  // a barrier the squad set up: drawn as one, from the mission's record of what was placed where
+  if (S.placedKit?.get(y * L.W + x) === "barricade") { const im = tacImg("tactical/prop/barricade"); if (im) ctx.drawImage(im, px, py, TS, TS); else barricadeArt(ctx, px, py); return; }
+  { const im = tacImg("tactical/prop/half"); if (im) { ctx.drawImage(im, px, py, TS, TS); return; } }
   // Phase 4C: pews in the nave, headstones in the graveyard
   if (/nave/.test(a)) {
     ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.fillRect(px + 2, py + 13, TS - 2, 12);
@@ -524,6 +556,8 @@ function crates(ctx: CanvasRenderingContext2D, px: number, py: number, two: bool
 
 function fullCover(ctx: CanvasRenderingContext2D, x: number, y: number, a: string, sf: Surface, map: MapId) {
   const px = x * TS, py = y * TS, n = (k: number) => noise(x, y, k);
+  if (S.placedKit?.get(y * L.W + x) === "sandbags") { const im = tacImg("tactical/prop/sandbags"); if (im) ctx.drawImage(im, px, py, TS, TS); else sandbagArt(ctx, px, py, x, y); return; }
+  { const im = tacImg("tactical/prop/full"); if (im) { ctx.drawImage(im, px, py, TS, TS); return; } }
   // Phase 4C: boxcars on the tracks and shipping containers on a freighter's deck, drawn as one long body per run
   if (/rail tracks|deck/.test(a)) {
     const left = tileAt(x - 1, y) === FULL, right = tileAt(x + 1, y) === FULL, deck = /deck/.test(a);

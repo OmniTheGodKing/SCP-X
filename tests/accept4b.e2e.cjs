@@ -43,6 +43,8 @@ const FREE = `(x, y, n) => { const A = window.__site19, S = A.mission, G = A.gri
       const front = [[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]][d.facing ?? 0];
       const fx = d.x + front[0], fy = d.y + front[1];
       for (const o of ops) { o.x = 1; o.y = 1; }
+      // the random spawn can leave someone already facing it at the start: begin this check from a calm 096
+      S.rage = undefined;
       const m = ops[0]; m.x = fx; m.y = fy; m.eyesDown = true; A.computeVis(); X.check096();
       out.eyesDownSafe = !S.rage;
       out.canHood = X.hoodTargets(m).length === 1;

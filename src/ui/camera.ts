@@ -39,7 +39,7 @@ export function frame(bx0: number, by0: number, bx1: number, by1: number, vw: nu
   cam.zMax = Math.max(2.6, fit * 1.5);
   if (!cam.ready || (changed && !keep)) {
     // open on the whole map when it fits at a readable size; otherwise at a comfortable tactical zoom
-    cam.tz = cam.z = Math.max(fit, Math.min(1.35, 48 / TS));
+    cam.tz = Math.max(fit, Math.min(1.35, 48 / TS)); cam.z = cam.tz * 0.78;   // eases in from a little further out
     cam.tx = cam.x = (bx0 + bx1) / 2; cam.ty = cam.y = (by0 + by1) / 2;
     cam.ready = true;
   }

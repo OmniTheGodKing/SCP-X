@@ -4,7 +4,7 @@
 // pool of specialist kit per squad (the same object in every member's item bar), participants who must be beside the
 // user. Balance numbers come from data/specialties.ts.
 import { rnd } from "../core/rng";
-import { DIRS, DRUM, EXIT, FLOOR, FULL, HALF, L, PART, STEEL, WALL, bump, cheb, passable, tileAt } from "../core/grid";
+import { TS, DIRS, DRUM, EXIT, FLOOR, FULL, HALF, L, PART, STEEL, WALL, bump, cheb, passable, tileAt } from "../core/grid";
 import { coverSides } from "../core/geom";
 import { KITS, SQUAD_BALANCE, TECHS, type TechDef } from "../data/specialties";
 import type { SpecialtyId } from "../data/mtf";
@@ -123,6 +123,7 @@ export function place(u: Unit, it: { id: ItemId; uses: number }, x: number, y: n
   if (placeCheck(u, it.id) || !placeValid(u, it.id, x, y)) return false;
   spendTech(u, id, it);
   const i = idx(x, y), t = tileAt(x, y), d = door(x, y);
+  S.effects.push({ type: "cue", t0: performance.now(), dur: 600, x: u.x * TS + TS / 2, y: u.y * TS + TS / 2, cue: "place" });
   switch (it.id) {
     case "breach_charge": case "demo_charge": {
       const heavy = it.id === "demo_charge";
@@ -141,12 +142,12 @@ export function place(u: Unit, it: { id: ItemId; uses: number }, x: number, y: n
       break;
     }
     case "barricade":
-      L.grid[y][x] = HALF; bump();
+      L.grid[y][x] = HALF; (S.placedKit ??= new Map()).set(i, "barricade"); bump();
       log(`${full(u)} sets up a portable barrier: half cover, and in the way.`, "key");
       break;
     case "sandbags":
-      if (d && d.state === "destroyed") { d.state = "closed"; log(`${full(u)} rehangs the blown door with timber and wire.`, "key"); }
-      else { L.grid[y][x] = FULL; log(`${full(u)} sandbags the position: full cover.`, "key"); }
+      if (d && d.state === "destroyed") { d.state = "closed"; (S.placedKit ??= new Map()).set(i, "rehung"); log(`${full(u)} rehangs the blown door with timber and wire.`, "key"); }
+      else { L.grid[y][x] = FULL; (S.placedKit ??= new Map()).set(i, "sandbags"); log(`${full(u)} sandbags the position: full cover.`, "key"); }
       bump();
       break;
     case "cordon_kit": {
