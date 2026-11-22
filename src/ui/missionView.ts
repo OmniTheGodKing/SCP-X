@@ -562,7 +562,8 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
         h = `<b>${sel.call} → ${who}: ${s.chance}% to hit</b>${s.crit ? `, ${s.crit}% crit` : ""}${activeGun(sel) ? ` · ${activeGun(sel)!.name}, ${activeGun(sel)!.dmg[0]}–${activeGun(sel)!.dmg[1]} damage` : ""}${sel.gun?.attachment === "bayonet" && Math.max(Math.abs(sel.x - hv.x), Math.abs(sel.y - hv.y)) <= 1 ? " · bayonet: a sure 3" : ""}${fw ? `\n<b>${esc(fw)}</b>` : ""}\n` + s.mods.map(m => `${m[0]} ${m[1] >= 0 ? "+" : ""}${m[1]}`).join(" · ");
       } else if (!sealCheck(sel)) h = `<b>${sel.call} can seal the container now.</b> Press S.`;
       else if (sel.staring) h = `<b>${esc(full(sel))} is staring</b>, ${sel.ap} action${sel.ap === 1 ? "" : "s"}.\nThey can move anywhere that keeps sight of SCP-173. Press B to look away (free).`;
-      else h = `<b>${esc(full(sel))}</b>, ${sel.ap} action${sel.ap === 1 ? "" : "s"}.\nClick a tile to move (blue costs 1, amber costs 2).${sel.side === "mtf" ? " Click a visible Insurgent to fire." : " D-Class are unarmed."}${S.has173 ? " Next to SCP-173, press G to drag it." : ""}${matchMedia("(pointer: coarse)").matches ? " Tap twice to confirm." : ""}`;
+      // routine play needs no paragraph: the first turn explains moving and firing once, after that the hint stays quiet
+      else h = S.turn <= 1 && !S.setup.lab ? `<b>${esc(full(sel))}</b> · ${sel.ap} action${sel.ap === 1 ? "" : "s"}\nClick a tile to move (blue costs 1, amber 2)${sel.side === "mtf" ? ", a visible enemy to fire" : ""}. Drag to pan, wheel to zoom.` : "";
     } else h = "No one has actions left. End the turn.";
     if (can && S.enemySummary && !hintFlash) h = `<span class="esum">${esc(S.enemySummary)}</span>\n${h}`;
     $("hint").innerHTML = h;

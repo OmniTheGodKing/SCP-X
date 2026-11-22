@@ -170,7 +170,7 @@ export function openLab(root: HTMLElement, onExit: () => void, spec?: SandboxSpe
   const tr = (sc as { trial?: TrialSpec }).trial; if (tr) applyTrial(tr);
   lab.viewer = S.units.find(u => u.side === "mtf")?.id ?? S.units[0]?.id ?? "";
   mountMission(root, () => { teardown(); onExit(); }, () => "");
-  root.querySelector("main.tac")?.classList.add("lab"); cam.insets.r = 360;
+  root.querySelector("main.tac")?.classList.add("lab"); cam.insets.r = 360; cam.occluded.r = 0;
   const panel = document.createElement("div");
   panel.id = "labPanel";
   panel.setAttribute("style", "position:fixed;top:8px;right:8px;width:340px;max-height:calc(100vh - 16px);overflow:auto;z-index:50;background:#14181c;color:#e7ecf0;border:1px solid #3a434b;border-radius:6px;padding:8px;font:12px/1.4 IBM Plex Mono,monospace;box-shadow:0 4px 18px rgba(0,0,0,.5)");
@@ -328,7 +328,7 @@ export function openLab(root: HTMLElement, onExit: () => void, spec?: SandboxSpe
   // the panel follows the hover and every change in the mission
   const prevUpdate = hooks.update;
   hooks.update = () => { prevUpdate(); const box = panel.querySelector("#labInfo"); if (box) box.innerHTML = info(); const tc = panel.querySelector("#labTrial"); if (tc) tc.innerHTML = trialCard(); };
-  function teardown() { cam.insets.r = 0; tapHook.fn = null; overlayHook.fn = null; panel.remove(); }
+  function teardown() { cam.insets.r = 0; cam.occluded.r = 312; tapHook.fn = null; overlayHook.fn = null; panel.remove(); }
   refresh();
 }
 /** Thick smoke the turn it's thrown (the lab keeps it thick until removed). */

@@ -661,7 +661,7 @@ main.tac .actionbar .act .cost i { width: 5px; height: 5px; background: var(--ma
 main.tac .actionbar .act .cost.end { font-size: 9px; color: var(--muted); }
 main.tac .actionbar .act .cd { position: absolute; bottom: 2px; right: 3px; font-family: var(--font-mono); font-size: 9.5px; color: var(--alert); }
 main.tac .actionbar .act .cd::before { content: "⟳"; margin-right: 1px; }
-main.tac .actionbar .act .nb { position: absolute; bottom: 1px; left: 0; right: 0; font-size: 8.5px; color: var(--alert); text-transform: uppercase; letter-spacing: .05em; }
+main.tac .actionbar .act .nb { position: absolute; top: 2px; left: 3px; right: auto; font-size: 8.5px; color: var(--alert); text-transform: uppercase; letter-spacing: .05em; }
 main.tac .grp.turn { gap: 6px; }
 main.tac .grp.turn .act { min-width: 70px; }
 main.tac .grp.turn #endBtn { min-width: 96px; background: var(--manila); color: #1b1710; border-color: var(--manila); font-weight: 600; }
@@ -687,3 +687,7 @@ main.tac .hud-obj .status { border: 0; border-left: 2px solid var(--alert); }
 main.tac .hud-obj .status.done { border-left-color: var(--ok); }
 main.tac .hud-obj .status.held { border-left-color: var(--manila); }
 main.tac .drawer.file { padding: 0; background: var(--plate); color: var(--ink); }
+main.tac #cv { border: 0; margin: 0; max-width: none; max-height: none; }
+main.tac .hud-obj, main.tac .hud-right { top: 68px; }
+main.tac .hud-obj { max-height: calc(44vh - 68px); }
+@media (max-height: 760px) { main.tac .hud-obj { max-height: calc(40vh - 72px); } }

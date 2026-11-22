@@ -12,6 +12,8 @@ export const cam = {
   vw: 0, vh: 0,
   /** Screen edges covered by HUD: the map is framed inside what's left. */
   insets: { t: 64, r: 0, b: 132, l: 0 } as Insets,
+  /** Screen edges the side panels cover (the map still shows under them, but nothing is focused there). */
+  occluded: { t: 0, r: 312, b: 0, l: 260 } as Insets,
   /** The playable rectangle in world pixels (one floor on multi-floor maps). */
   bx0: 0, by0: 0, bx1: 0, by1: 0,
   zMin: 0.5, zMax: 3, zFit: 1,
@@ -101,11 +103,15 @@ export function zoomAt(sx: number, sy: number, factor: number) {
 /** Bring a world point into view: always when `force`, otherwise only when it is near or past the edge of the
  *  free area (routine selection doesn't swing the camera about). */
 export function focus(wx: number, wy: number, force = false) {
+  // the side panels cover the map's edges: "in view" means inside the uncovered middle, and a focused point is
+  // brought to the middle of that, not merely to the centre of the screen
+  const o = cam.occluded, l = Math.min(o.l, cam.vw * 0.3), r = Math.min(o.r, cam.vw * 0.3);
   const [sx, sy] = [centreX() + (wx - cam.tx) * cam.tz, centreY() + (wy - cam.ty) * cam.tz];
-  const mx = areaW() * 0.22, my = areaH() * 0.22;
-  const inside = sx > cam.insets.l + mx && sx < cam.vw - cam.insets.r - mx && sy > cam.insets.t + my && sy < cam.vh - cam.insets.b - my;
+  const x0 = Math.max(cam.insets.l, l), x1 = cam.vw - Math.max(cam.insets.r, r), mx = (x1 - x0) * 0.15, my = areaH() * 0.18;
+  const inside = sx > x0 + mx && sx < x1 - mx && sy > cam.insets.t + my && sy < cam.vh - cam.insets.b - my;
   if (!force && inside) return;
-  cam.tx = wx; cam.ty = wy; clampTargets();
+  const want = (x0 + x1) / 2;
+  cam.tx = wx - (want - centreX()) / cam.tz; cam.ty = wy; clampTargets();
 }
 export function zoomBy(factor: number) { zoomAt(centreX(), centreY(), factor); }
 /** Show the whole playable area. */
