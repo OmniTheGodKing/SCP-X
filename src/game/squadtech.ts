@@ -56,6 +56,8 @@ export function techCost(u: Unit, id: string) {
 }
 const cdKey = (u: Unit, id: string) => `${u.squadId ?? "x"}:${id}`;
 const cooldownLeft = (u: Unit, id: string) => { ensure(); return Math.max(0, (S.squadCd![cdKey(u, id)] ?? 0) - S.turn); };
+/** Turns until the squad can use it again (0 = ready). */
+export const techCooldown = (u: Unit, id: string) => cooldownLeft(u, id);
 /** Why it can't be used right now, or null. */
 export function techWhy(u: Unit, id: string): string | null {
   const t = TECHS[id];

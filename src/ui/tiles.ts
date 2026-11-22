@@ -767,3 +767,21 @@ function roomLabels(ctx: CanvasRenderingContext2D, areas: string[]) {
     ctx.fillText(a.toUpperCase(), b.x0 * TS + 4, b.y0 * TS + 3);
   }
 }
+
+/** The ground beyond the map's edge, as a repeating pattern: bedrock around an underground site, earth and verge
+ *  around a town or farm, water around a ship. Drawn in world space so it pans and zooms with the map. */
+export function backdropPattern(ctx: CanvasRenderingContext2D): CanvasPattern | string {
+  const map = (S.setup.map ?? "wingC") as MapId, th = THEME[map] ?? THEME.wingC;
+  const n = 128, cv = document.createElement("canvas"); cv.width = cv.height = n;
+  const g = cv.getContext("2d"); if (!g) return th.mass;
+  const kind = th.under ? "rock" : map === "ship" ? "water" : map === "port" || map === "gate" ? "yard" : "earth";
+  const base = { rock: "#101316", water: "#0c1820", yard: "#16191b", earth: "#161812" }[kind];
+  g.fillStyle = base; g.fillRect(0, 0, n, n);
+  for (let k = 0; k < 220; k++) {
+    const x = noise(k, 3, 1) * n, y = noise(k, 7, 2) * n, r = 1 + noise(k, 9, 3) * (kind === "rock" ? 5 : 3);
+    g.fillStyle = kind === "water" ? `rgba(90,140,160,${0.04 + noise(k, 1, 4) * 0.05})` : kind === "earth" ? `rgba(${70 + noise(k, 2, 5) * 40},${80 + noise(k, 4, 6) * 30},50,${0.08 + noise(k, 5, 7) * 0.08})` : `rgba(255,255,255,${0.015 + noise(k, 6, 8) * 0.03})`;
+    if (kind === "water") g.fillRect(x, y, r * 4, 1); else { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); }
+  }
+  if (kind === "rock") { g.strokeStyle = "rgba(0,0,0,0.35)"; g.lineWidth = 1; for (let k = 0; k < 6; k++) { g.beginPath(); g.moveTo(noise(k, 11, 1) * n, noise(k, 12, 1) * n); g.lineTo(noise(k, 13, 1) * n, noise(k, 14, 1) * n); g.stroke(); } }
+  return ctx.createPattern(cv, "repeat") ?? base;
+}

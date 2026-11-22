@@ -48,10 +48,10 @@ async function stage(b, url, audio) {
 const shotNow = p => p.evaluate(() => { const A = window.__site19, S = A.mission; const m = S.units.find(u => u.side === 'mtf' && u.alive), r = S.units.find(u => u.side === 'raider' && u.alive); m.ap = 2; return A.fire(m, r, false).then(() => S.effects.map(e => e.type)); });
 const clickShot = async p => {
   // the pre-4G build has no fire handle: shoot through the canvas as a player would
-  const xy = await p.evaluate(() => { const S = window.__site19.mission, G = window.__site19.grid, cv = document.querySelector('#cv').getBoundingClientRect();
+  const xy = await p.evaluate(() => { const S = window.__site19.mission;
     const m = S.units.find(u => u.side === 'mtf' && u.alive); S.selected = m; m.ap = 2; const r = S.units.find(u => u.side === 'raider' && u.alive);
-    return [cv.x + (r.x + 0.5) * cv.width / G.W, cv.y + (r.y + 0.5) * cv.height / G.H]; });
-  await p.mouse.click(xy[0], xy[1]);
+    return [r.x, r.y]; });
+  await require('./lib.cjs').clickTile(p, xy[0], xy[1]);
 };
 async function enemyTurns(p, n) {
   const times = [];
@@ -86,9 +86,9 @@ const avg = xs => Math.round(xs.reduce((a, b) => a + b, 0) / xs.length);
     const p = s.p;
     const kinds = shotNow(p);
     await p.waitForTimeout(90);
+    const shot = await p.evaluate(() => window.__site19.mission.effects.find(e => e.type === 'line'));
     await (await p.$('#cv')).screenshot({ path: SP + '4g-after.png' });
     const k = await kinds;
-    const shot = await p.evaluate(() => window.__site19.mission.effects.find(e => e.type === 'line'));
     check('a shot is a travelling tracer that lands with an impact', !!shot && !!shot.impact && shot.rounds >= 1, JSON.stringify(shot && { impact: shot.impact, rounds: shot.rounds, dur: Math.round(shot.dur) }));
     check('the shot says why: a number, MISS, COVER or GRAZE', k.includes('text'), k.join(','));
     // an explosion, frozen mid-blast, for the record
@@ -96,7 +96,7 @@ const avg = xs => Math.round(xs.reduce((a, b) => a + b, 0) / xs.length);
     await p.waitForTimeout(160);
     await (await p.$('#cv')).screenshot({ path: SP + '4g-blast.png' });
     await p.waitForTimeout(1500);
-    const shookOn = await p.evaluate(() => window.__shook);
+    const shookOn = await p.evaluate(() => window.__site19.camera ? window.__site19.camera.cam.shakeFrames : window.__shook);
     check('with highlights on, a big moment shakes the map (control)', shookOn > 0, `shake frames ${shookOn}`);
     const normal = await enemyTurns(p, TURNS);
     const hint = await p.$eval('#hint', e => e.textContent);
@@ -120,7 +120,7 @@ const avg = xs => Math.round(xs.reduce((a, b) => a + b, 0) / xs.length);
     await p.evaluate(() => { const S = window.__site19.mission; S.effects.push({ type: 'jolt', t0: performance.now(), dur: 380, mag: 6, color: '#d75b47' }, { type: 'blast', t0: performance.now(), dur: 700, x: 300, y: 260, r: 2 }); });
     await p.waitForTimeout(600);
     await enemyTurns(p, 1);
-    const shook = await p.evaluate(() => window.__shook);
+    const shook = await p.evaluate(() => window.__site19.camera ? window.__site19.camera.cam.shakeFrames : window.__shook);
     check('with highlights off, a turn of play shows no shake', shook === 0, `shake frames ${shook}`);
     check('highlights-off run without errors', !s.errs.length, s.errs.join(' | '));
     await p.close();

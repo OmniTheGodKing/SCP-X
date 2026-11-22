@@ -40,6 +40,7 @@ import { bindCampaign } from "./campaign/org";
 import * as org from "./campaign/org";
 import * as squadtech from "./game/squadtech";
 import * as gridMod from "./core/grid";
+import * as cameraMod from "./ui/camera";
 import * as campaignMod from "./campaign/campaign";
 import * as autoteam from "./campaign/autoteam";
 import * as researchMod from "./campaign/research";
@@ -219,6 +220,9 @@ function showHub() {
   org, autoteam, research: researchMod, security: securityMod,
   // Version 12: squad techniques in a mission
   squadtech, campaignMod, gridMod,
+  // tactical camera: where a tile's centre is on screen now (client px), with the camera settled, for the tests
+  tileToScreen: (x: number, y: number) => { cameraMod.cam.x = cameraMod.cam.tx; cameraMod.cam.y = cameraMod.cam.ty; cameraMod.cam.z = cameraMod.cam.tz; const r = document.querySelector("#cv")!.getBoundingClientRect(); const [a, b] = cameraMod.tileToScreen(x, y); return [r.left + a, r.top + b]; },
+  camera: cameraMod,
 };
 
 function showLab() { screen = "mission"; openLab(root, () => { endMission(); showHub(); }); }

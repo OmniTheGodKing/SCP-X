@@ -1,7 +1,7 @@
 // Tactical overhaul T6.2: the tactical lab. It opens from #lab, loads presets, paints walls that change sight at once,
 // shows the same hit chance as the game's own shot rules, runs the AI, and saves and reloads a scenario.
 const { chromium } = require('playwright');
-const { GAME_URL, OUT, reporter } = require('./lib.cjs');
+const { GAME_URL, OUT, reporter, clickTile, hoverTile } = require('./lib.cjs');
 (async () => {
   const b = await chromium.launch(); const { check, done } = reporter();
   const p = await b.newPage({ viewport: { width: 1500, height: 1000 } });
@@ -18,9 +18,8 @@ const { GAME_URL, OUT, reporter } = require('./lib.cjs');
 
   // hover an Insurgent on the open-room preset: the panel's shot equals the rule's
   await p.selectOption('#labPreset', 'room'); await p.waitForTimeout(300);
-  const box = await (await p.$('#cv')).boundingBox();
   const tgt = await E(() => { const S = window.__site19.mission, G = window.__site19.grid; const r = S.units.find(u => u.side === 'raider'); return { x: r.x, y: r.y, W: G.W, H: G.H }; });
-  await p.mouse.move(box.x + (tgt.x + 0.5) / tgt.W * box.width, box.y + (tgt.y + 0.5) / tgt.H * box.height); await p.waitForTimeout(250);
+  await hoverTile(p, tgt.x, tgt.y); await p.waitForTimeout(250);
   const shot = await E(() => { const A = window.__site19, S = A.mission; const m = S.units.find(u => u.side === 'mtf'), r = S.units.find(u => u.side === 'raider');
     const txt = document.getElementById('labInfo').textContent; return { txt: txt.slice(0, 400), chance: A.canShoot(m, r) ? A.shotInfo(m, r).chance : null }; });
   check('the panel shows the same hit chance as the shot rules', shot.chance === null ? /Shot:\s*none/.test(shot.txt) : shot.txt.includes(`Shot: ${shot.chance}%`), shot);
@@ -30,7 +29,7 @@ const { GAME_URL, OUT, reporter } = require('./lib.cjs');
   const wall = await E(() => { const A = window.__site19, S = A.mission, G = A.grid; const m = S.units.find(u => u.side === 'mtf'), r = S.units.find(u => u.side === 'raider'); return { mx: m.x, my: m.y, rx: r.x, ry: r.y, before: A.canSee(m, r.x, r.y), W: G.W, H: G.H }; });
   await p.click('[data-tool="#"]');
   const wx = Math.floor((wall.mx + wall.rx) / 2);
-  for (let y = 1; y < wall.H - 1; y++) await p.mouse.click(box.x + (wx + 0.5) / wall.W * box.width, box.y + (y + 0.5) / wall.H * box.height);
+  for (let y = 1; y < wall.H - 1; y++) await clickTile(p, wx, y);
   const after = await E(w => { const A = window.__site19, S = A.mission; const m = S.units.find(u => u.side === 'mtf'); return A.canSee(m, w.rx, w.ry); }, wall);
   check('painting a wall across the room cuts the line of sight at once', wall.before && !after, { before: wall.before, after });
 
@@ -38,8 +37,7 @@ const { GAME_URL, OUT, reporter } = require('./lib.cjs');
   await p.selectOption('#labPreset', 'dugin'); await p.waitForTimeout(300);
   await p.click('[data-tool="inspect"]');
   const r1 = await E(() => { const S = window.__site19.mission, G = window.__site19.grid; const r = S.units.find(u => u.side === 'raider'); return { x: r.x, y: r.y, W: G.W, H: G.H }; });
-  const box2 = await (await p.$('#cv')).boundingBox();
-  await p.mouse.click(box2.x + (r1.x + 0.5) / r1.W * box2.width, box2.y + (r1.y + 0.5) / r1.H * box2.height);
+  await clickTile(p, r1.x, r1.y);
   await E(() => { window.__site19.pace.headless = true; });
   await p.click('[data-show="ai"]'); await p.waitForTimeout(200);
   await p.click('#labAI'); await p.waitForTimeout(300);

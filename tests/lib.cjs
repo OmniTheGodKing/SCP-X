@@ -38,4 +38,14 @@ async function openRoomTab(p, t) {
   await p.click(`[data-tab="${t}"]`); await p.waitForTimeout(60);
   if (t === 'command' || t === 'research') { const b = await p.$('.dept [data-enter]'); if (b) { await b.click(); await p.waitForTimeout(120); } }
 }
-module.exports = { ROOT, GAME_URL, OUT, close, dbg, fresh, reporter, openTarget, planIncident, openRoomTab };
+/** Tactical camera: where a tile's centre is on screen (client px), and a click or hover on that tile sent to the
+ *  battlefield canvas itself (the HUD may cover part of the map; the camera conversion is what's under test). */
+const tileXY = (p, x, y) => p.evaluate(([x, y]) => window.__site19.tileToScreen(x, y), [x, y]);
+async function clickTile(p, x, y) {
+  await p.evaluate(([x, y]) => { const [cx, cy] = window.__site19.tileToScreen(x, y), cv = document.querySelector('#cv'), o = { clientX: cx, clientY: cy, bubbles: true, button: 0, pointerType: 'mouse', pointerId: 1 };
+    cv.dispatchEvent(new PointerEvent('pointerdown', o)); cv.dispatchEvent(new PointerEvent('pointerup', o)); cv.dispatchEvent(new MouseEvent('click', o)); }, [x, y]);
+}
+async function hoverTile(p, x, y) {
+  await p.evaluate(([x, y]) => { const [cx, cy] = window.__site19.tileToScreen(x, y); document.querySelector('#cv').dispatchEvent(new PointerEvent('pointermove', { clientX: cx, clientY: cy, bubbles: true, pointerType: 'mouse', pointerId: 1, buttons: 0 })); }, [x, y]);
+}
+module.exports = { tileXY, clickTile, hoverTile, ROOT, GAME_URL, OUT, close, dbg, fresh, reporter, openTarget, planIncident, openRoomTab };

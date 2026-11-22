@@ -1,5 +1,8 @@
 // The mission screen: map, SCP-173 status, squad, actions, containment file and incident log.
-import { PLACED_TECH } from "../game/squadtech";
+import { PLACED_TECH, techCooldown, techCost } from "../game/squadtech";
+import { SPECIALTIES, SPECS } from "../data/mtf";
+import { icon, iconFor } from "./hudicons";
+import * as camera from "./camera";
 import { TECHS } from "../data/specialties";
 import { overwatchCheck } from "../game/actions";
 import { MISSION_STEPS } from "./tutorial";
@@ -59,82 +62,99 @@ const NEW_INFO: Record<string, { name: string; title: string; cls: string; objec
 };
 
 const TEMPLATE = `
-<main class="wrap">
-  <header class="top">
-    <div>
+<main class="tac">
+  <canvas id="cv" aria-label="Tactical map"></canvas>
+  <div class="overlay" id="overlay" hidden><div class="sheet" id="overlaySheet"></div></div>
+
+  <header class="hud-top">
+    <div class="hud-title">
       <div class="eyebrow" id="mEyebrow"></div>
       <h1 id="mTitle">SCP-173 Recontainment <small>“The Sculpture” · Euclid</small></h1>
     </div>
     <div class="turnbox">
-      <span class="pill" id="turnPill">Turn 1</span>
+      <span class="pill turn" id="turnPill">Turn 1</span>
       <span class="pill" id="phasePill">Your move</span>
       <span class="pill hot" id="sirenPill" hidden title="The breach siren: nobody recovers sanity on quiet turns, but SCP-173 can't hear where shots come from. Silence it at the panel.">Siren</span>
       <span class="pill" id="nightPill" hidden title="Night: away from lights, figures are only shapes until close (unknown contacts); lit rooms, flares and fires show them clearly.">Night</span>
       <span class="pill" id="weatherPill" hidden></span>
       <span class="pill" id="concealPill" hidden title="Insurgents haven't noticed the team. They only spot you within 4 tiles. Firing or throwing anything gives you away.">Concealed</span>
+    </div>
+    <div class="hud-sys">
+      <span class="camctl" role="group" aria-label="Camera">
+        <button class="ib" type="button" id="camIn" title="Zoom in (+ or mouse wheel)">${icon("zoomin")}</button>
+        <button class="ib" type="button" id="camOut" title="Zoom out (−)">${icon("zoomout")}</button>
+        <button class="ib" type="button" id="camAll" title="Whole map (Home)">${icon("overview")}</button>
+        <button class="ib" type="button" id="camSel" title="Centre on the selected operative (Space)">${icon("centre")}</button>
+      </span>
       <span id="sndSlot"></span>
       <button class="act" id="evacBtn" type="button" title="Ends the mission. Anyone who hasn't left through an exit is left behind.">Abort mission</button>
     </div>
   </header>
+  <div class="floorbar" id="floorBar" hidden></div>
+  <div class="coach" id="coachBox" hidden></div>
 
-  <div class="card coach" id="coachBox" hidden></div>
-  <div class="layout">
-    <section class="board" aria-label="Tactical map">
-      <div class="floorbar" id="floorBar" hidden></div>
-      <canvas id="cv"></canvas>
-      <div class="legend" id="legend"></div>
-      <details class="rules" open>
-        <summary>How this works</summary>
-        <div id="objRule"><b>Objective.</b> Get SCP-173 into the transport container at the dock in the southwest staging room, with nobody else inside, then have an operative seal it.</div>
-        <div><b>Do not blink.</b> Anyone on your team locks eyes on SCP-173 when they first see it, which costs 1 action. While staring they get one action per turn and can move anywhere that keeps sight of it. Looking away is free.</div>
-        <div><b>Blinks.</b> Everyone has a chance to blink each turn. D-Class blink more than operatives, and everyone blinks more as sanity falls. SCP-173 can only move when nobody with their eyes open can see it.</div>
-        <div><b>SCP-173 hunts.</b> It moves up to 8 tiles a turn and freezes the moment it steps into anyone's sight. It kills anyone it reaches while unseen (someone mid-blink, looking away or with their eyes shut) and keeps going. It can't see through walls, but it hears gunfire. It passes straight through the container, so drag it in.</div>
-        <div><b>Dragging.</b> Anyone next to SCP-173 can drag it once per turn while someone else stares at it: D-Class up to 2 tiles, operatives 1. It costs 5 sanity, and afterwards the dragger looks straight back at it.</div>
-        <div><b>Sanity</b> recovers on quiet turns: anyone not staring who lost no sanity that turn regains 5 (operatives) or 4 (D-Class).</div>
-        <div><b>Cover</b> only stops gunfire, and only when it sits between shooter and target. SCP-173 ignores it.</div>
-        <div><b>Sight and shooting.</b> One line of sight decides seeing and shooting: someone is in view when at least 3 of 5 points on their figure can be seen, from the viewer's own tile or leaning out past the end of the cover beside them (no leaning out sideways from the middle of a row of crates). Someone standing by cover leans out to watch too, so they can be seen and shot from in front, at their cover's value. Smoke stops sight; only reinforced glass stops a shot that could be seen. Cover is whatever the shot passes through right beside the target: walls, pillars and crates are full cover (−40), desks, drums and window sills half (−20); with nothing there, the target is flanked (+10, and crits possible). Misses that cover catches wear it down: a crate shot to pieces is half cover, then rubble. A miss by less than 10 points grazes for half damage. Each weapon has its own good range (hover a target for the numbers).</div>
-        <div><b>Seeing in the dark.</b> In view isn't the same as made out. Distance, light, weather, smoke and movement decide whether a figure is a shape (an unknown contact, ?) or identified. Lit rooms, flares, fires and muzzle flashes help; still figures in cover are harder to spot. An unknown contact can be fired on at −10, whoever it turns out to be.</div>
-        <div><b>Going down.</b> An operative at 0 HP is down and bleeds out in 3 turns. A medic with Stabilize can save them; otherwise they survive only if the mission is won first.</div>
-        <div><b>Equipment.</b> Armor adds HP and armor points; each point cuts the damage of every hit by 1. Eye drops save one blink while staring. Flashbangs blind everyone within a tile of where they land until next turn, including anyone holding SCP-173. Smoke blocks all sight for two turns. Motion trackers show anything within 6 tiles, through walls.</div>
-        <div><b>The Insurgency</b> holds SCP-173 with their eyes too, and loses sanity doing it. When they crack, they cover their eyes and SCP-173 is free to go after them.</div>
-      </details>
-      <div class="overlay" id="overlay" hidden><div class="sheet" id="overlaySheet"></div></div>
-    </section>
+  <aside class="hud-obj" aria-label="Objectives">
+    <div class="status" id="statusCard">
+      <div class="label" id="statusLabel">SCP-173 status</div>
+      <p class="objshort" id="objShort" title="Click for the full brief"></p>
+      <div class="status-line" id="statusLine"></div>
+      <div class="optional" id="optList"></div>
+    </div>
+  </aside>
 
-    <aside class="side">
-      <div class="card status" id="statusCard">
-        <div class="label" id="statusLabel">SCP-173 status</div>
-        <div class="status-line" id="statusLine"></div>
-        <div class="optional" id="optList"></div>
-      </div>
-      <div class="card">
-        <div class="label" id="squadLabel">Mobile Task Force Epsilon-11 “Nine-Tailed Fox”</div>
-        <div class="squad" id="squad"></div>
-      </div>
-      <div class="file" id="fileCard">
-        <div class="label">SCP Foundation · Secure. Contain. Protect.</div>
-        <h2>SCP-173 · The Sculpture</h2>
-        <ol id="notes"></ol>
-      </div>
-      <div class="card">
-        <div class="label">Incident log</div>
-        <div class="log" id="log" aria-live="polite"></div>
-      </div>
-    </aside>
-  </div>
-  <!-- the selected operative's actions sit along the bottom of the screen, as in XCOM, so the map stays in view -->
+  <aside class="hud-roster" aria-label="Squad">
+    <div class="label" id="squadLabel">Mobile Task Force Epsilon-11 “Nine-Tailed Fox”</div>
+    <div class="squad" id="squad"></div>
+  </aside>
+
+  <aside class="hud-right">
+    <details class="drawer" id="logDrawer" open><summary>Incident log</summary><div class="log" id="log" aria-live="polite"></div></details>
+    <details class="drawer"><summary>Map key</summary><div class="legend" id="legend"></div></details>
+    <details class="drawer rules" id="manual">
+      <summary>Field manual</summary>
+      <div id="objRule"><b>Objective.</b> Get SCP-173 into the transport container at the dock in the southwest staging room, with nobody else inside, then have an operative seal it.</div>
+      <div><b>Do not blink.</b> Anyone on your team locks eyes on SCP-173 when they first see it, which costs 1 action. While staring they get one action per turn and can move anywhere that keeps sight of it. Looking away is free.</div>
+      <div><b>Blinks.</b> Everyone has a chance to blink each turn. D-Class blink more than operatives, and everyone blinks more as sanity falls. SCP-173 can only move when nobody with their eyes open can see it.</div>
+      <div><b>SCP-173 hunts.</b> It moves up to 8 tiles a turn and freezes the moment it steps into anyone's sight. It kills anyone it reaches while unseen (someone mid-blink, looking away or with their eyes shut) and keeps going. It can't see through walls, but it hears gunfire. It passes straight through the container, so drag it in.</div>
+      <div><b>Dragging.</b> Anyone next to SCP-173 can drag it once per turn while someone else stares at it: D-Class up to 2 tiles, operatives 1. It costs 5 sanity, and afterwards the dragger looks straight back at it.</div>
+      <div><b>Sanity</b> recovers on quiet turns: anyone not staring who lost no sanity that turn regains 5 (operatives) or 4 (D-Class).</div>
+      <div><b>Cover</b> only stops gunfire, and only when it sits between shooter and target. SCP-173 ignores it.</div>
+      <div><b>Sight and shooting.</b> One line of sight decides seeing and shooting: someone is in view when at least 3 of 5 points on their figure can be seen, from the viewer's own tile or leaning out past the end of the cover beside them. Smoke stops sight; only reinforced glass stops a shot that could be seen. Walls, pillars and crates are full cover (−40), desks, drums and window sills half (−20); with nothing there, the target is flanked (+10, and crits possible). A miss by less than 10 points grazes for half damage.</div>
+      <div><b>Seeing in the dark.</b> Distance, light, weather, smoke and movement decide whether a figure is a shape (an unknown contact, ?) or identified. An unknown contact can be fired on at −10.</div>
+      <div><b>Going down.</b> An operative at 0 HP is down and bleeds out in 3 turns. A medic with Stabilize can save them; otherwise they survive only if the mission is won first.</div>
+      <div><b>Camera.</b> Drag the map (or hold the right button) to pan, mouse wheel or + and − to zoom, arrow keys to pan, Home for the whole map, Space to centre on the selected operative.</div>
+    </details>
+    <details class="drawer file" id="fileCard">
+      <summary>SCP-173 file</summary>
+      <h2>SCP-173 · The Sculpture</h2>
+      <ol id="notes"></ol>
+    </details>
+  </aside>
+
+  <div class="hint" id="hint"></div>
   <div class="actionbar" id="actionBar" role="toolbar" aria-label="Actions">
-    <div class="hint" id="hint"></div>
+    <div class="selpanel" id="selPanel"></div>
     <div class="actions">
-      <button class="act" id="stareBtn" type="button">Do not blink <kbd>B</kbd></button>
-      <button class="act" id="callBtn" type="button">Call the blink <kbd>C</kbd></button>
-      <button class="act" id="dragBtn" type="button">Drag <kbd>G</kbd></button>
-      <button class="act" id="sealBtn" type="button">Seal <kbd>S</kbd></button>
-      <button class="act" id="owBtn" type="button">Overwatch <kbd>O</kbd></button>
-      <button class="act" id="reloadBtn" type="button">Reload <kbd>R</kbd></button>
-      <button class="act" id="faceBtn" type="button" title="Set where they face when nothing needs their attention. Costs nothing.">Face <kbd>F</kbd></button>
-      <button class="act" id="eyesBtn" type="button" hidden title="Look at the floor: safe from SCP-096's face and SCP-012, but they see only what's next to them and can't fire. Free.">Eyes down <kbd>V</kbd></button>
-      <span class="itembar" id="itemBar"></span>
+      <div class="grp" data-g="pos"><span class="gl">Position</span>
+        <button class="act" id="faceBtn" type="button" title="Set where they face when nothing needs their attention. Costs nothing.">Face <kbd>F</kbd></button>
+        <button class="act" id="owBtn" type="button">Overwatch <kbd>O</kbd></button>
+        <button class="act" id="eyesBtn" type="button" hidden title="Look at the floor: safe from SCP-096's face and SCP-012, but they see only what's next to them and can't fire. Free.">Eyes down <kbd>V</kbd></button>
+        <span class="slot" id="abPos"></span>
+      </div>
+      <div class="grp" data-g="combat"><span class="gl">Combat</span>
+        <button class="act" id="reloadBtn" type="button">Reload <kbd>R</kbd></button>
+        <span class="slot" id="itemBar"></span><span class="slot" id="abCombat"></span>
+      </div>
+      <div class="grp spec" data-g="spec"><span class="gl" id="specLabel">Squad techniques</span><span class="slot" id="abSpec"></span></div>
+      <div class="grp" data-g="act"><span class="gl">Interact</span>
+        <button class="act" id="stareBtn" type="button">Do not blink <kbd>B</kbd></button>
+        <button class="act" id="callBtn" type="button">Call the blink <kbd>C</kbd></button>
+        <button class="act" id="dragBtn" type="button">Drag <kbd>G</kbd></button>
+        <button class="act" id="sealBtn" type="button">Seal <kbd>S</kbd></button>
+        <span class="slot" id="abAct"></span>
+      </div>
+    </div>
+    <div class="grp turn" data-g="turn">
       <button class="act" id="nextBtn" type="button">Next <kbd>Tab</kbd></button>
       <button class="act primary" id="endBtn" type="button">End turn <kbd>E</kbd></button>
     </div>
@@ -290,7 +310,8 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     const b = $(id) as HTMLButtonElement;
     b.disabled = !!why;
     b.title = why || "";
-    if (text) b.innerHTML = text;
+    if (text) b.innerHTML = iconFor(id) + `<span class="lb">${text}</span>`;
+    else if (!b.querySelector(".ic")) b.innerHTML = iconFor(id) + `<span class="lb">${b.innerHTML}</span>`;
   }
 
   function card(m: Unit) {
@@ -326,6 +347,36 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
         <span class="flags">${flags.join("")}</span>
       </span>
     </button>`;
+  }
+
+  /** The selected person, readable at a glance: who, what they carry, what state they're in. */
+  function selPanel(m: Unit) {
+    const ms = maxSanOf(m), cap = m.staring ? 1 : 2;
+    const st: string[] = [];
+    if (m.overwatch) st.push(`<span class="st">Overwatch${m.overwatchShots && m.overwatchShots > 1 ? ` ×${m.overwatchShots}` : ""}</span>`);
+    if (m.staring) st.push(`<span class="st hot">Staring</span>`);
+    if ((m.suppressedUntil ?? -1) >= S.turn) st.push(`<span class="st bad">Suppressed</span>`);
+    if (m.hunkerUntil !== undefined && m.hunkerUntil >= S.turn) st.push(`<span class="st">Hunkered</span>`);
+    if (m.emplaced) st.push(`<span class="st">Gun emplaced</span>`);
+    if (m.observing) st.push(`<span class="st">Observation post</span>`);
+    if ((m.anchoredUntil ?? -1) >= S.turn) st.push(`<span class="st">Anchored</span>`);
+    if (m.carrying) st.push(`<span class="st">Carrying</span>`);
+    if (m.alive && isPanicked(m)) st.push(`<span class="st bad">Eyes shut</span>`);
+    if (m.alive && isBlind(m)) st.push(`<span class="st bad">Blinded</span>`);
+    if (m.infectedTurn !== undefined && !m.flesh) st.push(`<span class="st bad">Infected · ${5 - (S.turn - m.infectedTurn)}</span>`);
+    if (m.armorKind === "contsuit") st.push(`<span class="st ${m.suitTorn ? "bad" : ""}">${m.suitTorn ? "Suit torn" : "Suit sealed"}</span>`);
+    if (m.alive && m.san <= ms * 0.3) st.push(`<span class="st bad">Shaken</span>`);
+    const gear = (m.items || []).filter(it => !THROWN.includes(it.id) && it.id !== "medkit" && it.id !== "camera" && (it.uses > 0 || it.id === "tracker")).map(it => esc(ITEM_NAMES[it.id])).join(" · ");
+    const unit = m.specialty ? `${esc(SPECIALTIES[m.specialty].name)}${m.mtfSpec ? ` · ${esc(SPECS[m.mtfSpec].name)}` : ""}` : m.guard ? "Site Security" : m.side === "mtf" ? "Mobile Task Force" : "";
+    return `<div class="who"><span class="call">${esc(m.call ?? "")}</span><b>${m.rankShort ? `${esc(m.rankShort)} ` : ""}${esc(m.name)}</b><span class="muted">${m.cls ? esc(CLASSES[m.cls].name) : m.side === "mtf" ? "Operative" : "D-Class"}${unit ? ` · ${unit}` : ""}</span></div>
+      <div class="stats">
+        <span class="apbig" title="Actions left">${[0, 1].map(i => `<i class="${i < m.ap ? "on" : i >= cap ? "locked" : ""}"></i>`).join("")}</span>
+        <span class="hpbar" title="Health ${Math.max(0, m.hp)} of ${m.maxHp}">${Array.from({ length: m.maxHp }, (_, i) => `<i class="${i < m.hp ? "on" : ""}"></i>`).join("")}</span>
+        <span class="san" title="Sanity">SAN ${m.san}</span>
+        ${m.armor ? `<span class="arm" title="Armor">◆${m.armor}</span>` : ""}
+      </div>
+      ${m.gun ? `<div class="gun"><span>${esc(m.gun.name)}${m.gun.ammoType ? ` · ${esc(AMMO[m.gun.ammoType].name)}` : ""}</span><span class="ammo">${"<i class='on'></i>".repeat(m.gun.ammo)}${"<i></i>".repeat(Math.max(0, m.gun.mag - m.gun.ammo))}</span></div>` : ""}
+      ${st.length ? `<div class="sts">${st.join("")}</div>` : ""}${gear ? `<div class="gear muted">${gear}</div>` : ""}`;
   }
 
   function update() {
@@ -457,25 +508,39 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("faceBtn").classList.toggle("on", S.mode === "face");
     setBtn("endBtn", off);
     setBtn("evacBtn", off);
-    const bar = $("itemBar");
+    // the action bar: grouped by what the action is for, each with its icon, cost and why it's unavailable
     const its = sel?.items || [];
-    const abil = abilitiesOf(sel).map(a => {
+    const slots: Record<"abPos" | "abCombat" | "abSpec" | "abAct" | "itemBar", string[]> = { abPos: [], abCombat: [], abSpec: [], abAct: [], itemBar: [] };
+    const pips = (n: number) => `<span class="cost" title="${n} action${n > 1 ? "s" : ""}">${"<i></i>".repeat(n)}</span>`;
+    for (const a of abilitiesOf(sel)) {
       const on = S.mode === "ability" && S.ability === a.perk;
       const why = off || (on ? null : abilityCheck(sel, a.perk));
       const left = a.uses ? ` ×${usesLeft(sel!, a.perk, a.uses(sel!))}` : "";
-      return `<button class="act ${on ? "on" : ""}" type="button" data-ability="${a.perk}" ${why ? `disabled title="${esc(why)}"` : ""}>${on ? "Cancel" : a.label + left}</button>`;
-    }).join("");
-    bar.innerHTML = abil + its.map((it, i) => {
+      const tech = a.perk.startsWith("sq_") ? TECHS[a.perk] : undefined;
+      const cd = tech && sel ? techCooldown(sel, a.perk) : 0;
+      const meta = tech && sel ? `${pips(techCost(sel, a.perk))}${cd ? `<span class="cd" title="Squad cooldown">${cd}</span>` : ""}${tech.incomplete ? `<span class="nb">not built</span>` : ""}` : a.endsTurn ? `<span class="cost end" title="Ends their turn">⏎</span>` : "";
+      const btn = `<button class="act ${on ? "on" : ""} ${tech ? "tech" : ""}" type="button" data-ability="${a.perk}" ${why ? `disabled title="${esc(why)}"` : `title="${esc(abilityDesc(a.perk))}"`}>${iconFor(a.perk)}<span class="lb">${on ? "Cancel" : esc(a.label) + left}</span>${meta}</button>`;
+      const g = tech ? "abSpec" : ["hunker"].includes(a.perk) ? "abPos" : ["suppression", "mark_target", "run_and_gun"].includes(a.perk) ? "abCombat" : "abAct";
+      slots[g].push(btn);
+    }
+    its.forEach((it, i) => {
       if (it.id === "medkit" || it.id === "camera") {
         const why = off || useCheck(sel, i);
-        return it.uses > 0 ? `<button class="act" type="button" data-use="${i}" ${why ? `disabled title="${esc(why)}"` : ""}>${it.id === "medkit" ? "Use medkit" : "Photograph"} <kbd>${i + 1}</kbd></button>` : "";
+        if (it.uses > 0) slots.abAct.push(`<button class="act" type="button" data-use="${i}" ${why ? `disabled title="${esc(why)}"` : ""}>${iconFor(it.id)}<span class="lb">${it.id === "medkit" ? "Use medkit" : "Photograph"} ×${it.uses}</span><kbd>${i + 1}</kbd></button>`);
+        return;
       }
-      const throwable = THROWN.includes(it.id);
-      if (!throwable) return `<span class="flag">${ITEM_NAMES[it.id]}${it.id === "eyedrops" ? ` ×${it.uses} · used automatically` : " · always on"}</span>`;
-      if (it.uses < 1) return "";
-      const why = off || (S.mode === "throw" && S.throwing === it ? null : throwCheck(sel, i));
-      return `<button class="act ${S.mode === "throw" && S.throwing === it ? "on" : ""}" type="button" data-item="${i}" ${why ? `disabled title="${esc(why)}"` : ""}>${S.mode === "throw" && S.throwing === it ? (PLACED_TECH[it.id] ? "Cancel" : "Cancel throw") : `${HEAVY.includes(it.id) ? "Fire" : PLACED_TECH[it.id] ? "Set" : "Throw"} ${HEAVY.includes(it.id) ? ITEM_NAMES[it.id] : ITEM_NAMES[it.id].toLowerCase()} ×${it.uses}`} <kbd>${i + 1}</kbd></button>`;
-    }).join("");
+      if (!THROWN.includes(it.id) || it.uses < 1) return;
+      const on = S.mode === "throw" && S.throwing === it, placed = PLACED_TECH[it.id];
+      const why = off || (on ? null : throwCheck(sel, i));
+      const label = on ? (placed ? "Cancel" : "Cancel throw") : `${HEAVY.includes(it.id) ? "Fire" : placed ? "Set" : "Throw"} ${HEAVY.includes(it.id) ? ITEM_NAMES[it.id] : ITEM_NAMES[it.id].toLowerCase()} ×${it.uses}`;
+      const meta = placed && sel ? pips(techCost(sel, placed)) : "";
+      (placed ? slots.abSpec : slots.itemBar).push(`<button class="act ${on ? "on" : ""} ${placed ? "tech" : ""}" type="button" data-item="${i}" ${why ? `disabled title="${esc(why)}"` : placed ? `title="${esc(TECHS[placed].name)}: ${esc(TECHS[placed].desc)}"` : ""}>${iconFor(it.id)}<span class="lb">${label}</span>${meta}<kbd>${i + 1}</kbd></button>`);
+    });
+    for (const [k, v] of Object.entries(slots)) $(k).innerHTML = v.join("");
+    $("specLabel").textContent = sel?.specialty ? `${SPECIALTIES[sel.specialty].name}${sel.stage ? ` · ${["Authorized", "Drilled", "Proficient", "Veteran"][sel.stage]}` : ""}` : "Squad techniques";
+    root.querySelectorAll<HTMLElement>("#actionBar .grp[data-g]").forEach(g => { if (g.dataset.g !== "turn") g.hidden = !g.querySelector("button:not([hidden])"); });
+    $("selPanel").innerHTML = sel ? selPanel(sel) : `<span class="muted">${can ? "Select an operative (Tab)" : ""}</span>`;
+    { const t = $("objRule").textContent?.replace(/^Objective\.\s*/, "") ?? ""; const o = $("objShort"); if (o.dataset.full !== t) { o.dataset.full = t; o.textContent = t; } }
 
     let h = "";
     if (hintFlash) h = `<b>${esc(hintFlash)}</b>`;
@@ -540,7 +605,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   const eyes = () => { if (canAct() && S.selected && !eyesCheck(S.selected)) { toggleEyes(S.selected); update(); } };
   $("eyesBtn").onclick = eyes;
   $("endBtn").onclick = endTurn;
-  $("itemBar").addEventListener("click", e => {
+  $("actionBar").addEventListener("click", e => {
     const b = (e.target as HTMLElement).closest<HTMLElement>("[data-item]");
     if (b) toggleThrow(Number(b.dataset.item), flash);
     const ub = (e.target as HTMLElement).closest<HTMLElement>("[data-use]");
@@ -569,6 +634,11 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
       const it = S.selected?.items?.[Number(k) - 1];
       if (it && (it.id === "medkit" || it.id === "camera")) useItem(Number(k) - 1, flash); else toggleThrow(Number(k) - 1, flash);
     }
+    else if (k === "arrowleft" || k === "arrowright" || k === "arrowup" || k === "arrowdown") { e.preventDefault(); camera.pan(k === "arrowleft" ? 160 : k === "arrowright" ? -160 : 0, k === "arrowup" ? 160 : k === "arrowdown" ? -160 : 0); }
+    else if (k === "+" || k === "=") camera.zoomBy(1.25);
+    else if (k === "-" || k === "_") camera.zoomBy(0.8);
+    else if (k === "home") camera.overview();
+    else if (k === " ") { e.preventDefault(); centreSel(); }
     else if (k === "e") endTurn();
     else if (k === "o") doOverwatch();
     else if (k === "r") doReload(flash);
@@ -582,19 +652,38 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
   document.addEventListener("keydown", onKey);
 
   let lastPointer = "mouse";
+  // every pointer goes through the camera: the tile under it is the tile the rules act on, at any zoom or pan
   const tileFromEvent = (e: MouseEvent) => {
     const r = cv.getBoundingClientRect(), vr = viewRows();
-    const x = Math.floor((e.clientX - r.left) / r.width * L.W), y = vr.y0 + Math.floor((e.clientY - r.top) / r.height * vr.h);
-    return (x >= 0 && y >= vr.y0 && x < L.W && y < vr.y0 + vr.h) ? { x, y } : null;
+    const t = camera.screenToTile(e.clientX - r.left, e.clientY - r.top);
+    return t && t.x >= 0 && t.x < L.W && t.y >= vr.y0 && t.y < vr.y0 + vr.h ? t : null;
   };
-  cv.addEventListener("pointerdown", e => { lastPointer = e.pointerType; });
+  // drag the map to pan (any button; a left-button drag past a few pixels isn't a click), wheel to zoom at the cursor
+  let drag: { x: number; y: number; moved: boolean; id: number } | null = null, swallowClick = false;
+  cv.addEventListener("pointerdown", e => { lastPointer = e.pointerType; drag = { x: e.clientX, y: e.clientY, moved: false, id: e.pointerId }; });
   cv.addEventListener("pointermove", e => {
+    if (drag && e.pointerId === drag.id && (e.buttons & 7)) {
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!drag.moved && Math.hypot(dx, dy) > 6) { drag.moved = true; try { cv.setPointerCapture(e.pointerId); } catch { /* fine */ } }
+      if (drag.moved) { camera.pan(dx, dy, true); drag.x = e.clientX; drag.y = e.clientY; cv.classList.add("panning"); }
+      return;
+    }
     if (e.pointerType !== "mouse") return;
     const t = tileFromEvent(e);
     if ((t && (!S.hover || t.x !== S.hover.x || t.y !== S.hover.y)) || (!t && S.hover)) { S.hover = t; update(); }
   });
+  const endDrag = () => { if (drag?.moved) swallowClick = true; drag = null; cv.classList.remove("panning"); };
+  cv.addEventListener("pointerup", endDrag); cv.addEventListener("pointercancel", endDrag);
+  cv.addEventListener("contextmenu", e => e.preventDefault());
+  cv.addEventListener("wheel", e => { e.preventDefault(); const r = cv.getBoundingClientRect(); camera.zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
   cv.addEventListener("pointerleave", () => { if (lastPointer === "mouse") { S.hover = null; update(); } });
-  cv.addEventListener("click", e => { const t = tileFromEvent(e); if (t) onTap(t.x, t.y, lastPointer !== "mouse", flash); });
+  cv.addEventListener("click", e => { if (swallowClick) { swallowClick = false; return; } const t = tileFromEvent(e); if (t) onTap(t.x, t.y, lastPointer !== "mouse", flash); });
+  const centreSel = () => { const u = S.selected; if (u) camera.focus(u.x * 32 + 16, u.y * 32 + 16, true); };
+  $("camIn").onclick = () => camera.zoomBy(1.25);
+  $("camOut").onclick = () => camera.zoomBy(0.8);
+  $("camAll").onclick = () => camera.overview();
+  $("camSel").onclick = centreSel;
+  $("objShort").onclick = () => { const m = root.querySelector<HTMLDetailsElement>("#manual"); if (m) { m.open = true; m.scrollIntoView({ block: "nearest" }); } };
 
   let running = true;
   const loop = (now: number) => { if (!running) return; draw(now); requestAnimationFrame(loop); };

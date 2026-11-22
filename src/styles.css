@@ -544,3 +544,146 @@ main.hub > * { min-width: 0; }
 .dbg-table th { text-align: left; color: var(--dim, #88919a); font-weight: 500; padding: 2px 8px 2px 0; white-space: nowrap; vertical-align: top; }
 .dbg-table td { padding: 2px 12px 2px 0; vertical-align: top; }
 .dbg-list { margin: 2px 0 8px; padding-left: 16px; font-size: 12px; }
+
+/* ===================================================================== tactical battlefield (full screen)
+   The map is the whole screen; the HUD sits on its edges as solid plates with hairline rules. */
+main.tac { position: fixed; inset: 0; overflow: hidden; background: #07090b; z-index: 10; --plate: rgba(9, 12, 15, .9); --rule: rgba(216, 191, 134, .28); }
+main.tac #cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; }
+main.tac #cv.panning { cursor: grabbing; }
+main.tac .label { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--manila); }
+main.tac .muted { color: var(--muted); }
+
+/* top strip: what this is, the turn, the camera and the way out */
+main.tac .hud-top { position: absolute; top: 0; left: 0; right: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; padding: 8px 14px 18px;
+  background: linear-gradient(to bottom, rgba(5, 7, 9, .92) 55%, rgba(5, 7, 9, 0)); pointer-events: none; z-index: 20; }
+main.tac .hud-top > * { pointer-events: auto; }
+main.tac .hud-title { min-width: 0; }
+main.tac .hud-title .eyebrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+main.tac .hud-title h1 { font-family: var(--font-display); font-weight: 400; font-size: 21px; margin: 0; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); }
+main.tac .hud-title h1 small { font-size: 13px; color: var(--muted); margin-left: 6px; }
+main.tac .turnbox { display: flex; gap: 6px; align-items: center; }
+main.tac .pill { border-radius: 0; background: var(--plate); border-color: var(--line); font-family: var(--font-mono); font-size: 12px; padding: 3px 9px; }
+main.tac .pill.turn { color: var(--manila); border-color: var(--rule); font-size: 13px; }
+main.tac .hud-sys { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
+main.tac .camctl { display: inline-flex; border: 1px solid var(--line); background: var(--plate); }
+main.tac .ib { width: 30px; height: 28px; display: grid; place-items: center; background: none; border: 0; color: var(--ink); cursor: pointer; padding: 0; }
+main.tac .ib + .ib { border-left: 1px solid var(--line); }
+main.tac .ib:hover { color: var(--manila); background: rgba(216, 191, 134, .08); }
+main.tac .ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+main.tac #evacBtn { font-size: 12px; padding: 5px 10px; border-radius: 0; }
+main.tac .floorbar { position: absolute; top: 54px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; z-index: 21; }
+main.tac .coach { position: absolute; top: 58px; left: 50%; transform: translateX(-50%); width: min(560px, calc(100vw - 720px)); min-width: 360px; z-index: 22; background: var(--plate); border-top: 2px solid var(--manila); padding: 10px 14px; font-size: 13.5px; }
+main.tac .coach p { margin: 4px 0 8px; }
+main.tac .coach .row { display: flex; gap: 6px; }
+
+/* left edge: objective and status above, the squad below */
+main.tac .hud-obj { position: absolute; top: 62px; left: 12px; width: 300px; max-height: calc(44vh - 62px); overflow-y: auto; z-index: 15; }
+main.tac .hud-obj .status { background: var(--plate); border-left: 2px solid var(--alert); padding: 8px 11px; font-size: 13px; }
+main.tac .hud-obj .status.done { border-left-color: var(--ok); }
+main.tac .hud-obj .status.held { border-left-color: var(--manila); }
+main.tac .objshort { margin: 4px 0 6px; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; cursor: help; font-size: 13px; line-height: 1.35; }
+main.tac .status-line { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+main.tac .status-line b { color: var(--ink); }
+main.tac .optional { font-size: 12px; margin-top: 6px; color: var(--muted); }
+main.tac .optional .ok { color: var(--ok); }
+main.tac .hud-roster { position: absolute; top: 44vh; bottom: 150px; left: 12px; width: 236px; overflow-y: auto; z-index: 15; display: flex; flex-direction: column; gap: 3px; }
+main.tac .hud-roster .label { padding: 0 2px 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+main.tac .hud-roster .squad { display: grid; gap: 3px; }
+main.tac .hud-roster h3 { font-family: var(--font-mono); font-size: 10.5px; color: var(--subject); margin: 6px 0 0; text-transform: uppercase; letter-spacing: .08em; }
+main.tac .hud-roster .op { background: var(--plate); padding: 5px 8px; grid-template-columns: 44px 1fr auto; gap: 0 6px; border: 0; border-left: 2px solid transparent; }
+main.tac .hud-roster .op.sel { border-left-color: var(--manila); background: rgba(40, 34, 20, .92); }
+main.tac .hud-roster .op .tag { font-size: 11px; grid-row: span 2; }
+main.tac .hud-roster .op .nm { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+main.tac .hud-roster .op .bars { gap: 6px; font-size: 10px; }
+main.tac .hud-roster .op .bars > span:not(:first-child) { display: none; }
+main.tac .hud-roster .op .bars .meter { display: inline-block; width: 90px; margin-left: 5px; vertical-align: middle; }
+
+/* right edge: log, key, manual and the SCP file, all collapsible */
+main.tac .hud-right { position: absolute; top: 62px; right: 12px; width: 300px; max-height: calc(100vh - 210px); overflow-y: auto; z-index: 15; display: grid; gap: 4px; align-content: start; }
+main.tac .drawer { background: var(--plate); border-top: 1px solid var(--rule); }
+main.tac .drawer > summary { cursor: pointer; padding: 6px 10px; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--manila); list-style: none; }
+main.tac .drawer > summary::-webkit-details-marker { display: none; }
+main.tac .drawer > summary::after { content: "+"; float: right; color: var(--muted); }
+main.tac .drawer[open] > summary::after { content: "−"; }
+main.tac .drawer > :not(summary) { margin: 0 10px 8px; }
+main.tac .drawer .log { max-height: 150px; font-size: 11.5px; }
+main.tac .drawer.rules > div { font-size: 12.5px; margin-bottom: 6px; color: var(--muted); }
+main.tac .drawer.rules b { color: var(--ink); }
+main.tac .drawer.file h2 { font-family: var(--font-display); font-weight: 400; font-size: 16px; margin: 0 10px 4px; }
+main.tac .drawer.file ol { font-size: 12px; color: var(--muted); padding-left: 18px; }
+main.tac .legend { margin: 0 10px 8px; display: grid; gap: 3px; }
+
+/* bottom: the selected operative, their actions in groups, and the turn */
+main.tac .hint { position: absolute; left: 50%; bottom: 124px; transform: translateX(-50%); max-width: min(720px, calc(100vw - 640px)); min-width: 320px; z-index: 16;
+  background: var(--plate); padding: 6px 12px; font-size: 12.5px; color: var(--muted); white-space: pre-line; text-align: center; pointer-events: none; }
+main.tac .hint:empty { display: none; }
+main.tac .hint b { color: var(--ink); }
+main.tac .actionbar { position: absolute; left: 0; right: 0; bottom: 0; top: auto; z-index: 20; display: grid; grid-template-columns: 300px minmax(0, 1fr) auto; gap: 12px; align-items: end; padding: 22px 12px 10px;
+  background: linear-gradient(to top, rgba(5, 7, 9, .95) 62%, rgba(5, 7, 9, 0)); border: 0; box-shadow: none; }
+main.tac .selpanel { background: var(--plate); border-left: 2px solid var(--mtf); padding: 7px 10px; font-size: 12.5px; display: grid; gap: 4px; min-height: 76px; align-content: start; }
+main.tac .selpanel .who { display: grid; grid-template-columns: auto 1fr; gap: 0 8px; }
+main.tac .selpanel .who .call { font-family: var(--font-mono); color: var(--mtf); font-size: 12px; grid-row: span 2; align-self: center; }
+main.tac .selpanel .who b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+main.tac .selpanel .who .muted { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+main.tac .selpanel .stats { display: flex; gap: 10px; align-items: center; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+main.tac .apbig { display: flex; gap: 5px; }
+main.tac .apbig i { width: 11px; height: 11px; border: 1.5px solid var(--manila); transform: rotate(45deg); }
+main.tac .apbig i.on { background: var(--manila); }
+main.tac .apbig i.locked { border-style: dashed; opacity: .35; }
+main.tac .hpbar { display: flex; gap: 2px; }
+main.tac .hpbar i { width: 7px; height: 9px; background: rgba(122, 170, 208, .18); }
+main.tac .hpbar i.on { background: var(--mtf); }
+main.tac .selpanel .gun { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+main.tac .ammo { display: flex; gap: 2px; align-items: center; }
+main.tac .ammo i { width: 3px; height: 10px; background: rgba(216, 191, 134, .2); }
+main.tac .ammo i.on { background: var(--manila); }
+main.tac .sts { display: flex; flex-wrap: wrap; gap: 3px; }
+main.tac .st { font-family: var(--font-mono); font-size: 10.5px; padding: 1px 5px; border: 1px solid var(--line); color: var(--ink); }
+main.tac .st.bad { border-color: var(--alert); color: var(--alert); }
+main.tac .st.hot { border-color: var(--manila); color: var(--manila); }
+main.tac .gear { font-size: 11px; }
+main.tac .actions { display: flex; gap: 14px; align-items: flex-end; flex-wrap: nowrap; overflow-x: auto; justify-content: center; padding-bottom: 2px; }
+main.tac .grp { display: flex; gap: 3px; align-items: flex-end; position: relative; padding-top: 15px; }
+main.tac .grp[hidden] { display: none; }
+main.tac .grp .gl { position: absolute; top: 0; left: 0; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+main.tac .grp.spec .gl { color: var(--manila); }
+main.tac .slot { display: contents; }
+main.tac .actionbar .act { display: grid; grid-template-rows: 20px auto; justify-items: center; align-content: center; gap: 2px; min-width: 62px; max-width: 96px; height: 58px; padding: 4px 6px; border-radius: 0;
+  background: var(--plate); border: 1px solid var(--line); color: var(--ink); font-size: 11px; line-height: 1.15; text-align: center; position: relative; }
+main.tac .actionbar .act .lb { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+main.tac .actionbar .act kbd { position: absolute; top: 2px; left: 3px; font-size: 9px; color: var(--muted); background: none; border: 0; padding: 0; }
+main.tac .actionbar .act:hover:not(:disabled) { border-color: var(--manila); color: var(--manila); }
+main.tac .actionbar .act.on { border-color: var(--manila); background: rgba(216, 191, 134, .18); color: var(--manila); }
+main.tac .actionbar .act:disabled { opacity: .38; cursor: not-allowed; }
+main.tac .actionbar .act.tech { border-color: rgba(216, 191, 134, .35); }
+main.tac .actionbar .act .cost { position: absolute; top: 3px; right: 3px; display: flex; gap: 2px; }
+main.tac .actionbar .act .cost i { width: 5px; height: 5px; background: var(--manila); transform: rotate(45deg); }
+main.tac .actionbar .act .cost.end { font-size: 9px; color: var(--muted); }
+main.tac .actionbar .act .cd { position: absolute; bottom: 2px; right: 3px; font-family: var(--font-mono); font-size: 9.5px; color: var(--alert); }
+main.tac .actionbar .act .cd::before { content: "⟳"; margin-right: 1px; }
+main.tac .actionbar .act .nb { position: absolute; bottom: 1px; left: 0; right: 0; font-size: 8.5px; color: var(--alert); text-transform: uppercase; letter-spacing: .05em; }
+main.tac .grp.turn { gap: 6px; }
+main.tac .grp.turn .act { min-width: 70px; }
+main.tac .grp.turn #endBtn { min-width: 96px; background: var(--manila); color: #1b1710; border-color: var(--manila); font-weight: 600; }
+main.tac .grp.turn #endBtn:disabled { background: var(--plate); color: var(--muted); }
+main.tac > .overlay { position: absolute; z-index: 40; }
+
+/* tactical lab: its own panel takes the right edge */
+main.tac.lab .hud-right { display: none; }
+
+@media (max-width: 1360px) {
+  main.tac .actionbar { grid-template-columns: 250px minmax(0, 1fr) auto; }
+  main.tac .actionbar .act { min-width: 54px; height: 54px; font-size: 10.5px; }
+  main.tac .hud-right, main.tac .hud-obj { width: 260px; }
+  main.tac .hud-roster { width: 210px; }
+}
+@media (max-height: 760px) {
+  main.tac .hud-obj { max-height: calc(40vh - 62px); }
+  main.tac .hud-roster { top: 40vh; bottom: 140px; }
+  main.tac .hud-roster .op { padding: 3px 7px; }
+  main.tac .hud-right { max-height: calc(100vh - 200px); }
+}
+main.tac .hud-obj .status { border: 0; border-left: 2px solid var(--alert); }
+main.tac .hud-obj .status.done { border-left-color: var(--ok); }
+main.tac .hud-obj .status.held { border-left-color: var(--manila); }
+main.tac .drawer.file { padding: 0; background: var(--plate); color: var(--ink); }

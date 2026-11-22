@@ -25,7 +25,7 @@ const { chromium } = require('playwright');
     return id;
   });
   console.log('operatives on the map:', JSON.stringify(ids));
-  const box = await (await p.$('#cv')).boundingBox(); const at = (x, y) => p.mouse.click(box.x + (x + .5) * box.width / 28, box.y + (y + .5) * box.height / 18);
+  const at = (x, y) => require('./lib.cjs').clickTile(p, x, y);
   const sel = id => p.click(`.op[data-id=${id}]`);
   await sel(ids.op4); await at(8, 12); await p.waitForTimeout(400);
   await sel(ids.op2); await at(6, 12); await p.waitForTimeout(700);
