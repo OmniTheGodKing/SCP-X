@@ -2,6 +2,9 @@ import { homeRegion, qualifiedFor, recordMastery, squadById, squadOfOp, squadSta
 import { EQUIP, KITS, SQUAD_BALANCE } from "../data/specialties";
 import { freshSeed, rnd, setCampaignSeed } from "../core/rng";
 import { fieldMap } from "../data/maps";
+import { intelFor, recordMission, tickDossier, ensureDossier } from "./dossier";
+import { arcAfterMission, searchOutcome, tickArcs, outbreakEnded } from "./storylines";
+import { anomalyDef } from "../data/anomalies";
 // Site-19 between missions: the roster, time passing, funding, public exposure and incidents.
 import { earn, spend, type Ledger } from "./ledger";
 import { tickContracts, type ContractState } from "./contracts";
@@ -85,7 +88,7 @@ export interface Operative {
   /** Part-XP banked from drills. */
   drill?: number;
   /** Away from duty: in therapy or retraining. */
-  busy?: { kind: "therapy" | "retrain" | "travel" | "contract"; daysLeft: number; trait?: TraitId; from?: RegionId; total?: number; out?: boolean };
+  busy?: { kind: "therapy" | "retrain" | "travel" | "contract" | "quarantine" | "missing"; daysLeft: number; trait?: TraitId; from?: RegionId; total?: number; out?: boolean };
   /** Chosen weapon type (one of their class's two) and the attachment fitted to it. */
   weapon?: WeaponType;
   attachment?: AttachmentId;
@@ -131,7 +134,17 @@ export interface Retiree { name: string; call: string; rank: number; missions: n
 
 export interface Incident {
   id: string;
-  kind: "breach" | "recovery" | "coverup" | "strike" | "escort" | "retaliation" | "outbreak" | "riot" | "raid" | "rescue" | "emergency";
+  kind: "breach" | "recovery" | "coverup" | "strike" | "escort" | "retaliation" | "outbreak" | "riot" | "raid" | "rescue" | "emergency" | "investigation";
+  /** Phase 6: the scenario variant, evidence at an investigation, whether the anomaly is still there, the instance it is
+   *  about, the storyline and stage that made it, missing operatives a search can bring home, and who it is coming for. */
+  variant?: import("../data/anomalies").MissionVariant;
+  evidence?: { kind: import("../data/anomalies").EvidenceKind; label: string }[];
+  presence?: boolean;
+  instance?: string;
+  arc?: string;
+  stage?: string;
+  recoverOps?: string[];
+  markedOp?: string;
   /** Phase 3J: the independent site involved, the lost team's name, an emergency's hazard and stated cause, and how
    *  many survivors (lost operatives or trapped researchers) are waiting. */
   site?: string;
@@ -224,7 +237,9 @@ export interface Campaign {
   dPolicy: "terminate" | "retain" | "release";
   /** SCP-610: when the first outbreak starts, and the outbreak under way (severity 1 to 5; 0 is burned out). */
   outbreakDay?: number;
-  outbreak?: { region: RegionId; severity: number; lastMission: number };
+  outbreak?: { region: RegionId; severity: number; lastMission: number; quarantinedUntil?: number };
+  /** Phase 6: regions SCP-610 has burned through, where it can come back. */
+  blighted?: RegionId[];
   /** Insurgency attacks on towns, due after captures in a region. */
   retaliations?: { region: RegionId; day: number }[];
   /** Guards issued flak vests through the workshop. */
@@ -324,6 +339,13 @@ export interface Campaign {
   ops?: FieldOp[];
   /** This month's recruit pool in the Command facility. */
   recruits?: Candidate[];
+  /** Phase 6: what is known of each anomaly and where each instance is; people SCP-106 took and people SCP-096 marked;
+   *  a recovered anomaly waiting at the dock for a placement decision; the storylines under way. */
+  dossier?: Record<string, import("./dossier").AnomalyFile>;
+  missing?: import("./dossier").Missing[];
+  marked?: import("./dossier").Marked[];
+  placement?: { scpId: string; since: number };
+  arcs?: Record<string, import("./storylines").ArcState>;
 }
 
 // Perks per rank: steadier aim, fewer blinks, more composure.
@@ -510,6 +532,10 @@ export function advanceDay(c: Campaign) {
         log(c, `${o.call} ${o.name} finished therapy. ${TRAITS[o.busy.trait].name} is gone.`, "good", "personnel");
       } else if (o.busy.kind === "travel") {
         log(c, `${o.call} ${o.name} is back at Site-19.`);
+      } else if (o.busy.kind === "quarantine") {
+        log(c, `${o.call} ${o.name} is out of quarantine, clean.`, "good", "personnel");
+      } else if (o.busy.kind === "missing") {
+        o.busy.daysLeft = 1; continue;   // only a search, or the dossier's clock, ends this
       } else if (o.busy.kind === "contract") {
         // the contract itself says they're back, and pays
       } else {
@@ -533,6 +559,8 @@ export function advanceDay(c: Campaign) {
   if (c.guards.some(g => g.alive && g.breaches >= 3)) reachMilestone(c, "guard_veteran");
   tickContainment(c);
   tickWorld(c);
+  tickDossier(c);
+  tickArcs(c);
   tickContracts(c);
   tickLeads(c);
   tickGeo(c);
@@ -838,7 +866,12 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     gun: { name: "M1 Carbine", type: "carbine" as const, dmg: [2, 4] as [number, number], mag: 5, ammo: 5, aim: 0 }, armorHp: 0 })) : [];
   return {
     mtfRules: !!c.mtfs, kit: c.mtfs ? drawSquadKit(c, loadouts.map(l => c.roster.find(x => x.id === l.opId)).filter((o): o is Operative => !!o)) : undefined,
-    kind, scp: (inc.scpId || "173") as ScpId, map: inc.map, amnestics, seed: (rnd() * 4294967296) >>> 0,
+    kind, scp: (inc.scpId || (inc.kind === "outbreak" ? "" : "173")) as ScpId, map: inc.map, amnestics, seed: (rnd() * 4294967296) >>> 0,
+    // Phase 6: the scenario variant, evidence, and what the site knows going in (only for anomalies with a full
+    // definition, so older anomalies and older missions play exactly as they did)
+    variant: inc.variant, evidence: inc.evidence, presence: inc.presence, contamination: !!c.mtfs && (inc.kind === "outbreak" || inc.scpId === "610"),
+    holdTurns: inc.variant === "quarantine_perimeter" ? 10 : undefined,
+    intel: c.site && inc.scpId && anomalyDef(inc.scpId) && (inc.first || inc.kind === "investigation") ? intelFor(c, inc.instance ?? inc.scpId) : undefined,
     night: away ? true : nightAt(c, inc), weather: missionWeather(c, inc),
     site: inc.site, records: away ? 2 : undefined, survivors: inc.kind === "rescue" ? inc.survivors : undefined,
     survivorName: inc.kind === "rescue" ? `${(inc.team ?? "Lost team").split(" ")[0]} operative` : undefined, hazard: inc.hazard,
@@ -881,7 +914,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
 /** What the O5 Council pays for each kind of mission won ($k). The World Map briefing shows the same figures. */
 /** Phase 4E salvage after a tactical mission. */
 export const SALVAGE = { perInsurgent: 5, cell: 20 };
-export const MISSION_BONUS: Partial<Record<Incident["kind"], number>> = { recovery: 100, strike: 80, breach: 50, retaliation: 40, outbreak: 120, raid: 60, rescue: 50 };
+export const MISSION_BONUS: Partial<Record<Incident["kind"], number>> = { recovery: 100, strike: 80, breach: 50, retaliation: 40, outbreak: 120, raid: 60, rescue: 50, investigation: 30 };
 
 export interface Debrief { lines: string[]; promotions: string[]; }
 
@@ -912,6 +945,11 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     const o = c.roster.find(x => x.id === s.opId);
     if (!o) continue;
     o.missions++;
+    if (!s.alive && r.missing?.includes(s.opId)) {
+      // Phase 6: taken by SCP-106 is missing, not dead (the dossier and the storylines decide what happens next)
+      o.busy = { kind: "missing", daysLeft: 9999, out: true };
+      continue;
+    }
     if (!s.alive) {
       o.alive = false; o.hp = 0; o.diedDay = c.day; o.diedAt = name;
       lines.push(`${o.call} ${o.name} was killed in action.`);
@@ -1017,6 +1055,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     addStanding(c, -4, `${name} failed`);
     if (kind === "raid") lines.unshift(`${name} failed. The Insurgency reached the lift. ${raidLoss(c).join(" ")}`);
     else if (kind === "riot") lines.unshift(`${name} failed. Site Security lost the block; it took a gas-and-baton sweep by the whole garrison to retake it.`);
+    else if (kind === "investigation") { addExposure(c, region, 5); lines.unshift(`${name}: the team came back without enough to go on (+5 exposure in ${where}).`); }
     else { addExposure(c, region, 20);
     lines.unshift(`${name} failed${r.escaped ? `: SCP-173 got out through the surface hatch` : r.evacuated ? " after the team evacuated" : ""}. ${REGIONS[region].front} has to clean up after it (+20 exposure in ${where}).`); }
   }
@@ -1036,10 +1075,21 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   }
   if (r.infectedLost) lines.push(`${r.infectedLost} lost to SCP-610's infection. There was nothing anyone could do.`);
   // an outbreak is only beaten back a stage at a time
-  if (kind === "outbreak" && c.outbreak) {
+  if (kind === "outbreak" && c.outbreak && inc?.variant) {
+    // Phase 6: a variant operation changes the outbreak only by what it achieved. A held line pauses the spread; an
+    // evacuation saves people and leaves the outbreak as it was; a burned core still sets it back a stage.
+    if (r.coreBurned) { c.outbreak.severity = Math.max(0, c.outbreak.severity - 1); lines.push(`The core burned out here: SCP-610 is a stage weaker (severity ${c.outbreak.severity}).`); }
+    if (r.outcome === "isolated" || r.objectives?.some(o => o.kind === "hold_perimeter" && o.status === "done")) {
+      c.outbreak.quarantinedUntil = c.day + 30; c.outbreak.lastMission = c.day;
+      lines.push(`The quarantine line holds: SCP-610 won't spread past it for 30 days. It is still there.`);
+    } else if (inc.variant === "quarantine_perimeter") lines.push("The line didn't hold. The outbreak goes on spreading.");
+    if (r.objectives?.some(o => o.kind === "rescue" && o.status === "done")) lines.push("The survivors are out. Evacuating them was not containing it: the outbreak is still there.");
+    if (r.samples) { (c.materials as Record<string, number>).samples610 = ((c.materials as Record<string, number>).samples610 ?? 0) + r.samples; lines.push(`${r.samples} sealed sample${r.samples > 1 ? "s" : ""} of the growth for the labs.`); }
+    if (c.outbreak.severity === 0) { lines.push(`SCP-610 in ${where} is burned out for good.`); outbreakEnded(c, c.outbreak.region); c.outbreak = undefined; c.incidents = c.incidents.filter(i => i.kind !== "outbreak"); }
+  } else if (kind === "outbreak" && c.outbreak) {
     c.outbreak.severity = Math.max(0, Math.min(5, c.outbreak.severity + (r.win ? -1 : 1)));
     c.outbreak.lastMission = c.day;
-    if (c.outbreak.severity === 0) { lines.push(`SCP-610 in ${where} is burned out for good.`); c.outbreak = undefined; }
+    if (c.outbreak.severity === 0) { lines.push(`SCP-610 in ${where} is burned out for good.`); outbreakEnded(c, c.outbreak.region); c.outbreak = undefined; c.incidents = c.incidents.filter(i => i.kind !== "outbreak" || i.id === r.incidentId); }
     else {
       lines.push(`SCP-610 outbreak in ${where}: severity ${c.outbreak.severity} of 5.`);
       c.incidents.push({ ...inc!, id: "inc" + c.nextIncident++, title: `${inc!.title.split(":")[0]}: SCP-610 outbreak, severity ${c.outbreak.severity}`, appeared: c.day });
@@ -1064,10 +1114,23 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   lines.push(...afterMission(c, r));
   if (c.tutorial?.on && !c.tutorial.seen.includes("mission")) c.tutorial.seen.push("mission");
   for (const l of [...lines, ...promotions]) log(c, l, r.win ? "good" : "bad");
-  if (inc?.transfer) lines.push(transferFought(c, inc.transfer, r.win));
+  // Phase 6: what this mission adds to the anomaly's file, the people it changed, and where the story goes next
+  ensureDossier(c);
+  lines.push(...recordMission(c, inc, r));
+  if (inc?.stage === "search") lines.push(...searchOutcome(c, inc, r.survivorsSaved ?? 0));
+  const investigation = inc?.kind === "investigation";
+  if (investigation && r.outcome === "secured") resolveScp(c, { ...inc!, first: true, kind: "recovery" }, true);
+  arcAfterMission(c, inc, r.outcome, r);
+  if (investigation) { /* the anomaly wasn't the objective: nothing to resolve unless it was sealed above */ }
+  else if (inc?.transfer) lines.push(transferFought(c, inc.transfer, r.win));
   else if (inc?.scpId && inc.kind !== "emergency" && r.lostTo) lines.push(loseForGood(c, inc, r.lostTo));
   else if (inc?.scpId && inc.kind !== "emergency") {   // another site's anomaly stays theirs
     resolveScp(c, inc, r.win && !r.noSpecimen);
+    if (r.outcome === "temporary") {
+      const s = c.scps.find(x => x.id === inc.scpId);
+      if (s && s.status === "contained") { s.maintenance = Math.min(s.maintenance, 25); s.holding = "temporary"; (c.riskBoost ??= []).push({ wings: [s.wingId], until: c.day + 14, mult: 2, why: `${s.name} sealed in by blast doors, not recontained` });
+        lines.push(`${s.name} is shut in its wing behind the blast doors, not properly recontained. Vincent Russo: "It's holding for now. Clean and repair that wing before it isn't."`); }
+    }
     if (r.noSpecimen) lines.push(`The ${scpName(inc.scpId)} pack is dead, so there is no specimen to hold. Another pack will be heard of somewhere, in time.`);
     else if (!r.win) lines.push(`${scpName(inc.scpId)} got away. It will turn up again somewhere, in its own time.`);
   }

@@ -1,6 +1,8 @@
 // The Geoscape: where everything on the World Map sits, what state it's in, and what the player knows about it.
 // Incidents are placed at the town they happened in (or at Site-19 for anything inside the site); independent
 // Foundation facilities are shown too, but Site-19 is the only one the player runs.
+import { anomalyDef } from "../data/anomalies";
+import { fileOf } from "./dossier";
 import { rnd } from "../core/rng";
 import { resolveTeam } from "./autoteam";
 import { earn, spend } from "./ledger";
@@ -90,7 +92,22 @@ export function briefing(c: Campaign, inc: Incident) {
   // the anomaly
   if (inc.scpId && !inc.first) known.push(`Anomaly: ${scpName(inc.scpId)}.`);
   else if (inc.first && inc.recon) known.push(`Anomaly: ${scpName(inc.scpId)}, identified by investigation.`);
-  else if (inc.first) unknown.push("Anomaly: unidentified. Witnesses describe something new; investigating would identify it.");
+  else if (inc.first && c.site && anomalyDef(inc.scpId) && fileOf(c, inc.instance ?? inc.scpId)?.stage === "identified") known.push(`Anomaly: ${scpName(inc.scpId)}, identified from the evidence.`);
+  else if (inc.first) unknown.push(inc.kind === "investigation" ? "Cause: unknown. That is what the team is going to find out." : "Anomaly: unidentified. Witnesses describe something new; investigating would identify it.");
+  // Phase 6: what the site's file says, and what it doesn't
+  if (c.site && inc.scpId && anomalyDef(inc.scpId) && (inc.first || inc.kind === "investigation")) {
+    const f = fileOf(c, inc.instance ?? inc.scpId)!, def = anomalyDef(inc.scpId)!;
+    for (const p of def.properties.filter(p => f.known.includes(p.id) && p.id !== "appearance")) known.push(`Known: ${p.text}`);
+    const left = def.properties.filter(p => !f.known.includes(p.id)).length;
+    if (left) unknown.push(`${left} thing${left > 1 ? "s" : ""} about it still unknown. Capture kit is issued only for procedures the file supports.`);
+    if (f.pending.length) estimated.push(`${f.pending.length} item${f.pending.length > 1 ? "s" : ""} of evidence still in the labs.`);
+  }
+  if (inc.kind === "investigation") known.push(`${inc.evidence?.length ?? 0} items of evidence reported at the scene.`);
+  if (inc.markedOp) { const o = c.roster.find(x => x.id === inc.markedOp); if (o) known.push(`It is coming for ${o.call} ${o.name}, who saw its face. If it isn't contained in time, it reaches them.`); }
+  if (inc.variant === "quarantine_perimeter") known.push("Objective: hold a line around the outbreak for 10 turns. Cordons, firebreaks and fire stop the flesh. Holding it pauses the spread for 30 days; it does not end the outbreak.");
+  if (inc.variant === "survivor_evacuation") known.push("Objective: bring at least half the survivors out. Evacuation is not containment.");
+  if (inc.variant === "sample_recovery") known.push("Objective: seal a sample of the growth and get out (Hazardous Recovery's sealed retrieval, or anyone with a sample case).");
+  if (inc.stage === "search") known.push("Objective: find the missing where they surfaced and bring them out.");
   if (inc.witnesses) known.push(`${inc.witnesses} witness${inc.witnesses === 1 ? "" : "es"} to dose.`);
   if (inc.kind === "rescue") estimated.push(`${inc.survivors ?? 2} or so of ${inc.team} may still be alive, hiding.`);
   if (inc.kind === "emergency" && inc.quiet) { unknown.push("Nobody knows what happened there: the site went silent. Expect anything: a loose anomaly, the Insurgency, or something escaped."); }
@@ -100,7 +117,7 @@ export function briefing(c: Campaign, inc: Incident) {
   const bonus = MISSION_BONUS[inc.kind] ?? 0;
   const rewards = [bonus ? `$${bonus}k from the O5 Council` : "", inc.kind === "coverup" ? "−10 exposure here" : inc.kind === "riot" || inc.kind === "raid" ? "" : "−5 exposure here",
     inc.kind === "strike" || inc.kind === "retaliation" || inc.kind === "raid" ? "captured Insurgent weapons and prisoners for research" : "",
-    inc.first ? (inc.recon ? `${scpName(inc.scpId)} for Site-19 to hold and study (opens ${anomalyProgress(c, inc.scpId).projects.map(p => p.name).join(", ") || "new research"})` : "a new anomaly for Site-19 to hold and study") : "", inc.kind === "outbreak" ? "SCP-610 burned back a stage" : "",
+    inc.kind === "investigation" ? "evidence for the anomaly's file, and an earlier, safer encounter" : inc.first ? (inc.recon ? `${scpName(inc.scpId)} for Site-19 to hold and study (opens ${anomalyProgress(c, inc.scpId).projects.map(p => p.name).join(", ") || "new research"})` : "a new anomaly for Site-19 to hold and study") : "", inc.kind === "outbreak" ? "SCP-610 burned back a stage" : "",
     inc.reward ? `${rewardText(inc.reward)} from the Council for answering this one` : "",
     inc.kind === "rescue" ? `${inc.site}'s gratitude (relations and standing for each survivor brought home), and maybe a transfer to Epsilon-11` : "",
     inc.kind === "emergency" ? `${inc.site}'s gratitude for every part done: researchers out, records recovered (Intel), power restored, the threat dealt with` : "", inc.transfer ? `${scpName(inc.transfer.scp)} delivered to Site-19` : ""].filter(Boolean);
@@ -113,6 +130,8 @@ export function briefing(c: Campaign, inc: Incident) {
     : inc.kind === "coverup" ? "The story gets out: +12 exposure here. An amnestics team or paying the front handles it without Epsilon-11."
     : inc.kind === "retaliation" ? "People die in the streets: +12 exposure here."
     : inc.kind === "strike" ? "The cell moves on; the Intel spent to find it is wasted."
+    : inc.kind === "investigation" ? "Nobody looks into it. Whatever it is keeps killing until it turns up somewhere worse, and the team that meets it will know nothing."
+    : inc.variant ? "The operation is lost; the outbreak goes on."
     : inc.kind === "outbreak" ? "SCP-610 keeps spreading: more exposure every week and a worse stage every two weeks."
     : inc.first ? "It moves on (+10 exposure here) and turns up somewhere else later."
     : "It goes dark again (+15 exposure here) and resurfaces later.";

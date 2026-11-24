@@ -19,6 +19,8 @@ import { noteMissed } from "./council";
 import { PROCEDURES } from "../data/procedures";
 import { researchersFree } from "./research";
 import { engineersFree } from "./base";
+import { arcExpired, beginArc } from "./storylines";
+import { canSpawnAnomaly, chamberRisk, fileOf, receiveRecovered } from "./dossier";
 
 export type ScpClass = "Safe" | "Euclid" | "Keter";
 const CLASS_GRADE: Record<ScpClass, number> = { Safe: 0, Euclid: 1, Keter: 2 };
@@ -42,7 +44,10 @@ export interface ScpRecord {
   name: string;
   title: string;
   cls: ScpClass;
-  status: "contained" | "breach" | "loose" | "away" | "leaving";
+  status: "contained" | "breach" | "loose" | "away" | "leaving" | "holding";
+  /** Phase 6: which instance this is (unset: the anomaly's only one), and how well its chamber holds it. */
+  instance?: string;
+  holding?: "permanent" | "temporary" | "emergency";
   /** While held at another site for safekeeping: the day it comes back. */
   returnDay?: number;
   wingId: string;
@@ -74,6 +79,9 @@ export function breachRisk(c: Campaign, s: ScpRecord) {
   const sec = securityNear(c, wing);
   if (sec) { p *= 0.7 ** sec; why.push(`${sec} security station${sec > 1 ? "s" : ""} on this level: ×${(0.7 ** sec).toFixed(2)}`); }
   if (wing.disabled) { p *= 3; why.push("Wing damaged: ×3"); }
+  // Phase 6: a chamber that lacks what this anomaly needs (cameras on SCP-173, image screening for SCP-096, a suspended
+  // lead-lined cell for SCP-106) holds it worse; founded campaigns only, so older saves keep their numbers
+  if (c.site) { const ch = chamberRisk(c, s.id, wing); if (ch.mult > 1) { p *= ch.mult; why.push(...ch.why); } }
   if (has(c, "containment_rev")) { p *= 0.75; why.push("Revised procedures: ×0.75"); }
   if (has(c, "reinforced_doors")) { p *= 0.8; why.push("Reinforced doors: ×0.8"); }
   if (s.id === "106" && has(c, "em_containment")) { p *= 0.7; why.push("Electromagnetic containment: ×0.7"); }
@@ -113,6 +121,12 @@ export function startBreach(c: Campaign, s: ScpRecord, cause: string) {
   }
   // SCP-035 held at Site-19 whispers to the staff: an "accident" elsewhere is anomalous half the time
   if (inc.cause === "accident" && s.id !== "035" && c.scps.some(x => x.id === "035" && x.status === "contained") && rnd() < 0.5) inc.cause = "anomalous";
+  // Phase 6: in a founded campaign some breaches catch staff in the wing first: getting them out is the job, and
+  // the anomaly may be left shut in behind the blast doors (temporary containment)
+  if (c.site && !isInert(s) && ["173", "049", "106"].includes(s.id) && c.researchers >= 2 && rnd() < 0.3) {
+    inc.variant = "breach_evacuation";
+    inc.title = inc.title.replace(" breach,", " breach with staff trapped,");
+  }
   c.nextIncident++;
   c.incidents.push(inc);
   openInquiry(c, inc);
@@ -275,6 +289,7 @@ export function tickContainment(c: Campaign) {
   }
   for (const inc of [...c.incidents]) {
     const s = c.scps.find(x => x.id === inc.scpId);
+    if (inc.arc && inc.first && c.day > inc.expires && inc.id !== c.activeIncident && !inc.dispatch && arcExpired(c, inc)) continue;
     if (inc.first && c.day > inc.expires && inc.id !== c.activeIncident) {
       // a new anomaly nobody went for: it moves on, and turns up somewhere else later
       c.incidents = c.incidents.filter(i => i !== inc); addExposure(c, inc.region, 10); noteMissed(c, inc.title.split(":")[0]);
@@ -304,6 +319,7 @@ export function resolveScp(c: Campaign, inc: Incident, recovered: boolean) {
     // Strategic overhaul D: back into its own wing if that still stands, is free and is strong enough, otherwise the
     // first free wing that will hold it. With none, Site-17 holds it until one opens (an anomaly that was never at
     // Site-19, or whose wing was torn down or taken, used to be marked contained in no wing at all).
+    if (c.site) { s.resurfaceDay = undefined; receiveRecovered(c, s.id); return; }
     const own = c.base.facilities.find(f => f.id === s.wingId);
     const ownOk = own && isContainment(own.type) && operational(own) && (FACILITIES[own.type].grade ?? 0) >= CLASS_GRADE[s.cls] && !c.scps.some(o => o !== s && o.wingId === own.id && (o.status === "contained" || o.status === "breach"));
     const to = ownOk ? own : freeWings(c, s.cls)[0];
@@ -431,12 +447,16 @@ export function newSightings(from: number): Partial<Record<ScpId, number>> {
 /** Paid when a captured anomaly has to go to another site; Keter-class ones are worth more. */
 export const transferBonus = (cls: ScpClass) => cls === "Keter" ? 150 : 100;
 
-export function firstSighting(c: Campaign, id: ScpId) {
+export function firstSighting(c: Campaign, id: ScpId, o: { region?: RegionId; where?: string; extra?: Partial<Incident> } = {}) {
+  // Phase 6: in a founded campaign the first word of a new anomaly is a report to investigate, not a capture order
+  if (!o.region && beginArc(c, id)) return;
+  if (!canSpawnAnomaly(c, id)) return;
   const open = REGION_IDS.filter(r => !c.regions[r].collapsed);
-  const region = open[rand(0, open.length - 1)] ?? homeRegion(c);
-  const towns = REGIONS[region].towns, where = towns[rand(0, towns.length - 1)];
+  const region = o.region ?? open[rand(0, open.length - 1)] ?? homeRegion(c);
+  const towns = REGIONS[region].towns, where = o.where ?? towns[rand(0, towns.length - 1)];
   const d = SCP_DEFS[id];
   const inc: Incident = {
+    ...(o.extra ?? {}),
     id: "inc" + c.nextIncident, kind: "recovery", scpId: id, first: true,
     title: `Incident ${String(c.nextIncident).padStart(3, "0")}: Anomalous sighting near ${where}`,
     appeared: c.day, expires: c.day + travelDays(c, region) + 4,
@@ -445,10 +465,14 @@ export function firstSighting(c: Campaign, id: ScpId) {
     gru: (region === "europe" || region === "east_asia") && rnd() < 0.5,
   };
   if (inc.gru) inc.insurgents = rand(2, 3);
+  if (o.extra?.expires) inc.expires = o.extra.expires;
   gocMaybe(c, inc);
   c.nextIncident++;
   c.incidents.push(inc);
-  log(c, `Reports from ${where}: ${d.sighting}. Something new. Capture it within ${inc.expires - c.day} days.${inc.gru ? " GRU Division \"P\" is in the area too." : ""}`, "bad", "command");
+  // what the site knows decides what the report can call it
+  const named = fileOf(c, id)?.stage === "identified";
+  if (named && o.region) inc.title = `Incident ${inc.id.slice(3).padStart(3, "0")}: ${d.name} near ${where}${inc.goc ? " (GOC present)" : ""}`;
+  log(c, `Reports from ${where}: ${d.sighting}. ${named ? `It is ${d.name}.` : "Something new."} Capture it within ${inc.expires - c.day} days.${inc.gru ? " GRU Division \"P\" is in the area too." : ""}`, "bad", "command");
 }
 
 /** Wings an anomaly could move into: working, empty, and at least its grade. */
@@ -459,6 +483,13 @@ export const freeWings = (c: Campaign, cls: ScpClass) => c.base.facilities.filte
 /** A newly found anomaly was caught (or not). Returns a line for the debrief. */
 function firstContact(c: Campaign, inc: Incident, caught: boolean) {
   const id = inc.scpId as ScpId, d = SCP_DEFS[id];
+  if (caught && c.site) {
+    // Phase 6: a recovered anomaly goes to a chamber that meets its needs, or waits at the dock for a decision
+    c.scps.push({ id, name: d.name, title: d.title, cls: d.cls, status: "holding", wingId: "", maintenance: 100, lastCleaned: c.day, instance: inc.instance });
+    chronicle(c, "anomaly", `${d.name}, "${d.title}" (${d.cls}), was recovered for the first time.`);
+    receiveRecovered(c, id);
+    return;
+  }
   if (caught) {
     const wing = freeWings(c, d.cls)[0];
     if (wing) {

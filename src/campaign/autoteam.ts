@@ -2,6 +2,8 @@
 // the same time, but hands-off, like leaving a breach to Site Security: the team flies out, the outcome is rolled at
 // the odds shown, and it comes back through the ordinary debrief (rewards, failures, wounds, deaths, experience).
 import { rnd } from "../core/rng";
+import { anomalyDef } from "../data/anomalies";
+import { fileOf } from "./dossier";
 import type { MissionResult } from "../game/types";
 import { applyResult, deployable, gainIntel, log, type Campaign, type Incident, type Operative } from "./campaign";
 import { flightOut } from "./world";
@@ -19,7 +21,7 @@ import type { ItemId } from "../game/types";
 
 export const AUTO_KINDS: Incident["kind"][] = ["recovery", "coverup", "strike", "retaliation", "rescue", "emergency"];
 /** Phase 5 sites can also send a squad to an SCP-610 outbreak without the player. */
-export const autoKinds = (c: Campaign): Incident["kind"][] => c.mtfs ? [...AUTO_KINDS, "outbreak"] : AUTO_KINDS;
+export const autoKinds = (c: Campaign): Incident["kind"][] => c.mtfs ? [...AUTO_KINDS, "outbreak", "investigation"] : AUTO_KINDS;
 export const AUTO = { min: 2, max: 4 };
 const rand = (a: number, b: number) => a + Math.floor(rnd() * (b - a + 1));
 
@@ -64,7 +66,7 @@ export function assessTeam(c: Campaign, inc: Incident, ops: Operative[]): Assess
   // the objective or it doesn't.
   let primaryCap = 0.92;
   if (sq) {
-    const caps = capabilities(c, sq, ops), obj = OBJECTIVES[inc.kind] ?? { primary: [], people: [] };
+    const caps = capabilities(c, sq, ops), obj = OBJECTIVES[inc.variant ?? ""] ?? OBJECTIVES[inc.kind] ?? { primary: [], people: [] };
     const p = obj.primary.filter(t => caps.includes(t)), q = obj.people.filter(t => caps.includes(t));
     const stage = (sq.mastery ?? 0) >= 3 || (sq.drilled ?? 0) >= 1 ? 0.04 : 0;
     if (p.length) add(`${sp!.name}: ${p.map(tagName).join(", ")}`, 0.18 + stage);
@@ -84,6 +86,18 @@ export function assessTeam(c: Campaign, inc: Incident, ops: Operative[]): Assess
   if (inc.kind === "coverup") add(c.amnestics >= (inc.witnesses ?? 0) ? "Enough amnestic doses" : "Too few amnestic doses", c.amnestics >= (inc.witnesses ?? 0) ? 0.06 : -0.2);
   if (inc.kind === "recovery" || inc.kind === "rescue") add(carried("tracker") ? "Seismic sensor to find them" : "No sensor", carried("tracker") ? 0.06 : 0);
   if (inc.kind === "strike" || inc.kind === "retaliation") add(carried("frag") ? "Grenades" : "No grenades", carried("frag") ? 0.05 : 0);
+  // Phase 6: the anomaly's own rules, and what the file says about it
+  const def = inc.scpId ? anomalyDef(inc.scpId) : inc.kind === "outbreak" ? anomalyDef("610") : undefined;
+  const capture = inc.kind === "recovery" || (inc.kind === "emergency" && inc.hazard === "scp");
+  if (def && c.site && capture) {
+    const f = fileOf(c, inc.instance ?? inc.scpId);
+    if (def.conventional !== "effective") add(`Gunfire ${def.conventional === "none" ? "does nothing to" : "only delays"} ${f?.stage === "identified" ? def.name : "it"}: numbers and aim don't secure it`, -0.1 * power * (def.conventional === "none" ? 0.8 : 0.5));
+    const procs = def.procedures.filter(p => p.needs.length), ready = procs.filter(p => p.needs.every(n => f?.known.includes(n)));
+    const share = procs.length ? ready.length / procs.length : 1;
+    add(`The file supports ${ready.length} of ${procs.length} procedures`, 0.2 * share - 0.05);
+    if (share < 0.5) { primaryCap = Math.min(primaryCap, 0.3); add("Too little is known to follow a containment procedure", -0.05); }
+  }
+  if (inc.kind === "investigation") add(f6Evidence(inc), 0.05);
   // what's known before they go
   if (inc.recon) add("Investigated: exact opposition known", 0.08);
   else if (inc.first) add("Unidentified anomaly", -0.08);
@@ -131,6 +145,7 @@ export function resolveTeam(c: Campaign, inc: Incident) {
   const a = c.mtfs ? assessTeam(c, inc, ops) : null;
   const win = rnd() < (a ? a.primary : d.odds ?? 0.5);
   const peopleOk = a ? rnd() < a.people : win;
+  const p6 = c.site ? phase6Outcome(c, inc, ops, win, peopleOk) : {};
   const ins = Math.max(0, inc.insurgents - (inc.weakened ?? 0));
   const down = win ? ins : rand(0, Math.floor(ins / 2));
   const squad = ops.map((o, i) => {
@@ -147,7 +162,10 @@ export function resolveTeam(c: Campaign, inc: Incident) {
     photos: [], restraints: false, aftercare: false, prisoners: 0, civiliansKilled: inc.kind === "retaliation" && !win ? rand(1, 3) : 0,
     witnessesEscaped: inc.kind === "coverup" && !win && !peopleOk ? wit : 0, witnessesDosed: inc.kind === "coverup" && (win || peopleOk) ? wit : 0, amnesticsUsed: inc.kind === "coverup" && win ? Math.min(wit, c.amnestics) : 0,
     known: [], dSent: 0, dReturned: 0, dRecruited: 0, dLost: 0, insurgentsDown: down, insurgentsTotal: ins,
+    ...p6,
   };
+  // Phase 6: SCP-106 takes people rather than killing them; the taken are missing, not dead
+  if (c.site && inc.scpId === "106") for (const m of squad) if (!m.alive && rnd() < 0.7) (r.missing ??= []).push(m.opId);
   inc.dispatch = undefined;
   const debrief = applyResult(c, r);
   if (!a) { log(c, `Hands-off team at ${inc.title.split(": ")[1]}: ${win ? "they did it" : "it went wrong"}. ${debrief.lines.join(" ")}`, win ? "good" : "bad", "command"); return; }
@@ -175,6 +193,32 @@ export function resolveTeam(c: Campaign, inc: Incident) {
   log(c, `After-action, ${inc.title.split(": ")[1] ?? inc.title}: ${team}, ${outcome.toLowerCase()}.${extra} ${debrief.lines.join(" ")}`, win ? "good" : "bad", "command");
 }
 
+// ---------- Phase 6: what a hands-off operation actually achieved ----------
+function f6Evidence(inc: Incident) { return `${inc.evidence?.length ?? 0} items of evidence to collect`; }
+/** Objectives met, evidence brought home, people marked, and the tactical outcome, from the rolls and the squad. A
+ *  recovery squad can save the people and leave the threat; a quarantine squad can hold a line and not end it. */
+function phase6Outcome(c: Campaign, inc: Incident, ops: Operative[], win: boolean, peopleOk: boolean): Partial<MissionResult> {
+  const sq = ops[0] ? squadOfOp(c, ops[0]) : undefined, caps = sq ? capabilities(c, sq.squad, ops) : [];
+  const st = (b: boolean) => b ? "done" as const : "failed" as const;
+  if (inc.kind === "investigation") {
+    const ev = inc.evidence ?? [], careful = caps.includes("can_read_evidence") || caps.includes("can_provide_sustained_observation");
+    const got = win ? ev.slice(0, Math.max(1, Math.ceil(ev.length * (careful ? 0.75 : 0.5)))) : [];
+    // a careless look at SCP-096's photograph marks someone; reading the scene properly means bagging it unseen
+    const photo = got.some(e => e.kind === "photograph" || e.kind === "film") && inc.scpId === "096" && !fileOf(c, "096")?.known.includes("image_carrier");
+    const marked = photo && !careful && rnd() < 0.5 && ops[0] ? [ops[0].id] : [];
+    return { outcome: win ? "evidence" : "failed", evidence: { examined: [], bagged: got.map(e => e.kind) }, marked,
+      objectives: [{ id: "evidence", kind: "evidence", tier: "primary", text: "Collect the evidence", status: st(win) }] };
+  }
+  if (inc.kind === "outbreak" && inc.variant) {
+    const burn = win && caps.includes("can_burn_infected_tile") && rnd() < 0.4;
+    const prim = inc.variant === "quarantine_perimeter" ? "hold_perimeter" : inc.variant === "survivor_evacuation" ? "rescue" : "sample";
+    return { outcome: burn ? "secured" : win ? (prim === "hold_perimeter" ? "isolated" : "evacuated") : "failed", coreBurned: burn, samples: prim === "sample" && win ? 1 : 0,
+      objectives: [{ id: prim, kind: prim, tier: "primary", text: prim, status: st(win) }, { id: "survivors", kind: "rescue", tier: "secondary", text: "Survivors", status: st(peopleOk) }] };
+  }
+  if (inc.kind === "recovery") return { outcome: win ? "secured" : peopleOk ? "evacuated" : "failed" };
+  return {};
+}
+
 // ---------- Version 12 capability tags (design 26.6) ----------
 /** Kit a tag depends on: no stock, no capability. Tags not listed need only training. */
 const TAG_ITEM: Record<string, ItemId> = {
@@ -200,7 +244,13 @@ const tagName = (t: string) => TAG_NAMES[t] ?? t;
 /** What each kind of incident's objectives accept (design 26.6): capabilities that open a route to the primary
  *  objective, ones that help the people side, the capability without which the primary objective is out of reach,
  *  and capabilities that carry a risk there. */
-const OBJECTIVES: Partial<Record<Incident["kind"], { primary: string[]; people: string[]; required?: string; risks?: [string, string, number][] }>> = {
+const OBJECTIVES: Partial<Record<string, { primary: string[]; people: string[]; required?: string; risks?: [string, string, number][] }>> = {
+  // Phase 6: investigations and SCP-610's variant operations each need their own capabilities
+  investigation: { primary: ["can_read_evidence", "can_provide_sustained_observation", "can_scout_route", "can_move_silently", "can_recover_contaminated_sample"], people: ["can_carry_two_person", "can_secure_transfer"],
+    risks: [["can_breach_structural_wall", "Demolitions at a crime scene destroy evidence", -0.08]] },
+  quarantine_perimeter: { primary: ["can_reduce_spread", "can_firebreak", "can_erect_barrier", "can_hold_line"], people: ["can_decontaminate"], required: "hold a line the flesh can't cross" },
+  survivor_evacuation: { primary: ["can_carry_two_person", "can_protected_extraction", "can_secure_transfer", "can_scout_route"], people: ["can_decontaminate", "can_protected_extraction"] },
+  sample_recovery: { primary: ["can_recover_contaminated_sample", "can_protected_extraction"], people: ["can_decontaminate"], required: "seal a sample of the growth" },
   outbreak: { primary: ["can_burn_infected_tile", "can_reduce_spread"], people: ["can_carry_two_person", "can_protected_extraction", "can_secure_transfer", "can_recover_contaminated_sample"], required: "burn or contain SCP-610's growth",
     risks: [["can_breach_structural_wall", "Demolition spreads the growth's debris", -0.05]] },
   strike: { primary: ["can_breach_door", "can_coordinated_entry", "can_breach_structural_wall", "can_assault", "can_emplace_mg", "can_suppress_lane", "can_covert_access"], people: ["can_anchor", "can_hold_line"] },

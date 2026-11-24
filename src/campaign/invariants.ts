@@ -41,7 +41,13 @@ export function checkInvariants(c: Campaign): string[] {
   for (const i of c.incidents) { if (inc.has(i.id)) out.push(`duplicate incident ${i.id}`); inc.add(i.id); }
   if (c.activeIncident && !inc.has(c.activeIncident)) out.push(`the active incident ${c.activeIncident} is gone`);
   // SCP-610: an outbreak in progress has exactly one incident on the map, at a severity from 1 to 5, and none without one
-  const outbreaks = c.incidents.filter(i => i.kind === "outbreak").length;
+  // Phase 6 variant operations (quarantine line, evacuation, sample) run beside the outbreak's own incident
+  const outbreaks = c.incidents.filter(i => i.kind === "outbreak" && !i.variant).length;
+  if (!c.outbreak && c.incidents.some(i => i.kind === "outbreak" && i.variant)) out.push("an SCP-610 operation with no outbreak");
+  // Phase 6: a unique anomaly is never both held and the subject of a first-contact incident, nor held twice
+  for (const s of c.scps) { if (c.scps.filter(x => x.id === s.id).length > 1) out.push(`${s.name} is held twice`);
+    if (c.incidents.some(i => i.first && i.scpId === s.id)) out.push(`${s.name} is held and reported as new`); }
+  for (const m of c.missing ?? []) { const o = c.roster.find(x => x.id === m.opId); if (o?.alive && o.busy?.kind !== "missing") out.push(`${o.name} is missing but on duty`); }
   if (c.outbreak && (c.outbreak.severity < 1 || c.outbreak.severity > 5)) out.push(`SCP-610 severity ${c.outbreak.severity} out of range`);
   if (c.outbreak && outbreaks !== 1) out.push(`SCP-610 outbreak with ${outbreaks} outbreak incidents`);
   if (!c.outbreak && outbreaks) out.push(`${outbreaks} SCP-610 incident(s) with no outbreak`);

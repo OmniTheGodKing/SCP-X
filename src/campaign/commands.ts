@@ -9,6 +9,7 @@ import {
 } from "./base";
 import { canHireEngineer, hireEngineer, type Campaign, type SiteLogEntry } from "./campaign";
 import { canClean, cleanCell } from "./containment";
+import { placeAnomaly, placementOptions, type PlacementKind } from "./dossier";
 import { PROJECTS, assign, canHireResearcher, canOrder, canOrderAttachment, hireResearcher, order, orderAttachment, type ItemId } from "./research";
 import { canFitAttachment, fitTo } from "./armory";
 import type { AttachmentId } from "../data/weapons";
@@ -31,7 +32,9 @@ export type Command =
   | { type: "fitAttachment"; opId: string; attachment: AttachmentId | "" }
   | { type: "orderAttachment"; attachment: AttachmentId }
   | { type: "cleanCell"; scpId: string }
-  | { type: "setAlert"; level: Alert };
+  | { type: "setAlert"; level: Alert }
+  /** Phase 6: where a recovered anomaly goes (a chamber, temporary or emergency holding, Site-17, or another site's help). */
+  | { type: "placeAnomaly"; scpId: string; kind: PlacementKind; wingId?: string };
 
 export interface CommandResult { ok: boolean; reason?: string; events: SiteLogEntry[] }
 
@@ -57,6 +60,12 @@ export function check(c: Campaign, cmd: Command): string | null {
     case "orderAttachment": return canOrderAttachment(c, cmd.attachment);
     case "cleanCell": { const s = c.scps.find(x => x.id === cmd.scpId); return s ? canClean(c, s) : "No such anomaly."; }
     case "setAlert": return ALERTS[cmd.level] ? null : "Unknown alert level.";
+    case "placeAnomaly": {
+      const sc = c.scps.find(x => x.id === cmd.scpId);
+      if (!sc) return "No such anomaly.";
+      if (sc.status !== "holding" && !(sc.status === "contained" && sc.holding && sc.holding !== "permanent")) return "It is already placed.";
+      return placementOptions(c, cmd.scpId).some(o => o.kind === cmd.kind && (!cmd.wingId || o.wingId === cmd.wingId)) ? null : "That isn't possible now.";
+    }
   }
 }
 
@@ -85,6 +94,13 @@ export function dispatch(c: Campaign, cmd: Command): CommandResult {
     case "orderAttachment": orderAttachment(c, cmd.attachment); break;
     case "cleanCell": cleanCell(c, c.scps.find(x => x.id === cmd.scpId)!); break;
     case "setAlert": c.alert = cmd.level; break;
+    case "placeAnomaly": {
+      // moving out of a temporary wing frees it first
+      const sc = c.scps.find(x => x.id === cmd.scpId)!;
+      if (sc.status === "contained") { sc.status = "holding"; sc.wingId = ""; }
+      reason = placeAnomaly(c, cmd.scpId, cmd.kind, cmd.wingId);
+      break;
+    }
   }
   if (reason) return { ok: false, reason, events: [] };
   // the entries this command wrote to the site log, newest first, are its events

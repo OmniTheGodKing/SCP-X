@@ -1,3 +1,4 @@
+import { outbreakRegion } from "./storylines";
 import { rnd } from "../core/rng";
 import { fieldMap } from "../data/maps";
 // The world outside Site-19: regional exposure and Foundation fronts, travel, cover-ups,
@@ -121,7 +122,7 @@ const STORIES = [
   "a schoolteacher's letter to her congressman",
 ];
 
-function newIncident(c: Campaign, i: Omit<Incident, "id" | "title" | "appeared"> & { what: string }): Incident {
+export function newIncident(c: Campaign, i: Omit<Incident, "id" | "title" | "appeared"> & { what: string }): Incident {
   const inc: Incident = { ...i, id: "inc" + c.nextIncident, title: `Incident ${String(c.nextIncident).padStart(3, "0")}: ${i.what}`, appeared: c.day };
   c.nextIncident++;
   c.incidents.push(inc);
@@ -206,17 +207,20 @@ export function tickWorld(c: Campaign) {
   if (c.outbreakDay && c.day >= c.outbreakDay) {
     c.outbreakDay = undefined;
     const open = REGION_IDS.filter(r => r !== homeRegion(c) && !c.regions[r].collapsed);
-    const r = pick(open.length ? open : REGION_IDS);
+    // Phase 6: it comes back to ground it burned through before, more often than not
+    const r = outbreakRegion(c, open) ?? pick(open.length ? open : REGION_IDS);
     c.outbreak = { region: r, severity: 2, lastMission: c.day };
     c.materials.outbreaks = (c.materials.outbreaks ?? 0) + 1;
     const inc = newIncident(c, { kind: "outbreak", region: r, map: fieldMap("outbreak"), scpId: "", what: `SCP-610 outbreak, severity 2`, expires: c.day + 99999, insurgents: 0, witnesses: 0, civilians: 4 });
     log(c, `${inc.title.split(":")[0]}: in ${pick(REGIONS[r].towns)}, people are fusing with something that grows out of the walls. SCP-610, "The Flesh that Hates". It can't be contained, only burned. It will spread every week it's left. Containment suit research is open.`, "bad", "command");
   }
   if (c.outbreak && c.day % 7 === 0) {
-    addExposure(c, c.outbreak.region, c.outbreak.severity * 2);
-    if (c.day - c.outbreak.lastMission >= 14 && c.outbreak.severity < 5) {
+    // Phase 6: a quarantine line that held keeps it from growing for a while, and keeps most of it out of sight
+    const held = (c.outbreak.quarantinedUntil ?? 0) >= c.day;
+    addExposure(c, c.outbreak.region, c.outbreak.severity * (held ? 1 : 2));
+    if (!held && c.day - c.outbreak.lastMission >= 14 && c.outbreak.severity < 5) {
       c.outbreak.severity++; c.outbreak.lastMission = c.day;
-      const inc = c.incidents.find(i => i.kind === "outbreak");
+      const inc = c.incidents.find(i => i.kind === "outbreak" && !i.variant);
       if (inc) inc.title = `${inc.title.split(":")[0]}: SCP-610 outbreak, severity ${c.outbreak.severity}`;
       log(c, `SCP-610 is spreading in ${REGIONS[c.outbreak.region].name}: severity ${c.outbreak.severity} of 5.`, "bad", "command");
     }

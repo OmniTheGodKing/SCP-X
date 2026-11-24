@@ -102,7 +102,7 @@ export interface HubActions {
   newMtf: () => void;
 }
 
-const KIND_NAMES = { raid: "Raid", riot: "Riot", outbreak: "SCP-610", breach: "Breach", recovery: "Manhunt", coverup: "Cover-up", strike: "Strike", escort: "Ambush", retaliation: "Retaliation", rescue: "Lost team", emergency: "Site emergency" } as const;
+const KIND_NAMES = { raid: "Raid", riot: "Riot", outbreak: "SCP-610", breach: "Breach", recovery: "Manhunt", coverup: "Cover-up", strike: "Strike", escort: "Ambush", retaliation: "Retaliation", rescue: "Lost team", emergency: "Site emergency", investigation: "Investigation" } as const;
 const KIND_BRIEF = {
   rescue: "Another site's task force has gone quiet out here. Find the survivors, get them to follow you, and bring them out through an exit. The Insurgency is still in the area.",
   emergency: "Another Foundation site has a breach it can't handle. Get the trapped researchers out, recover the records at risk, restore power at the panel, and deal with whatever got loose, as much of it as you can. Leave through the exit when you're done: partial success still counts.",
@@ -115,6 +115,7 @@ const KIND_BRIEF = {
   recovery: "SCP-173 is loose among civilians. Every death there raises exposure. Get it into the truck's container and seal it.",
   coverup: "Witnesses need amnestics before they talk. Dose each one; anyone who reaches the edge of the map undosed adds exposure.",
   strike: "Raid the Insurgency cell's warehouse and neutralise everyone inside. Wounded Insurgents can be taken prisoner.",
+  investigation: "Something happened here and nobody knows what. Search the scene: examine evidence now, or bag it unseen for the labs. Question the locals, and get out. Bring people who can carry bodies out, and keep your eyes down around anything you don't understand.",
 } as const;
 const pctText = (p: number) => p < 0.01 ? (p * 100).toFixed(1) + "%" : Math.round(p * 100) + "%";
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
