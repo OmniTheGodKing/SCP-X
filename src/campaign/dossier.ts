@@ -158,6 +158,7 @@ export function tickDossier(c: Campaign) {
   for (const m of [...(c.missing ?? [])]) {
     const o = c.roster.find(x => x.id === m.opId);
     if (!o || !o.alive) { c.missing = c.missing!.filter(x => x !== m); continue; }
+    if (o.busy?.kind === "missing") o.busy.daysLeft = Math.max(1, MISSING.lostAfter - (c.day - m.day));   // days until they are listed lost
     if (c.day - m.day >= MISSING.lostAfter) {
       c.missing = c.missing!.filter(x => x !== m);
       o.alive = false; o.busy = undefined; o.diedDay = c.day; o.diedAt = "SCP-106's pocket dimension";

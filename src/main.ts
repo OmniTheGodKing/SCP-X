@@ -1,3 +1,8 @@
+import * as dossierMod from "./campaign/dossier";
+import * as storylinesMod from "./campaign/storylines";
+import * as containmentMod from "./campaign/containment";
+import * as abilitiesMod from "./game/abilities";
+import * as objectivesMod from "./game/objectives";
 import "./styles.css";
 import { briefing } from "./campaign/geo";
 import { advanceDay, applyResult, buildSetup, log, newCampaign, refreshRecruits, resolveInterrupted, type Campaign, type Debrief, type Incident } from "./campaign/campaign";
@@ -73,12 +78,16 @@ const WIN: Record<MissionKind, [string, string]> = {
   emergency: ["Emergency answered", "The team pulled out with what it could save."],
   investigation: ["Findings in", "The team is out with what it found."],
 };
+const OUTCOME_NAMES: Record<string, string> = { secured: "Fully secured", temporary: "Temporarily contained", isolated: "Area isolated", evacuated: "Personnel evacuated, threat remains",
+  evidence: "Evidence recovered", escaped: "Anomaly escaped", failed: "Containment failed", abandoned: "Mission abandoned", none: "" };
 function debriefHtml(r: MissionResult, d: Debrief, kind: MissionKind, scp: string) {
   return `
     <div class="stampmark ${r.win ? "win" : "lose"}">${r.win ? WIN[kind][0] : r.evacuated ? "Evacuated" : "Mission failed"}</div>
     <h3>${r.win ? WIN[kind][1].replace("%s", scp) : r.evacuated ? "Epsilon-11 pulled out." : kind === "raid" ? "The Insurgency got into Site-19." : "Epsilon-11 did not come back."}</h3>
     <ul class="debrief">${[...d.lines, ...d.promotions].map(l => `<li>${esc(l)}</li>`).join("")}</ul>
+    ${r.objectives?.filter(o => !o.hidden).length ? `<div class="label">Objectives</div><ul class="debrief objectives">${r.objectives.filter(o => !o.hidden).map(o => `<li data-obj="${o.id}" data-status="${o.status}">${o.status === "done" ? "✓" : o.status === "failed" ? "✗" : "·"} ${esc(o.tier)}: ${esc(o.text)}</li>`).join("")}</ul>` : ""}
     <dl>
+      ${r.outcome && r.outcome !== "none" ? `<dt>Containment</dt><dd data-outcome="${r.outcome}">${OUTCOME_NAMES[r.outcome]}</dd>` : ""}
       <dt>Turns</dt><dd>${r.turns}</dd>
       <dt>Operatives lost</dt><dd>${r.squad.filter(s => !s.alive).length} / ${r.squad.length}</dd>
       <dt>D-Class lost</dt><dd>${r.dLost}</dd>
@@ -226,6 +235,10 @@ function showHub() {
   // tactical camera: where a tile's centre is on screen now (client px), with the camera settled, for the tests
   tileToScreen: (x: number, y: number) => { cameraMod.cam.x = cameraMod.cam.tx; cameraMod.cam.y = cameraMod.cam.ty; cameraMod.cam.z = cameraMod.cam.tz; const r = document.querySelector("#cv")!.getBoundingClientRect(); const [a, b] = cameraMod.tileToScreen(x, y); return [r.left + a, r.top + b]; },
   camera: cameraMod, sprites: spritesMod, registerArt: registerAsset,
+  // Phase 6: the dossier, storylines and containment, and starting a mission for an incident now (no flight)
+  dossier: dossierMod, storylines: storylinesMod, containment: containmentMod, abilities: abilitiesMod, objectives: objectivesMod,
+  launchNow: (incId: string, opIds: string[]) => { const inc = campaign.incidents.find(i => i.id === incId); if (!inc) return false; launch(buildSetup(campaign, inc, opIds.map(id => ({ opId: id, armor: "" as const, items: [] })), 0), inc); return true; },
+  hub: () => showHub(),
 };
 
 function showLab() { screen = "mission"; openLab(root, () => { endMission(); showHub(); }); }

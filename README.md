@@ -36,7 +36,7 @@ Press the backtick key on the hub for the debug panel. It opens with a read-only
 forecast, standing, exposure by region, breach risk per anomaly with the reasons, what each Insurgency operation is
 worth to it and why, and the invariant results. Looking does not mark the save as a debug save.
 
-The strategic UI's design rules are in `docs/UI_STYLE_GUIDE.md`; the overhaul's record is
+Phase 6 (anomalous operations and containment) is recorded in `docs/PHASE6_PROGRESS.md`. The strategic UI's design rules are in `docs/UI_STYLE_GUIDE.md`; the overhaul's record is
 `docs/STRATEGIC_OVERHAUL_PROGRESS.md`.
 
 ## The tactical lab
@@ -62,6 +62,9 @@ A developer screen for building a tactical situation and watching every rule: si
 | `src/campaign/briefing.ts` | Log severity and the Director's Briefing, derived from the campaign each time |
 | `src/campaign/forecast.ts`, `crews.ts` | Scheduled money and the projected balance; which engineers are on which job |
 | `src/campaign/invariants.ts`, `src/sim/campaignSim.ts` | Campaign invariants; the headless strategy simulations |
+| `src/data/anomalies.ts` | Phase 6 anomaly registry: class, threat, difficulty, sources and continuity, properties, procedures, chambers |
+| `src/game/objectives.ts`, `investigation.ts`, `contamination.ts`, `containment-actions.ts` | Phase 6 objectives and tactical outcomes, investigations and evidence, SCP-610 contamination, the containment procedure framework |
+| `src/campaign/dossier.ts`, `storylines.ts` | Phase 6 knowledge per anomaly, placement and chamber features, missing and marked personnel; multi-mission SCP storylines |
 | `src/ui/` | The command hub, the mission screen and the map renderer |
 
 Campaign saves are kept in the browser's local storage.

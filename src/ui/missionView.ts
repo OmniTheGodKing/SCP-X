@@ -250,7 +250,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     for (const id of ["stareBtn", "callBtn", ...(S.scp === "682" ? [] : ["dragBtn"]), ...(S.has049 || S.has106 || ["096", "939", "682"].includes(S.scp ?? "") ? [] : ["sealBtn"])]) $(id).hidden = true;
     $("fileCard").hidden = true;
     root.querySelectorAll<HTMLElement>(".rules > div").forEach(d => { if (d.id !== "objRule" && /SCP-173|Do not blink|Dragging|Blinks\./.test(d.textContent || "")) d.hidden = true; });
-    $("statusLabel").textContent = S.has049 ? "SCP-049 status" : S.has106 ? "SCP-106 status" : isNewScp(S.scp) ? `${statusName()} status` : "Objective";
+    $("statusLabel").textContent = kind === "investigation" ? (statueKnown() ? `${S.statue.name} · investigation` : "Investigation") : S.has049 ? "SCP-049 status" : S.has106 ? "SCP-106 status" : isNewScp(S.scp) ? `${statusName()} status` : "Objective";
   }
   if (isNewScp(S.scp) && kind !== "emergency" && kind !== "investigation") {
     const n = NEW_INFO[S.scp!], where = kind === "breach" ? "transport container in the staging room" : "truck's open container";
@@ -416,6 +416,12 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     if (S.setup.quiet && S.revealed === undefined) {
       sc.className = "card status danger";
       line.innerHTML = `<b>Unknown.</b> Nobody has seen what happened here yet.${S.powerOn ? " Power is back on." : " The power is out: the panel is in containment control, in the basement."}`;
+    } else if (kind === "investigation") {
+      // Phase 6: progress on the evidence; the cause is named only once it has been identified
+      const ev = S.units.filter(u => u.evidence), got = ev.filter(u => u.examined || u.saved).length;
+      const marked = S.units.filter(u => u.marked && u.alive && !u.saved);
+      sc.className = "card status " + (marked.length ? "danger" : got >= Math.ceil(ev.length / 2) ? "done" : "");
+      line.innerHTML = `<b>Evidence: ${got} of ${ev.length}</b> examined or bagged.${S.identified ? ` Identified: ${esc(S.statue.name)}.` : " Cause unknown."}${marked.length ? ` <span class="warn">Marked: ${marked.map(u => esc(u.call || u.name)).join(", ")}. Get them out.</span>` : ""}`;
     } else if (kind === "riot") {
       const left = S.units.filter(u => u.rioter && u.alive && !u.downed && u.side === "zombie").length;
       sc.className = "card status " + (left ? "danger" : "done");

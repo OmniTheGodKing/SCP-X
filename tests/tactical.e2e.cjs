@@ -127,7 +127,8 @@ const inside = (a, vw, vh) => a && a.x >= -1 && a.y >= -1 && a.x + a.w <= vw + 1
     const qid = await E(() => window.__site19.mission.units.find(u => u.side === 'mtf').id);
     await p.click(`.op[data-id="${qid}"]`); await p.waitForTimeout(200);
     const nb = await E(() => [...document.querySelectorAll('#abSpec button')].map(b => ({ t: b.textContent, nb: !!b.querySelector('.nb'), dis: b.disabled })).find(x => /Controlled crossing/.test(x.t)));
-    check('unfinished techniques are labelled "not built" and disabled', nb && nb.nb && nb.dis, nb);
+    // Phase 6 built the three techniques that waited for contamination and a paired move: none is labelled "not built"
+    check('techniques once marked "not built" are no longer labelled so', nb && !nb.nb, nb);
     // 19. the isolation line on the map matches the cordon tiles in the rules
     await E(() => { const A = window.__site19, S = A.mission, u = S.units.find(u => u.side === 'mtf'); const c = u.items.find(i => i.id === 'cordon_kit'); u.x = 6; u.y = 7; u.ap = 2; A.computeVis(); A.squadtech.place(u, c, 6, 6); S.units.filter(v => v.side === 'mtf').forEach((v, i) => { if (v.y < 10) { v.x = 2 + i; v.y = 12; } }); A.computeVis(); });
     await p.waitForTimeout(200);

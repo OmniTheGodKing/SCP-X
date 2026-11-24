@@ -29,6 +29,11 @@ export function remark(c: Campaign, who: AdvisorId): Remark {
     case "carter": {
       const b = pendingBreach(c);
       if (b) return { text: `${b.title.split(":")[0]} is live inside the site. Epsilon-11 goes now or Site Security holds it alone.`, tone: "urgent", plan: b.id, label: "Plan the response" };
+      // Phase 6: someone marked by SCP-096 is the most urgent thing on the board
+      const mk = (c.marked ?? [])[0], mo = mk && c.roster.find(o => o.id === mk.opId && o.alive);
+      if (mo) { const enc = c.incidents.find(i => i.markedOp === mo.id); return { text: `${fieldName(mo)} saw its face. It is coming for them. ${enc ? `Contain it before ${dateText(enc.expires)}, or it reaches them here.` : "Find it first."}`, tone: "urgent", ...(enc ? { plan: enc.id, label: "Plan the response" } : {}) }; }
+      const lostOps = (c.missing ?? []).map(x => c.roster.find(o => o.id === x.opId)).filter(o => o?.alive);
+      if (lostOps.length) return { text: `${lostOps.map(o => fieldName(o!)).join(" and ")} ${lostOps.length > 1 ? "are" : "is"} still missing since SCP-106 took them. If anyone surfaces, we go.`, tone: "grave", goto: "world", label: "World map" };
       const m = c.mtfs?.[0];
       if (m && c.day - m.founded <= 6 && !c.incidents.length) return { text: `${m.designation} has its charter and two squads: ${m.squads.map(q => q.name).join(" and ")}. Epsilon\u201111 won't be there next time. Get them drilled and kitted before the first call.`, tone: "plain", goto: "personnel", label: "Barracks" };
       const dead = recent(c, 10).filter(h => h.cat === "casualty");
@@ -49,6 +54,11 @@ export function remark(c: Campaign, who: AdvisorId): Remark {
       return { text: "Board's clear. Let the clock run on the world map; something will surface.", tone: "plain", goto: "world", label: "World map" };
     }
     case "bell": {
+      // Phase 6: evidence in the labs, and anomalies the file can't name yet
+      const pend = Object.values(c.dossier ?? {}).flatMap(f => f.pending);
+      if (pend.length) return { text: `${pend.length} item${pend.length > 1 ? "s" : ""} of field evidence in my labs. The first analysis is done ${dateText(Math.min(...pend.map(x => x.due)))}. Nobody opens anything that came back sealed without screening.`, tone: "plain" };
+      const inv = c.incidents.find(i => i.kind === "investigation");
+      if (inv) return { text: `${inv.title.split(": ")[1]}: we don't know what it is. Bag what you can't be sure of. I would rather wait for the lab than lose someone to a photograph.`, tone: "grave", plan: inv.id, label: "Plan the investigation" };
       if (c.site && c.day - c.site.founded <= 10 && c.research.done.length === 0 && researchersFree(c) > 0) return { text: `The instance from ${"Provisional Site-11"} is in our wing now, and nobody here has studied one closely yet. I'd start with its containment research before anything else.`, tone: "plain" };
       const done = recentLog(c, 7).filter(l => l.text.startsWith("Research complete:"));
       if (done.length) {
@@ -71,6 +81,11 @@ export function remark(c: Campaign, who: AdvisorId): Remark {
       return { text: "Every bench is covered. Hire more staff at a research lab if you want more at once.", tone: "plain", goto: "site", label: "Site-19" };
     }
     case "russo": {
+      // Phase 6: an anomaly at the dock, or held in a wing that doesn't meet its needs
+      const dock = c.scps.find(s => s.status === "holding");
+      if (dock) return { text: `${dock.name} is sitting at the loading dock in its transport container. Give me a decision: a wing, Site-17, or ask for help.`, tone: "urgent", goto: "site", label: "Containment" };
+      const temp = c.scps.find(s => s.status === "contained" && s.holding && s.holding !== "permanent");
+      if (temp) return { text: `${temp.name} is in ${temp.holding} holding. The wing isn't built for it. Every day it stays like that is a breach risk I can't engineer away.`, tone: "grave", goto: "site", label: "Containment" };
       if (c.site && c.day - c.site.founded <= 10 && !c.base.facilities.some(f => f.type === "workshop")) {
         const g = geoOf(c);
         return { text: `${c.site.designation} is a hole in the ground with a generator in it. ${g && g.remoteness > 0.6 ? `Every crate comes up from ${g.hub}, so supplies cost us more out here.` : g ? `${g.hub} is close, which keeps supplies cheap.` : ""} A workshop first, then barracks space and a training range.`, tone: "plain", goto: "site", label: "Site-19" };

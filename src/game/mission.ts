@@ -14,7 +14,7 @@ import { STARTING_NOTES } from "./notes";
 import { PROFILE } from "./profiles";
 import { S, computeVis, log, setMission } from "./state";
 import { isNewScp } from "./scp4b";
-import { objectivesFor, resetObjectiveCache, tacticalOutcome } from "./objectives";
+import { evalObjectives, objectivesFor, resetObjectiveCache, tacticalOutcome } from "./objectives";
 import { fieldObservations, placeEvidence } from "./investigation";
 import { contaminationResult } from "./contamination";
 import { ANOMALIES } from "../data/anomalies";
@@ -387,6 +387,7 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
   const kitLeft: Partial<Record<KitItem, number>> = {};
   for (const k of sharedKitFor(S.setup)) kitLeft[k.id] = (kitLeft[k.id] ?? 0) + Math.max(0, k.uses);
   // Phase 6: contamination, evidence, the taken and the marked, and how it ended for the anomaly
+  evalObjectives(true);
   const dirt = contaminationResult();
   const ev = S.units.filter(u => u.evidence);
   return {
@@ -431,7 +432,7 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
     straysLost: strays.filter(u => !u.alive || (!win && !u.restrained && !u.saved)).length,
     straysEscaped: strays.filter(u => u.alive && u.saved && !u.restrained).length,
     // researchers and survivors are counted on their own, and records are not people
-    civiliansKilled: S.units.filter(u => u.side === "civilian" && !u.alive && !u.researcher && !u.record).length,
+    civiliansKilled: S.units.filter(u => u.side === "civilian" && !u.alive && !u.researcher && !u.record && u.evidence !== "remains").length,
     witnessesEscaped: S.units.filter(u => u.witness && u.saved && !u.dosed).length,
     witnessesDosed: S.units.filter(u => u.witness && u.dosed).length,
     amnesticsUsed: S.setup.amnestics - S.amnestics,

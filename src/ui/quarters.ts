@@ -53,7 +53,7 @@ export function figureSpecOf(c: Campaign, o: Operative, kit: Kit): FigureSpec {
 
 type Tone = "ok" | "warn" | "bad" | "away" | "promo";
 export function statusOf(c: Campaign, o: Operative): { text: string; tone: Tone } {
-  if (o.busy) return { text: o.busy.kind === "therapy" ? "In therapy" : o.busy.kind === "travel" ? "In transit" : o.busy.kind === "contract" ? "On contract" : "Retraining", tone: "away" };
+  if (o.busy) return { text: o.busy.kind === "missing" ? "Missing (SCP-106)" : o.busy.kind === "quarantine" ? "In quarantine" : o.busy.kind === "therapy" ? "In therapy" : o.busy.kind === "travel" ? "In transit" : o.busy.kind === "contract" ? "On contract" : "Retraining", tone: "away" };
   if (injured(c, o)) return { text: o.injury!.name, tone: "bad" };
   if (tiredness(o) === "exhausted") return { text: "Exhausted", tone: "bad" };
   if (promotionDue(o)) return { text: "Promotion due", tone: "promo" };

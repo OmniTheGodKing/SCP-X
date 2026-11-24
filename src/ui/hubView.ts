@@ -1,4 +1,6 @@
 // Site-19 Command: incidents and time, the base and its containment, and Epsilon-11's roster.
+import { anomalyDef, CHAMBER_FEATURES } from "../data/anomalies";
+import { chamberCheck, fileOf, placementOptions, type PlacementKind } from "../campaign/dossier";
 import { creditsHtml } from "./credits";
 import "./hub.css";
 import { directorsBriefing } from "../campaign/briefing";
@@ -699,6 +701,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     if (isInert(s) && s.status === "contained") return `<div class="card status held"><div class="label">${s.name} · ${s.title} · ${s.cls}</div>
       <div class="status-line"><b>Held</b> in the ${wing ? nameInText(wing.type) + ` on level ${wing.level + 1}` : "?"}. An object: it doesn't breach or need cleaning.${s.id === "500" ? ` ${plural(pillsLeft(c), "dose")} of SCP-500 left.` : ""}</div>
       <button class="act" type="button" data-goto="site">Open its cell</button></div>`;
+    if (s.status === "holding") return `<div class="card status danger"><div class="label">${s.name} · ${s.title} · ${s.cls}</div>
+      <div class="status-line"><b>At the loading dock</b> in its transport container, waiting for a cell. Every day there it could break out.</div>${placementBlock(s)}${anomalyFileHtml(s.instance ?? s.id)}</div>`;
     if (s.status === "away") return `<div class="card status"><div class="label">${s.name} · ${s.title} · ${s.cls}</div>
       <div class="status-line"><b>Held at Site-17</b> for safekeeping. It comes back ${dateText(s.returnDay ?? c.day)}.</div></div>`;
     if (s.status === "breach") return `<div class="card status danger"><div class="label">${s.name} · ${s.title} · ${s.cls}</div>
@@ -1561,6 +1565,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       <h2>${s.name} · ${s.title} <small>${s.cls}</small></h2>
       ${progressHtml(s.id)}
       <p>Held in the ${wing ? `${nameInText(wing.type)} on level ${wing.level + 1}` : "?"}.</p>
+      ${s.holding && s.holding !== "permanent" ? `<p class="warn"><b>${s.holding === "temporary" ? "Temporary" : "Emergency"} holding.</b> This wing doesn't give it everything it needs.</p>${placementBlock(s)}` : ""}
       <div class="riskline"><b>Breach risk ${pctText(r.p)} a day</b></div>
       <ul class="why">${r.why.map(w => `<li>${esc(w)}</li>`).join("")}</ul>
       <div class="maint"><span>Maintenance ${s.maintenance}%</span><div class="exp-bar"><span style="width:${s.maintenance}%"></span></div></div>
@@ -1569,10 +1574,35 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       <label class="armorpick"><input type="checkbox" id="cleanOrder" ${c.cleaningOrder ? "checked" : ""}> Standing order: every anomaly's routine is carried out on schedule when the staff are free</label>
       <p>${c.cleaningOrder ? `Next ${rt.name.toLowerCase()} ${due > 0 ? `in ${plural(due, "day")}` : "today"}.` : `Next ${rt.name.toLowerCase()} ${due > 0 ? `due in ${plural(due, "day")}` : "<b>overdue</b>"}. Order it below.`}</p>
       <div class="row"><button class="act primary" data-clean="${s.id}" type="button" ${cw ? `disabled title="${esc(cw)}"` : ""}>${esc(rt.name)} now · ${rt.crew === "dclass" ? `${rt.n} D-Class` : rt.crew === "researcher" ? "1 researcher" : `${rt.n} engineers`}${rt.cost ? ` · $${rt.cost}k` : ""}</button>${cw ? `<span>${esc(cw)}</span>` : ""}</div>
+      ${anomalyFileHtml(s.instance ?? s.id)}
       ${procedureHtml(s.id)}
       ${evacBlock(s)}
       ${sendAwayBlock(s)}
     </div>`;
+  }
+
+  /** Phase 6: the anomaly's file. What is known, what isn't (counted, never named), evidence in the labs, the chamber it
+   *  needs and what this site gives it. */
+  function anomalyFileHtml(id: string) {
+    const def = anomalyDef(id), f = def ? fileOf(c, id) : undefined;
+    if (!def || !f) return "";
+    const known = def.properties.filter(p => f.known.includes(p.id)), unknown = def.properties.length - known.length;
+    const wing = c.scps.find(x => (x.instance ?? x.id) === id), w = wing ? wingOf(c, wing) : null;
+    const ch = w ? chamberCheck(c, id, w) : null;
+    return `<details class="archived" open data-file="${esc(id)}"><summary>File · ${f.stage === "identified" ? "identified" : f.stage} · ${known.length} of ${def.properties.length} known</summary>
+      <ul class="why">${known.map(p => `<li>${p.hazard ? "<b>Hazard.</b> " : ""}${esc(p.text)}</li>`).join("")}</ul>
+      ${unknown ? `<p class="muted">${unknown} propert${unknown > 1 ? "ies" : "y"} not yet known. Evidence, observation in the field and research fill the file.</p>` : ""}
+      ${f.pending.length ? `<p class="muted">In Dr. Bell's labs: ${f.pending.map(x => `${esc(x.kind)} (done ${dateText(x.due)})`).join(", ")}.</p>` : ""}
+      <p><b>Chamber.</b> ${def.chamber.grade}-grade, with ${def.chamber.features.map(x => `${esc(CHAMBER_FEATURES[x].name.toLowerCase())}${ch ? (ch.missing.includes(x) ? " (missing here)" : " (in place)") : ""}`).join(", ")}.</p>
+      <p class="muted">Class ${def.cls} · threat ${def.threat}/5 · difficulty ${def.difficulty}/5 · gunfire: ${def.conventional === "none" ? "useless" : def.conventional === "delay" ? "only delays it" : "works"}</p>
+      ${f.history.length ? `<p class="muted">${f.history.slice(0, 3).map(h => `${dateText(h.day)}: ${esc(h.text)}`).join("<br>")}</p>` : ""}</details>`;
+  }
+  /** Phase 6: where a recovered anomaly goes, through the command layer. */
+  function placementBlock(s: ScpRecord) {
+    const opts = placementOptions(c, s.id);
+    return `<div class="facpanel"><div class="label">Placement · Vincent Russo, Containment Engineering</div>
+      ${c.placement?.scpId === s.id ? `<p class="muted">Decide by ${dateText(c.placement.since + 3)}, or the Council sends it to Site-17.</p>` : ""}
+      <div class="rows">${opts.map(o => `<div class="row"><button class="act${o.kind === "permanent" ? " primary" : ""}" type="button" data-place="${s.id}" data-kind="${o.kind}" data-wing="${o.wingId ?? ""}">${esc(o.text)}</button></div>`).join("")}</div></div>`;
   }
 
   /** Recovery → containment → study → use, as a strip of steps, with what each finished study gives. */
@@ -1885,7 +1915,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
               <div class="row"><button class="act" type="button" data-retire="${o.id}">${tw2 ? "Honourable discharge" : "Retire as a trainer"}</button></div>`}`;
         }
         default: return `
-          ${o.busy ? `<p class="warn">${o.busy.kind === "therapy" ? "In therapy" : o.busy.kind === "travel" ? "Flying home" : o.busy.kind === "contract" ? "On contract" : "Retraining"}: ${plural(o.busy.daysLeft, "day")} left. Can't deploy until then.</p>` : ""}
+          ${o.busy ? `<p class="warn">${o.busy.kind === "missing" ? "Missing (SCP-106)" : o.busy.kind === "quarantine" ? "In quarantine" : o.busy.kind === "therapy" ? "In therapy" : o.busy.kind === "travel" ? "Flying home" : o.busy.kind === "contract" ? "On contract" : "Retraining"}: ${plural(o.busy.daysLeft, "day")} left. Can't deploy until then.</p>` : ""}
           <div class="fbars">${bar("Field HP", fh.hp, fh.max, "hp")}${bar("Sanity", o.san, ms, o.san <= ms * 0.3 ? "low" : "san")}${bar("Fatigue", o.fatigue ?? 0, 100, (o.fatigue ?? 0) >= FATIGUE.tired ? "low" : "fat")}${next !== undefined ? bar("XP", o.xp, next, "xp") : ""}</div>
           <dl class="fstats"><dt>Aim</dt><dd>${aimOf(o)}</dd><dt>Blink</dt><dd>${Math.round(blinkFullOf(o) * 100)}%</dd><dt>Missions</dt><dd>${o.missions}</dd><dt>Kills</dt><dd>${o.kills}</dd><dt>Wounded</dt><dd>${o.wounds ?? 0}×</dd><dt>Sealed</dt><dd>${o.seals ?? 0}</dd></dl>
           ${fh.why ? `<p class="specs">Field HP: ${esc(fh.why)}</p>` : ""}
@@ -1965,7 +1995,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     return {
       head: `      <div class="label">${esc(o.call)} · ${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}</div>
       <div class="row" style="align-items:center">${portraitSvg(lookOf(o), o.unit, 88)}<h3 class="fac">${esc(fieldName(o))}</h3></div>
-      ${o.busy ? `<p class="warn">${o.busy.kind === "therapy" ? "In therapy" : o.busy.kind === "travel" ? "Flying home" : "Retraining"}: ${plural(o.busy.daysLeft, "day")} left. Can't deploy until then.</p>` : ""}`,
+      ${o.busy ? `<p class="warn">${o.busy.kind === "missing" ? "Missing (SCP-106)" : o.busy.kind === "quarantine" ? "In quarantine" : o.busy.kind === "therapy" ? "In therapy" : o.busy.kind === "travel" ? "Flying home" : "Retraining"}: ${plural(o.busy.daysLeft, "day")} left. Can't deploy until then.</p>` : ""}`,
       bio: `      ${o.unit ? `<div class="specs">Recruited from the ${esc(UNITS[o.unit].name)} (${esc(UNITS[o.unit].country)}) · ${LEANS[UNITS[o.unit].lean]}${o.bio ? ` · nationality ${esc(nationalityOf(o.bio.home))}` : ""}</div>` : ""}
       <div class="specs">Sex: ${SEX_NAMES[o.sex ?? "m"]}</div>
       ${o.bio ? `<p class="muted">Age ${o.bio.age + Math.floor((c.day - 1) / 365)}, from ${esc(o.bio.home)}. ${esc(o.bio.story)}</p>` : ""}
@@ -2067,7 +2097,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   function opRow(o: Operative) {
     const next = RANK_XP[o.rank + 1], heal = healPerDay(c);
     const days = Math.ceil((o.maxHp - o.hp) / heal);
-    const status = o.busy ? `<span class="flag">${o.busy.kind === "therapy" ? "Therapy" : o.busy.kind === "travel" ? "In transit" : "Retraining"} · ${plural(o.busy.daysLeft, "day")}</span>`
+    const status = o.busy ? `<span class="flag">${o.busy.kind === "missing" ? "Missing" : o.busy.kind === "quarantine" ? "Quarantine" : o.busy.kind === "therapy" ? "Therapy" : o.busy.kind === "travel" ? "In transit" : "Retraining"} · ${plural(o.busy.daysLeft, "day")}</span>`
       : injured(c, o) ? `<span class="flag bad">${esc(o.injury!.name)} · ${plural(o.injury!.until - c.day, "day")}</span>`
       : tiredness(o) === "exhausted" ? `<span class="flag bad">Exhausted · ${plural(Math.ceil(((o.fatigue ?? 0) - FATIGUE.exhausted + 1) / FATIGUE.restPerDay), "day")}</span>`
       : promotionDue(o) ? `<span class="flag stare">Promotion</span>`
@@ -2243,6 +2273,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       if (s && twice(b, `away-${s.id}-${b.dataset.site}`, `Send ${s.name} away for good? Click again`)) change(() => sendAway(c, s.id, b.dataset.site!));
     });
     root.querySelectorAll<HTMLElement>("[data-contact]").forEach(b => b.onclick = () => change(() => makeContact(c, b.dataset.contact as RegionId)));
+    root.querySelectorAll<HTMLElement>("[data-place]").forEach(b => b.onclick = () => change(() => { dispatch(c, { type: "placeAnomaly", scpId: b.dataset.place!, kind: b.dataset.kind as PlacementKind, wingId: b.dataset.wing || undefined }); }));
     root.querySelectorAll<HTMLElement>("[data-transfer]").forEach(b => b.onclick = () => { const s = c.scps.find(x => x.id === b.dataset.transfer); if (s) change(() => transferOut(c, s)); });
     root.querySelectorAll<HTMLElement>("[data-clean]").forEach(b => b.onclick = () => run({ type: "cleanCell", scpId: b.dataset.clean! }));
     root.querySelectorAll<HTMLElement>("[data-alert]").forEach(b => b.onclick = () => run({ type: "setAlert", level: b.dataset.alert as Alert }));

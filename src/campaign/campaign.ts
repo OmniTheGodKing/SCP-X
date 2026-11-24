@@ -947,7 +947,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     o.missions++;
     if (!s.alive && r.missing?.includes(s.opId)) {
       // Phase 6: taken by SCP-106 is missing, not dead (the dossier and the storylines decide what happens next)
-      o.busy = { kind: "missing", daysLeft: 9999, out: true };
+      o.busy = { kind: "missing", daysLeft: 60, out: true };
       continue;
     }
     if (!s.alive) {
@@ -1043,7 +1043,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     addExposure(c, region, -cut);
     earn(c, bonus, "missions", `${name} closed`);
     const anomaly = scpName(inc?.scpId || "173");
-    const what = kind === "rescue" ? "The team is out of there." : kind === "emergency" ? `Epsilon-11 is out of ${inc?.site ?? "the site"}.` : kind === "coverup" ? "The witnesses remember nothing worth repeating." : kind === "strike" ? "The Insurgency cell is broken up."
+    const what = kind === "investigation" ? (r.outcome === "secured" ? "The cause was contained on the spot." : "The team is out with what it found.") : kind === "rescue" ? "The team is out of there." : kind === "emergency" ? `Epsilon-11 is out of ${inc?.site ?? "the site"}.` : kind === "coverup" ? "The witnesses remember nothing worth repeating." : kind === "strike" ? "The Insurgency cell is broken up."
       : kind === "riot" ? "The D-Class block is quiet again." : kind === "raid" ? "The Insurgency raid on Site-19 is beaten off." : kind === "outbreak" ? "The flesh here is burned out." : kind === "escort" ? `The convoy got ${anomaly} through.` : kind === "retaliation" ? "The Insurgency attack on the town is broken." : inc?.first ? `${anomaly} is in Foundation hands.` : `${anomaly} is back in its cell.`;
     lines.unshift(`${name} closed. ${what}${bonus ? ` The O5 Council approves a $${bonus}k bonus${cut ? ";" : "."}` : ""}${cut ? ` exposure in ${where} −${cut}.` : ""}`);
     if (kind !== "riot") c.council.tally.wins[region] = (c.council.tally.wins[region] ?? 0) + 1;
