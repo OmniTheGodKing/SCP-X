@@ -153,7 +153,7 @@ export const KITS: Record<SpecialtyId, SpecialtyKit> = {
     passive: { id: "fortification_drill", name: "Fortification Drill", desc: "Establishing a perimeter costs 1 action instead of 2." },
     grade2: "A third barrier in the squad kit.", worldMap: "Holds raids, retaliations and convoys well.", tradeoff: "Static: barriers cost stock and can block your own way out." },
   recovery: { tags: ["can_carry_two_person", "can_secure_transfer"], techs: ["sq_two_person_evac", "sq_secure_transfer"], certified: ["stretcher"],
-    passive: { id: "recovery_drill", name: "Recovery Drill", desc: "A downed squadmate they stabilize keeps one more turn before bleeding out.", incomplete: "Bleed-out has no per-turn timer to extend yet; the hands-off side is applied (fewer deaths on rescues)." },
+    passive: { id: "recovery_drill", name: "Recovery Drill", desc: "From Drilled: a downed person beside one of this squad, not yet stabilized, keeps their bleed-out count for one turn (once each). Hands-off rescues lose fewer people." },
     grade2: "A second stretcher.", worldMap: "More reliable rescues and evacuations hands-off; no guarantee of a capture.", tradeoff: "Carrying takes hands and actions away from the fight." },
   fire: { tags: ["can_suppress_lane", "can_emplace_mg"], techs: ["sq_covering_lane", "sq_suppression_shift"], certified: [],
     passive: { id: "fire_discipline", name: "Fire Discipline", desc: "Suppression uses 1 round instead of 2." },

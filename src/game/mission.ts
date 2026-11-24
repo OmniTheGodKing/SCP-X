@@ -73,7 +73,9 @@ export function createMission(setup: MissionSetup) {
   const units: Unit[] = [];
   // Phase 6: an investigation has the anomaly on the map only if it is still there (setup.presence)
   const investigating = setup.kind === "investigation";
-  const contain = setup.kind === "breach" || setup.kind === "manhunt" || (setup.kind === "emergency" && setup.hazard === "scp") || (investigating && !!setup.presence && (setup.scp as string) !== "610");
+  const contain = setup.kind === "breach" || setup.kind === "manhunt" || (setup.kind === "emergency" && setup.hazard === "scp") || (investigating && !!setup.presence && (setup.scp as string) !== "610")
+    // Phase 6: a search for SCP-106's missing, where it surfaces: it is on the map with them
+    || (setup.kind === "rescue" && setup.variant === "personnel_recovery" && setup.scp === "106");
   const has173 = contain && (setup.scp ?? "173") === "173", has049 = contain && setup.scp === "049", has106 = contain && setup.scp === "106";
   const scp = contain ? setup.scp ?? "173" : undefined, fresh = contain && isNewScp(setup.scp);
   // an object can't get out of its cell by itself: a "breach" of one is Insurgents trying to steal it
@@ -115,7 +117,7 @@ export function createMission(setup: MissionSetup) {
 
   // SCP-173 (if present) and the Insurgency start in different rooms.
   // a breach starts at the cell itself (the middle north room on wing C); a manhunt could be anywhere
-  const scpRoom = !contain ? null : setup.kind === "breach" && def.scpRooms.length > 1 ? def.scpRooms[1] : pick(def.scpRooms);
+  const scpRoom = !contain ? null : setup.kind === "breach" && def.scpRooms.length > 1 ? def.scpRooms[1] : pick(def.scpRooms.length ? def.scpRooms : def.insurgentRooms.length ? def.insurgentRooms : def.strayRooms);
   const [sx, sy] = scpRoom ? claim(floorTiles(scpRoom)) : [0, 0];
   // the enemy starts well away from where the team comes in, out of its sight: the farther rooms first, and never one the
   // team can see into from its starting tiles (playtest change after 4G)
@@ -215,6 +217,18 @@ export function createMission(setup: MissionSetup) {
   if (setup.kind === "outbreak") seedOutbreak(setup, strayRooms);
   // a settlement where it has only just started: a little growth and its core, nothing walking yet
   if (investigating && (setup.scp as string) === "610") seedOutbreak({ ...setup, severity: 1 }, strayRooms, 0);
+  if (setup.variant === "chamber_security" && scpRoom) state.cellRoom = scpRoom;
+  // the researcher who ran the footage is marked from the start
+  if (setup.variant === "surveillance_contamination" && setup.scp === "096") {
+    const viewer = state.units.find(u => u.researcher);
+    if (viewer) {
+      viewer.marked = true; state.rage = { targets: [viewer.id], scream: 1 };
+    }
+  }
+  // the search: the black rot where they surfaced, around each of the missing
+  if (setup.variant === "personnel_recovery") for (const u of state.units.filter(v => v.researcher)) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const x = u.x + dx, y = u.y + dy; if (x > 0 && y > 0 && x < L.W - 1 && y < L.H - 1 && tileAt(x, y) !== WALL) state.corroded.add(y * L.W + x);
+  }
   // Phase 6: an anomaly nobody has identified yet goes by what it is until someone gets a good look
   if (setup.intel && !setup.intel.identified) state.statue.name = "Unidentified entity";
   if (setup.kind === "riot") {

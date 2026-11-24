@@ -257,7 +257,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     $("mTitle").innerHTML = `${n.name} ${kind === "breach" ? "Recontainment" : S.setup.title.startsWith("Anomalous") ? "Capture" : "Manhunt"} <small>“${n.title}” · ${n.cls}</small>`;
     $("objRule").innerHTML = `<b>Objective.</b> ${esc(n.objective(where))}${kind === "breach" ? " Site Security starts on the scene; Epsilon-11 arrives later with the capture kit." : ""}`;
   }
-  if (S.has106 && kind !== "emergency" && kind !== "investigation") {
+  if (S.has106 && kind !== "emergency" && kind !== "investigation" && kind !== "rescue") {
     $("mTitle").innerHTML = `SCP-106 ${kind === "breach" ? "Recontainment" : S.setup.title.startsWith("Anomalous") ? "Capture" : "Manhunt"} <small>“The Old Man” · Keter</small>`;
     $("objRule").innerHTML = `<b>Objective.</b> Seal SCP-106 in the ${kind === "breach" ? "transport container in the staging room" : "truck's open container"}. It walks through walls and drags anyone it reaches into its pocket dimension, then sinks into the floor for 2 turns and rises near someone nobody is watching. Shooting it drives it under for a turn but can't hurt it. Its black rot costs double to cross and deals 1 damage. <b>Bait:</b> walk a D-Class (or a secured Insurgent) into the container. SCP-106 goes straight for them and stays a turn to feed: seal the door during that turn. People it takes have a ${Math.round(S.setup.mods.pocketReturn * 100)}% chance of coming back when the mission ends.${kind === "breach" ? " Site Security starts on the scene; Epsilon-11 arrives later." : ""}`;
   }
@@ -269,6 +269,18 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     const t = ({ "500": "Panacea", "914": "The Clockworks", "005": "The Skeleton Key" } as Record<string, string>)[S.scp ?? ""] ?? "";
     $("mTitle").innerHTML = `${esc(S.statue.name)} Theft <small>“${t}” · Safe</small>`;
     $("objRule").innerHTML = `<b>Objective.</b> Insurgents are in the wing to steal ${esc(S.statue.name)}. It's an object: it can't escape and doesn't need sealing, only keeping. Two Insurgents beside it for a whole turn pick it up and carry it toward the way out; shoot either carrier and they drop it. Eliminate or capture every Insurgent. If they get it out, it's lost to the Insurgency for good.`;
+  }
+  // Phase 6 variants: their own title and objective text
+  if (S.setup.variant === "chamber_security") {
+    $("mTitle").innerHTML = `SCP-173 Cell Failure <small>Chamber security · lights out</small>`;
+    $("objRule").innerHTML = `<b>Objective.</b> The power is out and SCP-173's cell doors won't lock. It is still in its cell, in the dark. Keep eyes on it (flares and torches help: darkness breaks the look), get to the panel at the east end of the corridor and Restore power (both actions). If it is inside its cell when the lights come back, the doors lock on it. If it gets out, drag it into the transport container and seal it instead.`;
+  }
+  if (S.setup.variant === "surveillance_contamination") {
+    $("objRule").innerHTML += ` <b>The footage.</b> ${esc(S.units.find(u => u.marked)?.name ?? "A researcher")} ran unscreened film of its face and is marked: it is coming for them. Nothing stops it. Get them out of the site and it follows them out of containment; keep them inside and it reaches them, then sits down to weep, and can be hooded.`;
+  }
+  if (S.setup.variant === "personnel_recovery") {
+    $("mTitle").innerHTML = `Search and Recovery <small>${esc(S.setup.title)}</small>`;
+    $("objRule").innerHTML = `<b>Objective.</b> People SCP-106 took have surfaced here, on ground rotted black where it came up. Reach them (they follow you) and bring them out through an exit.${S.has106 ? " SCP-106 is still here: it walks through walls and takes whoever it reaches. Gunfire only sends it under for a turn. Bait in the truck's container holds it while it feeds, if you want to try sealing it in." : ""}`;
   }
   if (kind === "breach") {
     $("squadLabel").textContent = "Site Security and Epsilon-11";

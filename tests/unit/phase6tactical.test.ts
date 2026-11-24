@@ -183,3 +183,33 @@ test("auto end turn: out of actions only when nobody able has an action and no f
   t[0].ap = 2; t[0].panicUntil = S.turn + 1;
   ok(outOfActions(), "a panicked operative's actions don't hold the turn open");
 });
+
+test("chamber security: SCP-173's cell doors fail in the dark; restoring power with it inside locks it in", () => {
+  createMission(setup({ kind: "breach", scp: "173", map: "wingC", variant: "chamber_security", night: true, guards: [member(7, { guard: true })], squad: [], mtfTurn: 30, researchers: 0 }));
+  ok(S.setup.night, "lights out");
+  ok(S.objectives!.some(o => o.kind === "restore_power" && o.tier === "primary") && S.objectives!.some(o => o.kind === "in_cell"), "objectives");
+  const [x0, y0, x1, y1] = S.cellRoom!, st = S.statue;
+  ok(st.x >= x0 && st.x <= x1 && st.y >= y0 && st.y <= y1, "it starts in its cell");
+  const g = S.units.find(u => u.side === "mtf")!, pn = L.def.panel!;
+  g.x = pn[0] - 1; g.y = pn[1]; while (!passable(g.x, g.y)) g.x--;
+  g.ap = 2; computeVis();
+  ok(abilityTargets(g, "restore").length === 1, "restore power offered at the panel");
+  useAbility(g, "restore", g);
+  ok(S.powerOn && !S.setup.night, "power back, lights on");
+  ok(checkEnd(), "ends");
+  ok(S.result!.win && S.result!.outcome === "secured", `secured (${S.result!.outcome})`);
+});
+
+test("surveillance footage: the researcher who ran it starts marked by SCP-096", () => {
+  createMission(setup({ kind: "breach", scp: "096", map: "wingC", variant: "surveillance_contamination", researchers: 2, researcherNames: ["Dr. Vance", "Dr. Ota"], guards: [member(7, { guard: true })], squad: [], mtfTurn: 30 }));
+  const viewer = S.units.find(u => u.marked);
+  ok(viewer && viewer.researcher, "a researcher is marked");
+  ok(S.rage?.targets.includes(viewer!.id), "SCP-096 is after them");
+});
+
+test("search and recovery: SCP-106 is on the map with the missing, on rotted ground", () => {
+  createMission(setup({ kind: "rescue", scp: "106", map: "farm", variant: "personnel_recovery", survivors: 2, survivorName: "Missing operative" }));
+  ok(S.has106 && S.statue.alive, "SCP-106 is here");
+  eq(S.units.filter(u => u.researcher).length, 2, "two of the missing to find");
+  ok(S.corroded.size >= 4, "black rot where they surfaced");
+});

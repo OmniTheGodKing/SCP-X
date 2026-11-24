@@ -338,9 +338,9 @@ export function outOfActions() {
   return able.length > 0 && able.every(u => u.ap <= 0);
 }
 function autoEndCheck() {
-  if (!outOfActions()) return;
+  if (!pace.autoEnd || !outOfActions()) return;
   const turn = S.turn, state = S;
-  const go = () => { if (S === state && S.turn === turn && canAct() && outOfActions()) { log("Nobody has any actions left. The turn ends.", "key"); void endTurn(); } };
+  const go = () => { if (pace.autoEnd && S === state && S.turn === turn && canAct() && outOfActions()) { log("Nobody has any actions left. The turn ends.", "key"); void endTurn(); } };
   // headless rule tests drive their own turns; the check itself is outOfActions()
   if (!pace.headless) setTimeout(go, AUTO_END_MS);
 }

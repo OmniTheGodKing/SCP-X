@@ -872,7 +872,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     variant: inc.variant, evidence: inc.evidence, presence: inc.presence, contamination: !!c.mtfs && (inc.kind === "outbreak" || inc.scpId === "610"),
     holdTurns: inc.variant === "quarantine_perimeter" ? 10 : undefined,
     intel: c.site && inc.scpId && anomalyDef(inc.scpId) && (inc.first || inc.kind === "investigation") ? intelFor(c, inc.instance ?? inc.scpId) : undefined,
-    night: away ? true : nightAt(c, inc), weather: missionWeather(c, inc),
+    night: away || inc.variant === "chamber_security" ? true : nightAt(c, inc), weather: missionWeather(c, inc),
     site: inc.site, records: away ? 2 : undefined, survivors: inc.kind === "rescue" ? inc.survivors : undefined,
     survivorName: inc.kind === "rescue" ? `${(inc.team ?? "Lost team").split(" ")[0]} operative` : undefined, hazard: inc.hazard,
     nu7: callNu7 ? nu7Troopers() : undefined,
@@ -995,7 +995,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
 
   c.dclass += r.dReturned;
   // breach losses among the staff: researchers, and D-Class from the block
-  const other = inc?.kind === "rescue" || inc?.kind === "emergency";   // these people belong to another site
+  const other = (inc?.kind === "rescue" && inc.stage !== "search") || inc?.kind === "emergency";   // these people belong to another site
   if (r.researchersLost && !other) { const how = `lost in the wing during ${name}`, named = r.researcherNamesLost ?? [];
     const who = [...named.flatMap(n => losePeople(c, "researcher", 1, how, n)), ...losePeople(c, "researcher", Math.max(0, r.researchersLost - named.length), how)]; lines.push(`${who.length ? who.join(" and ") : plural(r.researchersLost, "researcher")} didn't make it out of the wing.`); }
   if (inc && other) lines.push(...otherSiteOutcome(c, inc, r));
@@ -1117,11 +1117,15 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   // Phase 6: what this mission adds to the anomaly's file, the people it changed, and where the story goes next
   ensureDossier(c);
   lines.push(...recordMission(c, inc, r));
-  if (inc?.stage === "search") lines.push(...searchOutcome(c, inc, r.survivorsSaved ?? 0));
+  if (inc?.stage === "search") {
+    lines.push(...searchOutcome(c, inc, r.survivorsSaved ?? 0));
+    // SCP-106 baited and sealed where it surfaced: that's a capture
+    if (r.outcome === "secured" && inc.scpId === "106") resolveScp(c, { ...inc, kind: "recovery", first: !c.scps.some(s => s.id === "106") }, true);
+  }
   const investigation = inc?.kind === "investigation";
   if (investigation && r.outcome === "secured") resolveScp(c, { ...inc!, first: true, kind: "recovery" }, true);
   arcAfterMission(c, inc, r.outcome, r);
-  if (investigation) { /* the anomaly wasn't the objective: nothing to resolve unless it was sealed above */ }
+  if (investigation || inc?.stage === "search") { /* the anomaly wasn't the objective: resolved above only if it was sealed */ }
   else if (inc?.transfer) lines.push(transferFought(c, inc.transfer, r.win));
   else if (inc?.scpId && inc.kind !== "emergency" && r.lostTo) lines.push(loseForGood(c, inc, r.lostTo));
   else if (inc?.scpId && inc.kind !== "emergency") {   // another site's anomaly stays theirs

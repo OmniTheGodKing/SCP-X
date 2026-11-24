@@ -109,7 +109,7 @@ export function abilityTargets(u: Unit, p: AbilityId): Unit[] {
       const pn = L.def.panel;
       const at = !!pn && !u.staring && cheb(u.x, u.y, pn[0], pn[1]) <= 1;
       if (p === "doors" || p === "siren") return at && S.setup.kind === "breach" ? [u] : [];
-      if (p === "restore") return at && S.setup.kind === "emergency" && !S.powerOn ? [u] : [];
+      if (p === "restore") return at && (S.setup.kind === "emergency" || S.setup.variant === "chamber_security") && !S.powerOn ? [u] : [];
       return at && S.has173 && !S.sealed && S.lockedUntil < S.turn ? [u] : [];
     }
     case "ally": return team().filter(a => adjacent(u, a) && (p === "medkit" ? a.hp < a.maxHp && a.side === "mtf" : a.san < maxSanOf(a)));

@@ -48,7 +48,7 @@ export type MissionKind = "breach" | "manhunt" | "coverup" | "strike" | "escort"
 /** Phase 6: how a mission ended for the anomaly, as distinct from whether it was won (Part 9's tactical containment). */
 export type TacticalOutcome = "secured" | "temporary" | "isolated" | "evacuated" | "evidence" | "escaped" | "failed" | "abandoned" | "none";
 export type ObjTier = "primary" | "secondary" | "optional";
-export type ObjKind = "evidence" | "bag_all" | "identify" | "rescue" | "hold_perimeter" | "sample" | "secure" | "burn_core" | "protect_marked" | "no_civ_deaths" | "recover_bodies" | "clean_extraction" | "staff_out";
+export type ObjKind = "evidence" | "bag_all" | "identify" | "rescue" | "hold_perimeter" | "sample" | "secure" | "burn_core" | "protect_marked" | "no_civ_deaths" | "recover_bodies" | "clean_extraction" | "staff_out" | "restore_power" | "in_cell";
 export interface Objective { id: string; kind: ObjKind; tier: ObjTier; text: string; status: "active" | "done" | "failed";
   /** Not shown until something in the mission reveals it; added during the mission. */
   hidden?: boolean; dynamic?: boolean; n?: number; turns?: number; target?: string; }
@@ -550,5 +550,8 @@ export interface MissionState {
   identified?: boolean;
   arrive096?: number;
   examined?: import("../data/anomalies").EvidenceKind[];
+  /** Chamber security: the anomaly's own cell, and whether its doors locked again with it inside. */
+  cellRoom?: [number, number, number, number];
+  relocked?: boolean;
   result?: MissionResult;
 }

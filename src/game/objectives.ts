@@ -41,6 +41,12 @@ export function objectivesFor(setup: MissionSetup): Objective[] | undefined {
     o("survivors", "rescue", "secondary", "Evacuate at least half the survivors"),
     o("clean", "clean_extraction", "optional", "Nobody comes out carrying contamination"),
   ];
+  if (setup.kind === "breach" && v === "chamber_security") return [
+    o("power", "restore_power", "primary", "Restore power at the panel: the cell doors lock again when it comes back"),
+    o("cell", "in_cell", "primary", "Keep SCP-173 inside its cell, watched, until the doors lock"),
+    o("secure", "secure", "secondary", "If it gets out of the cell, seal it in the transport container instead"),
+    o("no_civ", "no_civ_deaths", "optional", "Lose no researcher"),
+  ];
   if (setup.kind === "breach" && v === "breach_evacuation") return [
     o("staff", "staff_out", "primary", "Bring the researchers caught in the wing out through an exit"),
     o("secure", "secure", "secondary", "Contain the anomaly, if it can be done safely"),
@@ -102,6 +108,8 @@ export function evalObjectives(end = false) {
       }
       case "sample": if ((s.samples ?? 0) >= 1) ob.status = "done"; else if (end) ob.status = "failed"; break;
       case "secure": if (s.sealed) ob.status = "done"; else if (end) ob.status = "failed"; break;
+      case "restore_power": if (s.powerOn) ob.status = "done"; else if (end) ob.status = "failed"; break;
+      case "in_cell": if (s.relocked) ob.status = "done"; else if (end || s.sealed) ob.status = "failed"; break;
       case "burn_core": if (s.core && s.core.hp <= 0) ob.status = "done"; else if (end) ob.status = "failed"; break;
       case "protect_marked": {
         const t = s.units.find(u => u.id === ob.target);
@@ -139,6 +147,17 @@ export function objectiveEnd(teamLeft: boolean): { over: boolean; win: boolean }
   if (!S.objectives) return null;
   evalObjectives();
   const p = primaries();
+  // chamber security: the power comes back with SCP-173 inside its cell, and the doors lock on it
+  if (S.setup.variant === "chamber_security" && S.powerOn && !S.relocked && S.cellRoom && S.statue.alive) {
+    const [x0, y0, x1, y1] = S.cellRoom, st = S.statue;
+    if (st.x >= x0 && st.x <= x1 && st.y >= y0 && st.y <= y1) {
+      S.relocked = true; S.sealed = true;
+      log("The power comes back and the cell doors slam shut with SCP-173 inside. It is contained.", "good");
+      banner("CELL LOCKED", "#86c193");
+      evalObjectives();
+      return { over: true, win: true };
+    }
+  }
   // ending at once: the anomaly sealed, the core burned out, or the cordon held for its time (relief takes over)
   if (S.sealed && S.setup.kind !== "outbreak") return { over: true, win: p.every(o => o.status === "done" || o.kind === "evidence" || o.kind === "staff_out") };
   if (S.core && S.core.hp <= 0 && S.setup.kind === "outbreak") return { over: true, win: p.every(o => o.status === "done" || o.kind === "rescue" || o.kind === "sample") };

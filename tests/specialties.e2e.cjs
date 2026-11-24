@@ -149,7 +149,7 @@ const L = require('./lib.cjs');
       const tg = T.techTargets(u, 'sq_suppression_shift'); if (tg.length) T.runTech(u, 'sq_suppression_shift', tg[0]);
       out.fire = { r1, r0, shots, ap, pinned, shift: tg.length > 0 && tg[0].suppressedBy === u.id && f.suppressedBy === undefined };
     }
-    // Quarantine: a cordon line of three tiles stops growth; controlled crossing is marked incomplete
+    // Quarantine: a cordon line of three tiles stops growth; controlled crossing is built (Phase 6)
     { const [u] = as('quarantine'); const c = kit('cordon_kit'); u.items = [c]; T.place(u, c, u.x, u.y - 1);
       out.quarantine = { line: S.cordon.size, blocks: T.blocksFlesh(idx(u.x, u.y - 1)), crossing: why(u, 'sq_controlled_crossing'), fireBurns: (T.burnCordon(idx(u.x, u.y - 1)), !S.cordon.has(idx(u.x, u.y - 1))) };
       u.armorKind = 'contsuit'; u.suitTorn = false; out.quarantine.zone = T.fleshSafe(u); u.stage = 0; out.quarantine.zone0 = T.fleshSafe(u); u.armorKind = undefined;
@@ -158,7 +158,7 @@ const L = require('./lib.cjs');
     { const [u] = as('incendiary'); const c = kit('firebreak_kit'); u.items = [c]; S.fires.set(idx(u.x, u.y - 1), 3); T.place(u, c, u.x, u.y - 1);
       out.incendiary = { out: !S.fires.has(idx(u.x, u.y - 1)), blocksFire: T.blocksFire(idx(u.x, u.y - 1)), blocksFlesh: T.blocksFlesh(idx(u.x - (u.x > u.x - 1 ? 0 : 0), u.y - 1)) };
     }
-    // Decontamination: the sweep cleans corrosion and fire but not SCP-610's growth; Clean Route; isolation incomplete
+    // Decontamination: the sweep cleans corrosion and fire but not SCP-610's growth; Clean Route; isolation is built (Phase 6)
     { const [u] = as('decon'); const c = kit('decon_agent'); u.items = [c]; S.corroded.add(idx(u.x, u.y - 1)); S.flesh.add(idx(u.x + 1, u.y - 1)); T.place(u, c, u.x, u.y - 1);
       out.decon = { cleaned: !S.corroded.has(idx(u.x, u.y - 1)), flesh: S.flesh.has(idx(u.x + 1, u.y - 1)), safe: T.corrosionSafe(u), iso: why(u, 'sq_equipment_isolation') };
     }
@@ -168,7 +168,7 @@ const L = require('./lib.cjs');
       u.armorKind = undefined; u.ap = 2; S.flesh.add(idx(u.x, u.y - 1)); T.place(u, c, u.x, u.y - 1); A.rng.force(null);
       out.hazrecovery = { samples: S.samples - s0, suited, unsuitedInfected: u.infectedTurn !== undefined }; u.infectedTurn = undefined;
     }
-    // Heavy Infantry: anchored in cover with armor can't be pinned; protected advance incomplete
+    // Heavy Infantry: anchored in cover with armor can't be pinned; protected advance is built (Phase 6)
     { const [u] = as('heavyinf', 1, { hasArmor: true }); Lv.grid[u.y - 1][u.x] = G.HALF; G.bump(); const tt = T.techTargets(u, 'sq_anchor').length; T.runTech(u, 'sq_anchor', u);
       out.heavyinf = { tt, pinnable: T.pinnable(u), pa: why(u, 'sq_protected_advance') };
     }

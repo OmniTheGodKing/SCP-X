@@ -60,6 +60,22 @@ repository on any branch, so this phase follows the continuity already in the co
 - **Advisors**: Carter (marked and missing personnel), Bell (evidence in the labs, unknown causes, hazards learned),
   Russo (dock holding, temporary holding, placement) react to these states.
 
+## Added after the first pass
+
+- **SCP-173 chamber security** (`chamber_security`): when the site loses power and SCP-173's cell locks fail, the breach
+  is played in the dark with it still in its cell. Restore power at the corridor panel; if it is inside its cell when
+  the lights come back, the doors lock on it (secured). If it gets out, the transport container is the fallback.
+- **SCP-096 surveillance contamination** (`surveillance_contamination`): while SCP-096 is held without facial-image
+  screening, footage from its cell can reach the film lab (30% chance once a month). The researcher who ran it starts
+  the breach marked: getting them out of the site means it follows them out; keeping them in means it reaches them,
+  then goes quiet and can be hooded. Image screening research prevents it.
+- **SCP-106 search and recovery** (`personnel_recovery`): the search for people SCP-106 took is played on ground rotted
+  black where they surfaced, with SCP-106 on the map when it isn't held. Those brought out come home with nightmares;
+  baiting and sealing it there counts as a capture. This is the edge of the pocket dimension, not the dimension itself.
+- **Recovery Drill**: the bleed-out timer already existed; the passive's one-turn grace was working and tested, and the
+  stale "incomplete" note is removed. No Version 12 technique or passive is marked unfinished now.
+- **Auto end turn switch**: in the mission's Sound and options panel, on by default.
+
 ## Auto end turn
 
 Once nobody on the team who can act has an action left, the turn ends by itself after 1.2 seconds, so the last action
@@ -87,13 +103,12 @@ abilities and squad techniques call the same hook.
 
 ## Not built in this phase
 
-- A playable SCP-106 pocket dimension. People taken are kept as missing and recovered through search operations.
+- A playable SCP-106 pocket dimension. People taken are kept as missing and recovered through search operations, which
+  are played where they surface.
 - Era finales and the full 1951–2026 historical chronology of storylines; only the framework and four arcs.
 - Investigation maps are the existing field maps with evidence placed in their rooms, not purpose-built scenes.
 - Facility defence, hostile raids, escort and multi-site emergencies were not changed beyond what existed.
-- Surveillance-camera contamination for SCP-096 (film evidence exists in the registry; no camera-feed mechanic).
-- SCP-173 mission variants beyond the staff-trapped breach.
-- Recovery Drill's bleed-out timer (still marked incomplete from Version 12).
+- SCP-173's escaped-instance recovery uses the existing manhunt; no separate variant was added.
 
 ## Source conflicts and adaptations
 

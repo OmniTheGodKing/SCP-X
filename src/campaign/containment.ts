@@ -226,7 +226,11 @@ function tickPower(c: Campaign) {
     return;
   }
   if (!unpowered(c)) return;
-  for (const s of c.scps) if (s.status === "contained" && !isInert(s) && rnd() < POWER.cascade) startBreach(c, s, "The cell's locks failed when the power went.");
+  for (const s of c.scps) if (s.status === "contained" && !isInert(s) && rnd() < POWER.cascade) {
+    const inc = startBreach(c, s, "The cell's locks failed when the power went.");
+    // Phase 6: SCP-173 in the dark behind doors that won't lock: get the power back with it still in the cell
+    if (c.site && s.id === "173" && inc) { inc.variant = "chamber_security"; inc.title = inc.title.replace(" breach", " cell doors open in the dark").replace(" breach with staff trapped", " cell doors open in the dark"); }
+  }
 }
 
 /** Wings an anomaly can be rushed into in an emergency: its own is damaged or has no power. */

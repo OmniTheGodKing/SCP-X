@@ -7,19 +7,19 @@ import { pace } from "../game/state";
 export type Channel = "sfx" | "ui" | "music";
 /** Volumes, plus the two Phase 4G display settings kept in the same panel: action highlights (shake and edge
  *  flashes) and the enemy-turn speed. */
-export interface AudioSettings { master: number; sfx: number; ui: number; music: number; muted: boolean; highlights: boolean; fastEnemy: boolean }
+export interface AudioSettings { master: number; sfx: number; ui: number; music: number; muted: boolean; highlights: boolean; fastEnemy: boolean; autoEnd: boolean }
 const KEY = "site19-audio";
-const DEFAULTS: AudioSettings = { master: 0.7, sfx: 0.8, ui: 0.5, music: 0.35, muted: false, highlights: true, fastEnemy: false };
+const DEFAULTS: AudioSettings = { master: 0.7, sfx: 0.8, ui: 0.5, music: 0.35, muted: false, highlights: true, fastEnemy: false, autoEnd: true };
 
 let settings: AudioSettings = (() => { try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) ?? "{}") }; } catch { return { ...DEFAULTS }; } })();
 let ac: AudioContext | null = null, master: GainNode, bus: Record<Channel, GainNode>, noiseBuf: AudioBuffer;
 
-pace.fast = settings.fastEnemy;
+pace.fast = settings.fastEnemy; pace.autoEnd = settings.autoEnd;
 export const audioSettings = () => settings;
 export function setAudio(patch: Partial<AudioSettings>) {
   settings = { ...settings, ...patch };
   try { localStorage.setItem(KEY, JSON.stringify(settings)); } catch { /* private mode: settings last this visit */ }
-  pace.fast = settings.fastEnemy;
+  pace.fast = settings.fastEnemy; pace.autoEnd = settings.autoEnd;
   apply();
 }
 function apply() {
@@ -226,6 +226,7 @@ export function soundControl(): string {
       <label class="sndrow"><input type="checkbox" data-sndmute ${s.muted ? "checked" : ""}> Mute everything</label>
       ${row("master", "Master")}${row("sfx", "Effects")}${row("ui", "Interface")}${row("music", "Music")}
       <label class="sndrow"><input type="checkbox" data-sndopt="highlights" ${s.highlights ? "checked" : ""}> Action highlights (shake and flashes)</label>
+      <label class="sndrow"><input type="checkbox" data-sndopt="autoEnd" ${s.autoEnd ? "checked" : ""}> End the turn when nobody has actions left</label>
       <label class="sndrow"><span>Enemy turns</span><select data-sndspeed aria-label="Enemy turn speed"><option value="normal" ${s.fastEnemy ? "" : "selected"}>Normal</option><option value="fast" ${s.fastEnemy ? "selected" : ""}>Fast</option></select></label>
     </div></details>`;
 }

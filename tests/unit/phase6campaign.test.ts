@@ -190,3 +190,38 @@ test("save: the dossier, storylines and missing survive a JSON round trip and re
   eq(back.incidents.filter(i => i.scpId === "106").length, 1, "no rediscovery on load");
   void receiveRecovered;
 });
+
+test("SCP-096 footage: without image screening, viewed footage breaks it out; with screening it can't happen", async () => {
+  const { tick096Footage } = await import("../../src/campaign/storylines");
+  const c = founded();
+  const { isContainment } = await import("../../src/campaign/base");
+  c.scps = []; const wing = c.base.facilities.find(f => isContainment(f.type));
+  ok(wing, "a free containment wing");
+  c.scps.push({ id: "096", name: "SCP-096", title: "The Shy Guy", cls: "Euclid", status: "contained", wingId: wing?.id ?? "w", maintenance: 100, lastCleaned: c.day });
+  c.research.done.push("image_screening");
+  eq(tick096Footage(c, true), null, "screening prevents it");
+  c.research.done = c.research.done.filter(x => x !== "image_screening");
+  const inc = tick096Footage(c, true);
+  ok(inc && inc.variant === "surveillance_contamination" && inc.kind === "breach", "a breach caused by footage");
+});
+
+test("search and recovery: the missing brought out come home with what they saw", () => {
+  const c = founded();
+  const o = ready(c)[0], others = ready(c).slice(1);
+  o.busy = { kind: "missing", daysLeft: 60, out: true };
+  c.missing = [{ opId: o.id, by: "106", day: c.day, region: "east_us" }];
+  const inc: Incident = { id: "inc950", kind: "rescue", scpId: "106", region: "east_us", map: "farm", title: "Incident 950: Survivor reported", appeared: c.day, expires: c.day + 5, insurgents: 0,
+    survivors: 1, recoverOps: [o.id], stage: "search", variant: "personnel_recovery", team: "the missing" };
+  c.incidents.push(inc);
+  const setup = buildSetup(c, inc, others.map(x => ({ opId: x.id, armor: "", items: [] })), 0);
+  createMission(setup);
+  for (const u of S.units) if (u.researcher) { u.saved = true; }
+  for (const u of S.units) if (u.side === "mtf" && u.alive) u.saved = true;
+  checkEnd();
+  const r = S.result!;
+  ok(r.win, "the missing are out");
+  applyResult(c, r);
+  ok(o.alive && !o.busy && !c.missing!.length, "home and off the missing list");
+  ok(o.traits.includes("nightmares"), "and changed by it");
+  eq(checkInvariants(c).join("; "), "", "invariants hold");
+});

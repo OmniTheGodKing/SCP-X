@@ -15,7 +15,7 @@ import { log, type Campaign, type Incident } from "./campaign";
 import { addExposure, travelDays } from "./world";
 import { chronicle } from "./history";
 import { canSpawnAnomaly, fileOf, missingOf, MISSING, type Stage } from "./dossier";
-import { firstSighting } from "./containment";
+import { firstSighting, startBreach } from "./containment";
 import { homeRegion } from "./org";
 import { has } from "./research";
 
@@ -169,6 +169,21 @@ export function tickArcs(c: Campaign) {
   }
   tickSearches(c);
   tick610(c);
+  tick096Footage(c);
+}
+
+export const FOOTAGE = { chance: 0.3, every: 30 };
+/** SCP-096 held without image screening: now and then a reel or a print from its cell's camera reaches someone
+ *  unscreened. Whoever looks is marked, and it breaks out to reach them. Image screening research stops it. */
+export function tick096Footage(c: Campaign, force = false) {
+  const s = c.scps.find(x => x.id === "096" && x.status === "contained");
+  if (!s || has(c, "image_screening") || (!force && (c.day % FOOTAGE.every !== 15 || rnd() >= FOOTAGE.chance))) return null;
+  log(c, `Dr. Bell: "A reel from the camera in SCP-096's cell went to the film lab without screening, and someone ran it. I want facial-image screening funded today."`, "bad", "research");
+  const inc = startBreach(c, s, "Footage of its face reached the film lab.");
+  if (inc) { inc.variant = "surveillance_contamination"; inc.title = inc.title.replace(" breach", " breach (surveillance footage)"); }
+  const a = arcOf(c, "096") ?? newArc(c, "096");
+  note(c, a, a.stage, "Unscreened footage from SCP-096's cell was viewed at the site, and it broke containment to reach the viewer.", "original");
+  return inc;
 }
 
 /** People SCP-106 took sometimes surface: a search and recovery operation where it happened. */
@@ -178,7 +193,8 @@ function tickSearches(c: Campaign) {
   const chance = has(c, "pocket_study") ? MISSING.foundStudied : MISSING.foundChance;
   if (rnd() >= chance) return;
   const region = lost[0].m.region, where = pick(REGIONS[region].towns), ops = lost.slice(0, 2).map(x => x.o.id);
-  const inc = incident(c, { kind: "rescue", scpId: "", region, map: fieldMap("rescue"), team: "the missing", survivors: ops.length, recoverOps: ops,
+  const held = c.scps.some(s => s.id === "106" && (s.status === "contained" || s.status === "holding" || s.status === "away" || s.status === "leaving"));
+  const inc = incident(c, { kind: "rescue", scpId: held ? "" : "106", region, map: fieldMap("rescue"), team: "the missing", survivors: ops.length, recoverOps: ops,
     insurgents: 0, expires: c.day + travelDays(c, region) + 4, arc: "106", stage: "search", variant: "personnel_recovery", what: `Survivor reported near ${where}` });
   log(c, `Carter: "A farmer near ${where} found someone crawling out of a black stain in his cellar, babbling about corridors. ${ops.map(id => opName(c, id)).join(" and ")} could be down there. Go and get them."`, "bad", "command");
   const a = arcOf(c, "106") ?? newArc(c, "106");
