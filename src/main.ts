@@ -71,6 +71,7 @@ const WIN: Record<MissionKind, [string, string]> = {
   retaliation: ["Town held", "The Insurgency attack is broken."],
   rescue: ["Team found", "The survivors are coming home."],
   emergency: ["Emergency answered", "The team pulled out with what it could save."],
+  investigation: ["Findings in", "The team is out with what it found."],
 };
 function debriefHtml(r: MissionResult, d: Debrief, kind: MissionKind, scp: string) {
   return `

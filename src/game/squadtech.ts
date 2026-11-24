@@ -3,6 +3,7 @@
 // SCP-610's flesh and fire). Squad-level things stay squad-level: one cooldown per technique per squad, one shared
 // pool of specialist kit per squad (the same object in every member's item bar), participants who must be beside the
 // user. Balance numbers come from data/specialties.ts.
+import { crossingTile, deconArea, isolateEquipment, isolationTargets, openCrossing } from "./contamination";
 import { rnd } from "../core/rng";
 import { TS, DIRS, DRUM, EXIT, FLOOR, FULL, HALF, L, PART, STEEL, WALL, bump, cheb, passable, tileAt } from "../core/grid";
 import { coverSides } from "../core/geom";
@@ -167,7 +168,8 @@ export function place(u: Unit, it: { id: ItemId; uses: number }, x: number, y: n
       } else {
         let flesh = 0, cleared = 0;
         for (const [a, b] of area) { const k = idx(a, b); if (S.corroded.delete(k)) cleared++; if (S.fires.delete(k)) cleared++; if (S.flesh.has(k)) flesh++; }
-        log(`${full(u)} sweeps the area with the decon rig${cleared ? `: ${cleared} tile${cleared > 1 ? "s" : ""} cleaned` : ", nothing removable there"}.${flesh ? " SCP-610's growth doesn't wash off." : ""}`, "key");
+        cleared += deconArea(area);
+        log(`${full(u)} sweeps the area with the decon rig${cleared ? `: ${cleared} tile${cleared > 1 ? "s" : ""} or people cleaned` : ", nothing removable there"}.${flesh ? " SCP-610's growth doesn't wash off." : ""}`, "key");
       }
       break;
     }
@@ -228,6 +230,10 @@ export function techTargets(u: Unit, id: string): Unit[] {
     case "sq_mark_trail": return freshTrail(u) && u.items?.some(i => i.id === "field_tags" && i.uses > 0) ? [u] : [];
     case "sq_route_recon": return [u];
     case "sq_safe_clearance": return DIRS.some(([dx, dy]) => tileAt(u.x + dx, u.y + dy) === DRUM) ? [u] : [];
+    // Phase 6: the techniques that waited for the contamination model and a paired move
+    case "sq_controlled_crossing": return crossingTile(u) !== null && !S.crossings?.has(crossingTile(u)!) ? [u] : [];
+    case "sq_equipment_isolation": return isolationTargets(u).length ? [u] : [];
+    case "sq_protected_advance": return hasCover(u) && u.ap >= 1 && ableNear(u).some(v => v.ap >= 1 && !!v.gun && v.gun.ammo >= 1) ? [u] : [];
     default: return [];
   }
 }
@@ -296,6 +302,15 @@ export function runTech(u: Unit, id: string, t: Unit) {
       break;
     }
     case "sq_silent_approach": S.silent![u.squadId ?? u.id] = S.turn; log(`${full(u)}'s squad moves quietly this turn (half the noise, one tile less).`, "key"); break;
+    case "sq_controlled_crossing": openCrossing(u); break;
+    case "sq_equipment_isolation": isolateEquipment(u); break;
+    case "sq_protected_advance": {
+      const partner = ableNear(u).find(v => v.ap >= 1 && !!v.gun && v.gun.ammo >= 1)!;
+      partner.ap -= 1; partner.coverFor = u.id; partner.overwatch = false;
+      u.protectedTurn = S.turn;
+      log(`${full(u)} moves out under ${full(partner)}'s fire: shots at them this turn are harder, and ${full(partner)} answers anyone who takes one.`, "key");
+      break;
+    }
     case "sq_observation_post": u.observing = true; observe(); log(`${full(u)} sets up an observation post: 2 tiles more sight, and every enemy crossing it is logged.`, "key"); break;
     case "sq_confirm_target": {
       const per = u.specialty === "surveillance" && (u.stage ?? 0) >= 2 ? 2 : 1;

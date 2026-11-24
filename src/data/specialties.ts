@@ -90,7 +90,7 @@ export const TECHS: Record<string, TechDef> = {
   sq_isolation_line: { id: "sq_isolation_line", name: "Isolation line", specialty: "quarantine", ap: 2, cooldown: 0, participants: 1, consumes: "cordon_kit", target: "tile",
     desc: "Run a three-tile cordon through an adjacent tile, across the operative's facing. SCP-610's flesh cannot spread into cordoned tiles while the line stands; fire burns it down." },
   sq_controlled_crossing: { id: "sq_controlled_crossing", name: "Controlled crossing", specialty: "quarantine", ap: 1, cooldown: 0, participants: 1, target: "self",
-    desc: "Open a staffed crossing in the cordon for friendly extraction.", incomplete: "Needs clean and dirty zones per tile, which the contamination model doesn't track yet." },
+    desc: "On or beside an isolation line: staff a crossing in it. While they hold it (stay on or beside it), anyone who steps through is washed down and comes out clean. Contaminated people walking out anywhere else track residue that can take root outside the line." },
   // 06 Incendiary
   sq_firebreak: { id: "sq_firebreak", name: "Firebreak", specialty: "incendiary", ap: 2, cooldown: 0, participants: 1, consumes: "firebreak_kit", target: "tile",
     desc: "Clear and soak a 2×2 strip: fires there go out and it won't burn or take SCP-610's flesh for 4 turns. Flesh already there stays." },
@@ -98,15 +98,15 @@ export const TECHS: Record<string, TechDef> = {
   sq_decon_sweep: { id: "sq_decon_sweep", name: "Decon sweep", specialty: "decon", ap: 2, cooldown: 0, participants: 1, consumes: "decon_agent", target: "tile",
     desc: "Treat a 2×2 area: SCP-106's corrosion and burning there are cleared. SCP-610's flesh is a living transformation and does not wash off." },
   sq_equipment_isolation: { id: "sq_equipment_isolation", name: "Equipment isolation", specialty: "decon", ap: 1, cooldown: 0, participants: 1, target: "self",
-    desc: "Bag exposed kit at the clean boundary.", incomplete: "Needs contaminated-equipment states, which the game doesn't model yet." },
+    desc: "On clean ground: bag the contaminated kit of everyone beside them, themselves included. Bagged kit comes home for decon; dirty kit left unbagged is incinerated at the end of the mission. It doesn't wash the person." },
   // 08 Hazardous Recovery
   sq_sealed_retrieval: { id: "sq_sealed_retrieval", name: "Sealed retrieval", specialty: "hazrecovery", ap: 2, cooldown: 0, participants: 1, consumes: "sample_case", target: "flesh",
     desc: "Package a sample of an adjacent SCP-610 growth in a sealed case. It comes home for research. Without a sealed suit, the handler risks infection." },
   // 09 Heavy Infantry
   sq_anchor: { id: "sq_anchor", name: "Anchor position", specialty: "heavyinf", ap: 2, cooldown: 2, participants: 1, target: "self",
     desc: "Brace in cover: hunkered, and suppression can't pin them until their next turn. Needs real cover and body armor." },
-  sq_protected_advance: { id: "sq_protected_advance", name: "Protected advance", specialty: "heavyinf", ap: 2, cooldown: 2, participants: 2, target: "self",
-    desc: "Paired move from cover to cover under a partner's fire.", incomplete: "Needs a paired-move order, which the movement system doesn't have yet." },
+  sq_protected_advance: { id: "sq_protected_advance", name: "Protected advance", specialty: "heavyinf", ap: 1, cooldown: 2, participants: 2, target: "self",
+    desc: "From cover, with an armed squadmate beside them: the partner spends an action covering, then this turn's move is made under their fire. Reaction shots at the mover take −20, and the partner returns fire on anyone who shoots at them (one shot each)." },
   // 10 Demolitions
   sq_shaped_breach: { id: "sq_shaped_breach", name: "Shaped breach", specialty: "demolitions", ap: 2, cooldown: 0, participants: 1, consumes: "demo_charge", target: "tile",
     desc: "Plant a demolition charge on an adjacent wall, partition, door or barricade and fire it: the wall is gone, sight and paths open. Reinforced walls too, never a containment cell's steel. Loud." },

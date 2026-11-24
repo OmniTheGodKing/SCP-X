@@ -12,13 +12,14 @@ import { S, alive, banner, canAct, canSee, computeVis, full, hooks, isPanicked, 
 import type { AbilityId, PerkId, Unit } from "./types";
 import { PERKS } from "../data/classes";
 import { MAPS } from "../data/maps";
+import { examine, examineTargets } from "./investigation";
 import { caseMask, caseTargets, hoodTargets, leadTargets096, putHood, scoreTargets, secureScore, shakeOut, shakeTargets } from "./scp4b";
 
 export interface AbilityDef {
   perk: AbilityId;
   label: string;
   desc?: string;
-  target: "ally" | "downed" | "panicked" | "enemy" | "self" | "captive" | "witness" | "panel" | "doctor" | "stray" | "carryable" | "record" | "specimen" | "radio" | "scp4b";
+  target: "ally" | "downed" | "panicked" | "enemy" | "self" | "captive" | "witness" | "panel" | "doctor" | "stray" | "carryable" | "record" | "specimen" | "radio" | "scp4b" | "evidence";
   /** For self-targeted actions that only make sense sometimes: when they show up. */
   when?: (u: Unit) => boolean;
   endsTurn?: boolean;
@@ -45,7 +46,9 @@ export const ABILITIES: AbilityDef[] = [
   { perk: "siren", label: "Silence the siren", target: "panel", desc: "At the panel: switch the breach siren off or on. While it wails nobody recovers sanity, but SCP-173 can't hear where your shots come from." },
   { perk: "lockdown", label: "Lock the hatch", target: "panel", endsTurn: true, desc: "At the lockdown panel: seal the surface hatch so SCP-173 can't get out that way for a few turns. Takes both actions." },
   { perk: "cutradio", label: "Cut the radio", target: "radio", desc: "Smash the Insurgents' radio set next to you: they can't call for reinforcements." },
-  { perk: "recover", label: "Recover records", target: "record", desc: "Gather up an adjacent file of classified records. They leave with the team." },
+  { perk: "recover", label: "Recover records", target: "record", desc: "Gather up an adjacent file of classified records or bag an item of evidence unseen. It leaves with the team; evidence goes to the labs for analysis." },
+  // Phase 6 investigation
+  { perk: "examine", label: "Examine", target: "evidence", desc: "Look closely at an item of evidence beside you, or question a local. What it shows is learned now. Some things are dangerous to look at: bagging them unseen (Recover) is the safe way." },
   { perk: "restore", label: "Restore power", target: "panel", endsTurn: true, desc: "At the panel: bring the site's power back. The lights come on (no more darkness penalty). Takes both actions." },
   { perk: "scan", label: "Scan the anomaly", target: "specimen", desc: "Field researcher only: take readings on an anomaly in sight within 8 tiles. Each scan (up to 3) puts work into research on it." },
   { perk: "dose", label: "Dose with amnestics", target: "witness", desc: "Give an adjacent witness amnestics. They forget what they saw and stop running." },
@@ -65,10 +68,11 @@ const TECH_NOT_NOW: Record<string, string> = {
   sq_two_person_evac: "Carry someone with a squadmate beside you.", sq_secure_transfer: "Carry someone onto an exit tile.", sq_covering_lane: "Needs a loaded weapon.",
   sq_suppression_shift: "They have to be suppressing someone already, with another enemy in sight.", sq_anchor: "Needs cover beside them and body armor.",
   sq_emplace: "Needs a machine gun.", sq_pack: "The gun isn't emplaced.", sq_interdiction: "Emplace the gun first, with 4 rounds.", sq_restore: "Stand beside a destroyed door.",
-  sq_observation_post: "Needs cover beside them.", sq_confirm_target: "No enemy in sight.", sq_read_sign: "No fresh sign here: trails are left where enemies have moved.",
+  sq_observation_post: "Needs cover beside them.", sq_controlled_crossing: "Stand on or beside an isolation line (one crossing per tile).",
+  sq_equipment_isolation: "Stand on clean ground beside someone with contaminated kit.", sq_protected_advance: "Needs cover beside them and an armed squadmate with an action to spare.", sq_confirm_target: "No enemy in sight.", sq_read_sign: "No fresh sign here: trails are left where enemies have moved.",
   sq_mark_trail: "Needs fresh sign beside them and field tags.", sq_safe_clearance: "Stand beside a fuel drum.",
 };
-const UNIVERSAL: AbilityId[] = ["cutradio", "secure", "dose", "lockdown", "doors", "siren", "calm", "restrain", "pickup", "drop", "exfil", "hunker", "recover", "restore", "scan", "hood", "lead096", "score", "shake", "casemask"];
+const UNIVERSAL: AbilityId[] = ["cutradio", "secure", "dose", "lockdown", "doors", "siren", "calm", "restrain", "pickup", "drop", "exfil", "hunker", "recover", "restore", "scan", "hood", "lead096", "score", "shake", "casemask", "examine"];
 const onExit = (u: Unit) => L.exitMap[u.y * L.W + u.x] === 0;
 /** Cover beside them on some side (Tactical overhaul T2.1: from the geometry kernel's obstacles). */
 const hasCover = (u: Unit) => coverSides(u.x, u.y).some(v => v > 0);
@@ -113,6 +117,7 @@ export function abilityTargets(u: Unit, p: AbilityId): Unit[] {
     case "panicked": return alive("mtf").filter(a => a !== u && isPanicked(a) && adjacent(u, a));
     case "enemy": return alive("raider").filter(r => seen(r.x, r.y) && canSee(u, r.x, r.y));
     case "record": return S.units.filter(a => a.record && !a.radio && !a.vehicle && !a.saved && adjacent(u, a));
+    case "evidence": return u.eyesDown ? [] : examineTargets(u);
     case "radio": return S.units.filter(a => a.radio && !a.saved && adjacent(u, a));
     case "scp4b": return p === "hood" ? hoodTargets(u) : p === "lead096" ? leadTargets096(u) : p === "score" ? scoreTargets(u) : p === "shake" ? shakeTargets(u) : caseTargets(u);
     case "specimen": {
@@ -258,8 +263,9 @@ export function useAbility(u: Unit, p: AbilityId, t: Unit) {
       break;
     case "recover":
       t.saved = true;
-      log(`${full(u)} gathers up the classified records.`, "good");
+      log(t.evidence ? `${full(u)} bags the ${t.name.toLowerCase()} without looking at it. It goes to the labs.` : `${full(u)} gathers up the classified records.`, "good");
       break;
+    case "examine": examine(u, t); break;
     case "restore":
       S.powerOn = true; S.setup.night = false;
       log(`${full(u)} gets the power back on. The lights come up across the wing.`, "good");

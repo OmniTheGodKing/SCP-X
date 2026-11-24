@@ -14,6 +14,10 @@ import { STARTING_NOTES } from "./notes";
 import { PROFILE } from "./profiles";
 import { S, computeVis, log, setMission } from "./state";
 import { isNewScp } from "./scp4b";
+import { objectivesFor, resetObjectiveCache, tacticalOutcome } from "./objectives";
+import { fieldObservations, placeEvidence } from "./investigation";
+import { contaminationResult } from "./contamination";
+import { ANOMALIES } from "../data/anomalies";
 import { WEATHER } from "../data/weather";
 import { OBJECT_SCPS, RAID_TURNS, type ItemId, type OptionalId, type MissionKind, type MissionResult, type MissionSetup, type MissionState, type SquadMember, type Unit } from "./types";
 
@@ -67,13 +71,18 @@ export function createMission(setup: MissionSetup) {
     return t;
   };
   const units: Unit[] = [];
-  const contain = setup.kind === "breach" || setup.kind === "manhunt" || (setup.kind === "emergency" && setup.hazard === "scp");
+  // Phase 6: an investigation has the anomaly on the map only if it is still there (setup.presence)
+  const investigating = setup.kind === "investigation";
+  const contain = setup.kind === "breach" || setup.kind === "manhunt" || (setup.kind === "emergency" && setup.hazard === "scp") || (investigating && !!setup.presence && (setup.scp as string) !== "610");
   const has173 = contain && (setup.scp ?? "173") === "173", has049 = contain && setup.scp === "049", has106 = contain && setup.scp === "106";
   const scp = contain ? setup.scp ?? "173" : undefined, fresh = contain && isNewScp(setup.scp);
   // an object can't get out of its cell by itself: a "breach" of one is Insurgents trying to steal it
   const object = contain && OBJECT_SCPS.includes(setup.scp ?? "");
   // Phase 4B: the capture kit for the new anomalies goes to the first operative of the squad
-  const kit = fresh ? ({ "096": ["hood", 1], "012": ["folder", 1], "939": ["noisemaker", (setup.mods.r4b ?? []).includes("acoustic_lures") ? 3 : 2], "035": ["case", 1] } as Record<string, [ItemId, number]>)[setup.scp!] : undefined;
+  const kitFor = fresh ? ({ "096": ["hood", 1], "012": ["folder", 1], "939": ["noisemaker", (setup.mods.r4b ?? []).includes("acoustic_lures") ? 3 : 2], "035": ["case", 1] } as Record<string, [ItemId, number]>)[setup.scp!] : undefined;
+  // Phase 6: capture kit is issued only for a procedure whose basis the Foundation knows (no hood without knowing why)
+  const kitProc = kitFor && ANOMALIES[setup.scp!]?.procedures.find(p => p.kit === kitFor[0]);
+  const kit = kitFor && (!setup.intel || !kitProc || kitProc.needs.every(n => setup.intel!.known.includes(n))) ? kitFor : undefined;
   if (kit && setup.squad[0] && !setup.squad[0].items.some(i => i.id === kit[0])) setup.squad[0] = { ...setup.squad[0], items: [...setup.squad[0].items, { id: kit[0], uses: kit[1] }] };
 
   // On a breach, Site Security is first on the scene and Epsilon-11 follows later; elsewhere the squad goes in together.
@@ -163,19 +172,21 @@ export function createMission(setup: MissionSetup) {
     units.push(mk({ id: "c" + (i + 1), side: "civilian", call: names[i % names.length], name: names[i % names.length], x, y, hp: 4, maxHp: 4, san: 50, witness,
       spooked: setup.kind === "manhunt" || setup.kind === "retaliation" }));
   }
+  if (investigating) units.push(...placeEvidence(setup, strayRooms, claim, mk));
   assignRoles(units, setup);
   const statue = object ? mk({ id: "scp" + setup.scp, side: "anomaly", name: `SCP-${setup.scp}`, x: sx, y: sy, hp: 1, maxHp: 1, san: 0, object: true })
     : fresh ? newAnomaly(setup.scp!, sx, sy, scpRoom!, claim, setup.kind, units)
     : has049
     ? mk({ id: "scp049", side: "anomaly", name: "SCP-049", x: sx, y: sy, hp: 1, maxHp: 1, san: 0 })
     : has106 ? mk({ id: "scp106", side: "anomaly", name: "SCP-106", x: sx, y: sy, hp: 1, maxHp: 1, san: 0 })
+    : investigating && !contain ? mk({ id: "scp" + (setup.scp ?? "x"), side: "anomaly", name: `SCP-${setup.scp}`, x: 0, y: 0, hp: 1, maxHp: 1, san: 0, alive: false, facing: 0 })
     : mk({ id: "scp173", side: "anomaly", name: "SCP-173", x: sx, y: sy, hp: 1, maxHp: 1, san: 0, sightBound: true, alive: has173 });
   units.push(statue);
   if (lorry) units.push(lorry);
 
   const W = def.rows[0].length, H = def.rows.length;
   const state: MissionState = {
-    setup, scp, has173, has049, calmUntil: 0, has106, sunkUntil: 0, submerged: false, feedTurn: -1, corroded: new Set(), amnestics: setup.amnestics, turn: 1, phase: "player", busy: false, over: false, called: false, mode: null,
+    setup, scp: investigating ? setup.scp : scp, objectives: objectivesFor(setup), has173, has049, calmUntil: 0, has106, sunkUntil: 0, submerged: false, feedTurn: -1, corroded: new Set(), amnestics: setup.amnestics, turn: 1, phase: "player", busy: false, over: false, called: false, mode: null,
     units, statue, sealed: false, selected: null, hover: null, pending: null,
     vis: new Uint8Array(W * H), explored: new Uint8Array(W * H),
     lastSeen: null, raidersActive: false, mem: new Map(), checked: new Set(),
@@ -200,7 +211,12 @@ export function createMission(setup: MissionSetup) {
   setMission(state);
   // perimeter alarms: Site Security is already in position and watching when the raid starts
   if (setup.kind === "raid" && setup.mods.alarms) for (const u of state.units) if (u.guard) u.overwatch = true;
+  resetObjectiveCache();
   if (setup.kind === "outbreak") seedOutbreak(setup, strayRooms);
+  // a settlement where it has only just started: a little growth and its core, nothing walking yet
+  if (investigating && (setup.scp as string) === "610") seedOutbreak({ ...setup, severity: 1 }, strayRooms, 0);
+  // Phase 6: an anomaly nobody has identified yet goes by what it is until someone gets a good look
+  if (setup.intel && !setup.intel.identified) state.statue.name = "Unidentified entity";
   if (setup.kind === "riot") {
     for (let i = 0; i < (setup.rioters ?? 0); i++) {
       const room = def.insurgentRooms[i % def.insurgentRooms.length];
@@ -285,7 +301,7 @@ function farRooms(rooms: [number, number, number, number][], from: Pt[]) {
 }
 
 /** SCP-610: a core of flesh in one of the rooms, flesh spread around it, and its instances on the flesh. */
-function seedOutbreak(setup: MissionSetup, rooms: [number, number, number, number][]) {
+function seedOutbreak(setup: MissionSetup, rooms: [number, number, number, number][], instances?: number) {
   const spawn = L.def.squadSpawns[0];
   const room = [...rooms].sort((a, b) => cheb(b[0], b[1], spawn[0], spawn[1]) - cheb(a[0], a[1], spawn[0], spawn[1]))[0];
   const tiles = floorTiles(room).filter(([x, y]) => !S.units.some(u => u.alive && u.x === x && u.y === y));
@@ -295,7 +311,7 @@ function seedOutbreak(setup: MissionSetup, rooms: [number, number, number, numbe
   const reach = bfs([[cx, cy]], 1 + sev, () => false);
   for (let i = 0; i < reach.dist.length; i++) if (reach.dist[i] >= 0) S.flesh.add(i);
   const on = [...S.flesh].filter(i => i !== cy * L.W + cx && !S.units.some(u => u.alive && u.y * L.W + u.x === i));
-  for (let k = 0; k < sev + 1 && on.length; k++) {
+  for (let k = 0; k < (instances ?? sev + 1) && on.length; k++) {
     const i = on.splice(Math.floor(rnd() * on.length), 1)[0];
     S.units.push(mk({ id: "f" + k, side: "zombie", name: "SCP-610 instance", x: i % L.W, y: (i / L.W) | 0, hp: 6, maxHp: 6, san: 0, flesh: true }));
   }
@@ -336,6 +352,7 @@ export function optionalMet(id: OptionalId, end = false): boolean {
 export const hazardDealt = () => S.sealed || (!S.has173 && !S.has049 && !S.has106 && !S.units.some(u => (u.side === "zombie" || u.side === "raider") && u.alive && !u.downed));
 
 export const BRIEFINGS: Record<MissionKind, (s: MissionSetup) => string> = {
+  investigation: s => `Something happened here and nobody knows what. ${s.evidence?.length ?? 0} items of evidence are reported at the scene. Examine them (1 action, beside them) to learn what they show now, or bag them unseen (Recover) for the labs to analyse safely back at the site. Talk to the locals. Get a good look at the cause, if it is still here, and get out through an exit. ${s.intel?.known.length ? "What is already known is in the file." : "Nothing is known yet."}`,
   rescue: s => `${s.survivorName ?? "A lost team"}'s survivors are hiding somewhere out here, and the Insurgency is still around. Reach them and they'll follow you; bring them out through an exit.`,
   emergency: s => s.quiet ? `Nobody at ${s.site ?? "the site"} has answered for two days, and the power is out. Find out what happened, restore power at the panel in containment control in the basement, and bring out whatever survivors and records you find. Whatever is in there, nobody has seen it yet.` : `${s.site ?? "The site"} is dark: the power is out and ${s.hazard === "scp" ? `${s.scp ? `SCP-${s.scp}` : "an anomaly"} is loose` : s.hazard === "insurgents" ? "an Insurgency team is inside" : "escaped instances are loose in the wing"}. ${s.researchers ?? 0} researchers are trapped and ${s.records ?? 0} files of records are at risk. Restore power at the panel, get the researchers out, recover the records${s.hazard === "scp" ? ", and seal the anomaly in the container if you can" : ""}. Exfiltrate when you've done what you can.`,
   riot: s => `The D-Class block is rioting: ${s.rioters} prisoners are out of their cells. They have nothing but their fists, but there are a lot of them. Restrain them (next to them, 1 action) or put them down; every one killed is a D-Class you won't have. Only Site Security answers this.`,
@@ -369,7 +386,18 @@ export function missionResult(win: boolean, evacuated: boolean): MissionResult {
   const strays = S.units.filter(u => u.stray), docs = S.units.filter(u => u.researcher);
   const kitLeft: Partial<Record<KitItem, number>> = {};
   for (const k of sharedKitFor(S.setup)) kitLeft[k.id] = (kitLeft[k.id] ?? 0) + Math.max(0, k.uses);
+  // Phase 6: contamination, evidence, the taken and the marked, and how it ended for the anomaly
+  const dirt = contaminationResult();
+  const ev = S.units.filter(u => u.evidence);
   return {
+    outcome: tacticalOutcome(win, evacuated),
+    objectives: S.objectives?.map(o => ({ id: o.id, kind: o.kind, tier: o.tier, text: o.text, status: o.status, hidden: o.hidden })),
+    evidence: S.objectives || ev.length ? { examined: ev.filter(u => u.examined).map(u => u.evidence!), bagged: ev.filter(u => u.saved && !u.cured && (u.alive || u.evidence === "remains")).map(u => u.evidence!) } : undefined,
+    observedProps: fieldObservations(), identified: !!S.identified,
+    contaminatedOps: dirt.people, dirtyLost: dirt.lost,
+    missing: S.units.filter(u => u.opId && u.taken && !u.returned).map(u => u.opId!),
+    marked: S.units.filter(u => u.opId && u.marked && u.alive && (u.saved || win)).map(u => u.opId!),
+    bodiesRecovered: S.units.filter(u => !u.alive && u.saved && !u.cured && (u.evidence === "remains" || u.side === "mtf")).length,
     kitLeft, techSquads: [...(S.techSquads ?? [])], clues: S.clues ?? 0, samples: S.samples ?? 0, collateral: S.collateral ?? 0,
     incidentId: S.setup.incidentId,
     win, evacuated,

@@ -1,4 +1,7 @@
 // Player actions and the turn cycle: your move, SCP-173, the Insurgency, then loose D-Class.
+import { evalObjectives, objectiveEnd } from "./objectives";
+import { contaminationPhase } from "./contamination";
+import { arrivalTick } from "./investigation";
 import { bleedGrace, observe, place, placeCheck, placeOptions, sharedKitFor } from "./squadtech";
 import { blast, blastArea } from "./explosive";
 import { DETECTED, perceive, setHaze } from "./perception";
@@ -587,6 +590,9 @@ export async function endTurn() {
   if (checkEnd()) { S.busy = false; return; }
   spreadFlesh();
   fleshContact();
+  contaminationPhase();
+  arrivalTick();
+  evalObjectives();
   recoverSanity();
   reinforcementsTick();
   S.enemySummary = enemySummary();
@@ -643,6 +649,12 @@ export function checkEnd() {
   if (S.over) return true;
   // the tactical lab never ends on its own
   if (S.setup.lab) return false;
+  // Phase 6: a mission with objectives is decided by them (investigations, and breach and outbreak variants)
+  if (S.objectives) {
+    const v = objectiveEnd(alive("mtf").length > 0 || S.reinforce.length > 0);
+    if (v?.over) { finish(v.win, !v.win && S.units.some(u => u.side === "mtf" && u.saved && u.alive)); return true; }
+    if (S.setup.kind === "investigation") return false;
+  }
   const k = S.setup.kind;
   if ((k === "breach" || k === "manhunt") && S.sealed) { finish(true, false); return true; }
   // Phase 4C: destroyed by the GOC or carried off by GRU-P; a convoy that got through

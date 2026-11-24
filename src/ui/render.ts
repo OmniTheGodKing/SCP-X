@@ -13,6 +13,7 @@ import { audioSettings, sfx, transition } from "./audio";
 import { createFx } from "./fxdraw";
 import { bubbles, createLiving, mist } from "./living";
 import { hidden939, inFace, isDown682, isNewScp, isTarget } from "../game/scp4b";
+import { fieldKnows } from "../game/investigation";
 import type { Effect } from "../game/types";
 import { fallOf, setEra, animOf, badge, drawBase, drawFallen, drawPerson, drawRadio, drawRecords, lookFor, noteEffects, placeOf, resetAnims } from "./sprites";
 import { escaping } from "../game/scp173";
@@ -95,6 +96,22 @@ export function createRenderer(cv: HTMLCanvasElement) {
         ctx.restore();
         ctx.fillStyle = "#6b5a3a"; ctx.fillRect(cx - 1.5, cy - 6, 3, 10); ctx.fillStyle = "#e5c23a"; ctx.fillRect(cx - 4, cy - 7, 8, 3);
       }
+    }
+    // Phase 6: residue tracked out of the flesh, staffed crossings in the cordon, and the zone's edge on a quarantine
+    if (S.residue?.size) for (const k of S.residue) {
+      if (!S.explored[k]) continue;
+      const x = (k % W) * TS, y = Math.floor(k / W) * TS;
+      ctx.fillStyle = "rgba(120,140,60,0.32)";
+      for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.arc(x + 6 + ((k * 7 + i * 11) % (TS - 12)), y + 6 + ((k * 5 + i * 13) % (TS - 12)), 2.5, 0, Math.PI * 2); ctx.fill(); }
+    }
+    if (S.crossings?.size) for (const [k] of S.crossings) {
+      const x = (k % W) * TS, y = Math.floor(k / W) * TS;
+      ctx.strokeStyle = "#86c193"; ctx.lineWidth = 2.5; ctx.strokeRect(x + 3, y + 3, TS - 6, TS - 6);
+      tag("CROSSING", x + TS / 2, y + 4, "#86c193");
+    }
+    if (S.objectives?.some(o => o.kind === "hold_perimeter" && o.status !== "done")) {
+      ctx.save(); ctx.strokeStyle = "rgba(215,91,71,0.55)"; ctx.setLineDash([8, 6]); ctx.lineWidth = 2;
+      ctx.strokeRect(TS * 2, TS * 2, (W - 4) * TS, (L.H - 4) * TS); ctx.restore();
     }
     if (S.marks?.size) for (const k of S.marks) {
       const x = (k % W) * TS + TS / 2, y = Math.floor(k / W) * TS + TS / 2;
@@ -413,7 +430,9 @@ export function createRenderer(cv: HTMLCanvasElement) {
       if (u.radio) drawRadio(ctx, cx, cy);
       else if (u.record) drawRecords(ctx, cx, cy);
       else drawPerson(ctx, cx, cy, p.ang, look, { hurt, bob });
-      badge(ctx, cx + 10, cy + 10, u.radio ? "X" : u.record ? "F" : u.dosed ? "✓" : u.witness ? "W" : u.researcher ? (S.setup.kind === "rescue" ? "L" : "R") : "C", col);
+      badge(ctx, cx + 10, cy + 10, u.evidence ? "E" : u.radio ? "X" : u.record ? "F" : u.dosed ? "✓" : u.witness ? "W" : u.researcher ? (S.setup.kind === "rescue" ? "L" : "R") : "C", col);
+      // Phase 6: evidence shows what it is and whether it has been looked at; never what it will show
+      if (u.evidence) tag(u.examined ? "EXAMINED" : u.evidence === "testimony" ? "WITNESS" : "EVIDENCE", cx, cy - 18, u.examined ? C.ok : "#e0b050");
       if (u.researcher && u.followId) tag("FOLLOWING", cx, cy - 18, C.ok);
       if (u.spooked && !u.dosed) tag("!", cx + 10, cy - 10, C.alert);
       return;
@@ -707,7 +726,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
     }
 
     // Phase 4B: SCP-096's face, as the tiles in the wedge in front of it that it can see; and noisemakers playing
-    if (S.scp === "096" && !S.hooded && !S.sealed && st.alive && (seen(st.x, st.y) || S.explored[st.y * L.W + st.x])) {
+    if (S.scp === "096" && fieldKnows("face_trigger") && !S.hooded && !S.sealed && st.alive && (seen(st.x, st.y) || S.explored[st.y * L.W + st.x])) {
       ctx.fillStyle = S.rage ? "rgba(215,91,71,0.22)" : "rgba(215,91,71,0.14)";
       for (let y = st.y - 10; y <= st.y + 10; y++) for (let x = st.x - 10; x <= st.x + 10; x++)
         if (x >= 0 && y >= 0 && x < L.W && y < L.H && passable(x, y) && inFace(x, y) && sightFrom(st.x, st.y, x, y, 10)) ctx.fillRect(x * TS + 1, y * TS + 1, TS - 2, TS - 2);

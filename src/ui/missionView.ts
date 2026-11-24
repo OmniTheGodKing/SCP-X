@@ -21,6 +21,18 @@ import {
 import { HEAVY, RAID_TURNS, THROWN, type AbilityId, type ItemId } from "../game/types";
 import { abilitiesOf, abilityCheck, abilityDesc, abilityName, startAbility } from "../game/abilities";
 import { usesLeft } from "../game/perks";
+import { fieldKnows, statueKnown } from "../game/investigation";
+import { visibleObjectives } from "../game/objectives";
+
+/** Phase 6: the mission's objectives by tier, with their state. */
+function objectivesHtml() {
+  const tiers: [string, string][] = [["primary", "Primary"], ["secondary", "Secondary"], ["optional", "Optional"]];
+  const mark = (st: string) => st === "done" ? "✓" : st === "failed" ? "✗" : "·";
+  return tiers.map(([t, name]) => {
+    const list = visibleObjectives().filter(o => o.tier === t);
+    return list.length ? `<div class="label">${name}</div>${list.map(o => `<div class="${o.status === "done" ? "ok" : o.status === "failed" ? "bad" : ""}" data-obj="${o.id}" data-status="${o.status}">${mark(o.status)} ${esc(o.text)}${o.dynamic ? " <small>(new)</small>" : ""}</div>`).join("")}` : "";
+  }).join("");
+}
 import { CLASSES, PERKS } from "../data/classes";
 
 const OBJECTIVES = {
@@ -35,6 +47,7 @@ const OBJECTIVES = {
   escort: "Keep the Insurgents away from the truck. One who stays next to it for a turn gets it open and the anomaly is lost. Neutralise them all, or hold for 8 turns.",
   retaliation: "Neutralise every Insurgent. They shoot civilians too, and every civilian killed adds exposure in the region.",
   strike: "Neutralise every Insurgent in the warehouse. Use Secure on a wounded one to take them prisoner.",
+  investigation: "Find out what happened. Examine evidence (beside it, 1 action) to learn from it now, or bag it unseen (Recover) so the labs can study it safely. Question the locals. Then get out through an exit. Nothing here has to be fought.",
 } as const;
 const ITEM_NAMES: Record<ItemId, string> = { armor: "Flak vest", armor_light: "Recon smock", armor_heavy: "Heavy plate", hazmat: "Hazmat suit", leadsuit: "Lead-lined suit",
   contsuit: "Containment suit", incendiary: "Incendiary", flamer: "M2 flamethrower", flare: "Signal flare", eyedrops: "Eye drops", flashbang: "Stun grenade", smoke: "M18 smoke", tracker: "Seismic sensor", frag: "M26 frag", csgas: "CS gas", bazooka: "M20 bazooka", law: "M72 LAW",
@@ -184,9 +197,13 @@ function legendHtml() {
   if (u.some(x => x.role === "commander")) items.push(["dia", "var(--raider)", `★ ${S.setup.commander}: their commander. Flees when badly hurt; take them alive if you can`]);
   if (S.setup.reinforce && !S.ciLanded) items.push(["sq", "transparent", `Reinforcements expected around turn ${S.setup.reinforce} (a turn's warning)`]);
   if (S.has173) items.push(["fig", "var(--concrete)", "SCP-173 · the Sculpture"]);
-  if (S.has049) items.push(["fig", "#1d1a18", "SCP-049 · the Plague Doctor (pale mask)"], ["", "#6f7a5c", "SCP-049-2 · its reanimated dead"]);
-  if (S.has106) items.push(["fig", "#2a2118", "SCP-106 · the Old Man"], ["sq", "rgba(28,22,14,.9)", "Black rot · costs 2 to cross, 1 damage"]);
-  if (S.scp === "096") items.push(["fig", "#e2ddd2", "SCP-096 · the Shy Guy"], ["sq", "rgba(215,91,71,.35)", "Its face · never look from inside the red wedge"]);
+  // Phase 6: an anomaly nobody has identified isn't named in the legend, and its hazards show only once they're known
+  const named = statueKnown();
+  if (S.has049) items.push(["fig", "#1d1a18", named ? "SCP-049 · the Plague Doctor (pale mask)" : "Unidentified entity"], ...(named ? [["", "#6f7a5c", "SCP-049-2 · its reanimated dead"] as [string, string, string]] : []));
+  if (S.has106) items.push(["fig", "#2a2118", named ? "SCP-106 · the Old Man" : "Unidentified entity"], ["sq", "rgba(28,22,14,.9)", "Black rot · costs 2 to cross, 1 damage"]);
+  if (S.scp === "096" && (S.statue.alive || named)) items.push(["fig", "#e2ddd2", named ? "SCP-096 · the Shy Guy" : "Unidentified entity"], ...(fieldKnows("face_trigger") ? [["sq", "rgba(215,91,71,.35)", "Its face · never look from inside the red wedge"] as [string, string, string]] : []));
+  if (S.units.some(u => u.evidence)) items.push(["sq", "rgba(224,176,80,.45)", "Evidence · Examine (look now) or Recover (bag unseen)"]);
+  if (S.residue?.size) items.push(["sq", "rgba(120,140,60,.45)", "Residue · tracked-out contamination; can take root"]);
   if (S.scp === "012") items.push(["fig", "#e3d9b8", "SCP-012 · A Bad Composition"]);
   if (S.scp === "939") items.push(["fig", "#7a1c1e", "SCP-939 · seen only within 5 tiles"]);
   if (S.scp === "035") items.push(["fig", "#f0ece2", "SCP-035 · the mask, and its host"]);
@@ -226,7 +243,7 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     show();
   }
   if (kind !== "breach") {
-    $("mTitle").innerHTML = { rescue: `Lost Team <small>${esc(S.setup.title)}</small>`, emergency: `Site Emergency <small>${esc(S.setup.site ?? "Partner site")}</small>`, raid: "Raid <small>Site-19 surface compound</small>", riot: "Riot <small>D-Class block</small>", outbreak: "SCP-610 Outbreak <small>“The Flesh that Hates” · Keter</small>", escort: "Convoy Ambush <small>Escort</small>", retaliation: "Retaliation <small>Insurgency attack</small>", manhunt: "SCP-173 Manhunt <small>Field recovery</small>", coverup: "Cover-up <small>Class-A amnestics</small>", strike: "Strike <small>Chaos Insurgency cell</small>", breach: "" }[kind];
+    $("mTitle").innerHTML = { rescue: `Lost Team <small>${esc(S.setup.title)}</small>`, emergency: `Site Emergency <small>${esc(S.setup.site ?? "Partner site")}</small>`, raid: "Raid <small>Site-19 surface compound</small>", riot: "Riot <small>D-Class block</small>", outbreak: "SCP-610 Outbreak <small>“The Flesh that Hates” · Keter</small>", escort: "Convoy Ambush <small>Escort</small>", retaliation: "Retaliation <small>Insurgency attack</small>", manhunt: "SCP-173 Manhunt <small>Field recovery</small>", coverup: "Cover-up <small>Class-A amnestics</small>", strike: "Strike <small>Chaos Insurgency cell</small>", investigation: `Investigation <small>${esc(S.setup.title)}</small>`, breach: "" }[kind];
     $("objRule").innerHTML = `<b>Objective.</b> ${esc(OBJECTIVES[kind])}`;
   }
   if (!has173) {
@@ -235,16 +252,16 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     root.querySelectorAll<HTMLElement>(".rules > div").forEach(d => { if (d.id !== "objRule" && /SCP-173|Do not blink|Dragging|Blinks\./.test(d.textContent || "")) d.hidden = true; });
     $("statusLabel").textContent = S.has049 ? "SCP-049 status" : S.has106 ? "SCP-106 status" : isNewScp(S.scp) ? `${statusName()} status` : "Objective";
   }
-  if (isNewScp(S.scp) && kind !== "emergency") {
+  if (isNewScp(S.scp) && kind !== "emergency" && kind !== "investigation") {
     const n = NEW_INFO[S.scp!], where = kind === "breach" ? "transport container in the staging room" : "truck's open container";
     $("mTitle").innerHTML = `${n.name} ${kind === "breach" ? "Recontainment" : S.setup.title.startsWith("Anomalous") ? "Capture" : "Manhunt"} <small>“${n.title}” · ${n.cls}</small>`;
     $("objRule").innerHTML = `<b>Objective.</b> ${esc(n.objective(where))}${kind === "breach" ? " Site Security starts on the scene; Epsilon-11 arrives later with the capture kit." : ""}`;
   }
-  if (S.has106 && kind !== "emergency") {
+  if (S.has106 && kind !== "emergency" && kind !== "investigation") {
     $("mTitle").innerHTML = `SCP-106 ${kind === "breach" ? "Recontainment" : S.setup.title.startsWith("Anomalous") ? "Capture" : "Manhunt"} <small>“The Old Man” · Keter</small>`;
     $("objRule").innerHTML = `<b>Objective.</b> Seal SCP-106 in the ${kind === "breach" ? "transport container in the staging room" : "truck's open container"}. It walks through walls and drags anyone it reaches into its pocket dimension, then sinks into the floor for 2 turns and rises near someone nobody is watching. Shooting it drives it under for a turn but can't hurt it. Its black rot costs double to cross and deals 1 damage. <b>Bait:</b> walk a D-Class (or a secured Insurgent) into the container. SCP-106 goes straight for them and stays a turn to feed: seal the door during that turn. People it takes have a ${Math.round(S.setup.mods.pocketReturn * 100)}% chance of coming back when the mission ends.${kind === "breach" ? " Site Security starts on the scene; Epsilon-11 arrives later." : ""}`;
   }
-  if (S.has049 && kind !== "emergency") {
+  if (S.has049 && kind !== "emergency" && kind !== "investigation") {
     $("mTitle").innerHTML = kind === "breach" ? "SCP-049 Recontainment <small>“The Plague Doctor” · Euclid</small>" : `SCP-049 ${S.setup.title.startsWith("Anomalous") ? "Capture" : "Manhunt"} <small>“The Plague Doctor” · Euclid</small>`;
     $("objRule").innerHTML = `<b>Objective.</b> Get SCP-049 into the ${kind === "breach" ? "transport container in the staging room" : "truck's open container"}, with nobody else inside, then have an operative seal it. Its touch kills anyone next to it, and it spends a turn beside any fresh body to raise it as SCP-049-2. Gunfire can't hurt it, but a hit staggers it so it loses its next move. <b>Calm</b> (1 action, 6 sanity, within 3 tiles and in sight) stops it acting on its next turn and lets you lead it up to 3 tiles. SCP-049-2 can be killed with gunfire.${kind === "breach" ? " Site Security starts on the scene; Epsilon-11 arrives later." : ""}`;
   }
@@ -392,7 +409,8 @@ export function mountMission(root: HTMLElement, onReturn: () => void, debrief: (
     wp.hidden = w === "clear";
     if (w !== "clear") { wp.textContent = WEATHER[w].name; wp.title = `${WEATHER[w].name}: ${WEATHER[w].desc.replace(" Flights there take a day longer.", "")}`; }
     $("sirenPill").hidden = !S.siren;
-    $("optList").innerHTML = S.optional.length ? `<div class="label">Optional</div>${S.optional.map(o => `<div class="${optionalMet(o.id) ? "ok" : ""}">${optionalMet(o.id) ? "✓" : "·"} ${esc(o.text)}</div>`).join("")}` : "";
+    if (S.objectives) $("optList").innerHTML = objectivesHtml();
+    else $("optList").innerHTML = S.optional.length ? `<div class="label">Optional</div>${S.optional.map(o => `<div class="${optionalMet(o.id) ? "ok" : ""}">${optionalMet(o.id) ? "✓" : "·"} ${esc(o.text)}</div>`).join("")}` : "";
 
     const sc = $("statusCard"), line = $("statusLine");
     if (S.setup.quiet && S.revealed === undefined) {

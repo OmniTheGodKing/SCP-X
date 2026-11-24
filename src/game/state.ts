@@ -41,8 +41,17 @@ export const label = (u: Unit) => u.call || u.name;
 export const full = (u: Unit) => u.side === "mtf" ? `${u.call} ${u.name}` : u.name;
 export const canAct = () => !!S && !S.busy && S.phase === "player" && !S.over;
 
+/** Phase 6: until the team has identified the anomaly, the log and banners don't name it. */
+export function veil(text: string) {
+  const intel = S?.setup.intel, id = S?.setup.scp;
+  if (!intel || intel.identified || S.identified || !id) return text;
+  const name = `SCP-${id}`;
+  return text.split(`${name}-2`).join("the walking dead").split(name).join("the entity")
+    .replace(/(^|[.!?]\s+)the /g, (_m: string, p: string) => `${p}The `);
+}
 export function log(text: string, kind = "") {
   if (!S) return;
+  text = veil(text);
   S.log.unshift({ t: S.turn, text, kind });
   if (S.log.length > 150) S.log.pop();
   hooks.log();
@@ -67,7 +76,7 @@ type NewEffect = Effect extends infer E ? E extends Effect ? Omit<E, "t0"> : nev
 export function fx(e: NewEffect, delay = 0) { S.effects.push({ ...e, t0: performance.now() + delay } as Effect); }
 /** Phase 4G: a consequential moment (shake and edge flash, if the viewer wants them) and a turning-point banner. */
 export const highlight = (mag: number, color = "#ffffff") => fx({ type: "jolt", mag, color, dur: 380 });
-export const banner = (text: string, color = "#d8bf86") => fx({ type: "banner", text, color, dur: 1300 });
+export const banner = (text: string, color = "#d8bf86") => fx({ type: "banner", text: text === text.toUpperCase() ? veil(text).toUpperCase() : veil(text), color, dur: 1300 });
 
 /** Enemy-turn pacing, set from the viewer's settings: Fast cuts every pause outside the player's turn to a third. */
 /** headless: rules run with no animation waits at all (tests and the lab's AI preview; Tactical overhaul T6.1). */
@@ -93,9 +102,24 @@ export function computeVis() {
   }
   for (let i = 0; i < W * H; i++) if (S.vis[i]) S.explored[i] = 1;
   const st = S.statue;
+  // Phase 6: a good look at the anomaly identifies it on the ground
+  if (!S.identified && st.alive && !st.object && S.perceived.get(st.id) === 2) identifiedHere();
   if (S.has173 && !S.sealed && seen(st.x, st.y)) S.lastSeen = { x: st.x, y: st.y, turn: S.turn };
   updateStares();
   noteContacts();
+}
+
+function identifiedHere() {
+  S.identified = true;
+  (S.observedProps ??= new Set()).add("appearance");
+  const intel = S.setup.intel;
+  if (!intel || intel.identified) return;
+  S.statue.name = `SCP-${S.setup.scp}`;
+  log(`Field identification: the cause is ${S.statue.name}. Its file is open to the team now.`, "key");
+  banner(`IDENTIFIED: ${S.statue.name}`, "#e0b050");
+  // a hidden objective to contain it here appears once the team knows what it's dealing with
+  const sec = S.objectives?.find(o => o.id === "secure" && o.hidden);
+  if (sec) { sec.hidden = false; log(`New objective: ${sec.text}.`, "key"); }
 }
 
 // "Do not blink" switches on automatically the moment someone on the team gains sight of

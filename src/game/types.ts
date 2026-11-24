@@ -5,7 +5,7 @@ export type { ClassId, PerkId, TraitId };
 /** Class abilities plus Secure, which every operative can do. */
 export type OptionalId = "ledger" | "radio" | "civilians" | "nocas" | "allwitnesses" | "nolosses" | "staff";
 export type AbilityId = PerkId | "cutradio" | "secure" | "dose" | "lockdown" | "doors" | "siren" | "calm" | "restrain" | "pickup" | "drop" | "exfil" | "hunker" | "recover" | "restore" | "scan"
-  | "hood" | "lead096" | "score" | "shake" | "casemask"
+  | "hood" | "lead096" | "score" | "shake" | "casemask" | "examine"
   // Version 12 squad techniques (see game/squadtech.ts)
   | `sq_${string}`;
 
@@ -30,7 +30,9 @@ export const HEAVY: ItemId[] = ["bazooka", "law", "flamer"];
 export interface Gun { name: string; type: WeaponType; dmg: [number, number]; mag: number; ammo: number; aim: number; attachment?: AttachmentId;
   /** Armor points every hit ignores (coil weapons, armor-piercing rounds), and special ammunition loaded. */
   pierce?: number; ammoType?: AmmoId; }
-export interface Carried { id: ItemId; uses: number; /** Version 12: the squad's shared stock, the same object in every member's items. */ shared?: boolean; }
+export interface Carried { id: ItemId; uses: number; /** Version 12: the squad's shared stock, the same object in every member's items. */ shared?: boolean;
+  /** Phase 6: contaminated in the field (lost at the end unless bagged), or bagged at the clean boundary for decon at the site. */
+  dirty?: boolean; bagged?: boolean; }
 
 /** Anomalies that are objects: no will and no legs. They never get out on their own; a "breach" of one is a theft. */
 export const OBJECT_SCPS: readonly string[] = ["500", "914", "005"];
@@ -42,7 +44,14 @@ export const NEW_SCPS = ["096", "012", "939", "035", "682"] as const;
 export type NewScp = typeof NEW_SCPS[number];
 /** Raids: the Insurgency pulls back if the lift still holds at the end of this turn. */
 export const RAID_TURNS = 14;
-export type MissionKind = "breach" | "manhunt" | "coverup" | "strike" | "escort" | "retaliation" | "outbreak" | "riot" | "raid" | "rescue" | "emergency";
+export type MissionKind = "breach" | "manhunt" | "coverup" | "strike" | "escort" | "retaliation" | "outbreak" | "riot" | "raid" | "rescue" | "emergency" | "investigation";
+/** Phase 6: how a mission ended for the anomaly, as distinct from whether it was won (Part 9's tactical containment). */
+export type TacticalOutcome = "secured" | "temporary" | "isolated" | "evacuated" | "evidence" | "escaped" | "failed" | "abandoned" | "none";
+export type ObjTier = "primary" | "secondary" | "optional";
+export type ObjKind = "evidence" | "bag_all" | "identify" | "rescue" | "hold_perimeter" | "sample" | "secure" | "burn_core" | "protect_marked" | "no_civ_deaths" | "recover_bodies" | "clean_extraction" | "staff_out";
+export interface Objective { id: string; kind: ObjKind; tier: ObjTier; text: string; status: "active" | "done" | "failed";
+  /** Not shown until something in the mission reveals it; added during the mission. */
+  hidden?: boolean; dynamic?: boolean; n?: number; turns?: number; target?: string; }
 export type Phase = "player" | "anomaly" | "hand" | "subjects" | "over";
 
 export interface Unit {
@@ -192,6 +201,14 @@ export interface Unit {
   wasSide?: Side;
   /** Phase 4C: the convoy's truck (an object on the map, moved by the rules). */
   vehicle?: boolean;
+  /** Phase 6: a piece of evidence (and whether someone has examined it), a person carrying contamination (the turn they
+   *  picked it up), a protected advance under way this turn and the partner covering it, someone marked by SCP-096. */
+  evidence?: import("../data/anomalies").EvidenceKind;
+  examined?: boolean;
+  contaminated?: number;
+  protectedTurn?: number;
+  coverFor?: string;
+  marked?: boolean;
 }
 
 export interface LogEntry { t: number; text: string; kind: string; }
@@ -245,6 +262,15 @@ export interface MissionMods {
   alarms?: boolean; }
 
 export interface MissionSetup {
+  /** Phase 6: the scenario variant (which objectives apply), evidence at an investigation, whether the anomaly is on the
+   *  map (investigations), what the Foundation knows about it going in, the contamination model, and how long a
+   *  quarantine has to hold. */
+  variant?: import("../data/anomalies").MissionVariant;
+  evidence?: { kind: import("../data/anomalies").EvidenceKind; label: string }[];
+  presence?: boolean;
+  intel?: { known: string[]; identified: boolean };
+  contamination?: boolean;
+  holdTurns?: number;
   /** Seed for the mission's own random stream (Tactical overhaul T0): the same seed and orders replay the same fight. */
   seed?: number;
   /** Version 12: a campaign with player MTFs (specialist kit and techniques follow its rules), and the deployed
@@ -317,6 +343,20 @@ export interface MissionSetup {
 
 export interface MissionResult {
   incidentId: string;
+  /** Phase 6: the tactical containment outcome, the objectives as they ended, evidence examined in the field and bagged
+   *  for the lab, what the team saw the anomaly do, operatives coming home contaminated, contaminated kit lost,
+   *  people taken by SCP-106 and not back, people marked by SCP-096 who got out, bodies brought out, and whether the
+   *  anomaly was identified on the ground. */
+  outcome?: TacticalOutcome;
+  objectives?: { id: string; kind: ObjKind; tier: ObjTier; text: string; status: "active" | "done" | "failed"; hidden?: boolean }[];
+  evidence?: { examined: import("../data/anomalies").EvidenceKind[]; bagged: import("../data/anomalies").EvidenceKind[] };
+  observedProps?: string[];
+  contaminatedOps?: string[];
+  dirtyLost?: Partial<Record<ItemId, number>>;
+  missing?: string[];
+  marked?: string[];
+  bodiesRecovered?: number;
+  identified?: boolean;
   /** Version 12: squad kit coming home, squads that used their specialty, clues and samples gathered, collateral. */
   kitLeft?: Partial<Record<ItemId, number>>; techSquads?: string[]; clues?: number; samples?: number; collateral?: number;
   /** Phase 4B: won by killing every SCP-939 instance, so nothing was taken alive. */
@@ -500,5 +540,15 @@ export interface MissionState {
   photos: ScpId[];
   /** Debug menu switches. */
   debug?: { freeze173?: boolean; place173?: boolean; kill?: boolean };
+  /** Phase 6: objectives, contamination residue left outside the flesh, staffed crossings (tile to the operative), what
+   *  the team has seen the anomaly do, whether it has been identified on the ground, when SCP-096 arrives for someone
+   *  marked away from it, and evidence examined. */
+  objectives?: Objective[];
+  residue?: Set<number>;
+  crossings?: Map<number, string>;
+  observedProps?: Set<string>;
+  identified?: boolean;
+  arrive096?: number;
+  examined?: import("../data/anomalies").EvidenceKind[];
   result?: MissionResult;
 }

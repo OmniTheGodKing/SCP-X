@@ -3,6 +3,7 @@
 // anyone left standing on it without an intact containment suit is infected, and anyone infected
 // turns into one of its instances 5 turns later, for good. Only fire can kill the core.
 import { blocksFire, blocksFlesh, burnCordon, fleshSafe } from "./squadtech";
+import { burnResidue, contaminate } from "./contamination";
 import { rnd } from "../core/rng";
 import { DIRS, DRUM, FLOOR, HALF, L, STEEL, TS, WALL, area, cheb, passable, tileAt } from "../core/grid";
 import { damage } from "./combat";
@@ -20,6 +21,7 @@ export function ignite(x: number, y: number, turns = FIRE_TURNS - (wet() ? 1 : 0
   const t = tileAt(x, y);
   if (t === WALL || t === STEEL || blocksFire(idx(x, y))) return;
   burnCordon(idx(x, y));
+  burnResidue(idx(x, y));
   if (t === DRUM) { explodeDrum(x, y); return; }
   // the core is wet with blood: fire on it goes out after a turn
   const last = S.turn + (S.core && S.core.x === x && S.core.y === y ? 1 : turns);
@@ -94,12 +96,16 @@ export function infect(u: Unit, how: string) {
 /** At the end of a turn: anyone standing on flesh without a sealed suit is infected. */
 export function fleshContact() {
   for (const u of S.units.filter(u => u.alive && !u.saved && !u.carriedBy && u.side !== "anomaly" && !u.flesh && onFlesh(u.x, u.y)))
+  {
+    // Phase 6: whoever stands on it carries it away on their suit and kit, sealed or not
+    contaminate(u, "standing on the flesh");
     if (!sealedSuit(u) && !fleshSafe(u)) infect(u, "contact with the flesh");
+  }
 }
 /** A melee hit from an instance: always infects without a suit, and tears a suit 60% of the time. */
 export function fleshBite(v: Unit) {
   if (sealedSuit(v)) {
-    if (rnd() >= SUIT_TEAR) { log(`${full(v)}'s containment suit holds.`, "good"); return; }
+    if (rnd() >= SUIT_TEAR) { log(`${full(v)}'s containment suit holds.`, "good"); contaminate(v, "a blow from an instance"); return; }
     v.suitTorn = true;
     log(`The blow tears ${full(v)}'s containment suit open.`, "bad");
   }

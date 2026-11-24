@@ -48,7 +48,7 @@ function pathTo(x: number, y: number, goal: (x: number, y: number) => boolean, w
 const someoneAt = (x: number, y: number, except?: Unit) => S.units.some(o => o !== except && o.alive && !o.saved && !o.carriedBy && o.x === x && o.y === y && !(o === S.statue && S.scp === "939"));
 
 // ---------- eyes down (SCP-096 and SCP-012 missions) ----------
-export const eyesMission = () => S.scp === "096" || S.scp === "012";
+export const eyesMission = () => S.scp === "096" || S.scp === "012" || S.setup.kind === "investigation";
 export function eyesCheck(u: Unit | null) {
   if (!u || !isTeam(u) || u.downed) return "Select someone.";
   if (!eyesMission()) return "Only on SCP-096 and SCP-012 missions.";
@@ -88,7 +88,7 @@ export function check096() {
   const first = !S.rage;
   S.rage ??= { targets: [], scream: S.phase === "player" ? S.turn : S.turn + 1 };
   S.rage.targets.push(...fresh.map(u => u.id));
-  for (const u of fresh) log(`${who(u)} saw SCP-096's face.`, "bad");
+  for (const u of fresh) { u.marked = true; log(`${who(u)} saw SCP-096's face.`, "bad"); }
   if (first) {
     log("SCP-096 takes its hands from its face and starts to scream. Whoever saw it has a turn before it comes for them.", "bad");
     banner("SCP-096 HAS BEEN SEEN", "#d75b47"); highlight(5, "#d75b47");
@@ -112,7 +112,15 @@ async function phase096() {
     return;
   }
   const all = marked();
-  if (all.some(u => u.alive && u.saved)) { S.escaped = true; log("Someone who saw its face has left the area. SCP-096 goes after them, out of reach.", "bad"); return; }
+  if (all.some(u => u.alive && u.saved)) {
+    // Phase 6: at an investigation it was never here to contain; it simply follows them out, and they stay marked
+    if (S.setup.kind === "investigation") {
+      d.alive = false; S.rage = undefined;
+      log("Someone it marked has left the area. SCP-096 turns and runs after them, out of sight. They are still marked.", "bad");
+      return;
+    }
+    S.escaped = true; log("Someone who saw its face has left the area. SCP-096 goes after them, out of reach.", "bad"); return;
+  }
   const left = all.filter(u => u.alive && !u.saved);
   if (!left.length) { S.rage = undefined; log("Its last target is dead. SCP-096 sits down where it is and goes back to weeping.", "key"); return; }
   if (S.turn <= S.rage.scream) { log("SCP-096 screams. It hasn't moved yet.", "bad"); return; }

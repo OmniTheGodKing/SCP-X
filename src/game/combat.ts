@@ -1,4 +1,5 @@
 // Gunfire, cover, damage and movement.
+import { stepHook } from "./contamination";
 import { afterReaction, corrosionSafe, leaveTrail, pinnable, suppressRounds } from "./squadtech";
 import { rnd, fxRnd } from "../core/rng";
 import { BOND_AIM } from "../campaign/condition";
@@ -80,6 +81,8 @@ export function shotInfo(sh: Unit, tg: Unit, reaction = false): ShotInfo {
   if (rm) mods.push(rm);
   // facing: a reaction shot at someone behind them means turning first
   if (reaction && sh.facing !== undefined) { const d = Math.abs(((facingTo(tg.x - sh.x, tg.y - sh.y) - sh.facing) % 8 + 12) % 8 - 4); if (d > 2) mods.push(["Turning to fire", -10]); }
+  // Phase 6: Protected advance, the mover going cover to cover under a partner's fire
+  if (reaction && tg.protectedTurn === S.turn) mods.push(["Moving under covering fire", -20]);
   if (reaction && !hasPerk(sh, "covering_fire")) mods.push(["Reaction shot", (gun?.type === "mg" ? -5 : -15) + (sh.side === "mtf" ? Math.min(S.setup.mods.reactionBonus ?? 0, gun?.type === "mg" ? 5 : 15) : 0)]);
   if (sh.side === "raider" && tg.hasArmor && S.setup.mods.ciAnalysis) mods.push(["Known weapons", -5]);
   if (officerNear(sh)) mods.push(["Officer nearby", 10]);
@@ -314,7 +317,17 @@ async function reactTo(u: Unit, firstStep: boolean) {
     if (!isTeam(w) && seen(w.x, w.y)) log(`${w.name} fires from overwatch.`, "bad");
     await fire(w, u, true);
     afterReaction(w, u);
+    await coverReturn(u, w);
   }
+}
+/** Phase 6: the partner covering a protected advance answers whoever shoots at the mover, once per shooter. */
+async function coverReturn(mover: Unit, shooter: Unit) {
+  if (mover.protectedTurn !== S.turn || !shooter.alive || shooter.downed) return;
+  const p = S.units.find(v => v.coverFor === mover.id && v.alive && !v.downed && !v.saved && !isPanicked(v));
+  if (!p || (p.used ??= {})["cover" + shooter.id + S.turn] || !canSee(p, shooter.x, shooter.y) || !canShoot(p, shooter)) return;
+  p.used["cover" + shooter.id + S.turn] = 1;
+  log(`${full(p)} returns fire on ${full(shooter)} to cover ${full(mover)}.`, "good");
+  await fire(p, shooter, true);
 }
 
 export async function moveUnit(u: Unit, path: Pt[]) {
@@ -327,6 +340,7 @@ export async function moveUnit(u: Unit, path: Pt[]) {
     if (openDoor(x, y)) { emitNoise(x, y, "door", u); if (isTeam(u)) computeVis(); }
     if (u.x !== x || u.y !== y) { leaveTrail(u, u.x, u.y, x, y); u.facing = facingTo(x - u.x, y - u.y); }
     u.x = x; u.y = y; u.movedTurn = S.turn;
+    stepHook(u, x, y);
     if (!hasPerk(u, "quiet_steps") && u.side !== "anomaly") emitNoise(x, y, "footsteps", u);
     if (u.carrying) { const c = S.units.find(v => v.id === u.carrying); if (c) { c.x = x; c.y = y; } }
     u.observing = false;
