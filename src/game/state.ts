@@ -16,6 +16,8 @@ export const hooks = {
   update: () => {},
   log: () => {},
   finished: (_result: MissionResult) => {},
+  /** After any player action: the turn rules check whether anyone can still act (turn.ts sets this). */
+  acted: () => {},
 };
 
 export const isTeam = (u: Unit) => u.side === "mtf" || u.side === "dclass";

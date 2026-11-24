@@ -29,6 +29,15 @@ const R = reporter();
   R.check('evidence is on the map and the cause is not named anywhere', view.evidence >= 3 && view.statue === 'Unidentified entity' && !view.legend && !/096/.test(view.title) && !/096|weeping/i.test(view.status), view);
   await p.screenshot({ path: path.join(OUT, 'phase6-investigation.png') });
 
+  // auto end turn: everyone but one spends their actions; that one moves with both actions; the turn ends by itself
+  await p.click('#coachSkip').catch(() => {});
+  const auto = await E(async () => { const A = window.__site19, S = A.mission, team = S.units.filter(u => u.side === 'mtf' && u.alive);
+    for (const u of team.slice(1)) u.ap = 0; const t0 = S.turn, u = team[0]; u.ap = 1;
+    const before = A.outOfActions(); u.ap = 0; A.actionsHook(); const right = A.outOfActions(); return { t0, before, right }; });
+  await p.waitForTimeout(2500);
+  const autoAfter = await E(() => ({ turn: window.__site19.mission.turn, log: window.__site19.mission.log.slice(0, 8).map(l => l.text).join(' | ') }));
+  R.check('the turn ends by itself once nobody has actions left', !auto.before && auto.right && autoAfter.turn === auto.t0 + 1 && /Nobody has any actions left/.test(autoAfter.log), { auto, autoAfter });
+
   // examine the photograph
   const mark = await E(() => { const A = window.__site19, S = A.mission, photo = S.units.find(u => u.evidence === 'photograph'), a = S.units.find(u => u.side === 'mtf');
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1]]) if (A.passable(photo.x + dx, photo.y + dy) && !S.units.some(v => v.alive && v.x === photo.x + dx && v.y === photo.y + dy)) { a.x = photo.x + dx; a.y = photo.y + dy; break; }

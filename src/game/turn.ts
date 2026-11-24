@@ -23,7 +23,7 @@ import { leadOptions, leadTo, plaguePhase, zombiePhase } from "./scp049";
 import { oldManPhase } from "./scp106";
 import { CORE_BURN, firePhase, fleshContact, ignite, spreadFlesh, turnInfected } from "./fire";
 import {
-  S, alive, banner, breakConcealment, canAct, canSee, computeVis, full, fx, highlight, hooks, humans, isPanicked, isTeam, label, log, loseSanity,
+  S, pace, alive, banner, breakConcealment, canAct, canSee, computeVis, full, fx, highlight, hooks, humans, isPanicked, isTeam, label, log, loseSanity,
   occupied, reveal, seen, sleep, starers, team, teamPerception, unitAt,
 } from "./state";
 import { PLACED, RAID_TURNS, THROWN, type ScpId, type Unit } from "./types";
@@ -325,7 +325,26 @@ function afterAction() {
   if (checkEnd()) return;
   if (S.selected && (!S.selected.alive || !isTeam(S.selected) || S.selected.ap === 0)) selectNext();
   hooks.update();
+  autoEndCheck();
 }
+
+/** Auto end turn: once nobody on the team who can act has an action left, and no follow-up order is waiting (leading
+ *  SCP-049 or SCP-096 after Calm or the hood, aiming a throw, picking a door), the turn ends by itself after a short
+ *  pause so the last action can be seen. Not in the tactical lab, where the clock is the tester's. */
+export const AUTO_END_MS = 1200;
+export function outOfActions() {
+  if (!S || S.over || S.setup.lab || S.mode) return false;
+  const able = team().filter(u => !isPanicked(u));
+  return able.length > 0 && able.every(u => u.ap <= 0);
+}
+function autoEndCheck() {
+  if (!outOfActions()) return;
+  const turn = S.turn, state = S;
+  const go = () => { if (S === state && S.turn === turn && canAct() && outOfActions()) { log("Nobody has any actions left. The turn ends.", "key"); void endTurn(); } };
+  // headless rule tests drive their own turns; the check itself is outOfActions()
+  if (!pace.headless) setTimeout(go, AUTO_END_MS);
+}
+hooks.acted = () => { if (canAct()) autoEndCheck(); };
 
 export function doOverwatch() {
   const u = S.selected;

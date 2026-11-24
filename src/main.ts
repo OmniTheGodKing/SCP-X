@@ -24,9 +24,9 @@ import { L } from "./core/grid";
 import { fireLine, sightFrom } from "./core/sight";
 import { blastStructure, openDoor, opaque, passable } from "./core/grid";
 import { canShoot, coverAgainst, fire, lineOfFire, moveUnit, shotInfo } from "./game/combat";
-import { canSee, computeVis, pace } from "./game/state";
+import { canSee, computeVis, hooks, pace } from "./game/state";
 import { emitNoise, settleFacing } from "./game/noise";
-import { endTurn, reachFor } from "./game/turn";
+import { endTurn, outOfActions, reachFor } from "./game/turn";
 import * as scp4b from "./game/scp4b";
 import { generateTown } from "./data/towngen";
 import { mountMission } from "./ui/missionView";
@@ -239,6 +239,8 @@ function showHub() {
   dossier: dossierMod, storylines: storylinesMod, containment: containmentMod, abilities: abilitiesMod, objectives: objectivesMod,
   launchNow: (incId: string, opIds: string[]) => { const inc = campaign.incidents.find(i => i.id === incId); if (!inc) return false; launch(buildSetup(campaign, inc, opIds.map(id => ({ opId: id, armor: "" as const, items: [] })), 0), inc); return true; },
   hub: () => showHub(),
+  // auto end turn: the check, and the after-action hook the rules call
+  outOfActions, actionsHook: () => hooks.acted(),
 };
 
 function showLab() { screen = "mission"; openLab(root, () => { endMission(); showHub(); }); }

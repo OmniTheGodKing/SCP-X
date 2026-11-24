@@ -60,6 +60,14 @@ repository on any branch, so this phase follows the continuity already in the co
 - **Advisors**: Carter (marked and missing personnel), Bell (evidence in the labs, unknown causes, hazards learned),
   Russo (dock holding, temporary holding, placement) react to these states.
 
+## Auto end turn
+
+Once nobody on the team who can act has an action left, the turn ends by itself after 1.2 seconds, so the last action
+is seen and a free action (Face, Eyes down) can still be started. It waits while a follow-up order is open (leading
+SCP-049 or a hooded SCP-096, aiming a throw, picking a door), ignores panicked operatives' actions, re-checks when the
+timer fires, and is off in the tactical lab. Rules: `outOfActions()` and the after-action hook in `game/turn.ts`;
+abilities and squad techniques call the same hook.
+
 ## Tests
 
 - `tests/unit/phase6tactical.test.ts` (headless): examine versus bag; a no-combat investigation win; SCP-096's

@@ -168,7 +168,7 @@ export function useAbility(u: Unit, p: AbilityId, t: Unit) {
   if (isTech(p)) {
     if (abilityCheck(u, p) || !techTargets(u, p).includes(t)) return;
     S.mode = null; S.ability = null;
-    runTech(u, p, t); hooks.update(); return;
+    runTech(u, p, t); hooks.update(); hooks.acted(); return;
   }
   const d = def(p);
   if (abilityCheck(u, p) || !abilityTargets(u, p).includes(t)) return;
@@ -288,4 +288,5 @@ export function useAbility(u: Unit, p: AbilityId, t: Unit) {
   }
   computeVis();
   hooks.update();
+  hooks.acted();
 }

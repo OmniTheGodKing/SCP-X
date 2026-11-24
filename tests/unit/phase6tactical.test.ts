@@ -167,3 +167,19 @@ test("knowledge: the SCP-096 hood is issued only when the Foundation knows why i
   ok(team().some(u => u.items?.some(i => i.id === "hood")), "missions without intel are unchanged");
   void spawnMember;
 });
+
+test("auto end turn: out of actions only when nobody able has an action and no follow-up order is waiting", async () => {
+  const { outOfActions } = await import("../../src/game/turn");
+  createMission(setup({ scp: "049", evidence: [{ kind: "records", label: "Ledger" }] }));
+  const t = team();
+  for (const u of t) u.ap = 0;
+  t[0].ap = 1;
+  ok(!outOfActions(), "someone still has an action");
+  t[0].ap = 0;
+  ok(outOfActions(), "nobody has an action");
+  S.mode = "lead";
+  ok(!outOfActions(), "a follow-up order (leading) keeps the turn open");
+  S.mode = null;
+  t[0].ap = 2; t[0].panicUntil = S.turn + 1;
+  ok(outOfActions(), "a panicked operative's actions don't hold the turn open");
+});
