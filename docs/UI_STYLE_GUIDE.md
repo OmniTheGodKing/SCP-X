@@ -62,6 +62,28 @@ Headings never exceed 28px.
 | System menu | `.sysmenu` (`<details>`) | Campaigns, export and import, sound, credits: out of the header's way |
 | Dossier | `.file` | The manila document style, kept for SCP files, reports and Council documents |
 
+## Buttons
+
+Every `.act` button, tactical and strategic, takes its states from one set of rules in `src/styles.css`. Variants and
+contexts only change the `--btn-*` tokens (`--btn-bg`, `--btn-fg`, `--btn-line`, `--btn-line-hover`, `--btn-sel`,
+`--btn-off-*`); they never set `background` or `opacity` on a button themselves.
+
+| State | Look |
+|---|---|
+| Normal | Opaque face (`--btn-bg`), body text, 1px line |
+| Primary | Manila fill on the tactical screen; a solid cyan-tinted face with a cyan line on the strategy screens |
+| Hovered | Face lightened 10%, manila line |
+| Pressed | Face darkened 20% |
+| Selected (`.on`) | Face tinted with the selection colour, selection-coloured line: manila on the tactical screen, cyan on the strategy screens |
+| Disabled | Flat dark face, quieter text (above 4.5:1), dashed line, `not-allowed` cursor |
+
+Buttons never use `opacity`, and neither do the rows that contain them: a finished or locked project is quieter in
+colour. Overlays may stay translucent (the tactical action bar, the room's context panel, the gradients behind room
+titles), but the buttons on them paint their own opaque face, so a bright room or a lit map never shows through.
+Buttons placed straight on room art (`.objbar`) use the darkest face, and every control in a room gets the
+emphasised line. `tests/buttons.e2e.cjs` walks the major screens at 1024, 1280 and 1920 wide and fails on any
+translucent button, inherited opacity or low-contrast label.
+
 ## Screen layouts
 
 - **Command:** the Director's Briefing as the main column (the decision queue); the Council and finances as compact

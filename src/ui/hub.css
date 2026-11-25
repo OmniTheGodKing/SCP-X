@@ -57,8 +57,14 @@ body:has(.hub) { background: var(--s-bg); }
 .panel-b { padding: 10px 12px 12px; }
 .hub .pill { border-radius: 0; }
 .hub .act { border-radius: 0; clip-path: polygon(6px 0, 100% 0, 100% 100%, 0 100%, 0 6px); }
-.hub .act.primary { background: rgba(110,169,200,.12); border-color: var(--s-info); color: var(--s-text); }
-.hub .act.danger { border-color: var(--s-danger); color: var(--s-danger); }
+/* strategy-screen buttons: same states as the tactical ones (src/styles.css), drawn in the console's colours.
+   Selection is cyan here, as everywhere on these screens. */
+.hub { --btn-fg: var(--s-text); --btn-sel: var(--s-info); }
+/* controls drawn over room art take the emphasised line so their edges hold against bright scenery */
+.roomview, .stagebanner { --btn-line: var(--s-line-2); }
+.hub .act.primary { --btn-bg: color-mix(in srgb, var(--s-info) 14%, var(--s-surface)); --btn-line: var(--s-info); --btn-fg: var(--s-text); }
+.hub .act.on { --btn-fg: var(--s-text); --btn-face: color-mix(in srgb, var(--s-info) 18%, var(--btn-bg)); }
+.hub .act.danger { --btn-line: var(--s-danger); --btn-fg: #e07a63; }
 
 /* status lamps, meters and row lists */
 .lamp { display: inline-block; width: 7px; height: 7px; margin-right: 7px; vertical-align: 1px; background: var(--s-dim); }
@@ -216,7 +222,6 @@ body:has(.hub) { background: var(--s-bg); }
 .armlist .armop, .armopts .armopt { display: grid; gap: 2px; text-align: left; }
 .armlist .armop span, .armopt span { font-family: var(--font-body); font-size: 12.5px; color: var(--s-dim); letter-spacing: 0; }
 .armopts { display: grid; gap: 6px; margin: 6px 0; }
-.armopt.on { border-color: var(--s-info); background: rgba(110,169,200,.1); }
 .armbench .mounts { flex-wrap: wrap; gap: 4px; }
 .armbench .mounts .act { padding: 6px 9px; font-size: 11.5px; }
 .roomview .mount { cursor: pointer; outline: none; }
@@ -238,8 +243,8 @@ body:has(.hub) { background: var(--s-bg); }
 .roomview .rv-cam { width: 100%; height: 100%; transform-origin: 0 0; transition: transform .45s cubic-bezier(.2,.7,.2,1); }
 .roomview .rv-cam svg.interior { width: 100%; height: 100%; display: block; }
 .roomview .objbar { position: absolute; left: 12px; bottom: 12px; right: 12px; display: flex; flex-wrap: wrap; gap: 6px; z-index: 3; pointer-events: none; }
-.roomview .objbar .act { pointer-events: auto; background: rgba(5,8,11,.78); padding: 6px 10px; font-size: 11.5px; }
-.roomview .objbar .act.on { border-color: var(--s-info); color: var(--s-text); background: rgba(110,169,200,.18); }
+/* buttons standing directly on the room art: the darkest face */
+.roomview .objbar .act { pointer-events: auto; padding: 6px 10px; font-size: 11.5px; --btn-bg: var(--s-bg); }
 .roomview.haspanel .objbar { right: calc(min(460px, 40%) + 24px); }
 .ctxpanel { position: absolute; top: 58px; right: 12px; bottom: 60px; width: min(460px, 40%); z-index: 4; display: grid; grid-template-rows: auto minmax(0, 1fr); background: rgba(14,18,22,.96); border: 1px solid var(--s-line-2); box-shadow: 0 10px 40px rgba(0,0,0,.5); }
 .ctxpanel.wide { width: min(880px, 72%); }
