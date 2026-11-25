@@ -294,14 +294,15 @@ body:has(.hub) { background: var(--s-bg); }
 .ctxpanel, .ctxpanel .ctx-b { grid-template-columns: minmax(0, 1fr); }
 
 /* ---- UI/UX overhaul: personnel inspection (identity plate, switching and zoom over the scene) ---- */
-.roomview .herotag { position: absolute; left: 18px; top: 64px; z-index: 6; display: grid; gap: 2px; min-width: 220px; max-width: 300px; padding: 10px 14px 11px; background: #0d1216; border: 1px solid var(--s-line-2); border-left: 3px solid var(--s-paper); }
+.roomview .herocol { position: absolute; left: 18px; top: 64px; z-index: 6; display: grid; gap: 6px; justify-items: start; }
+.roomview .herotag { display: grid; gap: 2px; min-width: 220px; max-width: 300px; padding: 10px 14px 11px; background: #0d1216; border: 1px solid var(--s-line-2); border-left: 3px solid var(--s-paper); }
 .herotag .ht-call { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--s-dim); }
 .herotag b { font-family: var(--font-display); font-size: 22px; font-weight: 400; color: var(--s-paper); line-height: 1.15; }
 .herotag span { font-size: 13px; }
 .herotag .ht-mtf { font-family: var(--font-mono); font-size: 11px; color: var(--s-info); }
 .herotag .ht-ready { font-family: var(--font-mono); font-size: 11.5px; margin-top: 4px; }
 .herotag .ht-ready.ok { color: var(--s-ok); } .herotag .ht-ready.caution { color: var(--s-caution); } .herotag .ht-ready.danger { color: var(--s-danger); }
-.roomview .herobar { position: absolute; left: 18px; bottom: 56px; z-index: 6; display: flex; align-items: center; gap: 6px; padding: 6px; background: #0d1216; border: 1px solid var(--s-line-2); }
+.roomview .herobar { display: flex; align-items: center; gap: 6px; padding: 6px; background: #0d1216; border: 1px solid var(--s-line-2); }
 .herobar .act { padding: 5px 10px; font-size: 11.5px; }
 .herobar .hb-n { font-family: var(--font-mono); font-size: 11px; color: var(--s-dim); min-width: 64px; text-align: center; }
 .herobar .hb-sep { width: 1px; align-self: stretch; background: var(--s-line-2); margin: 0 4px; }
@@ -386,3 +387,44 @@ ul.quals { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; fon
 .pickop .pk-st.ok { color: var(--s-ok); } .pickop .pk-st.caution { color: var(--s-caution); } .pickop .pk-st.danger { color: var(--s-danger); }
 .stg-others { margin-top: 8px; } .stg-others > summary { cursor: pointer; font-size: 12.5px; color: var(--s-dim); }
 @media (max-width: 1100px) { .stg-body { grid-template-columns: 1fr; height: auto; } .stg-scene { height: 320px; } .stg-slots { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); } }
+
+/* ---- UI/UX overhaul D: the World Map fills the screen; the HUD sits around it ---- */
+.geo.geo-full { position: relative; display: block; height: var(--geoh, calc(100vh - 190px)); min-height: 420px; border: 1px solid var(--s-line-2); background: #0a1016; overflow: hidden; }
+.geo-full .mapwrap { position: absolute; inset: 0; }
+.geo-full .worldmap { width: 100%; height: 100%; border: none; }
+.geo-full .geo-top { position: absolute; left: 0; right: 0; top: 0; z-index: 4; padding: 8px 10px; background: linear-gradient(#0b0f13 0%, #0b0f13 70%, rgba(11,15,19,0)); pointer-events: none; }
+.geo-full .geo-top .geobar { margin: 0; pointer-events: auto; }
+.geo-full .geobar .mapfilters .act { padding: 4px 7px; font-size: 11px; }
+.geo-full .geo-ops { position: absolute; left: 10px; top: 58px; bottom: 44px; z-index: 3; width: 290px; overflow-y: auto; display: grid; align-content: start; gap: 8px; }
+.geo-full .geo-ops .card { margin: 0; padding: 10px 12px; background: #0f1418; border: 1px solid var(--s-line-2); }
+.geo-full .geo-ops .inclist li { font-size: 12.5px; }
+.geo-full .geoside { position: absolute; right: 10px; top: 58px; bottom: 44px; z-index: 5; width: 380px; max-height: none; overflow-y: auto; display: grid; align-content: start; gap: 8px; }
+.geo-full .geoside .file, .geo-full .geoside .card { margin: 0; }
+.geo-full .geoclose { position: sticky; top: 0; justify-self: end; z-index: 2; padding: 3px 10px; margin-bottom: -6px; }
+.geo-full .geo-foot { position: absolute; left: 310px; right: 140px; bottom: 8px; z-index: 3; pointer-events: none; }
+.geo-full .geohelp { margin: 0; display: inline-block; padding: 4px 8px; background: #0b0f13; border: 1px solid var(--s-line); color: var(--s-dim); font-size: 11.5px; pointer-events: auto; }
+.geo-full .zoombtns { z-index: 4; right: 10px; bottom: 8px; }
+.geoforces .gf-mtf { margin-top: 6px; font-size: 13px; }
+.geoforces .gf-sq { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0 3px 8px; border-left: 2px solid var(--s-line-2); margin-top: 3px; font-size: 12px; }
+.geoforces .gf-sq .ok { color: var(--s-ok); } .geoforces .gf-sq .warn { color: var(--s-caution); }
+@media (max-width: 960px) {
+  .geo.geo-full { height: auto; min-height: 0; overflow: visible; border: none; background: none; }
+  .geo-full .mapwrap { position: relative; height: 60vh; }
+  .geo-full .geo-top, .geo-full .geo-ops, .geo-full .geoside, .geo-full .geo-foot { position: static; width: auto; background: none; margin-top: 8px; }
+}
+.geowire p { margin: 4px 0; font-size: 12px; line-height: 1.35; }
+/* organization board */
+.orgpanel .rows .r { padding: 4px 0; font-size: 12.5px; grid-template-columns: 150px minmax(0, 1fr); }
+.orgpanel .rows .r .v { color: var(--s-text); text-align: left; font-family: var(--font-body); font-size: 12.5px; }
+.orgpanel .rows .r > span:first-child { color: var(--s-dim); }
+.orgsq { margin-top: 10px; padding: 8px 10px; border: 1px solid var(--s-line); border-left: 3px solid var(--s-info); background: var(--s-surface-2); }
+.orgsq-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.orgsq-h b { font-size: 14px; color: var(--s-paper); }
+.orgsq-h .chip { font-family: var(--font-mono); font-size: 10.5px; padding: 2px 6px; border: 1px solid var(--s-info); color: var(--s-info); }
+.orgsq-h .orgcap { margin-left: auto; font-size: 11.5px; }
+.orgsq p { margin: 4px 0; }
+.orgops { display: grid; gap: 3px; margin-top: 6px; }
+.orgop { display: grid; grid-template-columns: 10px minmax(0, 1.4fr) minmax(0, 1fr) auto auto; gap: 6px; align-items: center; font-size: 12.5px; }
+.orgop .orgq { font-family: var(--font-mono); font-size: 10.5px; }
+.orgop select, .orgpanel input, .orgpanel select { background: var(--ctl-bg); color: var(--ctl-text); border: 1px solid var(--ctl-line); padding: 3px 5px; font: inherit; font-size: 12px; }
+@media (max-width: 1500px) { .geo-full .geo-ops, .geo-full .geoside { top: 94px; } }

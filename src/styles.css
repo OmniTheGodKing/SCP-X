@@ -549,3 +549,4 @@ ul.fin.entries .hday { margin-right: 8px; }
 .dbg-table th { text-align: left; color: var(--dim, #88919a); font-weight: 500; padding: 2px 8px 2px 0; white-space: nowrap; vertical-align: top; }
 .dbg-table td { padding: 2px 12px 2px 0; vertical-align: top; }
 .dbg-list { margin: 2px 0 8px; padding-left: 16px; font-size: 12px; }
+.file .linkbtn { color: var(--paper-ink); font-weight: 600; }

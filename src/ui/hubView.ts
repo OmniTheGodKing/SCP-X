@@ -119,7 +119,13 @@ let pendingMapSel: string | null = null;
 /** The World Map's zoom and pan (an SVG viewBox), kept across renders. */
 const WORLD_VIEW = { x: 8, y: 14, w: 344, h: 124 };
 /** Height over width of the map on screen: the whole-world strip on wide screens, a taller window on phones. */
-const mapAspect = () => window.innerWidth < 700 ? 0.8 : WORLD_VIEW.h / WORLD_VIEW.w;
+/** UI/UX overhaul D: the World Map fills the screen, so its proportions are the screen's (measured after each render;
+ *  estimated from the window before the first). The map can pan past the land into open sea, so the land can sit
+ *  clear of the operations panel. */
+let geoAR = 0;
+const mapAspect = () => geoAR || (window.innerWidth < 700 ? 0.8 : Math.max(0.3, Math.min(1.2, (window.innerHeight - 190) / Math.max(320, window.innerWidth - 40))));
+const GEO_BOUNDS = { x: -130, y: -40, w: 620, h: 260 };
+const GEO_OPS_PX = 290;   // the operations panel's width on screen, kept clear when fitting the world
 /** Each region's own tint on the map, before exposure reddens it. */
 const TERR_TINT: Record<RegionId, string> = { east_us: "#3d4d63", west_us: "#47506a", latam: "#3d5448", europe: "#4c4762", africa: "#554f3c", east_asia: "#3e5559" };
 let geoView = { ...WORLD_VIEW };
@@ -219,8 +225,22 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   let dragMoved = false;
   /** Keep a view inside the world and at the map's proportions, between the whole world and about 8× zoom. */
   const clampView = (vw: { x: number; y: number; w: number; h: number }) => {
-    const ar = mapAspect(), nw = Math.min(WORLD_VIEW.w, WORLD_VIEW.h / ar, Math.max(42, vw.w)), nh = nw * ar;
-    return { w: nw, h: nh, x: Math.min(WORLD_VIEW.x + WORLD_VIEW.w - nw, Math.max(WORLD_VIEW.x, vw.x)), y: Math.min(WORLD_VIEW.y + WORLD_VIEW.h - nh, Math.max(WORLD_VIEW.y, vw.y)) };
+    const ar = mapAspect(), nw = Math.min(470, GEO_BOUNDS.h / ar, Math.max(42, vw.w)), nh = nw * ar;
+    return { w: nw, h: nh, x: Math.min(GEO_BOUNDS.x + GEO_BOUNDS.w - nw, Math.max(GEO_BOUNDS.x, vw.x)), y: Math.min(GEO_BOUNDS.y + GEO_BOUNDS.h - nh, Math.max(GEO_BOUNDS.y, vw.y)) };
+  };
+  /** Bring a place into the part of the map between the operations panel and the selected item's panel. */
+  const panInto = (pl: { lon: number; lat: number }) => {
+    const g = document.querySelector(".geo-full"), px = g?.clientWidth ?? 0; if (!px || window.innerWidth < 960) return;
+    const [mx, my] = project(pl.lon, pl.lat), left = (GEO_OPS_PX + 20) / px, right = 1 - 400 / px, fx = (mx - geoView.x) / geoView.w;
+    if (fx > left && fx < right) return;
+    geoView = clampView({ ...geoView, x: mx - ((left + right) / 2) * geoView.w, y: my - geoView.h / 2 });
+  };
+  /** The whole world, centred in the part of the map the operations panel doesn't cover. */
+  const worldFit = () => {
+    const ar = mapAspect(), px = Math.max(320, document.querySelector(".geo-full")?.clientWidth ?? window.innerWidth - 32);
+    const free = window.innerWidth < 960 ? 0 : GEO_OPS_PX / px;
+    const nw = Math.min(470, GEO_BOUNDS.h / ar, (WORLD_VIEW.w + 6) / (1 - free));
+    return clampView({ x: WORLD_VIEW.x - 3 - free * nw, y: WORLD_VIEW.y + WORLD_VIEW.h / 2 - nw * ar / 2, w: nw, h: 0 });
   };
   /** Frame a region's territory, with a little margin. */
   const zoomToRegion = (r: RegionId) => {
@@ -312,6 +332,14 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     render();
   }
 
+  /** UI/UX overhaul D: the World Map takes the rest of the window; when its measured proportions change, the view is
+   *  re-fitted (one extra render, only when they actually changed). */
+  function fitGeo() {
+    const g = root.querySelector<HTMLElement>(".geo-full"); if (!g) return;
+    g.style.setProperty("--geoh", `${Math.max(420, Math.round(window.innerHeight - g.getBoundingClientRect().top - window.scrollY - 12))}px`);
+    const r = g.getBoundingClientRect(), ar = r.width > 0 ? r.height / r.width : 0;
+    if (ar && Math.abs(ar - geoAR) > 0.01) { geoAR = ar; requestAnimationFrame(() => { if (stillHere() && tab === "world") render(); }); }
+  }
   function render() {
     advanceOnboarding(c);   // Strategic overhaul E2: steps whose goal is met close themselves
     if (planning && !c.incidents.some(i => i.id === planning)) planning = null;
@@ -959,7 +987,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     // zoom: every on-screen size is multiplied by k so markers and text stay the same size at any zoom
     // k: map units per "design pixel", from the zoom and the map's width on screen (bigger on a phone)
     const mapPx = Math.max(300, (document.querySelector(".geomap svg")?.clientWidth ?? (window.innerWidth < 960 ? window.innerWidth - 40 : window.innerWidth * 0.66)));
-    if (Math.abs(geoView.h / geoView.w - mapAspect()) > 0.01) { const [s19x] = project(SITE19.lon, SITE19.lat); geoView = clampView({ ...geoView, x: geoView.w >= WORLD_VIEW.w ? s19x - 80 : geoView.x }); }
+    if (Math.abs(geoView.h / geoView.w - mapAspect()) > 0.01) geoView = geoView.w >= WORLD_VIEW.w ? worldFit() : clampView({ ...geoView });
     const v = geoView, k = Math.max(0.25, v.w / mapPx * 2.6);
     const label = (r: RegionId) => REGIONS[r].name.replace("Western ", "W. ").replace("Eastern ", "E. ").replace("United States", "US").replace(" and the Middle East", " & M.E.");
     // regions as territories: the land inside each region's boxes, tinted by its exposure
@@ -1110,7 +1138,18 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
         ${(c.ops ?? []).length ? `<p class="muted">Field operations: ${c.ops!.map(op => `${esc(FIELD_OPS[op.kind].name)} in ${esc(REGIONS[op.region].name)} (${dateText(op.done)})`).join("; ")}.</p>` : ""}
         <p class="muted">Next month: $${councilGrant(c)}k from the O5 Council and $${frontsFunding(c)}k from the fronts, $${monthlyUpkeep(c)}k upkeep and salaries. Global exposure ${c.exposure}; ${collapsedCount(c)} of ${COLLAPSE_LIMIT} fronts lost. Select a region on the map for its front and field operations.</p>
       </div>`;
-    const side = selInc ? briefPanel(selInc) : selLead ? leadPanel(selLead) : selFac ? facPanel(selFac) : selReg ? regionPanel() : overview;
+    const side = selInc ? briefPanel(selInc) : selLead ? leadPanel(selLead) : selFac ? facPanel(selFac) : selReg ? regionPanel() : "";
+    // the wire: the latest things the world did without Site-19 (the Insurgency, the fronts, the Council, other sites)
+    const wireItems = (c.history ?? []).filter(h => h.cat === "insurgency" || h.cat === "region" || h.cat === "council").slice(-4).reverse();
+    const wire = wireItems.length ? `<div class="card geowire"><div class="label">The wire</div>${wireItems.map(h => `<p><span class="muted">${esc(dateText(h.day))}</span> ${esc(h.text)}</p>`).join("")}<button class="linkbtn" type="button" data-tab="history">Full chronicle →</button></div>` : "";
+    // the task forces at a glance: each squad's readiness, who is in the air, and the flight out
+    const forces = `<div class="card geoforces"><div class="label">Task forces</div>
+      ${(c.org?.mtfs ?? []).map(mt => `<div class="gf-mtf"><b>${esc(mt.designation)}</b> <span class="muted">"${esc(mt.name)}"</span>
+        ${mt.squads.map(q => { const ms = membersOf(c, q.id), rd = ms.filter(o => deployable(c, o)).length, air = ms.filter(o => o.busy?.kind === "travel").length;
+          return `<div class="gf-sq"><span>${esc(q.name)} <span class="muted">${esc(SPECS[q.spec].name)}</span></span><span class="${rd ? "ok" : "warn"}">${rd}/${ms.length} ready${air ? ` · ${air} in the air` : ""}</span></div>`; }).join("")}
+        ${reserveOf(c, mt.tf).length ? `<div class="gf-sq"><span class="muted">Reserve</span><span>${reserveOf(c, mt.tf).length}</span></div>` : ""}</div>`).join("")}
+      ${c.outbound ? `<p class="ok">${esc(c.outbound.tf)} en route to ${esc(REGIONS[c.outbound.region].name)}: lands ${dateText(Math.floor(c.outbound.arrive))}.</p>` : ""}
+    </div>`;
     const clock = `<div class="geobar">
         <b class="geodate">${dateText(c.day)} · ${String(Math.floor(c.hour ?? 0)).padStart(2, "0")}:00</b>
         <div class="speeds"><button class="act ${speed ? "" : "on"}" type="button" data-speed="0" aria-pressed="${!speed}" title="Pause (Space)">❚❚</button>
@@ -1119,11 +1158,9 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
         ${pendingBreach(c) ? `<span class="warn">${pendingBreach(c)!.kind === "escort" ? "A convoy is under attack" : "Site-19 needs an answer"}: time is held.</span>` : ""}
         <div class="mapfilters">${(["anomaly", "insurgency", "coverup", "site", "lead", "facility", "night", "weather"] as const).map(g => `<button class="act ${mapShow.has(g) ? "on" : ""}" type="button" data-mapfilter="${g}" aria-pressed="${mapShow.has(g)}" title="${{ anomaly: "Anomalies", insurgency: "Insurgency", coverup: "Cover-ups", site: "At Site-19", lead: "Leads: opportunities", facility: "Facilities", night: "Day and night", weather: "Weather" }[g]}"><span class="dot ${g}"></span><span class="fname">${{ anomaly: "Anomalies", insurgency: "Insurgency", coverup: "Cover-ups", site: "Site-19", lead: "Leads", facility: "Facilities", night: "Night", weather: "Weather" }[g]}</span></button>`).join("")}</div>
       </div>`;
-    return `<div class="geo">
-      <div class="card geomap">
-        ${clock}
+    return `<div class="geo geo-full">
         <div class="mapwrap">
-        <svg class="worldmap" id="worldsvg" viewBox="${v.x} ${v.y} ${v.w} ${v.h}" style="aspect-ratio:${(v.w / v.h).toFixed(3)}" role="group" aria-label="World map: regions, incidents and Foundation facilities">
+        <svg class="worldmap" id="worldsvg" viewBox="${v.x} ${v.y} ${v.w} ${v.h}" preserveAspectRatio="xMidYMid slice" role="group" aria-label="World map: regions, incidents and Foundation facilities">
           <defs>${clips}<path id="landShape" d="${landPaths}"/>
             <pattern id="seaWaves" width="12" height="6" patternUnits="userSpaceOnUse"><path d="M0 3 q3 -1.6 6 0 t6 0" fill="none" stroke="#1a2731" stroke-width=".35"/></pattern>
             <pattern id="landTex" width="5" height="5" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r=".35" fill="#3b4752"/><circle cx="3.5" cy="3.2" r=".25" fill="#1e262e"/></pattern>
@@ -1152,9 +1189,10 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
         </svg>
         <div class="zoombtns"><button class="act" type="button" data-zoom="in" aria-label="Zoom in">+</button><button class="act" type="button" data-zoom="out" aria-label="Zoom out">−</button><button class="act" type="button" data-zoom="world" aria-label="Show the whole world">World</button></div>
         </div>
-        <p class="muted geohelp">Markers: <span class="dot anomaly"></span>anomaly <span class="dot insurgency"></span>Insurgency <span class="dot coverup"></span>cover-up <span class="dot site"></span>at Site-19 <span class="dot lead"></span>lead (an opportunity). Ring: <span class="urgenttxt">urgent</span>, <span class="newtxt">new</span>, <span class="activetxt">under way</span>. Select a marker or region.</p>
-      </div>
-      <aside class="geoside">${side}</aside>
+        <div class="geo-top">${clock}</div>
+        <aside class="geo-ops" aria-label="Operations">${overview}${forces}${wire}</aside>
+        ${side ? `<aside class="geoside" aria-label="Selected"><button class="act geoclose" type="button" data-mapclear aria-label="Close">×</button>${side}</aside>` : ""}
+        <div class="geo-foot"><p class="geohelp">Markers: <span class="dot anomaly"></span>anomaly <span class="dot insurgency"></span>Insurgency <span class="dot coverup"></span>cover-up <span class="dot site"></span>at Site-19 <span class="dot lead"></span>lead (an opportunity). Ring: <span class="urgenttxt">urgent</span>, <span class="newtxt">new</span>, <span class="activetxt">under way</span>. Select a marker or region.</p></div>
     </div>
 `;
   }
@@ -1392,6 +1430,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     if (L.kind === "quarters") {
       extras.people = ops.map(o => ({ key: o.id, label: o.name.split(" ").slice(-1)[0], spec: operativeFigure(c, o) }));
       extras.focus = opSel ?? undefined;
+      { const m = mtfOf(c, "e11"); if (m) extras.unit = { code: m.designation.split("-").map((w, i) => i ? w : w[0]).join("-"), name: m.name }; }
       const hero = target?.startsWith("person:") ? c.roster.find(o => `person:${o.id}` === target && o.alive) : undefined;
       if (hero) extras.hero = { key: hero.id, spec: operativeFigure(c, hero), x: HERO_X };
       extras.span = target ? [200, 1000] : [240, 1160];
@@ -1426,12 +1465,12 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     }
     const heroIdx = heroOp ? ops.findIndex(o => o.id === heroOp.id) : -1;
     const heroUi = heroOp ? (() => { const sq = squadOf(c, heroOp), r = readinessOf(heroOp), prevO = ops[(heroIdx - 1 + ops.length) % ops.length], nextO = ops[(heroIdx + 1) % ops.length];
-      return `<div class="herotag" aria-live="polite"><span class="ht-call">${esc(heroOp.call)} · ${RANKS[heroOp.rank]}</span><b>${esc(fieldName(heroOp))}</b>
+      return `<div class="herocol"><div class="herotag" aria-live="polite"><span class="ht-call">${esc(heroOp.call)} · ${RANKS[heroOp.rank]}</span><b>${esc(fieldName(heroOp))}</b>
         <span>${heroOp.cls ? esc(CLASSES[heroOp.cls].name) : "No class yet"} · ${sq ? `${esc(sq.squad.name)}, ${esc(SPECS[sq.squad.spec].name)}` : "Reserve"}</span>
         <span class="ht-mtf">${esc(mtfLabel(c, tfOf(heroOp)))}</span>
         <span class="ht-ready ${r.tone}"><span class="lamp ${r.tone}"></span>${esc(r.text)}</span></div>
       <div class="herobar"><button class="act" type="button" data-herostep="${prevO.id}" aria-label="Previous operative">‹ ${esc(prevO.name.split(" ").slice(-1)[0])}</button><span class="hb-n">${heroIdx + 1} / ${ops.length}</span><button class="act" type="button" data-herostep="${nextO.id}" aria-label="Next operative">${esc(nextO.name.split(" ").slice(-1)[0])} ›</button>
-        <span class="hb-sep"></span><button class="act" type="button" data-herozoom="-1" aria-label="Zoom out" ${heroZoom <= 1 ? "disabled" : ""}>−</button><span class="hb-n">${heroZoom === 1 ? "Full figure" : heroZoom < 2 ? "Closer" : "Close-up"}</span><button class="act" type="button" data-herozoom="1" aria-label="Zoom in" ${heroZoom >= 2 ? "disabled" : ""}>+</button></div>`; })() : "";
+        <span class="hb-sep"></span><button class="act" type="button" data-herozoom="-1" aria-label="Zoom out" ${heroZoom <= 1 ? "disabled" : ""}>−</button><span class="hb-n">${heroZoom === 1 ? "Full figure" : heroZoom < 2 ? "Closer" : "Close-up"}</span><button class="act" type="button" data-herozoom="1" aria-label="Zoom in" ${heroZoom >= 2 ? "disabled" : ""}>+</button></div></div>`; })() : "";
     const stateText: Record<string, string> = { operational: L.powered ? "Operational" : "No power", building: "Under construction", damaged: "Damaged", wrecked: "Wrecked", repairing: "Under repair", demolishing: "Being torn down", upgrading: "Being refitted" };
     const labs = L.kind === "lab" ? c.base.facilities.filter(f => f.type === "lab") : [];
     const panel = target ? (target.startsWith("person:") ? target : selT?.panel ?? null) : null;
@@ -1496,6 +1535,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       case "admin": return financesCard();
       // Epsilon-11's quarters
       case "roster": return personnelRoster();
+      case "org": return orgPanel();
       // the armory
       case "issue": case "bench": return armoryPanel();
       // the workshop
@@ -2130,6 +2170,56 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     </div>`;
   }
 
+  /** UI/UX overhaul (section 4): the task force's organization. MTF, then squads, then people, each with what
+   *  it is for, what it may carry, who is fit, and who is still training. Everything changes through commands. */
+  function orgPanel() {
+    const mts = c.org?.mtfs ?? [], size = squadSize(c);
+    const sel = mts.find(m => m.tf === tfPick) ?? mts[0];
+    if (!sel) return `<p class="muted">No task force yet.</p>`;
+    const prim = PRIMARY[sel.primary];
+    const opRow = (o: Operative) => { const r = readinessOf(o), sq = squadOf(c, o);
+      return `<div class="orgop"><span class="lamp ${r.tone}" title="${esc(r.text)}"></span><button class="linkbtn" type="button" data-openop="${o.id}">${esc(o.call)} ${esc(fieldName(o))}</button>
+        <span class="muted">${RANK_SHORT[o.rank]}${o.cls ? ` · ${esc(CLASSES[o.cls].name)}` : ""}</span>
+        <span class="orgq">${sq ? (qualified(o, sq.squad.spec) ? `<span class="ok">qualified</span>` : o.qualTraining ? `<span class="warn">training to ${esc(dateText(o.qualTraining.until))}</span>` : `<span class="warn">not qualified</span>`) : ""}</span>
+        <select data-opsquad="${o.id}" aria-label="Move ${esc(o.name)}">${sel.squads.map(q => `<option value="${q.id}" ${o.squad === q.id ? "selected" : ""}>${esc(q.name)}</option>`).join("")}<option value="" ${sq ? "" : "selected"}>Reserve</option></select></div>`; };
+    const squadsHtml = sel.squads.map(q => { const ms = membersOf(c, q.id), rd = ms.filter(o => deployable(c, o)).length, sp = SPECS[q.spec];
+      const missions = ms.reduce((n, o) => n + o.missions, 0), kills = ms.reduce((n, o) => n + o.kills, 0);
+      return `<section class="orgsq">
+        <div class="orgsq-h"><b>${esc(q.name)}</b><span class="chip">${esc(sp.name)}</span>${q.retrainUntil ? `<span class="warn">retraining to ${esc(dateText(q.retrainUntil))}</span>` : ""}<span class="muted orgcap">${rd} ready of ${ms.length} · deploys ${size}</span></div>
+        <p class="specs">${esc(sp.role)} ${esc(sp.tradeoff)}</p>
+        <p class="specs">Specialist kit in stores: ${sp.kit.map(i => `${esc(ITEMS[i].name)} × ${c.inventory[i] ?? 0}`).join(", ")}</p>
+        <div class="orgops">${ms.length ? ms.map(opRow).join("") : `<p class="muted">Nobody assigned.</p>`}</div>
+        <p class="specs">Record of its people: ${plural(missions, "mission")}, ${plural(kills, "kill")}.</p>
+        <details class="archived"><summary>Rename or retrain</summary>
+          <div class="row"><input id="sqname-${q.id}" maxlength="24" value="${esc(q.name)}" aria-label="Squad name"><button class="act" type="button" data-renamesquad="${q.id}">Rename</button></div>
+          <div class="row"><select id="retrain-${q.id}" aria-label="New specialty">${prim.pool.filter(x => x !== q.spec).map(x => `<option value="${x}">${esc(SPECS[x].name)}</option>`).join("")}</select>
+            <button class="act" type="button" data-retrain="${q.id}" ${q.retrainUntil || c.funds < ORG.retrainCost ? "disabled" : ""}>Retrain · $${ORG.retrainCost}k · ${ORG.retrainDays} days</button></div>
+          <p class="muted">Members keep what they've learned and train the new qualification; until then the new kit stays in stores for them.</p></details>
+      </section>`; }).join("");
+    const reserve = reserveOf(c, sel.tf), fw = canFormSquad(c, sel.tf);
+    return `<div class="card orgpanel">
+      ${mts.length > 1 ? `<div class="row">${mts.map(m => `<button class="act ${m === sel ? "on" : ""}" type="button" data-tf="${m.tf}" aria-pressed="${m === sel}">${esc(m.designation)}</button>`).join("")}</div>` : ""}
+      <div class="label">Mobile Task Force · formed ${esc(dateText(sel.founded))}</div>
+      <h3 class="fac">${esc(sel.designation)} "${esc(sel.name)}"</h3>
+      <div class="rows">
+        <div class="r"><span>Primary specialization</span><span class="v">${esc(prim.name)}</span></div>
+        <div class="r"><span>Authorized squad specialties</span><span class="v">${prim.pool.map(x => esc(SPECS[x].name)).join(", ")}</span></div>
+        <div class="r"><span>Squads</span><span class="v">${sel.squads.length} of ${ORG.maxSquads}</span></div>
+        <div class="r"><span>Deployed squad size</span><span class="v">${size} (Foundation-wide doctrine${size < 8 ? `; next: ${has(c, "fireteam_doctrine") ? "Section command doctrine" : "Fire team doctrine"}` : ""})</span></div>
+        <div class="r"><span>Personnel</span><span class="v">${c.roster.filter(o => o.alive && tfOf(o) === sel.tf).length}, ${reserve.length} in reserve</span></div>
+      </div>
+      <p class="specs">${esc(prim.desc)} Basic Foundation kit is open to everyone; specialist kit needs the squad qualification.</p>
+      <details class="archived"><summary>Designation and name</summary><div class="row">
+        <input id="mtfDes" maxlength="16" value="${esc(sel.designation)}" aria-label="Designation"><input id="mtfName" maxlength="32" value="${esc(sel.name)}" aria-label="Name">
+        <button class="act" type="button" data-renamemtf="${sel.tf}">Save</button></div></details>
+      ${squadsHtml}
+      ${reserve.length ? `<section class="orgsq"><div class="orgsq-h"><b>Reserve</b><span class="muted orgcap">${reserve.length}</span></div><div class="orgops">${reserve.map(opRow).join("")}</div></section>` : ""}
+      <details class="archived"><summary>Form a new squad</summary><div class="row"><input id="newSqName" maxlength="24" placeholder="Squad name" aria-label="New squad name">
+        <select id="newSqSpec" aria-label="Specialty">${prim.pool.map(x => `<option value="${x}">${esc(SPECS[x].name)}</option>`).join("")}</select>
+        <button class="act" type="button" id="formSquadBtn" ${fw ? `disabled title="${esc(fw)}"` : ""}>Form · $${ORG.squadCost}k</button></div>${fw ? `<p class="muted">${esc(fw)}</p>` : ""}</details>
+    </div>`;
+  }
+
   /** The quarters' focused view: one section of the file at a time. */
   function opFocusPanel(o: Operative) {
     const p = opParts(o);
@@ -2328,6 +2418,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     on("leaveRoom", () => leaveRoom());
     // the room fills the window below the header, whatever the header's height at this width
     { const rv = root.querySelector<HTMLElement>(".roomview"); if (rv) rv.style.setProperty("--rvh", `${Math.max(380, Math.round(window.innerHeight - rv.getBoundingClientRect().top - window.scrollY - 14))}px`); }
+    fitGeo();
     // environment-first: the room's objects, the panel, the way back
     const pickTarget = (id: string) => {
       const L = currentRoom() ? roomLayout(c, currentRoom()!) : null; if (!L) return;
@@ -2348,6 +2439,10 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     on("fxToggle", () => { setTransitions(!transitionsSetting()); render(); });
     root.querySelectorAll<HTMLElement>("[data-opsec]").forEach(b => b.onclick = () => { opSection = b.dataset.opsec as OpSection; render(); });
     on("squadBtn", () => { target = null; heroZoom = 1; render(); });
+    root.querySelectorAll<HTMLElement>("[data-renamemtf]").forEach(b => b.onclick = () => run({ type: "renameMtf", tf: b.dataset.renamemtf as TaskForce, designation: root.querySelector<HTMLInputElement>("#mtfDes")!.value, name: root.querySelector<HTMLInputElement>("#mtfName")!.value }));
+    root.querySelectorAll<HTMLElement>("[data-renamesquad]").forEach(b => b.onclick = () => run({ type: "renameSquad", squadId: b.dataset.renamesquad!, name: root.querySelector<HTMLInputElement>(`#sqname-${b.dataset.renamesquad}`)!.value }));
+    root.querySelectorAll<HTMLElement>("[data-retrain]").forEach(b => b.onclick = () => run({ type: "retrainSquad", squadId: b.dataset.retrain!, spec: root.querySelector<HTMLSelectElement>(`#retrain-${b.dataset.retrain}`)!.value as SquadSpec }));
+    on("formSquadBtn", () => run({ type: "formSquad", tf: (c.org?.mtfs.find(m => m.tf === tfPick) ?? c.org?.mtfs[0])?.tf ?? "e11", name: root.querySelector<HTMLInputElement>("#newSqName")!.value, spec: root.querySelector<HTMLSelectElement>("#newSqSpec")!.value as SquadSpec }));
     root.querySelectorAll<HTMLSelectElement>("[data-opsquad]").forEach(b => b.onchange = () => run({ type: "assignSquad", opId: b.dataset.opsquad!, squadId: b.value }));
     root.querySelectorAll<HTMLElement>("[data-herozoom]").forEach(b => b.onclick = () => { heroZoom = Math.max(1, Math.min(2, Math.round((heroZoom + Number(b.dataset.herozoom) * 0.5) * 100) / 100)); render(); });
     root.querySelectorAll<HTMLElement>("[data-herostep]").forEach(b => b.onclick = () => { opSel = b.dataset.herostep!; target = `person:${opSel}`; render(); });
@@ -2373,7 +2468,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       render();
     });
     root.querySelectorAll<HTMLElement>("[data-mapinc]").forEach(b => {
-      const pick = () => { const i = c.incidents.find(x => x.id === b.dataset.mapinc); if (!i) return; mapSel = "inc:" + i.id; regionSel = i.region; if (planning && planning !== i.id) planning = null; flashMsg = ""; tab = "world"; render(); };
+      const pick = () => { const i = c.incidents.find(x => x.id === b.dataset.mapinc); if (!i) return; mapSel = "inc:" + i.id; regionSel = i.region; if (planning && planning !== i.id) planning = null; flashMsg = ""; tab = "world"; panInto(incidentPlace(i)); render(); };
       b.onclick = pick; b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } };
     });
     root.querySelectorAll<HTMLElement>("[data-maplead]").forEach(b => { const pick = () => { mapSel = "lead:" + b.dataset.maplead; planning = null; flashMsg = ""; tab = "world"; render(); };
@@ -2410,7 +2505,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     }
     root.querySelectorAll<HTMLElement>("[data-zoom]").forEach(b => b.onclick = () => {
       const z = b.dataset.zoom, cx = geoView.x + geoView.w / 2, cy = geoView.y + geoView.h / 2;
-      if (z === "world") { const [s19x] = project(SITE19.lon, SITE19.lat); geoView = clampView({ x: s19x - WORLD_VIEW.w / 2, y: WORLD_VIEW.y, w: WORLD_VIEW.w, h: 0 }); }
+      if (z === "world") geoView = worldFit();
       else { const nw = geoView.w * (z === "in" ? 1 / 1.5 : 1.5); geoView = clampView({ x: cx - nw / 2, y: cy - nw * mapAspect() / 2, w: nw, h: 0 }); }
       render();
     });
@@ -2567,7 +2662,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   };
   document.addEventListener("keydown", onKey);
   // the room keeps filling the window as it is resized
-  const onResize = () => { if (!stillHere()) { window.removeEventListener("resize", onResize); return; } const rv = root.querySelector<HTMLElement>(".roomview"); if (rv) rv.style.setProperty("--rvh", `${Math.max(380, Math.round(window.innerHeight - rv.getBoundingClientRect().top - window.scrollY - 14))}px`); };
+  const onResize = () => { if (!stillHere()) { window.removeEventListener("resize", onResize); return; } fitGeo(); const rv = root.querySelector<HTMLElement>(".roomview"); if (rv) rv.style.setProperty("--rvh", `${Math.max(380, Math.round(window.innerHeight - rv.getBoundingClientRect().top - window.scrollY - 14))}px`); };
   window.addEventListener("resize", onResize);
   requestAnimationFrame(tick);
 

@@ -14,7 +14,7 @@ const check = (n, name, ok, detail) => { results.push(`${ok ? 'PASS' : 'FAIL'} $
   await dbg(p, 'strike');
   await p.click('[data-tab="command"]');
   const id = await p.evaluate(() => { const c = window.__site19.campaign; const i = c.incidents.find(i => i.kind === 'strike'); i.map = 'wingC'; return i.id; });
-  await require("./lib.cjs").planIncident(p, id); for (const op of ['op1', 'op2']) await p.click(`[data-pick="${op}"]`).catch(() => {});
+  await require("./lib.cjs").planIncident(p, id); for (const op of ['op1', 'op2']) await p.click(`[data-pick="${op}"]`, { timeout: 2000 }).catch(() => {});
   await p.click('#launchBtn'); await p.waitForTimeout(300);
   if (await p.evaluate(() => !!window.__site19.campaign.outbound)) { await dbg(p, 'land'); await p.waitForTimeout(300); }
   const E = (f, a) => p.evaluate(f, a);

@@ -118,7 +118,7 @@ export function tickOrg(c: Campaign) {
   for (const o of c.roster) if (o.alive && o.qualTraining && o.qualTraining.until <= c.day) {
     const s = o.qualTraining.spec;
     o.quals = [...new Set([...(o.quals ?? []), s])]; o.qualTraining = undefined;
-    log(c, `${o.call} ${o.name} is now qualified for ${SPECS[s].name}.`, "good", "personnel");
+    log(c, `${o.call} ${o.name} is now qualified for ${SPECS[s].name}.`, "good");
   }
   for (const m of c.org!.mtfs) for (const s of m.squads) if (s.retrainUntil && s.retrainUntil <= c.day) {
     s.retrainUntil = undefined; log(c, `${s.name} (${m.designation}) finished retraining as ${SPECS[s.spec].name}.`, "good", "personnel");
@@ -139,7 +139,7 @@ export function canRenameMtf(c: Campaign, tf: TaskForce, designation: string, na
 export function renameMtf(c: Campaign, tf: TaskForce, designation: string, name: string) {
   if (canRenameMtf(c, tf, designation, name)) return;
   const m = mtfOf(c, tf)!; m.designation = designation.trim(); m.name = name.trim();
-  log(c, `The task force is now designated ${m.designation} "${m.name}".`, "key", "personnel");
+  log(c, `The task force is now designated ${m.designation} "${m.name}".`);
 }
 export function canRenameSquad(c: Campaign, id: string, name: string): string | null {
   const f = squadById(c, id); if (!f) return "No such squad.";
@@ -165,7 +165,7 @@ export function retrainSquad(c: Campaign, id: string, spec: SquadSpec) {
   spend(c, ORG.retrainCost, "staff", `${squad.name} retraining`);
   squad.spec = spec; squad.retrainUntil = c.day + ORG.retrainDays;
   for (const o of membersOf(c, id)) if (!qualified(o, spec)) o.qualTraining = { spec, until: c.day + ORG.retrainDays };
-  log(c, `${squad.name} (${mtf.designation}) begins retraining as ${SPECS[spec].name}: ${ORG.retrainDays} days.`, "key", "personnel");
+  log(c, `${squad.name} (${mtf.designation}) begins retraining as ${SPECS[spec].name}: ${ORG.retrainDays} days.`);
 }
 
 export function canJoinSquad(c: Campaign, o: Operative, squadId: string): string | null {
@@ -197,7 +197,7 @@ export function formSquad(c: Campaign, tf: TaskForce, name: string, spec: SquadS
   const n = name.trim().length >= 2 ? name.trim().slice(0, 24) : `Squad ${m.squads.length + 1}`;
   spend(c, ORG.squadCost, "staff", `${m.designation}: new squad`);
   m.squads.push(newSquad(c, n, PRIMARY[m.primary].pool.includes(spec) ? spec : PRIMARY[m.primary].pool[0]));
-  log(c, `${m.designation} forms a new squad, ${n}.`, "key", "personnel");
+  log(c, `${m.designation} forms a new squad, ${n}.`);
 }
 
 // ---------- readiness: what a deployment can and can't handle ----------

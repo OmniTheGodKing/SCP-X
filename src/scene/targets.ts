@@ -64,7 +64,8 @@ export function targetsFor(L: RoomLayout, opts: { heroes?: { id: string; name: s
       t.push({ id: "recruit", kind: "station", label: "Recruitment desk", panel: "room", rect: [BX0 + 1000, BY1 + 30, 200, 160], hint: "Recruit Epsilon-11, field agents" });
       break;
     case "quarters":
-      t.push({ id: "roster", kind: "display", label: "Duty roster", panel: "roster", rect: [BX0 + 120, BY0 + 150, 200, 130], hint: "Everyone on the roster, site staff, the fallen and retired" });
+      t.push({ id: "org", kind: "display", label: "Organization board", panel: "org", rect: [BX0 + 120, BY0 + 150, 200, 130], hint: "The task force, its squads, specialties and qualifications" });
+      t.push({ id: "roster", kind: "display", label: "Duty roster", panel: "roster", rect: [BX0 + 380, BY0 + 164, 110, 126], hint: "Everyone on the roster, site staff, the fallen and retired" });
       for (const h of opts.heroes ?? []) t.push({ id: `person:${h.id}`, kind: "person", label: h.name, panel: `person:${h.id}`, rect: [0, 0, 0, 0], hint: "Operative" });
       t.push({ id: "armorydoor", kind: "exit", label: "To the armory", panel: "go:armory", rect: [BX0 + 990, BY0 + 200, 110, 320], hint: "Their weapon on the armory bench" });
       break;

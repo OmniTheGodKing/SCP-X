@@ -40,6 +40,8 @@ export interface SceneExtras {
   making?: { kind: "attachment" | "ammo" | "item" | "refit"; id: string; label: string; progress: number };
   /** P5, Command: the incidents on the operations map (x, y as 0..1 of the map), alarms lit, the teletype's line. */
   ops?: { pins: { x: number; y: number; urgent: boolean }[]; alarms: number; teletype: string; clock: string };
+  /** The quarters: the task force's own designation and name on its banner. */
+  unit?: { code: string; name: string };
   /** One person brought forward, large, with the room still behind them (the quarters' selected operative). */
   hero?: { spec: FigureSpec; key: string; x?: number };
   /** The stretch of the scene, in scene units, people stand across (clear of a side panel). */
@@ -257,8 +259,9 @@ const FURNISH: Partial<Record<RoomLayout["kind"], (L: RoomLayout, x: SceneExtras
     ${bench(BX0 + 620, 520)}`,
   quarters: (L, x) => `
     ${[0, 1, 2].map(i => bunk(BX0 + 40 + i * 300, BY1, "#4f5a3a") + `<rect x="${BX0 + 60 + i * 300}" y="${BY1 - 44}" width="120" height="44" fill="#4b5a46" stroke="#2c3528" stroke-width="3"/><rect x="${BX0 + 110 + i * 300}" y="${BY1 - 30}" width="20" height="8" fill="${C.steelLt}"/>`).join("")}
-    <rect x="${BX0 + 120}" y="${BY0 + 150}" width="200" height="130" fill="#2a3a5a"/><rect x="${BX0 + 120}" y="${BY0 + 150}" width="200" height="12" fill="#c9a45c"/><text x="${BX0 + 220}" y="${BY0 + 230}" font-family="IBM Plex Mono,monospace" font-size="22" font-weight="700" fill="${C.paper}" text-anchor="middle">E-11</text>
-    <text x="${BX0 + 220}" y="${BY0 + 260}" font-family="IBM Plex Mono,monospace" font-size="13" fill="${C.paper}" text-anchor="middle">NINE-TAILED FOX</text>${x.people?.length ? "" : ""}`,
+    <rect x="${BX0 + 120}" y="${BY0 + 150}" width="200" height="130" fill="#2a3a5a"/><rect x="${BX0 + 120}" y="${BY0 + 150}" width="200" height="12" fill="#c9a45c"/><text x="${BX0 + 220}" y="${BY0 + 230}" font-family="IBM Plex Mono,monospace" font-size="22" font-weight="700" fill="${C.paper}" text-anchor="middle">${esc(x.unit?.code ?? "E-11")}</text>
+    <text x="${BX0 + 220}" y="${BY0 + 260}" font-family="IBM Plex Mono,monospace" font-size="13" fill="${C.paper}" text-anchor="middle">${esc((x.unit?.name ?? "Nine-Tailed Fox").toUpperCase().slice(0, 22))}</text>
+    <rect x="${BX0 + 380}" y="${BY0 + 170}" width="110" height="120" fill="#5a4a32"/><rect x="${BX0 + 390}" y="${BY0 + 180}" width="90" height="100" fill="#d9ceb2"/>${[0, 1, 2, 3, 4, 5].map(i => `<path d="M${BX0 + 398} ${BY0 + 196 + i * 14}h${60 + (i * 13) % 17}" stroke="#6b604c" stroke-width="3"/>`).join("")}<rect x="${BX0 + 422}" y="${BY0 + 164}" width="26" height="12" fill="#8a8f94"/>`,
   armory: (_L, x) => {
     const stock = (x.racks?.length ? x.racks : ["m1_garand", "m2_carbine", "m1897", "bar", "m3", "m1903a4"]).slice(0, 8);
     return `<rect x="${BX0 + 40}" y="${BY0 + 110}" width="${BX1 - BX0 - 80}" height="330" fill="${C.wood}" stroke="#3f3222" stroke-width="8"/>
