@@ -72,6 +72,7 @@ const { check, done } = reporter();
   // live customization: each change redraws the figure at once and is saved with the campaign
   const fig = () => E(() => document.querySelector('.hero')?.innerHTML ?? '');
   const f0 = await fig();
+  await p.click('[data-opsec="appearance"]'); await p.waitForTimeout(80);
   for (const k of ['skin', 'hair', 'face', 'coat', 'accessory']) {
     const before = await fig();
     await p.click(`[data-look="${k}"][data-d="1"]`); await p.waitForTimeout(80);
@@ -84,7 +85,7 @@ const { check, done } = reporter();
   await p.click('[data-tab="site"]'); await p.waitForTimeout(300);
   await p.click('[data-enter="surface:quarters"]'); await p.waitForTimeout(500);
   if (!(await p.$('.hero'))) { await p.click(`.scene-person[data-person="${who}"]`); await p.waitForTimeout(150); }
-  for (const sec of ['loadout', 'abilities', 'record', 'bio', 'appearance']) {
+  for (const sec of ['loadout', 'abilities', 'record', 'bio', 'appearance', 'overview']) {
     await p.click(`[data-opsec="${sec}"]`); await p.waitForTimeout(60);
     check(`quarters: the ${sec} section opens`, await E(s => document.querySelector(`[data-opsec="${s}"]`)?.getAttribute('aria-selected') === 'true', sec));
   }

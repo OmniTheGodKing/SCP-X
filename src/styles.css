@@ -18,6 +18,20 @@
   --ok: #86c193;
   --paper: #e4d6b4;
   --paper-ink: #2a241a;
+  /* Controls: every interactive button has an opaque fill, so it reads the same over a panel, a room scene or the
+     map. Disabled is a separate, still-legible colour set, never whole-element opacity (which let scenes show
+     through). */
+  --ctl-bg: #1e272f;
+  --ctl-bg-hover: #26313b;
+  --ctl-line: #3a4652;
+  --ctl-text: #e2dccd;
+  --ctl-on-bg: #24323c;
+  --ctl-primary-bg: #1f4256;
+  --ctl-primary-line: #6ea9c8;
+  --ctl-primary-hover: #275169;
+  --ctl-off-bg: #161b20;
+  --ctl-off-line: #2a333c;
+  --ctl-off-text: #6f7880;
   --font-display: "Special Elite", "Courier New", monospace;
   --font-body: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -90,12 +104,12 @@ canvas { display: block; width: 100%; max-width: 100%; height: auto; border: 1px
 .flag.bad { border-color: var(--alert); color: var(--alert); }
 .actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .actions .wide { grid-column: 1 / -1; }
-button.act, label.act, summary.act { font-family: var(--font-mono); font-size: 12px; letter-spacing: .04em; padding: 9px 10px; background: var(--panel-2); color: var(--ink); border: 1px solid var(--line); cursor: pointer; }
-button.act:hover:not(:disabled), label.act:hover, summary.act:hover { border-color: var(--manila); }
+button.act, label.act, summary.act { font-family: var(--font-mono); font-size: 12px; letter-spacing: .04em; padding: 9px 10px; background: var(--ctl-bg); color: var(--ctl-text); border: 1px solid var(--ctl-line); cursor: pointer; }
+button.act:hover:not(:disabled), label.act:hover, summary.act:hover { border-color: var(--manila); background: var(--ctl-bg-hover); }
 button.act:focus-visible, summary.act:focus-visible { outline: 2px solid var(--manila); outline-offset: 1px; }
-button.act:disabled { opacity: .4; cursor: not-allowed; }
+button.act:disabled, button.act:disabled.primary, button.act:disabled.on { background: var(--ctl-off-bg); color: var(--ctl-off-text); border-color: var(--ctl-off-line); border-style: dashed; cursor: not-allowed; }
 button.act.primary { background: var(--manila); color: var(--bg); border-color: var(--manila); font-weight: 500; }
-button.act.on { border-color: var(--manila); color: var(--manila); }
+button.act.on { border-color: var(--manila); color: var(--manila); background: var(--ctl-on-bg); }
 button.act kbd { opacity: .6; font-family: inherit; }
 .hint { font-family: var(--font-mono); font-size: 12px; color: var(--muted); min-height: 3.2em; white-space: pre-line; margin-top: 10px; }
 .hint b { color: var(--ink); font-weight: 500; }
@@ -195,7 +209,7 @@ ul.why { margin: 4px 0 8px; padding-left: 18px; font-family: var(--font-mono); f
 .file .pickop { background: rgba(42,36,26,.08); color: var(--paper-ink); }
 .file .pickop.on { border-color: var(--paper-ink); }
 .file button.act { background: var(--paper-ink); color: var(--paper); border-color: var(--paper-ink); }
-.file button.act:disabled { opacity: .45; }
+.file button.act:disabled { background: #cbbd9a; color: #6d6450; border-color: #8f8468; }
 .pickop.small { font-size: 13px; padding: 6px 8px; }
 .watch { margin-top: 6px; }
 .maint .exp-bar { flex: 1; }
@@ -356,7 +370,7 @@ details.archived summary { cursor: pointer; font-family: var(--font-mono); font-
 
 .mapwrap { position: relative; }
 .zoombtns { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 4px; }
-.zoombtns .act { padding: 4px 9px; background: rgba(15,19,23,.85); }
+.zoombtns .act { padding: 4px 9px; }
 .worldmap { touch-action: none; cursor: grab; }
 .worldmap.panning { cursor: grabbing; }
 .worldmap .terr { fill: color-mix(in srgb, var(--alert) calc(var(--heat) * 0.9%), #34414d); fill-opacity: .85; cursor: pointer; outline: none; }
@@ -415,7 +429,7 @@ details.archived summary { cursor: pointer; font-family: var(--font-mono); font-
 .sheet.campaigns { max-width: 640px; display: grid; gap: 10px; }
 .slotrow { display: grid; gap: 4px; padding: 8px; border: 1px solid var(--line); background: var(--panel-2); }
 .slotrow.on { border-color: var(--manila); }
-.act.disabled { opacity: .45; cursor: not-allowed; }
+.act.disabled { background: var(--ctl-off-bg); color: var(--ctl-off-text); border-color: var(--ctl-off-line); border-style: dashed; cursor: not-allowed; }
 .coach { border-color: var(--manila); background: color-mix(in srgb, var(--manila) 8%, var(--panel)); }
 .coach p { margin: 6px 0; }
 .act.armed { border-color: var(--alert); color: var(--alert); }
@@ -431,7 +445,7 @@ details.archived summary { cursor: pointer; font-family: var(--font-mono); font-
 .eqfitted .row { justify-content: space-between; gap: 8px; margin: 3px 0; }
 .eqopt { display: grid; gap: 2px; text-align: left; padding: 8px; background: var(--panel-2); border: 1px solid var(--line); color: var(--ink); font: inherit; cursor: pointer; }
 .eqopt.on { border-color: var(--manila); background: color-mix(in srgb, var(--manila) 10%, var(--panel-2)); }
-.eqopt:disabled { opacity: .5; cursor: not-allowed; }
+.eqopt:disabled { background: var(--ctl-off-bg); color: var(--ctl-off-text); border-color: var(--ctl-off-line); border-style: dashed; cursor: not-allowed; }
 /* the tactical action bar, pinned to the bottom of the screen */
 .actionbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; gap: 6px; padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
   background: color-mix(in srgb, var(--panel) 94%, transparent); border-top: 1px solid var(--line); backdrop-filter: blur(4px); }

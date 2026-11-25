@@ -39,6 +39,7 @@ import { missionWeather, nightAt, tickGeo, type FieldOp } from "./geo";
 import { newsFor } from "./news";
 import { ATTACHMENTS, CLASS_WEAPONS, WEAPON_TIERS, model, startingModels, type AmmoId, type AttachmentId, type WeaponType } from "../data/weapons";
 import { fits } from "../data/mounts";
+import { canCarry, ensureOrg, tickOrg, type OrgState, type SquadSpec } from "./org";
 
 // The US Army's enlisted ladder as it stood in 1951 (Staff Sergeant was dropped in 1948 and came back in 1958).
 export const RANKS = ["Private", "Private First Class", "Corporal", "Sergeant", "Sergeant First Class", "Master Sergeant", "Sergeant Major"];
@@ -114,6 +115,11 @@ export interface Operative {
   /** Portrait parts; operatives without one get a fixed face drawn from their id. */
   look?: Look;
   fleet?: boolean;
+  /** MTF organization (org.ts): their squad's id ("" is the reserve), the specialist qualifications they have
+   *  learned, and one being trained. */
+  squad?: string;
+  quals?: SquadSpec[];
+  qualTraining?: { spec: SquadSpec; until: number };
 }
 
 /** Someone who left Epsilon-11 alive: as a trainer at the training range, or with an honourable discharge. */
@@ -219,6 +225,8 @@ export interface Campaign {
   materials: Partial<Record<MaterialId, number>>;
   /** One-off training range purchases (like XCOM's Guerrilla Tactics School). */
   purchases: string[];
+  /** The task forces' organization: MTFs, squads and specialties (org.ts). */
+  org?: OrgState;
   /** When each anomaly not yet found will first be sighted. */
   sightings: Partial<Record<ScpId, number>>;
   /** Site Security, and how ready Epsilon-11 is kept for a breach. */
@@ -449,6 +457,7 @@ export function newCampaign(opts: NewCampaignOptions = { difficulty: "agent", ir
     c.roster.push(operativeFrom(c, { ...k, quality: 0, trait: undefined }));
   }
   refreshRecruits(c);
+  ensureOrg(c);
   const station = c.base.facilities.find(f => f.type === "security");
   for (let i = 0; i < 2; i++) { const g = newGuard(c); g.stationId = station?.id; c.guards.push(g); }
   issueDirectives(c, false);
@@ -480,6 +489,7 @@ export function advanceDay(c: Campaign) {
   if (pendingBreach(c)) return true;
   const incidentsBefore = c.incidents.length, logBefore = c.log.length;
   c.day++;
+  tickOrg(c);
   for (const line of tickConstruction(c)) log(c, line, "good", "site");
   tickResearch(c);
   const heal = healPerDay(c), calm = sanityPerDay(c) * ALERTS[c.alert].sanity;
@@ -773,11 +783,12 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
   const take = (i: ItemId) => { c.inventory[i] = (c.inventory[i] || 0) - 1; };
   const squad: SquadMember[] = loadouts.map(l => {
     const o = c.roster.find(x => x.id === l.opId)!;
-    const kind = l.armor && (c.inventory[l.armor] ?? 0) > 0 ? l.armor : "";
+    // specialist kit needs the qualification: anything they aren't trained for stays in stores
+    const kind = l.armor && (c.inventory[l.armor] ?? 0) > 0 && !canCarry(o, l.armor) ? l.armor : "";
     if (kind) take(kind);
     const st = kind ? armorStats(kind, c.armorTier) : { hp: 0, points: 0, move: 0 };
     // heavy weapons only go with heavy armor
-    const items = l.items.filter(i => kind === "armor_heavy" || !HEAVY.includes(i));
+    const items = l.items.filter(i => (kind === "armor_heavy" || !HEAVY.includes(i)) && !canCarry(o, i));
     items.forEach(take);
     const uni = uniformOf(c), bonus = st.hp + uni.hp;
     return {

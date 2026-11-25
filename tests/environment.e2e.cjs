@@ -71,6 +71,7 @@ const { check, done } = reporter();
   const heroH = await E(() => document.querySelector('.rv-stage .hero')?.getBoundingClientRect().height ?? 0);
   check('C2: the operative comes forward, full height (over half the scene)', heroH > (await E(() => document.querySelector('.rv-stage').getBoundingClientRect().height)) * 0.5, heroH);
   const fig0 = await E(() => document.querySelector('.rv-stage .hero').innerHTML);
+  await p.click('.ctxpanel [data-opsec="appearance"]'); await p.waitForTimeout(80);
   await p.click('.ctxpanel [data-look="coat"][data-d="1"]'); await p.waitForTimeout(100);
   check('C3: changing their jacket changes the figure', fig0 !== (await E(() => document.querySelector('.rv-stage .hero').innerHTML)));
   const look = await E(id => JSON.stringify(window.__site19.campaign.roster.find(o => o.id === id).look), who);

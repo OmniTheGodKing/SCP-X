@@ -1,5 +1,6 @@
 // Campaign saves live in this browser only. Storage can be unavailable (private windows,
 // blocked site data), so every access is guarded and the game still runs without it.
+import { ensureOrg } from "./org";
 import { campaignState, freshSeed, inMission, rnd, setCampaignSeed } from "../core/rng";
 import { fixEta10Calls, newTf } from "./taskforces";
 import { newChaos } from "./chaos";
@@ -171,7 +172,8 @@ export function parseCampaign(raw: string): Campaign | null {
     const cc = c as unknown as Campaign;
     if (typeof cc.rng !== "number") cc.rng = freshSeed();
     setCampaignSeed(cc.rng);
-    reconcileAttachments(cc);   // Presentation overhaul P4: fits the weapon can no longer take go back to stores
+    reconcileAttachments(cc);
+    ensureOrg(cc);              // UI/UX overhaul: MTF, squads and qualifications for older saves   // Presentation overhaul P4: fits the weapon can no longer take go back to stores
     return cc;
   } catch {
     return null;

@@ -8,6 +8,9 @@ const { chromium } = require('playwright');
   await p.evaluate(() => { const c = window.__site19.campaign; c.inventory = { frag: 2 };
     c.scps[0].status = 'breach'; c.incidents.push({ id: 'incX', kind: 'breach', scpId: '173', title: 'Incident 900: SCP-173 breach, test', appeared: c.day, expires: c.day, insurgents: 3, region: 'east_us', map: 'wingC' }); });
   await p.click('[data-tab=site]'); await p.click('[data-tab=command]'); await require('./lib.cjs').planIncident(p, 'incX');
+  // the staging area picks the readiest squad first; this test wants op1 to op4: show the whole MTF and set exactly them
+  await p.click('[data-stgsquad=""]'); await p.waitForTimeout(80);
+  for (const op of ['op5', 'op6', 'op1', 'op2', 'op3', 'op4']) { const want = ['op1', 'op2', 'op3', 'op4'].includes(op); const el = await p.$(`[data-pick="${op}"]`); if (el && (await el.isChecked()) !== want && !(await el.isDisabled())) { await el.click(); await p.waitForTimeout(60); } }
   await p.selectOption('#gear-op1-0', 'frag');
   await p.click('#launchBtn'); await p.waitForTimeout(400);
   // bring Epsilon-11 in now through the debug menu, then stage everyone where the old test expects them

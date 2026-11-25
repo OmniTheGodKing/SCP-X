@@ -311,8 +311,8 @@ function people(L: RoomLayout, x: SceneExtras) {
     const hx = x.hero.x ?? 560, back = (x.people ?? []).filter(p => p.key !== x.hero!.key).slice(0, 6);
     const behind = back.map((p, i) => figureSvg(p.spec, 260 + i * 190 + (i >= 2 ? 520 : 0), BY1 + 40, 0.6)).join("");
     return `<g opacity=".55">${behind}</g><rect width="${W}" height="${H}" fill="#05080b" opacity=".38" pointer-events="none"/>
-      <ellipse cx="${hx}" cy="${H - 34}" rx="190" ry="26" fill="${C.lamp}" opacity=".08"/>
-      <g class="hero" data-person="${esc(x.hero.key)}">${figureSvg(x.hero.spec, hx, H - 28, 1.72)}</g>`;
+      <ellipse cx="${hx}" cy="${H - 100}" rx="190" ry="26" fill="${C.lamp}" opacity=".1"/>
+      <g class="hero" data-person="${esc(x.hero.key)}">${figureSvg(x.hero.spec, hx, H - 96, 1.62)}</g>`;
   }
   if (x.people?.length) {
     const n = x.people.length, slots = x.people.map((p, i) => {

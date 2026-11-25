@@ -4,6 +4,7 @@
 // drawn at y = -h.
 import { FRAMES, mountAt, type MountId } from "../../data/mounts";
 import type { AttachmentId } from "../../data/weapons";
+import { assetUrl } from "../assets";
 
 const STEEL = "#3e464d", STEEL_DK = "#262c31", STEEL_LT = "#6c777f", BLUED = "#2e3438";
 
@@ -13,6 +14,8 @@ export function weaponSide(modelId: string, attachment?: string, opts: { ghost?:
   const w = f.wood, wdk = shade(w, 0.72), wlt = shade(w, 1.15);
   const P: string[] = [];
   const [r0, r1] = f.rx, mz = f.muzzle;
+  // finished art, when there is any, replaces the drawn body; attachments still go on at the frame's mounts
+  const art = assetUrl("weapons", modelId);
   // stock: the butt drops below the bore line (y > 0) and rises to the wrist behind the receiver
   const grip = (fill: string) => `<path d="M${f.grip} 14 L${f.grip - 18} 78 L${f.grip + 12} 82 L${f.grip + 28} 14Z" fill="${fill}"/>`;
   switch (f.stock) {
@@ -81,6 +84,7 @@ export function weaponSide(modelId: string, attachment?: string, opts: { ghost?:
       default: return "";
     }
   };
+  if (art) P.splice(0, P.length, `<image href="${art}" x="0" y="-90" width="${f.length}" height="180" preserveAspectRatio="xMidYMid meet"/>`);
   if (attachment) P.push(draw(attachment));
   if (opts.ghost && opts.ghost !== attachment) P.push(draw(opts.ghost, true));
   if (opts.highlight) { const [hx, hy] = mountAt(modelId, opts.highlight); P.push(`<circle cx="${hx}" cy="${-hy}" r="30" fill="none" stroke="#6ea9c8" stroke-width="4" class="mountpulse"/>`); }
