@@ -115,3 +115,11 @@ The squad with the most fit members is picked first. Every id the rules and test
   world-event director as described in the design context is not built.
 - Era-specific interface styling (later Cold War, modernization, contemporary) is not implemented; everything is
   the 1951 look.
+
+## Verification
+
+- `npm run build && npm test`: 24 of 24 suites pass (136 unit tests; `overhaul.e2e.cjs` has 39 checks, including
+  solid buttons on the quarters, research, Site-19, Command, World Map, staging and tactical screens).
+- Screenshots at 1280×720, 1440×900 and 1920×1080 are in `docs/screenshots/uiux/`. At 1280×720 the header's
+  readouts wrap to a second row (unchanged from before), so the staging screen's slot cards sit below the fold and
+  the page scrolls to them.
