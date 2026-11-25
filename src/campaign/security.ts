@@ -1,5 +1,6 @@
 // Site Security: the guards who are actually at Site-19 when a cell fails, the alert level that
 // decides how quickly Epsilon-11 can get there, and breaches left to the guards alone.
+import { deployCap, homeRegion } from "./org";
 import { rnd } from "../core/rng";
 import { earn, spend } from "./ledger";
 import { chronicle } from "./history";
@@ -203,7 +204,7 @@ export function tickRaids(c: Campaign) {
 }
 export function startRaid(c: Campaign) {
   c.lastRaid = c.day;
-  c.incidents.push({ id: "inc" + c.nextIncident, kind: "raid", scpId: "", region: HOME, map: "gate", appeared: c.day, expires: c.day, insurgents: raidSize(c),
+  c.incidents.push({ id: "inc" + c.nextIncident, kind: "raid", scpId: "", region: homeRegion(c), map: "gate", appeared: c.day, expires: c.day, insurgents: raidSize(c),
     title: `Incident ${String(c.nextIncident).padStart(3, "0")}: Insurgency raid on Site-19` });
   c.nextIncident++;
   chronicle(c, "insurgency", `The Chaos Insurgency raided Site-19's surface compound with about ${raidSize(c)} fighters.`);
@@ -233,7 +234,7 @@ export function raidLoss(c: Campaign, left = 3): string[] {
     const hit = c.base.facilities.filter(f => f.level === 0 && f.type !== "command" && f.type !== "generator" && !f.disabled && f.daysLeft === 0);
     if (hit.length) { const f = hit[rand(0, hit.length - 1)]; wreckFacility(c, f, "Demolition charges went off on the way out.", true); out.push(`The ${nameInText(f.type)} on level 1 was wrecked.`); }
   }
-  addExposure(c, HOME, 5); out.push("Locals heard the shooting (+5 exposure in the Eastern US).");
+  addExposure(c, homeRegion(c), 5); out.push("Locals heard the shooting (+5 exposure in the Eastern US).");
   return out;
 }
 /** Leave the raid to Site Security. More guards (and alarms) make it likelier they hold. */
@@ -292,11 +293,11 @@ export function letGuardsHandle(c: Campaign, inc: Incident) {
   }
   const dead = lost.length ? ` ${lost.join(" and ")} ${lost.length > 1 ? "were" : "was"} killed.` : "";
   if (rnd() < Math.max(0.1, 0.4 - DEPTH.escape * wingLevel(c, inc.scpId))) {
-    addExposure(c, HOME, 10);
+    addExposure(c, homeRegion(c), 10);
     goDark(c, s, `Site Security couldn't hold it.${dead} (+10 exposure.)`);
   } else {
     s.status = "contained"; s.maintenance = Math.max(s.maintenance, 40);
-    addExposure(c, HOME, 5);
+    addExposure(c, homeRegion(c), 5);
     log(c, `Site Security lost control of ${s.name} for hours before cornering it back into its cell.${dead} Word got out (+5 exposure).`, "bad");
   }
 }
@@ -313,7 +314,9 @@ export const TRAINING: Record<string, { name: string; cost: number; desc: string
   command_staff:  { name: "Command staff", cost: 300, needs: "officer_school", captain: true, desc: "A field command structure under a Sergeant First Class. Squad size 6." },
   guard_training: { name: "Guard training program", cost: 100, desc: "Site Security trains on the range every week. Guards get +10 aim and +10 sanity." },
 };
-export const squadSize = (c: Campaign) => 4 + (c.purchases.includes("officer_school") ? 1 : 0) + (c.purchases.includes("command_staff") ? 1 : 0);
+/** How many go on a mission: Phase 5 sites use the Foundation-wide doctrine (4, 6, 8); older saves keep Site-19's
+ *  training-range courses. */
+export const squadSize = (c: Campaign) => c.mtfs ? deployCap(c) : 4 + (c.purchases.includes("officer_school") ? 1 : 0) + (c.purchases.includes("command_staff") ? 1 : 0);
 export function canTrain(c: Campaign, id: string) {
   const t = TRAINING[id];
   if (c.purchases.includes(id)) return "Already done.";

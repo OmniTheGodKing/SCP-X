@@ -7,13 +7,14 @@ import { S, canAct, canSee, isPanicked, isTeam, seen, team, teamPerception, unit
 import { blastArea, dragOptions, moveCost, reachFor, throwOptions } from "../game/turn";
 import { abilityTargets } from "../game/abilities";
 import type { Unit } from "../game/types";
-import { mapLayer, noise } from "./tiles";
+import { mapLayer, noise, backdropPattern } from "./tiles";
+import { cam, focus, frame, resetCamera, step, worldTransform } from "./camera";
 import { audioSettings, sfx, transition } from "./audio";
 import { createFx } from "./fxdraw";
 import { bubbles, createLiving, mist } from "./living";
 import { hidden939, inFace, isDown682, isNewScp, isTarget } from "../game/scp4b";
 import type { Effect } from "../game/types";
-import { animOf, badge, drawBase, drawFallen, drawPerson, drawRadio, drawRecords, lookFor, noteEffects, placeOf, resetAnims } from "./sprites";
+import { fallOf, setEra, animOf, badge, drawBase, drawFallen, drawPerson, drawRadio, drawRecords, lookFor, noteEffects, placeOf, resetAnims } from "./sprites";
 import { escaping } from "../game/scp173";
 import { detectRange } from "../game/insurgency";
 import { freshBodies, isCalm, isStaggered, leadOptions } from "../game/scp049";
@@ -39,13 +40,26 @@ export function createRenderer(cv: HTMLCanvasElement) {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   // Phase 4C: a map with floors shows one floor at a time (view.floor), drawn from its own rows
   const floorH = L.def.floors ? L.def.floors[0].y1 - L.def.floors[0].y0 + 1 : L.H;
-  cv.width = L.W * TS * dpr; cv.height = floorH * TS * dpr;
+  // the canvas is the whole battlefield viewport: sized to its box, the camera decides what of the world it shows
+  resetCamera();
+  let lastW = 0, lastH = 0, lastNow = 0, lastSelId = "", lastFloor = -1;
+  let statueSeenAt = -1; const scrapes: { x: number; y: number; a: number }[] = [];
+  const layerScale = Math.max(1, Math.min(3, dpr * 2, 4096 / (L.W * TS), 4096 / (L.H * TS)));
+  const backdrop = backdropPattern(ctx);
+  function fitCanvas() {
+    const w = cv.clientWidth || cv.parentElement?.clientWidth || L.W * TS, h = cv.clientHeight || cv.parentElement?.clientHeight || floorH * TS;
+    if (w !== lastW || h !== lastH) { lastW = w; lastH = h; cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    const f = L.def.floors?.[Math.min(view.floor, (L.def.floors?.length ?? 1) - 1)];
+    const y0 = f ? f.y0 * TS : 0, y1 = f ? (f.y1 + 1) * TS : L.H * TS;
+    frame(0, y0, L.W * TS, y1, w, h, lastFloor === view.floor);
+    if (lastFloor !== view.floor) { lastFloor = view.floor; }
+  }
   view.floor = L.def.floors && S.units.some(u => u.side === "mtf") ? floorOf(S.units.find(u => u.side === "mtf")!.y) : 0;
-  resetAnims();
+  resetAnims(); setEra(S.setup.year);
   const fxr = createFx(), living = createLiving();
 
   function drawTiles() {
-    ctx.drawImage(mapLayer(dpr), 0, 0, L.W * TS, L.H * TS);
+    ctx.drawImage(mapLayer(layerScale), 0, 0, L.W * TS, L.H * TS);
     // container door frame along its open (north) side
     if (!L.contTiles.length) return;
     const [x0, y0] = L.contTiles[0], x1 = Math.max(...L.contTiles.map(t => t[0]));
@@ -54,6 +68,56 @@ export function createRenderer(cv: HTMLCanvasElement) {
     ctx.beginPath(); ctx.moveTo(x0 * TS, y0 * TS + 1); ctx.lineTo((x1 + 1) * TS, y0 * TS + 1); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = "#e7ecf0"; ctx.font = "9px IBM Plex Mono, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText(S.setup.kind === "raid" ? "LIFT" : "CONTAINER", (x0 + x1 + 1) / 2 * TS, (y0 + 2) * TS - 5);
+  }
+
+  /** Version 12 squad kit on the ground, straight from mission state: isolation lines (tape on stakes), firebreaks
+   *  (soaked, cleared ground with a countdown), marked points, sandbagged gun emplacements, and the trails a tracker
+   *  can read (only with a Tracking operative on the map, and only where the team can see). */
+  function drawSquadKit(now: number) {
+    const W = L.W;
+    if (S.firebreak?.size) for (const [k, until] of S.firebreak) {
+      if (until < S.turn) continue;
+      const x = (k % W) * TS, y = Math.floor(k / W) * TS;
+      ctx.fillStyle = "rgba(40,70,90,0.38)"; ctx.fillRect(x + 1, y + 1, TS - 2, TS - 2);
+      ctx.strokeStyle = "rgba(150,190,210,0.25)"; ctx.lineWidth = 1; ctx.beginPath();
+      for (let i = 4; i < TS; i += 7) { ctx.moveTo(x + i, y + 4); ctx.lineTo(x + i - 3, y + TS - 4); } ctx.stroke();
+      if (S.vis[k]) tag(`${until - S.turn + 1}`, x + TS - 6, y + 6, "#9cc3d6");
+    }
+    if (S.cordon?.size) {
+      const has = (x: number, y: number) => S.cordon!.has(y * W + x);
+      for (const k of S.cordon) {
+        const tx = k % W, ty = Math.floor(k / W), cx = tx * TS + TS / 2, cy = ty * TS + TS / 2;
+        ctx.save(); ctx.lineWidth = 3; ctx.setLineDash([5, 5]);
+        for (const [dx, dy] of [[1, 0], [0, 1], [1, 1], [1, -1]]) if (has(tx + dx, ty + dy)) {
+          ctx.strokeStyle = "#e5c23a"; ctx.lineDashOffset = 0; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + dx * TS, cy + dy * TS); ctx.stroke();
+          ctx.strokeStyle = "#1b1b18"; ctx.lineDashOffset = 5; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + dx * TS, cy + dy * TS); ctx.stroke();
+        }
+        ctx.restore();
+        ctx.fillStyle = "#6b5a3a"; ctx.fillRect(cx - 1.5, cy - 6, 3, 10); ctx.fillStyle = "#e5c23a"; ctx.fillRect(cx - 4, cy - 7, 8, 3);
+      }
+    }
+    if (S.marks?.size) for (const k of S.marks) {
+      const x = (k % W) * TS + TS / 2, y = Math.floor(k / W) * TS + TS / 2;
+      ctx.strokeStyle = "#3a2f1e"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x - 4, y + 9); ctx.lineTo(x - 4, y - 9); ctx.stroke();
+      ctx.fillStyle = "#e0b040"; ctx.beginPath(); ctx.moveTo(x - 4, y - 9); ctx.lineTo(x + 6, y - 6); ctx.lineTo(x - 4, y - 3); ctx.closePath(); ctx.fill();
+    }
+    if (S.trails?.size && S.units.some(u => u.side === "mtf" && u.alive && u.specialty === "tracking")) for (const [k, t] of S.trails) {
+      if (!S.vis[k]) continue;
+      const age = S.turn - t.turn; if (!t.tagged && age > 5) continue;
+      const x = (k % W) * TS + TS / 2, y = Math.floor(k / W) * TS + TS / 2, a = t.dir * Math.PI / 4;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.globalAlpha = t.tagged ? 0.9 : Math.max(0.25, 0.8 - age * 0.12);
+      ctx.fillStyle = t.tagged ? "#e0b040" : "#c8b890";
+      for (const [fx, fy] of [[-6, -3], [0, 3], [6, -3]]) { ctx.beginPath(); ctx.ellipse(fx, fy, 2.4, 1.3, 0, 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore();
+    }
+    // emplaced guns sit behind a crescent of sandbags facing the way they point
+    for (const u of S.units) if (u.emplaced && u.alive && seen(u.x, u.y)) {
+      const a = (u.facing ?? 0) * Math.PI / 4, cx = u.x * TS + TS / 2, cy = u.y * TS + TS / 2;
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(a);
+      for (let i = -2; i <= 2; i++) { const b = i * 0.42; ctx.fillStyle = i % 2 ? "#8a7a56" : "#7a6b4a"; ctx.beginPath(); ctx.ellipse(Math.cos(b) * 13, Math.sin(b) * 13, 3.2, 5, b, 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore();
+    }
+    void now;
   }
 
   function drawFog() {
@@ -249,8 +313,8 @@ export function createRenderer(cv: HTMLCanvasElement) {
 
   function hpBar(u: Unit, cx: number, cy: number) {
     const w = 20, frac = Math.max(0, u.hp / u.maxHp);
-    ctx.fillStyle = "#0f1317"; ctx.fillRect(cx - w / 2 - 1, cy - 20, w + 2, 4);
-    ctx.fillStyle = u.side === "raider" || u.side === "zombie" ? C.alert : "#9cd0a6"; ctx.fillRect(cx - w / 2, cy - 19, w * frac, 2);
+    ctx.fillStyle = "#0f1317"; ctx.fillRect(cx - w / 2 - 1, cy - 38, w + 2, 4);
+    ctx.fillStyle = u.side === "raider" || u.side === "zombie" ? C.alert : "#9cd0a6"; ctx.fillRect(cx - w / 2, cy - 37, w * frac, 2);
   }
 
   /** A detected but unidentified contact: a dark figure with a question mark, nothing more. */
@@ -266,7 +330,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
     const hurt = Math.max(0, 1 - (now - p.a.hit) / 280), flash = now - p.a.fired < 110, bob = p.moving ? Math.sin(now / 35) * 0.8 : 0;
     // Phase 4G: recoil after firing, a duck aside from a near miss, the weapon down while reloading, blood when badly hurt
     const kick = Math.max(0, 1 - (now - p.a.fired) / 140) * 2.6, fl = now - p.a.flinch < 260 ? (now - p.a.flinch) / 260 : 0;
-    const pose = { kick, flinch: fl, reloading: now - p.a.reload < 650, bloodied: u.hp > 0 && u.hp < u.maxHp / 2, seed: u.id.length + u.name.length };
+    const pose = { kick, flinch: fl, reloading: now - p.a.reload < 650, kneel: now - p.a.place < 600 ? (now - p.a.place) / 600 : 0, bloodied: u.hp > 0 && u.hp < u.maxHp / 2, seed: u.id.length + u.name.length };
     if (u.object) {
       // an object in its case: a steel strongbox with a hazard stripe
       ctx.fillStyle = "#5a5f66"; ctx.fillRect(cx - 9, cy - 7, 18, 14);
@@ -313,7 +377,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
       return;
     }
     if (u.side === "mtf" && u.downed) {
-      drawFallen(ctx, cx, cy, p.ang, look, false);
+      { const fk = fallOf(u, now); if (fk < 1) drawPerson(ctx, cx, cy, p.ang, look, { fall: fk }); else drawFallen(ctx, cx, cy, p.ang, look, false); }
       ctx.strokeStyle = u.stabilized ? C.ok : C.alert; ctx.lineWidth = 2.5;
       ctx.beginPath(); ctx.moveTo(cx + 6, cy - 9); ctx.lineTo(cx + 12, cy - 9); ctx.moveTo(cx + 9, cy - 12); ctx.lineTo(cx + 9, cy - 6); ctx.stroke();
       if (!u.stabilized) tag(`${u.bleed}`, cx + 11, cy - 17, C.alert);
@@ -323,14 +387,17 @@ export function createRenderer(cv: HTMLCanvasElement) {
       const pan = isPanicked(u), col = pan ? "#55636f" : u.guard ? "#9fb3c4" : C.mtf;
       drawBase(ctx, cx, cy, u.guard ? "rsquare" : "circle", col);
       drawPerson(ctx, cx, cy, p.ang, look, { hurt, flash, bob, ...pose, raised: !!u.overwatch });
-      badge(ctx, cx + 10, cy + 10, pan ? "!!" : u.guard ? "S" : String(u.slot ?? ""), col);
+      badge(ctx, cx + 13, cy + 6, pan ? "!!" : u.guard ? "S" : String(u.slot ?? ""), col);
       shieldBadge(u, cx - 12, cy - 11);
-      if (S.phase === "player" && !u.downed) apPips(u, cx, cy - 24);
+      if (S.phase === "player" && !u.downed) apPips(u, cx, cy - 40);
       if (S.concealed) { ctx.strokeStyle = C.ok; ctx.lineWidth = 1.5; ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.arc(cx, cy, 16, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); }
       if (u.overwatch) { ctx.strokeStyle = C.manila; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, 16, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke(); }
+      // squad technique states the player needs to read at a glance
+      const st = [u.observing ? "OP" : "", (u.anchoredUntil ?? -1) >= S.turn ? "BRACED" : "", u.emplaced ? "EMPLACED" : "", u.laneTurn !== undefined && S.turn - u.laneTurn <= 1 && u.overwatch ? "LANE" : ""].filter(Boolean);
+      if (st.length) tag(st.join(" · "), cx, cy + 24, C.manila);
     } else if (u.side === "raider") {
       const col = u.downed ? "#5d5266" : S.activePods.includes(u.pod ?? 0) ? C.raider : "#8a74a0";
-      if (u.downed) { drawFallen(ctx, cx, cy, p.ang, look, false); drawBase(ctx, cx, cy, "diamond", col); }
+      if (u.downed) { const fk = fallOf(u, now); if (fk < 1) drawPerson(ctx, cx, cy, p.ang, look, { fall: fk }); else drawFallen(ctx, cx, cy, p.ang, look, false); drawBase(ctx, cx, cy, "diamond", col); }
       else {
         drawBase(ctx, cx, cy, "diamond", u.role === "commander" ? C.manila : col);
         drawPerson(ctx, cx, cy, p.ang, look, { hurt, flash, bob, ...pose, raised: !!u.overwatch });
@@ -475,18 +542,30 @@ export function createRenderer(cv: HTMLCanvasElement) {
       else if (e.type === "blast") sfx.explosion();
       else if (e.type === "ghost") sfx.scrape();
       else if (e.type === "banner") sfx.sting(e.color === "#86c193");
-      else if (e.type === "cue") ({ reload: sfx.reload, crack: sfx.crack, rise: sfx.rumble, raise: sfx.raise, blink: () => {} })[e.cue]();
+      else if (e.type === "cue") ({ reload: sfx.reload, crack: sfx.crack, rise: sfx.rumble, raise: sfx.raise, blink: () => {}, place: sfx.reload })[e.cue]();
     }, now);
     // Phase 4G: a short shake on a big moment (only with Action highlights on)
     const [ox, oy] = fxr.offset(now, hl);
+    if (ox || oy) cam.shakeFrames++;
+    fitCanvas();
+    // the camera follows the selected operative, and anything that moves in sight near the edge of the view
+    const selU = S.selected;
+    if (selU && selU.id !== lastSelId) { lastSelId = selU.id; const a = animOf(selU.id); focus(a ? a.x : selU.x * TS + TS / 2, a ? a.y : selU.y * TS + TS / 2); }
+    if (S.phase !== "player") for (const u of S.units) { const a = animOf(u.id); if (a && a.dur && u.alive && seen(u.x, u.y)) { focus(a.toX, a.toY); break; } }
+    step(lastNow ? Math.min(100, now - lastNow) : 0); lastNow = now;
+    const top = cam.by0;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = "#0b0e11"; ctx.fillRect(0, 0, L.W * TS, L.H * TS);
-    const top = L.def.floors ? L.def.floors[Math.min(view.floor, L.def.floors.length - 1)].y0 * TS : 0;
-    ctx.setTransform(dpr, 0, 0, dpr, ox * dpr, (oy - top) * dpr);
+    const [z, tx, ty] = worldTransform();
+    ctx.setTransform(dpr * z, 0, 0, dpr * z, (tx + ox * z) * dpr, (ty + oy * z) * dpr);
+    // ground beyond the map's edge: bedrock under a site, earth and verge outdoors, never a black void
+    ctx.fillStyle = backdrop; ctx.fillRect(-4000, cam.by0 - 4000, L.W * TS + 8000, (cam.by1 - cam.by0) + 8000);
+    ctx.save(); ctx.shadowColor = "rgba(0,0,0,0.75)"; ctx.shadowBlur = 28 * z; ctx.fillStyle = "#0b0e11"; ctx.fillRect(0, cam.by0, L.W * TS, cam.by1 - cam.by0); ctx.restore();
+    ctx.save(); ctx.beginPath(); ctx.rect(0, cam.by0, L.W * TS, cam.by1 - cam.by0); ctx.clip();
     stateSounds();
     drawTiles();
     fxr.under(ctx);
     living.floor(ctx, now);
+    drawSquadKit(now);
     drawFog();
     // night: the map is dark except where flares burn
     if (S.setup.night && !L.def.floors?.[view.floor]?.under) {
@@ -527,10 +606,46 @@ export function createRenderer(cv: HTMLCanvasElement) {
       tag(`CORE ${S.core.hp}`, cx, cy - 20, C.alert);
     }
     living.fire(ctx, now);
-    // floor rotted by SCP-106
-    if (S.has106) {
-      ctx.fillStyle = "rgba(28,22,14,0.55)";
-      for (const i of S.corroded) { const x = i % L.W, y = (i / L.W) | 0; if (S.explored[i]) { ctx.beginPath(); ctx.ellipse(x * TS + TS / 2, y * TS + TS / 2, 13, 10, (i % 7) / 3, 0, Math.PI * 2); ctx.fill(); } }
+    // floor rotted by SCP-106: a black, glistening pool that joins its neighbours, slow bubbles rising in it
+    if (S.has106 || S.corroded.size) {
+      for (const i of S.corroded) {
+        const x = i % L.W, y = (i / L.W) | 0; if (!S.explored[i]) continue;
+        const cx = x * TS + TS / 2, cy = y * TS + TS / 2, sk = (i % 7) / 3;
+        ctx.fillStyle = "rgba(22,17,10,0.62)"; ctx.beginPath(); ctx.ellipse(cx, cy, 13, 10, sk, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "rgba(60,48,28,0.55)"; ctx.lineWidth = 3;
+        for (const [dx, dy] of [[1, 0], [0, 1], [1, 1], [-1, 1]]) if (S.corroded.has((y + dy) * L.W + x + dx)) { ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + dx * TS, cy + dy * TS); ctx.stroke(); }
+        ctx.fillStyle = "rgba(140,120,80,0.18)"; ctx.beginPath(); ctx.ellipse(cx - 4, cy - 3, 4, 2, sk, 0, Math.PI * 2); ctx.fill();
+        if (S.vis[i]) { const t = ((now / 1400 + (i % 5) / 5) % 1); ctx.strokeStyle = `rgba(90,74,44,${0.6 * (1 - t)})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(cx + ((i * 7) % 9) - 4, cy + ((i * 3) % 7) - 3, 1 + t * 3, 0, Math.PI * 2); ctx.stroke(); }
+      }
+    }
+    // SCP-610: veins creeping from the growth onto the tiles it can take next turn (only where the team can see)
+    if (S.flesh.size) {
+      for (const i of S.flesh) {
+        const x = i % L.W, y = (i / L.W) | 0; if (!S.vis[i]) continue;
+        const cx = x * TS + TS / 2, cy = y * TS + TS / 2;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, ny = y + dy, k = ny * L.W + nx;
+          if (S.flesh.has(k) || !passable(nx, ny) || !S.vis[k] || (S.cordon?.has(k)) || ((S.firebreak?.get(k) ?? -1) >= S.turn)) continue;
+          const pulse = 0.5 + 0.5 * Math.sin(now / 420 + i);
+          ctx.strokeStyle = `rgba(130,26,34,${0.35 + 0.25 * pulse})`; ctx.lineWidth = 2; ctx.lineCap = "round";
+          ctx.beginPath(); ctx.moveTo(cx + dx * 10, cy + dy * 10); ctx.quadraticCurveTo(cx + dx * 18 + dy * 5, cy + dy * 18 + dx * 5, cx + dx * (20 + 4 * pulse), cy + dy * (20 + 4 * pulse)); ctx.stroke();
+          ctx.lineCap = "butt";
+        }
+      }
+    }
+    // SCP-173: concrete scraped where it was seen to have moved between sightings
+    if (S.has173 && st.alive !== false && !S.sealed) {
+      const k = st.y * L.W + st.x;
+      if (seen(st.x, st.y)) {
+        if (statueSeenAt >= 0 && statueSeenAt !== k) {
+          const ax = statueSeenAt % L.W, ay = (statueSeenAt / L.W) | 0, n = Math.max(Math.abs(st.x - ax), Math.abs(st.y - ay));
+          for (let j = 0; j <= n; j++) { const tx = Math.round(ax + (st.x - ax) * j / Math.max(1, n)), ty = Math.round(ay + (st.y - ay) * j / Math.max(1, n)); if (S.explored[ty * L.W + tx]) scrapes.push({ x: tx, y: ty, a: Math.atan2(st.y - ay, st.x - ax) }); }
+          if (scrapes.length > 80) scrapes.splice(0, scrapes.length - 80);
+        }
+        statueSeenAt = k;
+      }
+      ctx.strokeStyle = "rgba(190,184,170,0.28)"; ctx.lineWidth = 1;
+      for (const sc of scrapes) { const cx = sc.x * TS + TS / 2, cy = sc.y * TS + TS / 2; ctx.save(); ctx.translate(cx, cy); ctx.rotate(sc.a); ctx.beginPath(); for (const o of [-4, 0, 4]) { ctx.moveTo(-12, o); ctx.lineTo(12, o + 1); } ctx.stroke(); ctx.restore(); }
     }
     // the fallen where they lie (the ones SCP-049 could still raise are marked)
     for (const b of S.units.filter(u => !u.alive && !u.saved && !u.carriedBy && !u.taken && u.side !== "anomaly")) {
@@ -604,7 +719,8 @@ export function createRenderer(cv: HTMLCanvasElement) {
       tag(`LURE · T${l.until}`, cx, cy + 16, C.manila);
     }
 
-    for (const u of S.units) {
+    // drawn back to front, so a figure nearer the camera stands in front of one behind it
+    for (const u of [...S.units].sort((a, b) => a.y - b.y)) {
       if (!u.alive || u.saved || u.carriedBy) continue;
       if (!isTeam(u) && !seen(u.x, u.y) && !u.restrained) continue;
       if (hidden939(u)) continue;
@@ -615,7 +731,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
       const pp = placeOf(u, now);
       if (u.eyesDown) tag("EYES DOWN", pp.x, pp.y + 20, C.ok);
       if (u.compelled !== undefined) tag("COMPELLED", pp.x, pp.y + 20, C.alert);
-      if (isTarget(u)) tag("MARKED", pp.x, pp.y - 26, C.alert);
+      if (isTarget(u)) tag("MARKED", pp.x, pp.y - 40, C.alert);
       if ((u.suppressedUntil ?? -1) >= S.turn) tag("SUPPRESSED", pp.x, pp.y + 20, C.alert);
     }
 
@@ -644,7 +760,7 @@ export function createRenderer(cv: HTMLCanvasElement) {
     if (sel && sel.alive) {
       const sa = animOf(sel.id), [cx, cy] = sa ? [sa.x, sa.y] : center(sel);
       ctx.strokeStyle = C.manila; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]); ctx.lineDashOffset = -now / 60;
-      ctx.beginPath(); ctx.arc(cx, cy, 18, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.ellipse(cx, cy + 10, 15, 6.5, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
     }
 
     // every enemy the selected operative can shoot right now shows its hit chance (hovering one gives the detail)
@@ -775,5 +891,11 @@ export function createRenderer(cv: HTMLCanvasElement) {
 
     S.effects = S.effects.filter(e => now - e.t0 < e.dur);
     fxr.over(ctx, now, S.effects, L.W * TS, floorH * TS, hl, drawStatue, top);
+    ctx.restore();
+    // a soft darkening toward the screen's edges, under the HUD
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const vg = ctx.createRadialGradient(lastW / 2, lastH / 2, Math.min(lastW, lastH) * 0.35, lastW / 2, lastH / 2, Math.max(lastW, lastH) * 0.75);
+    vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.42)");
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, lastW, lastH);
   };
 }

@@ -26,7 +26,7 @@ import { councilSeal, dossierPhoto, gearArt, iconBody, icon, incidentScene, insu
 import { ART_DEFS, roomSvg, surfaceSvg } from "./art";
 import { CAT_NAMES, INCOME_CATS, SPEND_CATS, monthIndex } from "../campaign/ledger";
 import { LEADS, canLeadAction, leadAction, leadPrice, offerText, type Lead, type LeadAction } from "../campaign/leads";
-import { AUTO_KINDS, canDispatch, dispatchOdds, dispatchTeam } from "../campaign/autoteam";
+import { AUTO_KINDS, assessTeam, autoKinds, canDispatch, dispatchOdds, dispatchTeam } from "../campaign/autoteam";
 import { CONTRACTS, NEEDS, acceptContract, canAcceptContract, contractPool, whoText } from "../campaign/contracts";
 import { ambience, playMusic, soundControl, transition, ui, wireSound } from "./audio";
 import { DISRUPT_INTEL, INQUIRY, PLANS, goalText, whenText, REVEAL_INTEL, THREAT_STEPS, canDisrupt, canInvestigateBreach, canReveal, disrupt, investigateBreach, reveal } from "../campaign/chaos";
@@ -42,6 +42,13 @@ import { MEDALS } from "../data/bios";
 import { LEANS, QUALITY, UNITS, nationalityOf } from "../data/units";
 import { ACCESSORIES, COATS, FACES, FACIAL, HAIR_BY_SEX, HAIR_COLORS, HAIR_STYLES, HEADGEAR, LOOK_PARTS, SEX_NAMES, SKIN, fitLook, rollLook } from "../data/looks";
 import { portraitSvg } from "./portrait";
+import { armoryHtml, barracksHtml, barracksTarget, BARRACKS_ROOM, type QuartersCtx } from "./quarters";
+import { leaveToward, wireStage } from "./stage/scene";
+import { commandBand, engineeringBand, researchBand } from "./departments";
+import { canDrill, chooseBranch, drillSquad, equipStatus, squadStage, type Squad } from "../campaign/org";
+import { KITS, SQUAD_BALANCE, TECHS } from "../data/specialties";
+import { addSquad, assignToSquad, bindCampaign, canAddSquad, eligibleKit, localizeText, retrainSquad, siteOf19, specUnlock, squadRosterMax, mtfsOf, squadMembers, squadAway, squadOfOp, deployCap, qualifiedFor } from "../campaign/org";
+import { MTF_CONFIG, SPECIALTIES, SPECS, type SpecialtyId } from "../data/mtf";
 import { INSPECTION, inspectionChecks, inspectionSoon } from "../campaign/inspection";
 import {
   UPGRADE, countOperational, damageEffect, engineersBusy, repairOf, GEN_TIERS, canRefitGen, genTierOf, generatorOutput, refitGenerator, canUpgrade, upgradeFacility, RECREATION, canAddRecreation, addRecreation, DEMOLISH, canDemolish, demolish, demolishDays, demolishLeavesShort, ENGINEER_COST, EXCAVATE, FACILITIES, nameInText, GRADE_NAMES, MAX_LEVELS, REPAIR, SLOTS, build, canBuild, canExcavate, canRepair,
@@ -76,10 +83,10 @@ import {
   promoteGuard, breachGuards, letGuardsHandleRiot, letGuardsHandleRaid, raidArrivalText, raidOdds, postedAt, postGuard, unposted, TRAINING, canTrain, squadSize, train, type Alert, type Guard,
 } from "../campaign/security";
 import { HEAVY, type ScpId } from "../game/types";
-import { esc } from "./util";
+import { esc, localizeDom } from "./util";
 
 const MAX_DCLASS = 4, MAX_WATCHERS = 2;
-type Tab = "command" | "world" | "site" | "research" | "personnel" | "history";
+type Tab = "command" | "world" | "site" | "research" | "personnel" | "armory" | "history";
 /** History tab: the category shown and the incident report opened from it. */
 let histCat: HistCat | "all" = "all", openReport: string | null = null;
 
@@ -91,6 +98,8 @@ export interface HubActions {
   newCampaign: (opts: NewCampaignOptions, slot: Slot) => void;
   loadSlot: (slot: Slot) => void;
   importCampaign: (c: Campaign) => void;
+  menu: () => void;
+  newMtf: () => void;
 }
 
 const KIND_NAMES = { raid: "Raid", riot: "Riot", outbreak: "SCP-610", breach: "Breach", recovery: "Manhunt", coverup: "Cover-up", strike: "Strike", escort: "Ambush", retaliation: "Retaliation", rescue: "Lost team", emergency: "Site emergency" } as const;
@@ -165,7 +174,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   /** The research category tab open. */
   let resCat: ResearchCat = "anomalies", resCatPicked = false;
   /** The equipment slot open on the personnel file. */
-  let eqSlot: string | null = "weapon";
+  let eqSlot: string | null = null;
   /** Two-step confirmation inside the page (the claude.ai viewer blocks the browser's own confirm boxes): the first
    *  click turns the button into a warning, a second click within four seconds goes ahead. */
   let armedKey = "", armedTimer = 0;
@@ -180,12 +189,20 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let dlg: null | { view: "slots" } | { view: "new"; slot: Slot; difficulty: Difficulty; ironman: boolean; tutorial: boolean } = null;
   /** Which task force is being sent, and the support people and units going with it. */
   let tfPick: TaskForce = "e11";
+  /** Phase 5: the squad answering the incident being planned. */
+  let squadPick: string | null = null;
   const extras: Extras = {};
   const watchers = new Set<string>();
   const gear = new Map<string, { armor: ItemId | ""; items: (ItemId | "")[] }>();
   let flashMsg = "";
   let opSel: string | null = null;
-  let lookOpen = false;   // keep the appearance editor open while clicking through parts
+  let lookOpen = false;
+  /** Which page of the personnel file is open, and which wall archive in the barracks. */
+  let dosTab = "record";
+  let archive: string | null = null;
+  let lastDrawn = "";
+  /** Point the barracks camera at the selected operative on the next draw (not after a drag). */
+  let reframe = true;   // keep the appearance editor open while clicking through parts
   let dCount = 2;
   let sel: { level: number; slot: number } | null = null;
   // Presentation overhaul P2: the room the Director is standing in (a facility id or a fixed surface location), and
@@ -233,7 +250,11 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   const ready = () => c.roster.filter(o => deployable(c, o));
   // an ambushed convoy is defended by whoever made the capture, wounded or not
   // a squad is one task force: with Eta-10 formed, the panel picks which one goes
-  const readyFor = (inc: Incident) => inc.kind === "escort" && inc.squad ? c.roster.filter(o => o.alive && inc.squad!.includes(o.id)) : c.tf.eta10 ? ready().filter(o => tfOf(o) === tfPick) : ready();
+  const readyFor = (inc: Incident) => inc.kind === "escort" && inc.squad ? c.roster.filter(o => o.alive && inc.squad!.includes(o.id))
+    : c.mtfs ? ready().filter(o => o.squad && o.squad === (squadPick ?? defaultSquad()))
+    : c.tf.eta10 ? ready().filter(o => tfOf(o) === tfPick) : ready();
+  /** The squad offered first: the one at home with the most people fit to go. */
+  const defaultSquad = () => mtfsOf(c).flatMap(m => m.squads).filter(sq => !squadAway(c, sq.id)).sort((a, b) => ready().filter(o => o.squad === b.id).length - ready().filter(o => o.squad === a.id).length)[0]?.id ?? null;
   const watchPool = () => guardsReady(c);
   const scp173 = () => c.scps.find(s => s.id === "173")!;
 
@@ -304,6 +325,12 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     render();
   }
 
+  function wireStages() {
+    const st = root.querySelector<HTMLElement>("[data-stage=barracks]");
+    if (st) { const o = c.roster.find(x => x.id === opSel && x.alive && !x.busy); wireStage(st, "barracks", barracksTarget(c, o ? o.id : null), { yaw: 34, minDist: -420, maxDist: 1300 }, reframe); reframe = false; }
+    const arm = root.querySelector<HTMLElement>("[data-stage=armory]");
+    if (arm && !opSel) opSel = c.roster.find(x => x.alive)?.id ?? null;
+  }
   function render() {
     advanceOnboarding(c);   // Strategic overhaul E2: steps whose goal is met close themselves
     if (planning && !c.incidents.some(i => i.id === planning)) planning = null;
@@ -332,6 +359,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       ${ro("Amnestics", `${c.amnestics}/${amnesticsCapacity(c)}`, "", "Class-A amnestics in stock / storage.")}
     </div>
     <details class="sysmenu"><summary class="act">System${c.ironman ? " · Ironman" : ""}</summary><div class="menu">
+      <button class="act" id="menuBtn" type="button" title="Back to the title screen (the campaign is saved)">Main menu</button>
       <button class="act" id="campaignsBtn" type="button">Campaigns</button>
       <button class="act" id="exportBtn" type="button" title="Download this campaign as a file, to keep or move to another browser">Export save</button>
       ${c.ironman ? `<span class="act disabled" title="Ironman: this campaign can't be replaced by loading a save over it.">Import save</span>` : `<label class="act" for="importFile" title="Load a campaign from an exported file. It replaces the current one.">Import save</label>`}
@@ -346,13 +374,14 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     ${tabBtn("world", "World")}
     ${tabBtn("site", "Site-19")}
     ${tabBtn("research", "Research", researchersFree(c) > 0 && c.researchers ? researchersFree(c) : 0)}
-    ${tabBtn("personnel", "Personnel")}
+    ${tabBtn("personnel", "Barracks")}
+    ${tabBtn("armory", "Armory")}
     ${tabBtn("history", "History")}
   </nav>
   ${flashMsg ? `<p class="warn-box" role="status">${esc(flashMsg)}</p>` : ""}
   ${coachCard()}
-  ${tab === "world" ? worldTab() : tab === "history" ? historyTab() : tab === "site" ? (room ? roomView(room) : siteTab())
-    : tabRoom(tab) ? roomView(tabRoom(tab)!) : tab === "research" ? researchTab() : tab === "command" ? commandTab() : personnelTab()}
+  ${tab === "world" ? worldTab() : tab === "history" ? historyTab() : tab === "site" ? (room ? roomView(room) : engineeringBand(c) + siteTab())
+    : tab === "research" ? researchBand(c) + researchScreen() : tab === "command" ? commandBand(c) + commandTab() : personnelTab()}${tab === "personnel" || tab === "armory" ? "" : (lastDrawn = "", "")}
   ${creditsOpen ? `<div class="overlay fixed"><div class="sheet" role="dialog" aria-label="Credits">${creditsHtml()}<div class="row"><button class="act primary" type="button" id="creditsClose">Close</button></div></div></div>` : ""}
   ${!c.over && c.notices?.length ? `<div class="overlay fixed"><div class="sheet notice" role="dialog" aria-label="Time paused">
     <div class="label">${dateText(c.day)} · time paused</div>
@@ -368,7 +397,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     <button class="act primary" type="button" id="overBtn">Start a new campaign</button>
   </div></div>` : ""}
 </main>`;
-    bind(); wireSound(root); hubSounds();
+    bindCampaign(c); localizeDom(root, localizeText);
+    bind(); wireSound(root); hubSounds(); wireStages();
   }
 
   const nightPoints = () => nightPointsOf(c);
@@ -377,7 +407,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   /** Planes in the air: squads flying out to an incident and home again, placed by the clock (hours included), so
    *  they move along their route while time runs. */
   function flightMarkup(k: number) {
-    const [sx, sy] = project(SITE19.lon, SITE19.lat), now = c.day + (c.hour ?? 0) / 24;
+    const [sx, sy] = project(siteOf19(c).lon, siteOf19(c).lat), now = c.day + (c.hour ?? 0) / 24;
     const plane = (ax: number, ay: number, bx: number, by: number, f: number, cls: string, title: string) => {
       f = Math.max(0, Math.min(1, f));
       const z = cls === "out" ? 1.7 : 1;   // the squad on its way out is the one to watch
@@ -587,7 +617,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
           ${row(`Council grant: base`, gp.base)}${row(`Standing ${c.council.standing}`, gp.standing)}${row(`${gp.held} ${gp.held === 1 ? "anomaly" : "anomalies"} held`, gp.anomalies)}${row(`${plural(gp.yearsRun, "year")} of service`, gp.years)}${row("Raised grant", gp.raised)}${row(`${DIFFICULTIES[c.difficulty ?? "agent"].name} difficulty`, gp.difficulty)}${row("Emergency repayment", gp.repay, "warn")}
           ${REGION_IDS.filter(r => regionFunding(c, r)).map(r => row(REGIONS[r].front, regionFunding(c, r))).join("")}</ul></div>
         <div><div class="label">Each month out</div><ul class="fin">
-          ${row("Facility upkeep", -up.facilities)}${row(`Operatives' pay (${c.roster.filter(o => o.alive).length})`, -up.operatives)}${row(`Guards' pay (${c.guards.filter(g => g.alive).length})`, -up.guards)}${row(`${ALERTS[c.alert].name} alert`, -up.alert)}</ul></div>
+          ${row("Facility upkeep", -up.facilities)}${row(`Operatives' pay (${c.roster.filter(o => o.alive).length})`, -up.operatives)}${row(`Guards' pay (${c.guards.filter(g => g.alive).length})`, -up.guards)}${row("Supply routes (remote site)", -up.supply)}${row(`${ALERTS[c.alert].name} alert`, -up.alert)}</ul></div>
       </div>
       ${why.length ? `<p class="muted">The grant has changed since last month: ${esc(why.join("; "))}.</p>` : ""}
       ${c.council.repay ? `<p class="warn">Emergency appropriation: $${c.council.repay.n}k comes off each of the next ${plural(c.council.repay.left, "grant")}.</p>` : ""}
@@ -720,6 +750,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       ${inc.kind === "riot" ? (() => { const g = guardsReady(c).slice(0, 8); return `<p>Site Security: <b>${g.length}</b> ${g.length === 1 ? "guard answers" : "guards answer"}${g.length ? ` (${g.map(x => esc(x.name)).join(", ")})` : ". Nobody is fit to respond"}. D-Class left: <b>${c.dclass}</b>.</p>`; })() : `
       ${c.tf.eta10 && inc.kind !== "escort" ? `<div class="row">${(["e11", "eta10"] as TaskForce[]).map(t => `<button class="act ${tfPick === t ? "on" : ""}" type="button" data-tf="${t}" aria-pressed="${tfPick === t}">${esc(TF_NAMES[t])}</button>`).join("")}</div>
         <p class="muted">A squad is one task force: ${esc(TF_DESC[tfPick])} You play one; the other can only go hands-off.</p>` : ""}
+      ${c.mtfs && inc.kind !== "escort" ? `<div class="mlabel">Which squad answers</div><div class="squadpick">${mtfsOf(c).flatMap(m => m.squads.map(sq => { const away = squadAway(c, sq.id), fit = ready().filter(o => o.squad === sq.id).length, on = (squadPick ?? defaultSquad()) === sq.id;
+          return `<button type="button" class="act ${on ? "on" : ""}" data-squadpick="${sq.id}" ${away ? `disabled title="${esc(away)}"` : ""} aria-pressed="${on}"><b>${esc(m.designation)} · ${esc(sq.name)}</b><span>${esc(SPECIALTIES[sq.specialty].name)} · ${away ? esc(away) : `${fit} fit`}</span></button>`; })).join("")}</div>` : ""}
       <p class="muted">Pick up to ${squadSize(c)} operatives. Only fully healed operatives can deploy; sanity carries over, so watch it.${inc.kind === "breach" ? " You can also send nobody and play it with the guards alone." : ""}</p>
       <div class="pick">${ops.length ? ops.map(o => `<label class="pickop ${chosen.has(o.id) ? "on" : ""}">
         <input type="checkbox" id="pick-${o.id}" data-pick="${o.id}" ${chosen.has(o.id) ? "checked" : ""} ${!chosen.has(o.id) && chosen.size >= squadSize(c) ? "disabled" : ""}>
@@ -736,10 +768,12 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
         <button class="act" type="button" id="dPlus" ${dCount >= Math.min(c.dclass, MAX_DCLASS) ? "disabled" : ""}>+</button>
         <span class="muted">of ${c.dclass} in holding</span>
       </div>`}
-      ${(() => { if (!c.tf.eta10 || !AUTO_KINDS.includes(inc.kind)) return "";
+      ${(() => { if (!(c.mtfs || c.tf.eta10) || !autoKinds(c).includes(inc.kind)) return "";
         const team = [...chosen].map(id => c.roster.find(o => o.id === id)!).filter(Boolean), w = canDispatch(c, inc, team);
+        const as = c.mtfs && team.length ? assessTeam(c, inc, team) : null;
         return `<div class="row"><button class="act" type="button" id="autoBtn" ${w ? `disabled title="${esc(w)}"` : ""}>Send them without you${w ? "" : ` · ${Math.round(dispatchOdds(c, inc, team) * 100)}% chance`}</button>
-          <span class="muted">${esc(w ?? "Like leaving it to Site Security: no manual control, and they can fail. Wounds, deaths and rewards come back in the debrief.")}</span></div>`; })()}
+          <span class="muted">${esc(w ?? "Like leaving it to Site Security: no manual control, and they can fail. Wounds, deaths and rewards come back in the debrief.")}</span></div>
+          ${as ? `<div class="assess"><span class="specs">Objective ${Math.round(as.primary * 100)}% · people ${Math.round(as.people * 100)}%</span><ul>${as.factors.map(([l, v]) => `<li class="${v >= 0 ? "good" : "bad"}">${v >= 0 ? "+" : "−"}${Math.abs(Math.round(v * 100))} ${esc(l)}</li>`).join("")}</ul></div>` : ""}`; })()}
       ${secondInGroup(c, inc) ? `<p class="warn">Another incident from this group is already answered: this one can only go to a team sent without you.</p>` : ""}
       <div class="row">
         <button class="act primary" type="button" id="launchBtn" ${secondInGroup(c, inc) ? "disabled" : chosen.size || ((inc.kind === "breach" || inc.kind === "riot" || inc.kind === "raid") && guardsReady(c).length) ? "" : "disabled"}>${inc.kind === "riot" ? `Send in ${plural(Math.min(8, guardsReady(c).length), "guard")}` : `Deploy ${plural(chosen.size, "operative")}`}${noD ? "" : ` and ${dCount} D-Class`}</button>
@@ -772,7 +806,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     const carry = (Object.keys(ITEMS) as ItemId[]).filter(i => !ITEMS[i].armor && ((c.inventory[i] || 0) > 0) && (g.armor === "armor_heavy" || !HEAVY.includes(i)));
     const slot = (i: number) => `<select id="gear-${o.id}-${i}" data-gear="${o.id}" data-slot-i="${i}" aria-label="${esc(o.name)} item slot ${i + 1}">
       <option value="">Empty slot</option>
-      ${carry.map(it => { const left = spare(it, o.id, i); return `<option value="${it}" ${g.items[i] === it ? "selected" : ""} ${left < 1 && g.items[i] !== it ? "disabled" : ""}>${ITEMS[it].name} (${Math.max(0, left)} left)</option>`; }).join("")}
+      ${carry.map(it => { const left = spare(it, o.id, i), q = qualifiedFor(c, o, it); return `<option value="${it}" ${g.items[i] === it ? "selected" : ""} ${(left < 1 && g.items[i] !== it) || q ? "disabled" : ""}>${ITEMS[it].name} (${q ? "not trained" : `${Math.max(0, left)} left`})</option>`; }).join("")}
     </select>`;
     const kinds = ARMOR_KINDS.filter(k => (c.inventory[k] || 0) > 0 || g.armor === k);
     return `<div class="loadrow"><b>${esc(o.call)} ${esc(fieldName(o))}</b>
@@ -789,7 +823,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   function worldTab() {
     const [x0, y0, w, h] = [8, 14, 344, 124];
     const path = (poly: [number, number][]) => "M" + poly.map(([lo, la]) => project(lo, la).map(v => v.toFixed(1)).join(",")).join("L") + "Z";
-    const [sx, sy] = project(SITE19.lon, SITE19.lat);
+    const [sx, sy] = project(siteOf19(c).lon, siteOf19(c).lat);
     const selInc = mapSel?.startsWith("inc:") ? c.incidents.find(i => i.id === mapSel!.slice(4)) ?? null : null;
     const selLead = mapSel?.startsWith("lead:") ? c.leads?.list.find(l => l.id === mapSel!.slice(5)) ?? null : null;
     const selFac = mapSel?.startsWith("fac:") ? FACILITIES_WORLD.find(f => f.id === mapSel!.slice(4)) ?? null : null;
@@ -797,7 +831,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     // zoom: every on-screen size is multiplied by k so markers and text stay the same size at any zoom
     // k: map units per "design pixel", from the zoom and the map's width on screen (bigger on a phone)
     const mapPx = Math.max(300, (document.querySelector(".geomap svg")?.clientWidth ?? (window.innerWidth < 960 ? window.innerWidth - 40 : window.innerWidth * 0.66)));
-    if (Math.abs(geoView.h / geoView.w - mapAspect()) > 0.01) { const [s19x] = project(SITE19.lon, SITE19.lat); geoView = clampView({ ...geoView, x: geoView.w >= WORLD_VIEW.w ? s19x - 80 : geoView.x }); }
+    if (Math.abs(geoView.h / geoView.w - mapAspect()) > 0.01) { const [s19x] = project(siteOf19(c).lon, siteOf19(c).lat); geoView = clampView({ ...geoView, x: geoView.w >= WORLD_VIEW.w ? s19x - 80 : geoView.x }); }
     const v = geoView, k = Math.max(0.25, v.w / mapPx * 2.6);
     const label = (r: RegionId) => REGIONS[r].name.replace("Western ", "W. ").replace("Eastern ", "E. ").replace("United States", "US").replace(" and the Middle East", " & M.E.");
     // regions as territories: the land inside each region's boxes, tinted by its exposure
@@ -1104,6 +1138,9 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     `;
   }
   /** Without a working lab there is no lab to stand in: the catalog and dossier, said plainly. */
+  function researchScreen() {
+    return `<div class="hubgrid"><section class="col">${researchCatalog()}</section><section class="col">${experimentsDossier()}</section></div>`;
+  }
   function researchTab() {
     return `<div class="card notice-nolab"><div class="label">No research lab</div><p>Site-19 has no research lab, so there is nowhere to do research. Build one on the Site-19 tab; researchers need a lab to work.</p><div class="row"><button class="act" type="button" data-goto="site">Site-19 →</button></div></div>
       <div class="hubgrid"><section class="col">${researchCatalog()}</section><section class="col">${experimentsDossier()}</section></div>`;
@@ -1730,9 +1767,144 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     `;
   }
   function personnelTab() {
-    if (!c.roster.some(x => x.id === opSel && x.alive)) opSel = c.roster.find(x => x.alive)?.id ?? null;
-    return `<div class="hubgrid screen-personnel"><section class="col">${personnelRoster()}</section><section class="col">${opDetail()}</section></div>`;
+    const q = quartersCtx();
+    return tab === "armory" ? armoryHtml(q) : barracksHtml(q);
   }
+  function quartersCtx(): QuartersCtx {
+    const entering = lastDrawn !== tab; lastDrawn = tab;
+    return { c, opSel, eqSlot, gearOf, fieldHp, dossier, archive, archiveHtml, entering };
+  }
+  /** Phase 5: the site's MTFs, their squads and people, from the board on the barracks wall. */
+  function orgPanel(head: (t: string) => string) {
+    const ms = mtfsOf(c), cap = deployCap(c), max = squadRosterMax(c);
+    const lamp = (o: Operative) => { const t = o.busy ? "away" : injured(c, o) || tiredness(o) === "exhausted" ? "bad" : o.hp < o.maxHp || tiredness(o) === "tired" ? "warn" : "ok"; return `<i class="olamp t-${t}"></i>`; };
+    const moveSel = (o: Operative) => `<select data-sqmove="${o.id}" aria-label="Assign ${esc(o.name)}">${ms.flatMap(m => m.squads.map(sq => `<option value="${sq.id}" ${o.squad === sq.id ? "selected" : ""}>${esc(m.designation)} · ${esc(sq.name)}</option>`)).join("")}<option value="" ${o.squad ? "" : "selected"}>Reserve</option></select>`;
+    const row = (o: Operative) => `<li>${lamp(o)}<b>${esc(o.call)}</b><span class="who">${esc(fieldName(o))} <span class="muted">${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}${o.injury && o.injury.until > c.day ? ` · ${esc(o.injury.name)}` : o.busy ? ` · away ${o.busy.daysLeft} d` : ""}</span></span>${moveSel(o)}</li>`;
+    const reserve = c.roster.filter(o => o.alive && (!o.squad || !squadOfOp(c, o)));
+    const hist = (c.history ?? []).filter(h => h.cat === "deployment").slice(-5).reverse();
+    const kit = eligibleKit(c).map(i => `${ITEMS[i].name}: ${c.inventory[i] ?? 0}`).join(" · ");
+    const next = ms.length < MTF_CONFIG.maxMtfs ? (["bio", "heavy", "recon"] as const).map(sp => ({ sp, why: specUnlock(c, sp) })) : [];
+    const newWhy = ms.length >= MTF_CONFIG.maxMtfs ? `At most ${MTF_CONFIG.maxMtfs} MTFs.` : c.council.standing < MTF_CONFIG.mtfStanding ? `Needs Council standing ${MTF_CONFIG.mtfStanding} (now ${c.council.standing}).` : c.funds < MTF_CONFIG.mtfCost ? `Needs $${MTF_CONFIG.mtfCost}k.` : next.every(x => x.why) ? "No other specialization is unlocked yet." : null;
+    return `${head(`Organization · ${esc(siteOf19(c).designation)}`)}
+      <div class="fbody org">
+      ${ms.map(m => `<section class="orgmtf">
+        <h4>${esc(m.designation)} "${esc(m.name)}"</h4>
+        <p class="specs">${esc(SPECS[m.spec].name)} · chartered ${dateText(m.founded)} · deploys ${cap} per squad (Foundation doctrine) · ${c.roster.filter(o => o.alive && m.squads.some(sq => sq.id === o.squad) && deployable(c, o)).length} fit of ${c.roster.filter(o => o.alive && m.squads.some(sq => sq.id === o.squad)).length}</p>
+        ${m.squads.map(sq => { const mem = squadMembers(c, sq.id), away = squadAway(c, sq.id), re = sq.retrainUntil && sq.retrainUntil > c.day;
+          return `<div class="orgsq">
+            <div class="sqhead"><input data-sqname="${sq.id}" value="${esc(sq.name)}" maxlength="24" aria-label="Squad name"><button type="button" class="act" data-sqrename="${sq.id}">Rename</button>
+              <select data-sqspec="${sq.id}" aria-label="Squad specialty">${SPECS[m.spec].specialties.map(id => `<option value="${id}" ${sq.specialty === id ? "selected" : ""}>${esc(SPECIALTIES[id].name)}</option>`).join("")}</select></div>
+            <p class="specs">${mem.length}/${max} on the roster · ${mem.filter(o => deployable(c, o)).length} fit to deploy${away ? ` · <b>${esc(away)}</b>` : ""}${re ? ` · <span class="warn">retraining, ${sq.retrainUntil! - c.day} d: specialist kit unusable</span>` : ""}</p>
+            <p class="muted">${esc(SPECIALTIES[sq.specialty].desc)} Retraining into another specialty takes about ${SQUAD_BALANCE.retrainDays} days at the training range; people keep the certifications they have.</p>
+            ${squadCapabilities(sq, mem)}
+            <ul class="orglist">${mem.map(row).join("") || `<li class="muted">Nobody assigned.</li>`}</ul>
+          </div>`; }).join("")}
+        ${(() => { const why = canAddSquad(c, m); return `<div class="row"><input id="newSq-${m.id}" maxlength="24" placeholder="New squad name"><select id="newSqSpec-${m.id}">${SPECS[m.spec].specialties.map(id => `<option value="${id}">${esc(SPECIALTIES[id].name)}</option>`).join("")}</select><button type="button" class="act" data-addsq="${m.id}" ${why ? `disabled title="${esc(why)}"` : ""}>Raise a squad · $${MTF_CONFIG.squadCost}k</button>${why ? `<span class="muted">${esc(why)}</span>` : ""}</div>`; })()}
+      </section>`).join("")}
+      <section class="orgmtf"><h4>Reserve · ${reserve.length}</h4><p class="muted">At the site but in no squad: rotate them in as people are hurt or tired. Recruit more at Command.</p><ul class="orglist">${reserve.map(row).join("") || `<li class="muted">Nobody in reserve.</li>`}</ul></section>
+      <section class="orgmtf"><h4>Specialist kit in stores</h4><p class="specs">${kit || "None. Squads' specialist kit is built at the workshop once a squad is trained for it."}</p></section>
+      <section class="orgmtf"><h4>Operational history</h4>${hist.length ? `<ul class="memorial">${hist.map(h => `<li>${dateText(h.day)}: ${esc(h.text)}</li>`).join("")}</ul>` : `<p class="muted">No deployments yet.</p>`}</section>
+      <section class="orgmtf"><h4>Another MTF</h4><p class="muted">${next.map(x => `${esc(SPECS[x.sp].name)}: ${x.why ? esc(x.why) : "unlocked"}`).join(" · ")}</p>
+        <div class="row"><button type="button" class="act" data-newmtf ${newWhy ? `disabled title="${esc(newWhy)}"` : ""}>Charter another MTF · $${MTF_CONFIG.mtfCost}k</button>${newWhy ? `<span class="muted">${esc(newWhy)}</span>` : ""}</div></section>
+      </div>`;
+  }
+
+  /** Version 12: what a squad's specialty lets it do, how far it has come, and what it costs, on the organization board. */
+  function squadCapabilities(sq: Squad, mem: Operative[]) {
+    const k = KITS[sq.specialty], stage = squadStage(sq), cert = mem.filter(o => (o.quals ?? []).includes(sq.specialty)).length;
+    const next = SQUAD_BALANCE.stageOps[Math.min(3, stage + 1)], drillWhy = canDrill(c, sq);
+    const tech = (id: string) => { const t = TECHS[id]; return `<li class="${t.incomplete ? "incomplete" : ""}"><b>${esc(t.name)}</b> <span class="specs">${t.ap} action${t.ap > 1 ? "s" : ""}${t.cooldown ? ` · squad cooldown ${t.cooldown}` : ""}${t.participants > 1 ? ` · ${t.participants} people` : ""}${t.consumes ? ` · uses ${esc(ITEMS[t.consumes].name.toLowerCase())}` : ""}</span><br><span class="muted">${esc(t.desc)}</span>${t.incomplete ? `<br><span class="warn">Not built yet: ${esc(t.incomplete)}</span>` : ""}</li>`; };
+    return `<div class="sqcap">
+      <div class="sqstage"><b>${SQUAD_BALANCE.stageNames[stage]}</b> <span class="specs">stage ${stage} · ${sq.mastery ?? 0} specialist operations${stage < 3 ? ` (next stage at ${next})` : ""} · ${cert}/${mem.length} certified${(sq.drillUntil ?? 0) > c.day ? ` · drilling, ${sq.drillUntil! - c.day} d` : ""}</span>
+        <button type="button" class="act" data-drill="${sq.id}" ${drillWhy ? `disabled title="${esc(drillWhy)}"` : ""}>Squad drill</button>${drillWhy ? `<span class="muted">${esc(drillWhy)}</span>` : ""}</div>
+      ${stage >= 3 && !sq.branch ? `<div class="row"><span class="specs">Veteran branch:</span><button type="button" class="act" data-branch="${sq.id}" data-b="speed">Operational speed</button><button type="button" class="act" data-branch="${sq.id}" data-b="reliability">Reliability</button></div>` : sq.branch ? `<p class="specs">Veteran branch: ${sq.branch === "speed" ? "operational speed (techniques recover a turn sooner)" : "reliability (a quarter of kit uses come free)"}</p>` : ""}
+      <ul class="techs">${k.techs.map(tech).join("")}</ul>
+      <p class="${stage >= 1 ? "" : "muted"}"><b>${esc(k.passive.name)}</b>${stage >= 1 ? "" : " (from Drilled)"}: ${esc(k.passive.desc)}${k.passive.incomplete ? ` <span class="warn">${esc(k.passive.incomplete)}</span>` : ""}</p>
+      <p class="${stage >= 2 ? "" : "muted"}"><b>Grade 2</b>${stage >= 2 ? "" : " (from Proficient)"}: ${esc(k.grade2)}</p>
+      <p class="muted"><b>Kit:</b> ${k.certified.map(i => { const st = equipStatus(c, mem.find(o => (o.quals ?? []).includes(sq.specialty)) ?? mem[0], i); return `${esc(ITEMS[i].name)} ${c.inventory[i] ?? 0} in stores${st.ok || st.kind === "stock" ? "" : ` (${esc(st.reason!)})`}`; }).join(" · ") || "ordinary weapons and gear"}. <b>Hands-off:</b> ${esc(k.worldMap)} <b>Tradeoff:</b> ${esc(k.tradeoff)}</p>
+    </div>`;
+  }
+
+  /** The wall archive opened from the barracks: site staff, retired operatives, the memorial. */
+  function archiveHtml(k: string) {
+    const head = (t: string) => `<header class="filehead"><span class="eyebrow">Site-19 · Barracks</span><h3>${t}</h3><button type="button" class="x" data-archive="${k}" aria-label="Close">×</button></header>`;
+    if (k === "org") return orgPanel(head);
+    if (k === "staff") return `${head(`Site staff · ${plural(c.researchers, "researcher")}, ${plural(c.engineers, "engineer")}`)}
+      <p class="muted">Guards, training, therapy, D-Class, engineers and prisoners are managed from their facilities on the Site-19 tab.</p>
+      ${staffList("researcher")}${staffList("engineer")}
+      ${c.staffLost?.length ? `<div class="label" style="margin-top:8px">Staff lost</div><ul class="memorial">${c.staffLost.map(l => `<li><b>${esc(l.name)}</b>, ${l.kind}${l.field ? ` (${esc(FIELDS[l.field].name.toLowerCase())})` : l.trade ? ` (${esc(TRADES[l.trade].name.toLowerCase())})` : ""}: ${esc(l.how)}, ${dateText(l.day)}</li>`).join("")}</ul>` : ""}`;
+    if (k === "retired") return `${head("Retired")}<ul class="memorial">${(c.retired ?? []).map(r => `<li>${r.look ? portraitSvg(r.look, r.unit, 36) : ""} <b>${esc(r.name)}</b> (${esc(r.call)}), ${RANKS[r.rank]}${r.unit ? `, formerly ${esc(UNITS[r.unit].name)}` : ""} · ${plural(r.missions, "mission")}${r.kills ? `, ${plural(r.kills, "kill")}` : ""}${r.medals?.length ? ` · ${r.medals.map(m => MEDALS[m].name).join(", ")}` : ""} · ${r.trainer ? "trainer at the range" : "honourable discharge"}, ${dateText(r.day)}</li>`).join("") || `<li class="muted">Nobody has retired yet.</li>`}</ul>`;
+    const dead = c.roster.filter(o => !o.alive);
+    return `${head("In memoriam")}${dead.length ? `<ul class="memorial">${dead.map(o => `<li>${portraitSvg(lookOf(o), o.unit, 36, true)} <b>${esc(fieldName(o))}</b> (${esc(o.call)}), ${RANKS[o.rank]}${o.unit ? `, formerly ${esc(UNITS[o.unit].name)}` : ""}${o.bio ? `, of ${esc(o.bio.home)}` : ""} · ${plural(o.missions, "mission")}, ${plural(o.kills, "kill")}${o.wounds ? `, wounded ${o.wounds}×` : ""}${o.seals ? `, ${o.seals} sealed` : ""}${o.medals?.length ? ` · ${o.medals.map(m => MEDALS[m].name).join(", ")}` : ""} · killed ${o.diedDay ? dateText(o.diedDay) : ""}${o.diedAt ? `, ${esc(o.diedAt)}` : ""}</li>`).join("")}</ul>` : `<p class="muted">No Epsilon-11 operative has died under this command. The plaque is blank.</p>`}`;
+  }
+
+  /** An operative's personnel file, beside them in the barracks: only what has to be read as text. Their kit is
+   *  changed in the Armory, and their face and build show on the figure itself. */
+  function dossier(o: Operative) {
+    const pair = perkChoices(o), tw = canTherapy(c, o), bad = o.traits.filter(t => TRAITS[t].bad), ms = maxSanOf(o), next = RANK_XP[o.rank + 1], fh = fieldHp(o);
+    const needs = (promotionDue(o) && !o.cls) || !!pair;
+    const dtab = needs ? "perks" : dosTab;
+    const tabs: [string, string][] = [["record", "Record"], ["perks", needs ? "Promotion ▲" : "Perks & traits"], ["look", "Appearance"], ["admin", "Admin"]];
+    const bar = (label: string, v: number, max: number, cls: string) => `<div class="fbar ${cls}"><span>${label}</span><b>${v}/${max}</b><i style="--v:${Math.max(0, Math.min(1, v / max))}"></i></div>`;
+    const body = (() => {
+      switch (dtab) {
+        case "perks": return `
+          ${promotionDue(o) && !o.cls ? `<p><b>Choose a class.</b> It decides the abilities they learn from here on.</p>
+            <div class="classpick">${(Object.keys(CLASSES) as ClassId[]).map(k => `<button type="button" class="classopt" data-class="${k}">
+              <b>${CLASSES[k].name}</b><span class="muted">${CLASSES[k].role}</span>
+              <span class="specs">Starts with ${PERKS[CLASSES[k].base].name}: ${esc(PERKS[CLASSES[k].base].desc)}</span>
+              <span class="specs">Later: ${CLASSES[k].choices.map(p => p.map(x => PERKS[x].name).join(" or ")).join(" · ")}</span></button>`).join("")}</div>` : ""}
+          ${pair ? `<p><b>Choose a perk for ${RANKS[o.rank]}.</b></p>
+            <div class="classpick two">${pair.map(p => `<button type="button" class="classopt" data-perk="${p}"><b>${PERKS[p].name}</b><span class="muted">${esc(PERKS[p].desc)}</span></button>`).join("")}</div>` : ""}
+          ${o.cls ? `<ol class="tree">
+              <li><b>${PERKS[CLASSES[o.cls].base].name}</b> <span class="muted">${esc(PERKS[CLASSES[o.cls].base].desc)}</span></li>
+              ${CLASSES[o.cls].choices.map((p, i) => { const got = o.perks[i + 1]; return `<li>${RANKS[i + 2]}: ${got ? `<b>${PERKS[got].name}</b> <span class="muted">${esc(PERKS[got].desc)}</span>` : `<span class="muted">${p.map(x => PERKS[x].name).join(" or ")}${o.rank >= i + 2 ? " (choose above)" : ""}</span>`}</li>`; }).join("")}
+              ${[5, 6].map(r => `<li>${RANKS[r]}: <span class="${o.rank >= r ? "" : "muted"}">${RANK_BONUS[r]}</span></li>`).join("")}
+            </ol>` : !promotionDue(o) ? `<p class="muted">No class yet: they choose one on their first promotion.</p>` : ""}
+          <div class="label" style="margin-top:10px">Traits</div>
+          ${o.traits.length ? `<ul class="traits">${o.traits.map(t => `<li class="${TRAITS[t].bad ? "bad" : "good"}"><b>${TRAITS[t].name}</b>: ${esc(TRAITS[t].desc)} <span class="muted">${esc(TRAITS[t].how)}</span>
+            ${TRAITS[t].bad && !o.busy ? `<span class="muted">Treatable at Psychological services.</span>` : ""}</li>`).join("")}</ul>
+            ${bad.length && tw ? `<p class="muted">${esc(tw)}</p>` : ""}` : `<p class="muted">None yet. Traits come from what happens to them on missions.</p>`}
+          ${o.cls && !o.busy ? `<p class="muted">Retraining (a new class, keeping their rank) is arranged at the training range.</p>` : ""}`;
+        case "look": {
+          const l = lookOf(o), part = (key: string, label: string, value: string) => `<div class="lookrow"><span>${label}</span><button class="act" type="button" data-look="${key}" data-d="-1" aria-label="Previous ${label.toLowerCase()}">‹</button><b>${esc(value)}</b><button class="act" type="button" data-look="${key}" data-d="1" aria-label="Next ${label.toLowerCase()}">›</button></div>`;
+          return `<p class="muted">Changes show on them in the room as you make them.</p>` + part("sex", "Sex", SEX_NAMES[o.sex ?? "m"]) + part("skin", "Skin tone", `${l.skin + 1} of ${SKIN.length}`) + part("hair", "Hair", HAIR_STYLES[l.hair]) + part("hairColor", "Hair colour", `${l.hairColor + 1} of ${HAIR_COLORS.length}`)
+            + (o.sex === "f" ? "" : part("facial", "Facial hair", FACIAL[l.facial])) + part("scar", "Scar", l.scar ? "Yes" : "No") + (o.unit && HEADGEAR[o.unit] ? part("headgear", "Headgear", l.headgear ? HEADGEAR[o.unit]![0] : "None") : "")
+            + `<p class="muted">Helmets and suit hoods replace the headgear when armor is worn: set that in the Armory.</p>`;
+        }
+        case "admin": {
+          const tw2 = trainerWhy(c, o);
+          return `<div class="label">Rename</div><div class="renamegrid">
+              <label class="specs" for="renameName">Full name</label><input id="renameName" maxlength="40" value="${esc(o.name)}">
+              <label class="specs" for="renameNick">Nickname</label><input id="renameNick" maxlength="16" value="${esc(o.nick ?? "")}" placeholder="${o.rank >= NICK_RANK ? "none" : "given at Corporal"}">
+              <label class="specs" for="renameCall">Callsign</label><input id="renameCall" maxlength="12" value="${esc(o.call)}">
+              <span></span><button class="act" type="button" id="renameBtn">Save</button></div>
+            <p class="specs">Task force: <b>${esc(TF_NAMES[tfOf(o)])}</b> (for good, from hiring). ${esc(TF_DESC[tfOf(o)])}</p>
+            ${o.busy ? "" : `<div class="label" style="margin-top:10px">Retire</div><p class="muted">${tw2 ? `${esc(tw2)} They can still leave with an honourable discharge.` : "As a trainer at the range, new recruits arrive as Privates First Class while they're there."}</p>
+              <div class="row"><button class="act" type="button" data-retire="${o.id}">${tw2 ? "Honourable discharge" : "Retire as a trainer"}</button></div>`}`;
+        }
+        default: return `
+          ${o.busy ? `<p class="warn">${o.busy.kind === "therapy" ? "In therapy" : o.busy.kind === "travel" ? "Flying home" : o.busy.kind === "contract" ? "On contract" : "Retraining"}: ${plural(o.busy.daysLeft, "day")} left. Can't deploy until then.</p>` : ""}
+          <div class="fbars">${bar("Field HP", fh.hp, fh.max, "hp")}${bar("Sanity", o.san, ms, o.san <= ms * 0.3 ? "low" : "san")}${bar("Fatigue", o.fatigue ?? 0, 100, (o.fatigue ?? 0) >= FATIGUE.tired ? "low" : "fat")}${next !== undefined ? bar("XP", o.xp, next, "xp") : ""}</div>
+          <dl class="fstats"><dt>Aim</dt><dd>${aimOf(o)}</dd><dt>Blink</dt><dd>${Math.round(blinkFullOf(o) * 100)}%</dd><dt>Missions</dt><dd>${o.missions}</dd><dt>Kills</dt><dd>${o.kills}</dd><dt>Wounded</dt><dd>${o.wounds ?? 0}×</dd><dt>Sealed</dt><dd>${o.seals ?? 0}</dd></dl>
+          ${fh.why ? `<p class="specs">Field HP: ${esc(fh.why)}</p>` : ""}
+          ${o.injury && o.injury.until > c.day ? `<p class="warn">${esc(o.injury.name)} until ${dateText(o.injury.until)}</p>` : ""}
+          <p class="specs">Fatigue: ${tiredness(o)}; tired at ${FATIGUE.tired}, can't deploy at ${FATIGUE.exhausted}; −${FATIGUE.restPerDay} a day at Site-19${countOperational(c, "psych") ? `, −${FATIGUE.restPsych} more with psychological services` : ""}.</p>
+          ${o.unit ? `<p class="specs">Recruited from the ${esc(UNITS[o.unit].name)} (${esc(UNITS[o.unit].country)}) · ${LEANS[UNITS[o.unit].lean]}${o.bio ? ` · nationality ${esc(nationalityOf(o.bio.home))}` : ""}</p>` : ""}
+          ${o.bio ? `<p class="muted">Age ${o.bio.age + Math.floor((c.day - 1) / 365)}, from ${esc(o.bio.home)}. ${esc(o.bio.story)}</p>` : ""}
+          ${o.faced?.length ? `<p class="specs">Faced ${esc(o.faced.join(", "))}</p>` : ""}
+          ${o.medals?.length ? `<ul class="traits">${o.medals.map(m => `<li class="good"><b>${MEDALS[m].name}</b>: ${esc(MEDALS[m].bonus)} <span class="muted">${esc(MEDALS[m].how)}</span></li>`).join("")}</ul>` : ""}
+          ${bondsOf(o).length || o.lostBonds?.length ? `<p class="specs">Bonds: ${bondsOf(o).map(b => { const m = c.roster.find(x => x.id === b.id); return m ? `${BOND_NAMES[b.level]} with <b>${esc(m.name)}</b>${m.alive ? "" : " (fallen)"} (${b.n} missions together)` : ""; }).filter(Boolean).join("; ")}${o.lostBonds?.length ? `${bondsOf(o).length ? "; " : ""}lost: ${o.lostBonds.map(esc).join(", ")}` : ""}</p>` : ""}`;
+      }
+    })();
+    return `<header class="filehead">${portraitSvg(lookOf(o), o.unit, 64)}<div><span class="eyebrow">${esc(o.call)} · ${RANKS[o.rank]}${o.cls ? ` · ${CLASSES[o.cls].name}` : ""}</span><h3>${esc(fieldName(o))}</h3>
+        <span class="specs">${SEX_NAMES[o.sex ?? "m"]}${o.unit ? ` · ${esc(UNITS[o.unit].country)}` : ""} · ${esc(TF_NAMES[tfOf(o)])}</span></div>
+        <button type="button" class="x" data-op="${o.id}" aria-label="Close file">×</button></header>
+      <nav class="ftabs">${tabs.map(([k, l]) => `<button type="button" class="${dtab === k ? "on" : ""}" data-dostab="${k}" aria-pressed="${dtab === k}">${l}</button>`).join("")}</nav>
+      <div class="fbody">${body}</div>
+      <footer class="ffoot"><button type="button" class="act primary" data-gotoarmory="${o.id}">Kit them out in the Armory</button></footer>`;
+  }
+
 
 
   /** XCOM-style equipment: a row of slots, and the one clicked opens below with its stats and what can go in it. */
@@ -1974,7 +2146,46 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       flashMsg = ""; tab = "site"; speed = 0; render();
     });
     root.querySelectorAll<HTMLElement>("[data-hire]").forEach(b => b.onclick = () => { const k = c.recruits?.find(x => x.id === b.dataset.hire); if (k) change(() => hireCandidate(c, k, b.dataset.hiretf === "eta10" ? "eta10" : "e11")); });
-    root.querySelectorAll<HTMLElement>("[data-op]").forEach(b => b.onclick = () => { opSel = b.dataset.op!; lookOpen = false; render(); });
+    root.querySelectorAll<HTMLElement>("[data-op]").forEach(b => b.onclick = () => { if (opSel !== b.dataset.op) dosTab = "record"; opSel = tab === "personnel" && opSel === b.dataset.op ? null : b.dataset.op!; lookOpen = false; archive = null; reframe = true; render(); });
+    // Phase 5: the organization board, and the barracks and armory
+    root.querySelectorAll<HTMLSelectElement>("[data-sqmove]").forEach(sel => sel.onchange = () => { const o = c.roster.find(x => x.id === sel.dataset.sqmove); if (!o) return; const why = assignToSquad(c, o, sel.value || undefined); if (why) flashMsg = why; act.save(); render(); });
+    root.querySelectorAll<HTMLSelectElement>("select[data-sqspec]").forEach(sel => sel.onchange = () => { const sq = mtfsOf(c).flatMap(m => m.squads).find(x => x.id === sel.dataset.sqspec); if (sq) change(() => { retrainSquad(c, sq, sel.value as SpecialtyId); }); });
+    root.querySelectorAll<HTMLElement>("[data-sqrename]").forEach(b => b.onclick = () => { const sq = mtfsOf(c).flatMap(m => m.squads).find(x => x.id === b.dataset.sqrename), v = root.querySelector<HTMLInputElement>(`[data-sqname="${b.dataset.sqrename}"]`)?.value.trim(); if (sq && v) change(() => { sq.name = v; }); });
+    root.querySelectorAll<HTMLElement>("[data-addsq]").forEach(b => b.onclick = () => { const m = mtfsOf(c).find(x => x.id === b.dataset.addsq); if (!m) return; const nm = root.querySelector<HTMLInputElement>(`#newSq-${m.id}`)?.value ?? "", sp = root.querySelector<HTMLSelectElement>(`#newSqSpec-${m.id}`)?.value as SpecialtyId; change(() => { const why = addSquad(c, m, nm, sp); if (why) flashMsg = why; }); });
+    root.querySelectorAll<HTMLElement>("[data-newmtf]").forEach(b => b.onclick = () => act.newMtf());
+    root.querySelectorAll<HTMLElement>("[data-drill]").forEach(b => b.onclick = () => { const sq = mtfsOf(c).flatMap(m => m.squads).find(x => x.id === b.dataset.drill); if (sq) change(() => { const why = drillSquad(c, sq); if (why) flashMsg = why; }); });
+    root.querySelectorAll<HTMLElement>("[data-branch]").forEach(b => b.onclick = () => { const sq = mtfsOf(c).flatMap(m => m.squads).find(x => x.id === b.dataset.branch); if (sq) change(() => chooseBranch(sq, b.dataset.b as "speed" | "reliability")); });
+    root.querySelectorAll<HTMLElement>("[data-dostab]").forEach(b => b.onclick = () => { dosTab = b.dataset.dostab!; reframe = false; render(); });
+    root.querySelectorAll<HTMLElement>("[data-archive]").forEach(b => b.onclick = () => { archive = archive === b.dataset.archive ? null : b.dataset.archive!; if (archive) opSel = null; reframe = true; render(); });
+    const toArmory = (id?: string) => { if (id) opSel = id; eqSlot = null; tab = "armory"; try { localStorage.setItem("site19-tab", tab); } catch { /* fine */ } render(); };
+    root.querySelectorAll<HTMLElement>("[data-gotoarmory]").forEach(b => b.onclick = () => {
+      const stage = root.querySelector<HTMLElement>("[data-stage=barracks]");
+      if (stage && !b.dataset.gotoarmory) leaveToward(stage, "barracks", -BARRACKS_ROOM.w / 2 + 90, -BARRACKS_ROOM.d / 2, () => toArmory());
+      else toArmory(b.dataset.gotoarmory);
+    });
+    root.querySelectorAll<HTMLElement>("[data-gotobarracks]").forEach(b => b.onclick = () => { tab = "personnel"; reframe = true; try { localStorage.setItem("site19-tab", tab); } catch { /* fine */ } render(); });
+    root.querySelectorAll<HTMLElement>("[data-resfocus]").forEach(b => b.onclick = () => {
+      const id = b.dataset.resfocus!, find = () => root.querySelector<HTMLElement>(`[data-assign="${id}"]`)?.closest<HTMLElement>(".proj") ?? null;
+      let card = find();
+      if (!card) { resCat = researchCat(id); render(); card = find(); }   // it's under another category tab
+      if (!card) return;
+      card.scrollIntoView({ behavior: "smooth", block: "center" }); card.classList.remove("flash"); void card.offsetWidth; card.classList.add("flash");
+    });
+    root.querySelectorAll<HTMLElement>("[data-armsel]").forEach(b => b.onclick = () => { opSel = b.dataset.armsel!; eqSlot = null; render(); });
+    root.querySelectorAll<HTMLElement>("[data-shelfitem]").forEach(b => b.onclick = () => {
+      const o = c.roster.find(x => x.id === opSel) ?? c.roster.find(x => x.alive); if (!o) return;
+      const g = gearOf(o.id), slots = o.perks.includes("field_kit") ? 3 : 2, item = b.dataset.shelfitem as ItemId;
+      let i = eqSlot?.startsWith("item") ? Number(eqSlot.slice(4)) : -1;
+      if (i < 0) i = Array.from({ length: slots }, (_, k) => k).find(k => !g.items[k]) ?? -1;
+      if (i < 0) { eqSlot = "item0"; flashMsg = ""; render(); return; }   // every slot full: pick which one to swap
+      opSel = o.id; eqSlot = `item${i}`;
+      change(() => { g.items[i] = g.items[i] === item ? "" : item; });
+    });
+    root.querySelectorAll<HTMLElement>("[data-squadpick]").forEach(b => b.onclick = () => {
+      squadPick = b.dataset.squadpick!; chosen.clear();
+      const pl = c.incidents.find(i => i.id === planning); if (pl) for (const o of readyFor(pl).slice(0, squadSize(c))) chosen.add(o.id);
+      render();
+    });
     const opNow = () => c.roster.find(x => x.id === opSel)!;
     root.querySelectorAll<HTMLElement>("[data-class]").forEach(b => b.onclick = () => change(() => chooseClass(c, opNow(), b.dataset.class as ClassId)));
     root.querySelectorAll<HTMLElement>("[data-perk]").forEach(b => b.onclick = () => change(() => choosePerk(c, opNow(), b.dataset.perk as PerkId)));
@@ -1985,7 +2196,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     root.querySelectorAll<HTMLElement>("[data-post]").forEach(b => b.onclick = () => { const g = c.guards.find(x => x.id === b.dataset.post); if (g) run({ type: "postGuard", guardId: g.id, stationId: b.dataset.station! }); });
     root.querySelectorAll<HTMLElement>("[data-rescat]").forEach(b => b.onclick = () => { resCat = b.dataset.rescat as ResearchCat; resCatPicked = true; render(); });
     root.querySelectorAll<HTMLElement>("[data-eqslot]").forEach(b => b.onclick = () => { eqSlot = eqSlot === b.dataset.eqslot ? null : b.dataset.eqslot!; render(); });
-    root.querySelectorAll<HTMLElement>("[data-fitatt]").forEach(b => b.onclick = () => run({ type: "fitAttachment", opId: opNow().id, attachment: b.dataset.fitatt as AttachmentId | "" }));
+    root.querySelectorAll<HTMLElement>("[data-fitatt]").forEach(b => b.onclick = () => { if (tab === "armory") eqSlot = null; run({ type: "fitAttachment", opId: opNow().id, attachment: b.dataset.fitatt as AttachmentId | "" }); });
     root.querySelectorAll<HTMLElement>("[data-loadammo]").forEach(b => b.onclick = () => change(() => loadAmmo(c, opNow(), b.dataset.loadammo as AmmoId | "")));
     root.querySelectorAll<HTMLElement>("[data-kitarmor]").forEach(b => b.onclick = () => change(() => { const g = gearOf(opNow().id); g.armor = b.dataset.kitarmor as ItemId | ""; if (g.armor !== "armor_heavy") g.items = g.items.map(i => (i && HEAVY.includes(i) ? "" : i)); }));
     root.querySelectorAll<HTMLElement>("[data-kititem]").forEach(b => b.onclick = () => change(() => { gearOf(opNow().id).items[Number((eqSlot ?? "item0").slice(4))] = b.dataset.kititem as ItemId | ""; }));
@@ -2049,6 +2260,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       else { const kk = k as keyof typeof LOOK_PARTS, n = LOOK_PARTS[kk]; (l as unknown as Record<string, unknown>)[kk] = (((l as unknown as Record<string, number | undefined>)[kk] ?? 0) + d + n) % n; }
       change(() => { o.look = l; });
     });
+    on("menuBtn", () => act.menu());
     on("renameBtn", () => {
       const o = c.roster.find(x => x.id === opSel), n = root.querySelector<HTMLInputElement>("#renameName")!.value.trim(), k = root.querySelector<HTMLInputElement>("#renameCall")!.value.trim();
       const nk = root.querySelector<HTMLInputElement>("#renameNick")!.value.trim().replace(/"/g, "");
@@ -2155,7 +2367,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     }
     root.querySelectorAll<HTMLElement>("[data-zoom]").forEach(b => b.onclick = () => {
       const z = b.dataset.zoom, cx = geoView.x + geoView.w / 2, cy = geoView.y + geoView.h / 2;
-      if (z === "world") { const [s19x] = project(SITE19.lon, SITE19.lat); geoView = clampView({ x: s19x - WORLD_VIEW.w / 2, y: WORLD_VIEW.y, w: WORLD_VIEW.w, h: 0 }); }
+      if (z === "world") { const [s19x] = project(siteOf19(c).lon, siteOf19(c).lat); geoView = clampView({ x: s19x - WORLD_VIEW.w / 2, y: WORLD_VIEW.y, w: WORLD_VIEW.w, h: 0 }); }
       else { const nw = geoView.w * (z === "in" ? 1 / 1.5 : 1.5); geoView = clampView({ x: cx - nw / 2, y: cy - nw * mapAspect() / 2, w: nw, h: 0 }); }
       render();
     });
@@ -2172,6 +2384,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       if (planning) speed = 0;   // nothing expires while a plan is being made
       const pl = c.incidents.find(i => i.id === planning);
       if (planning && pl?.kind === "escort") chosen.clear();
+      if (planning) squadPick = null;
       if (planning && !chosen.size && pl) for (const o of readyFor(pl).slice(0, squadSize(c))) chosen.add(o.id);
       render();
     });

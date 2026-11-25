@@ -5,7 +5,9 @@ export type { ClassId, PerkId, TraitId };
 /** Class abilities plus Secure, which every operative can do. */
 export type OptionalId = "ledger" | "radio" | "civilians" | "nocas" | "allwitnesses" | "nolosses" | "staff";
 export type AbilityId = PerkId | "cutradio" | "secure" | "dose" | "lockdown" | "doors" | "siren" | "calm" | "restrain" | "pickup" | "drop" | "exfil" | "hunker" | "recover" | "restore" | "scan"
-  | "hood" | "lead096" | "score" | "shake" | "casemask";
+  | "hood" | "lead096" | "score" | "shake" | "casemask"
+  // Version 12 squad techniques (see game/squadtech.ts)
+  | `sq_${string}`;
 
 import type { AmmoId, AttachmentId, WeaponType } from "../data/weapons";
 export type { AmmoId, AttachmentId, WeaponType };
@@ -13,16 +15,22 @@ export type { AmmoId, AttachmentId, WeaponType };
 export type ItemId = "armor" | "armor_light" | "armor_heavy" | "hazmat" | "leadsuit"
   | "contsuit" | "incendiary" | "flamer" | "flare" | "eyedrops" | "flashbang" | "smoke" | "tracker" | "frag" | "csgas" | "bazooka" | "law" | "medkit" | "camera" | "restraints" | "darts" | "ward"
   // Phase 4B capture kit, issued for the mission's anomaly
-  | "hood" | "folder" | "noisemaker" | "case";
+  | "hood" | "folder" | "noisemaker" | "case"
+  // Phase 5 squad-specialist kit: Breach Response charges, Containment Security barricades
+  | "breach_charge" | "barricade"
+  // Version 12 squad kit: stretchers, cordons, firebreaks, decon, sample cases, demolition charges, sandbags, field tags
+  | "stretcher" | "cordon_kit" | "firebreak_kit" | "decon_agent" | "sample_case" | "demo_charge" | "sandbags" | "field_tags";
 /** Items thrown or fired at a tile, and the heavy weapons among them (heavy armor only). */
-export const THROWN: ItemId[] = ["frag", "flashbang", "smoke", "csgas", "bazooka", "law", "flare", "incendiary", "flamer", "noisemaker"];
+export const THROWN: ItemId[] = ["frag", "flashbang", "smoke", "csgas", "bazooka", "law", "flare", "incendiary", "flamer", "noisemaker", "breach_charge", "barricade", "demo_charge", "sandbags", "cordon_kit", "firebreak_kit", "decon_agent", "field_tags", "sample_case"];
+/** Kit placed against the tile beside the operative rather than thrown. */
+export const PLACED: ItemId[] = ["breach_charge", "barricade", "demo_charge", "sandbags", "cordon_kit", "firebreak_kit", "decon_agent", "field_tags", "sample_case"];
 export const HEAVY: ItemId[] = ["bazooka", "law", "flamer"];
 
 /** The weapon a unit carries into a mission. */
 export interface Gun { name: string; type: WeaponType; dmg: [number, number]; mag: number; ammo: number; aim: number; attachment?: AttachmentId;
   /** Armor points every hit ignores (coil weapons, armor-piercing rounds), and special ammunition loaded. */
   pierce?: number; ammoType?: AmmoId; }
-export interface Carried { id: ItemId; uses: number; }
+export interface Carried { id: ItemId; uses: number; /** Version 12: the squad's shared stock, the same object in every member's items. */ shared?: boolean; }
 
 /** Anomalies that are objects: no will and no legs. They never get out on their own; a "breach" of one is a theft. */
 export const OBJECT_SCPS: readonly string[] = ["500", "914", "005"];
@@ -156,6 +164,11 @@ export interface Unit {
   suppressedUntil?: number;
   /** Tactical overhaul T4.6: who is suppressing them (moving draws that unit's shot). */
   suppressedBy?: string;
+  /** Version 12 squad specialty in the field: the squad, its specialty and stage, the MTF's family, whether this
+   *  operative is certified for the squad's kit, and the Veteran branch. */
+  squadId?: string; specialty?: import("../data/mtf").SpecialtyId; stage?: number; mtfSpec?: import("../data/mtf").SpecId; qualified?: boolean; branch?: "speed" | "reliability";
+  /** Technique states: stretcher carry this turn, covering lane, emplaced gun, braced, observation post, bleed grace used. */
+  evacTurn?: number; laneTurn?: number; emplaced?: boolean; anchoredUntil?: number; observing?: boolean; graceUsed?: boolean;
   markedUntil?: number;
   overwatchShots?: number;
   /** Per-mission and per-turn ability bookkeeping. */
@@ -198,7 +211,7 @@ export type Effect =
   | { type: "jolt"; t0: number; dur: number; mag: number; color: string }
   | { type: "banner"; t0: number; dur: number; text: string; color: string }
   // a one-off moment with its own look and sound: a reload, SCP-173's crack, SCP-106 rising, SCP-049 raising a body
-  | { type: "cue"; t0: number; dur: number; x: number; y: number; cue: "reload" | "crack" | "rise" | "raise" | "blink" };
+  | { type: "cue"; t0: number; dur: number; x: number; y: number; cue: "reload" | "crack" | "rise" | "raise" | "blink" | "place" };
 
 /** One operative as sent from Site-19. */
 export interface SquadMember {
@@ -214,6 +227,7 @@ export interface SquadMember {
   rankShort?: string;
   /** Phase 3J: Eta-10's video goggles, and staff who come along in a support role. */
   goggles?: boolean;
+  squadId?: string; specialty?: import("../data/mtf").SpecialtyId; stage?: number; mtfSpec?: import("../data/mtf").SpecId; qualified?: boolean; branch?: "speed" | "reliability";
   specialist?: "researcher" | "amnestics";
   /** Bonded squadmates on this mission (operative id to bond level). */
   bonds?: Record<string, number>;
@@ -233,6 +247,10 @@ export interface MissionMods {
 export interface MissionSetup {
   /** Seed for the mission's own random stream (Tactical overhaul T0): the same seed and orders replay the same fight. */
   seed?: number;
+  /** Version 12: a campaign with player MTFs (specialist kit and techniques follow its rules), and the deployed
+   *  squad's shared specialist stock. */
+  mtfRules?: boolean;
+  kit?: Partial<Record<ItemId, number>>;
   /** A tactical lab sandbox (T6.2): never ends on its own. */
   lab?: boolean;
   kind: MissionKind;
@@ -299,6 +317,8 @@ export interface MissionSetup {
 
 export interface MissionResult {
   incidentId: string;
+  /** Version 12: squad kit coming home, squads that used their specialty, clues and samples gathered, collateral. */
+  kitLeft?: Partial<Record<ItemId, number>>; techSquads?: string[]; clues?: number; samples?: number; collateral?: number;
   /** Phase 4B: won by killing every SCP-939 instance, so nothing was taken alive. */
   noSpecimen?: boolean;
   win: boolean;
@@ -448,6 +468,14 @@ export interface MissionState {
   enemyTurn?: { shots: number; hits: number; hurt: Record<string, number>; lost: string[]; start: Record<string, string> };
   enemySummary?: string;
   lockedDoors: number[];
+  /** Version 12 squad techniques: cooldowns per squad, cordoned and firebreak tiles, enemy trails, techniques and
+   *  squads that used them, clues and samples for the debrief, marks, silent turns, structural collateral. */
+  squadCd?: Record<string, number>; cordon?: Set<number>; firebreak?: Map<number, number>;
+  trails?: Map<number, { turn: number; dir: number; who: string; tagged?: boolean }>;
+  /** Version 12 kit placed on tiles, for the map's art: what was put where. */
+  placedKit?: Map<number, "barricade" | "sandbags" | "rehung">;
+  techUsed?: string[]; techSquads?: string[]; clues?: number; samples?: number; marks?: Set<number>; silent?: Record<string, number>; collateral?: number; observed?: string[];
+  sharedKit?: Carried[];
   /** Escorts: the Insurgency got the truck open. */
   stolen?: boolean;
   /** Fire on the map (tile index → last turn it burns), and SCP-610's flesh and its core. */

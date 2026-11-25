@@ -1,3 +1,5 @@
+import { homeRegion, qualifiedFor, recordMastery, squadById, squadOfOp, squadStage, tickOrg } from "./org";
+import { EQUIP, KITS, SQUAD_BALANCE } from "../data/specialties";
 import { freshSeed, rnd, setCampaignSeed } from "../core/rng";
 import { fieldMap } from "../data/maps";
 // Site-19 between missions: the roster, time passing, funding, public exposure and incidents.
@@ -70,6 +72,12 @@ export interface Operative {
   lostBonds?: string[];
   /** Which task force they serve with (unset: Epsilon-11). */
   tf?: TaskForce;
+  /** Phase 5: the squad they're assigned to (an id from one of the site's MTFs), and an operative on loan to the
+   *  site for the opening mission only. */
+  squad?: string;
+  loan?: boolean;
+  /** Version 12: squad specialties this operative is certified in. Kept when they change squads. */
+  quals?: import("../data/mtf").SpecialtyId[];
   /** The kit they take on missions by default: armor and item slots (taken from stores when they deploy). */
   kit?: { armor: ItemId | ""; items: (ItemId | "")[] };
   /** Given on making Corporal; the player can change it. */
@@ -197,6 +205,12 @@ export interface Campaign {
   outbound?: { incId: string; region: RegionId; depart: number; arrive: number; setup: MissionSetup; tf: string };
   /** Eta-10 and Nu-7, field agents, and relations with the other Foundation sites. */
   tf: TfState;
+  /** Phase 5: the player's own site (unset: the legacy Site-19), their MTFs, and where a new campaign's opening is. */
+  site?: import("./org").Site;
+  mtfs?: import("./org").Mtf[];
+  phase?: import("./org").Phase;
+  /** The Epsilon-11 detachment loaned for the opening mission, gone back to Foundation duty: who and how it went. */
+  loanReturned?: { day: number; names: string[]; lost: string[] };
   /** The Chaos Insurgency's global agenda, operations, commander and moles. */
   chaos: ChaosState;
   /** Standing with the O5 Council, its orders, requests and transfers. */
@@ -474,6 +488,7 @@ export const monthlyFunding = (c: Campaign) => councilGrant(c) + frontsFunding(c
 /** Advance one day. Returns true if something happened that needs the player's attention. */
 export function advanceDay(c: Campaign) {
   if (c.over) return false;
+  tickOrg(c);
   // with a squad in the air, anything at Site-19 is Site Security's problem
   answerWhileAway(c);
   // a breach is answered on the spot: time stands still until it's dealt with
@@ -541,6 +556,7 @@ export function advanceDay(c: Campaign) {
     earn(c, grant, "council", `${monthName(c.day)} grant`);
     for (const r of REGION_IDS) earn(c, regionFunding(c, r), "fronts", REGIONS[r].front);
     spend(c, up.facilities, "upkeep", "Facility upkeep"); spend(c, up.operatives + up.guards, "salaries", "Operatives' and guards' pay"); spend(c, up.alert, "alert", `${ALERTS[c.alert].name} alert`);
+    if (up.supply) spend(c, up.supply, "upkeep", "Supply routes to a remote site");
     if (has(c, "front_accounting")) earn(c, fronts - REGION_IDS.reduce((a, r) => a + regionFunding(c, r), 0), "fronts", "Front accounting");
     c.lastGrant = { ...gp, standingNow: c.council.standing };
     if (c.council.repay) { c.council.repay.left--; if (c.council.repay.left <= 0) c.council.repay = undefined; }
@@ -586,7 +602,7 @@ function tickMorale(c: Campaign) {
   if (c.morale < MORALE.riotBelow && c.dclass >= 3 && !c.incidents.some(i => i.kind === "riot") && rnd() < (MORALE.riotBelow - c.morale) / 600) startRiot(c);
 }
 export function startRiot(c: Campaign) {
-  const inc: Incident = { id: "inc" + c.nextIncident, kind: "riot", scpId: "", region: HOME, map: "dblock", appeared: c.day, expires: c.day, insurgents: 0,
+  const inc: Incident = { id: "inc" + c.nextIncident, kind: "riot", scpId: "", region: homeRegion(c), map: "dblock", appeared: c.day, expires: c.day, insurgents: 0,
     title: `Incident ${String(c.nextIncident).padStart(3, "0")}: Riot in the D-Class block` };
   c.nextIncident++; c.incidents.push(inc);
   log(c, "The D-Class block is rioting. Site Security has to put it down, or you can leave it to them.", "bad", "command");
@@ -777,7 +793,8 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     if (kind) take(kind);
     const st = kind ? armorStats(kind, c.armorTier) : { hp: 0, points: 0, move: 0 };
     // heavy weapons only go with heavy armor
-    const items = l.items.filter(i => kind === "armor_heavy" || !HEAVY.includes(i));
+    // and specialist kit only goes with someone whose squad is trained for it (Phase 5)
+    const items = l.items.filter(i => (kind === "armor_heavy" || !HEAVY.includes(i)) && !qualifiedFor(c, o, i));
     items.forEach(take);
     const uni = uniformOf(c), bonus = st.hp + uni.hp;
     return {
@@ -785,6 +802,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
       rankShort: RANK_SHORT[o.rank], maxSan: maxSanOf(o), aim: aimOf(o) + (has(c, "marksmanship") ? 5 : 0) + (tfOf(o) === "e11" ? TF_BONUS.e11Aim : 0), blinkFull: blinkFullOf(o), medals: [...(o.medals ?? [])],
       armor: st.points + uni.points, hasArmor: !!kind || uni.points > 0, armorKind: kind || undefined, armorHp: st.hp + uni.hp, moveBonus: st.move + (o.fleet ? 1 : 0), items: items.map(id => ({ id, uses: ITEMS[id].uses ?? 1 })),
       cls: o.cls, perks: [...o.perks], traits: [...o.traits], gun: gunFor(c, o), goggles: tfOf(o) === "eta10", bonds: undefined as Record<string, number> | undefined,
+      ...squadFields(c, o),
     };
   }).map(m => {
     if (m.goggles) m.aim += GOGGLES.aim;
@@ -819,6 +837,7 @@ export function buildSetup(c: Campaign, inc: Incident, loadouts: Loadout[], dCou
     hp: 6, maxHp: 6, san: 70, maxSan: 70, aim: 55, blinkFull: 0.12, armor: 0, hasArmor: false, items: [], perks: [], traits: [],
     gun: { name: "M1 Carbine", type: "carbine" as const, dmg: [2, 4] as [number, number], mag: 5, ammo: 5, aim: 0 }, armorHp: 0 })) : [];
   return {
+    mtfRules: !!c.mtfs, kit: c.mtfs ? drawSquadKit(c, loadouts.map(l => c.roster.find(x => x.id === l.opId)).filter((o): o is Operative => !!o)) : undefined,
     kind, scp: (inc.scpId || "173") as ScpId, map: inc.map, amnestics, seed: (rnd() * 4294967296) >>> 0,
     night: away ? true : nightAt(c, inc), weather: missionWeather(c, inc),
     site: inc.site, records: away ? 2 : undefined, survivors: inc.kind === "rescue" ? inc.survivors : undefined,
@@ -869,6 +888,7 @@ export interface Debrief { lines: string[]; promotions: string[]; }
 export function applyResult(c: Campaign, r: MissionResult): Debrief {
   const lines: string[] = [], promotions: string[] = [];
   const inc = c.incidents.find(i => i.id === r.incidentId);
+  squadDebrief(c, r, inc, lines);
   c.incidents = c.incidents.filter(i => i.id !== r.incidentId);
   c.activeIncident = undefined;
   const name = inc ? inc.title.split(":")[0] : "Incident";
@@ -949,7 +969,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     c.dclass = Math.max(0, c.dclass - r.straysLost - r.straysEscaped);
     dclassDied(c, r.straysLost);
     if (r.straysLost) lines.push(`${plural(r.straysLost, "D-Class")} from the block ${r.straysLost > 1 ? "were" : "was"} lost in the breach.`);
-    if (r.straysEscaped) { addExposure(c, HOME, 3 * r.straysEscaped); lines.push(`${plural(r.straysEscaped, "D-Class")} got out of Site-19 and will talk (+${3 * r.straysEscaped} exposure in the Eastern US).`); }
+    if (r.straysEscaped) { addExposure(c, homeRegion(c), 3 * r.straysEscaped); lines.push(`${plural(r.straysEscaped, "D-Class")} got out of Site-19 and will talk (+${3 * r.straysEscaped} exposure in the Eastern US).`); }
   }
   // material for studies, brought home from a won mission
   if (r.win) { addMaterial(c, "ciWeapons", r.insurgentsDown); addMaterial(c, "tissue", r.zombiesKilled); }
@@ -975,7 +995,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
     if (role === "researcher") { const who = losePeople(c, "researcher", 1, `killed in the field with Epsilon-11 (${name})`, person); lines.push(`${who[0] ?? "The field researcher"}, who went with the team as field researcher, didn't come back.`); }
     else lines.push("The amnestics specialist who went with the team didn't come back.");
   }
-  const region = inc?.region ?? HOME, where = REGIONS[region].name;
+  const region = inc?.region ?? homeRegion(c), where = REGIONS[region].name;
   const kind = inc?.kind ?? "breach";
   c.amnestics = Math.max(0, c.amnestics - r.amnesticsUsed);
   if (r.win) {
@@ -1038,7 +1058,7 @@ export function applyResult(c: Campaign, r: MissionResult): Debrief {
   for (const o of r.optional ?? []) {
     if (!o.met) { lines.push(`Optional objective missed: ${o.text.replace(/ \([A-Z]\)/g, "")}.`); continue; }
     const got = o.id === "ledger" ? (gainIntel(c, 2), "+2 Intel") : o.id === "radio" ? (addThreat(c, -1, "a cell cut off before it could call for help"), "the Insurgency's agenda −1")
-      : o.id === "allwitnesses" ? (addExposure(c, inc?.region ?? HOME, -5), "−5 more exposure") : (addStanding(c, 2, `optional objective: ${o.text.toLowerCase()}`), "+2 standing");
+      : o.id === "allwitnesses" ? (addExposure(c, inc?.region ?? homeRegion(c), -5), "−5 more exposure") : (addStanding(c, 2, `optional objective: ${o.text.toLowerCase()}`), "+2 standing");
     lines.push(`Optional objective met: ${o.text.replace(/ \([A-Z]\)/g, "")} (${got}).`);
   }
   lines.push(...afterMission(c, r));
@@ -1096,10 +1116,52 @@ export function resolveInterrupted(c: Campaign) {
   const inc = c.incidents.find(i => i.id === c.activeIncident);
   c.incidents = c.incidents.filter(i => i.id !== c.activeIncident);
   c.activeIncident = undefined;
-  addExposure(c, inc?.region ?? HOME, 20);
+  addExposure(c, inc?.region ?? homeRegion(c), 20);
   c.stats.lost++;
   log(c, "Contact with the last deployment was lost. The incident had to be covered up (+20 exposure there).", "bad");
   if (inc?.transfer) log(c, transferFought(c, inc.transfer, false), "bad");
   else if (inc?.scpId) resolveScp(c, inc, false);
   checkOver(c);
+}
+
+// ---------- Version 12: the deployed squad's specialty, its kit pool, and what comes home ----------
+/** What a soldier brings of their squad into the mission: its id, specialty (not while retraining), stage, MTF
+ *  family, their own certification and the Veteran branch. */
+function squadFields(c: Campaign, o: Operative) {
+  const at = squadOfOp(c, o);
+  if (!at) return {};
+  const sq = at.squad, training = (sq.retrainUntil ?? 0) > c.day;
+  return { squadId: sq.id, specialty: training ? undefined : sq.specialty, stage: squadStage(sq), mtfSpec: at.mtf.spec, qualified: (o.quals ?? []).includes(sq.specialty), branch: sq.branch };
+}
+/** The squad's shared specialist kit for this mission, taken from site stores: what its specialty is certified for,
+ *  at most 2 major bundles (3 at Proficient) and one of each smaller item (2 at Proficient). Specialty never
+ *  creates stock (design T04). */
+export function drawSquadKit(c: Campaign, ops: Operative[]) {
+  const kit: Partial<Record<ItemId, number>> = {};
+  const squads = [...new Set(ops.map(o => squadOfOp(c, o)).filter(x => !!x && !((x.squad.retrainUntil ?? 0) > c.day)))];
+  for (const at of squads) {
+    const sq = at!.squad, stage = squadStage(sq), cert = KITS[sq.specialty].certified.filter(i => EQUIP[i] && !ITEMS[i].armor && (EQUIP[i]!.year <= yearOf(c.day)));
+    if (!ops.some(o => o.squad === sq.id && (o.quals ?? []).includes(sq.specialty))) continue;   // nobody certified to use it
+    let majors = SQUAD_BALANCE.kitMajors + (stage >= 2 ? SQUAD_BALANCE.kitMajorsProficient : 0);
+    for (const i of cert) {
+      const stock = c.inventory[i] ?? 0, cap = EQUIP[i]!.major ? majors : stage >= 2 ? 2 : 1;
+      const n = Math.min(stock, cap); if (n <= 0) continue;
+      kit[i] = (kit[i] ?? 0) + n; c.inventory[i] = stock - n;
+      if (EQUIP[i]!.major) majors -= n;
+    }
+  }
+  return kit;
+}
+function squadDebrief(c: Campaign, r: MissionResult, inc: Incident | undefined, lines: string[]) {
+  const back = Object.entries(r.kitLeft ?? {}).filter(([, n]) => (n ?? 0) > 0);
+  // Biological Containment doctrine: on an outbreak, cordon kits and suits are sometimes salvaged
+  for (const [i, n] of back) c.inventory[i as ItemId] = (c.inventory[i as ItemId] ?? 0) + (n ?? 0);
+  if (back.length) lines.push(`Squad kit back in stores: ${back.map(([i, n]) => `${n} × ${ITEMS[i as ItemId].name}`).join(", ")}.`);
+  if (inc?.kind === "outbreak" && r.techSquads?.some(id => squadById(c, id)?.mtf.spec === "bio") && rnd() < 0.2) { c.inventory.cordon_kit = (c.inventory.cordon_kit ?? 0) + 1; lines.push("Biological Containment doctrine: a cordon kit is salvaged."); }
+  if (r.techSquads?.length && r.win) { recordMastery(c, r.techSquads); lines.push(`Specialty mastery: ${r.techSquads.map(id => squadById(c, id)?.squad.name).filter(Boolean).join(", ")} +1.`); }
+  const recon = r.techSquads?.some(id => squadById(c, id)?.mtf.spec === "recon") ? 1 : 0;
+  const intel = Math.min(4, (r.clues ?? 0)) + (r.clues ? recon : 0);
+  if (intel) { gainIntel(c, intel); lines.push(`Observations and surveys: +${intel} Intel.`); }
+  if (r.samples) { addMaterial(c, "tissue", r.samples); lines.push(`${r.samples} sealed sample${r.samples > 1 ? "s" : ""} of SCP-610 tissue for the lab.`); }
+  if (r.collateral) { addExposure(c, inc?.region ?? homeRegion(c), 2 * r.collateral); lines.push(`Demolition damage: +${2 * r.collateral} exposure.`); }
 }

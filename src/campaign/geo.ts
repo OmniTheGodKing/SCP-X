@@ -7,7 +7,8 @@ import { earn, spend } from "./ledger";
 import { bringBack, sendAway } from "./people";
 import { agentRisk, agentsFree } from "./taskforces";
 import { addThreat, reveal, scanReveals } from "./chaos";
-import { REGIONS, SITE19, type RegionId } from "../data/regions";
+import { REGIONS, type RegionId } from "../data/regions";
+import { activeSite, siteOf19 } from "./org";
 import { anomalyProgress, has } from "./research";
 import { rewardText } from "./council";
 import { addExposure, flightOut, isContacted, locateCell, travelDays } from "./world";
@@ -37,7 +38,7 @@ export const FACILITIES_WORLD = [
 
 /** Where an incident is: its town if the title names one, Site-19 for anything inside the site, else the region. */
 export function incidentPlace(inc: Incident): { name: string; lon: number; lat: number } {
-  if (inc.kind === "breach" || inc.kind === "riot" || inc.kind === "raid") return { name: "Site-19", ...SITE19 };
+  if (inc.kind === "breach" || inc.kind === "riot" || inc.kind === "raid") { const st = activeSite(); return { name: st.designation, lon: st.lon, lat: st.lat }; }
   if (inc.kind === "emergency") { const f = FACILITIES_WORLD.find(x => x.name === inc.site); if (f) return { name: f.name, lon: f.lon, lat: f.lat }; }
   const town = REGIONS[inc.region].towns.find(t => inc.title.includes(t.split(",")[0]));
   if (town && TOWN_POS[town]) return { name: town, lon: TOWN_POS[town][0], lat: TOWN_POS[town][1] };
@@ -314,7 +315,7 @@ export const TERRITORY: Record<RegionId, [number, number, number, number][]> = {
   europe: [[-30, 35, 30, 72]], africa: [[-20, -40, 60, 35]], east_asia: [[100, -50, 180, 45]],
 };
 /** The hour at a longitude when it is `hour` at Site-19 (solar time, by longitude). */
-export const localHour = (hour: number, lon: number) => ((hour + (lon - SITE19.lon) / 15) % 24 + 24) % 24;
+export const localHour = (hour: number, lon: number) => ((hour + (lon - activeSite().lon) / 15) % 24 + 24) % 24;
 export const isNightHour = (h: number) => h < 6 || h >= 20;
 /** Whether a mission there would be fought in the dark: outdoors, by local time on arrival. */
 export function nightAt(c: Campaign, inc: Incident) {
@@ -326,7 +327,7 @@ export function nightPolygon(c: Campaign): [number, number][] {
   const d = new Date(Date.UTC(1951, 5, 1) + (c.day - 1) * 864e5), doy = Math.floor((d.getTime() - Date.UTC(d.getUTCFullYear(), 0, 0)) / 864e5);
   let dec = -23.44 * Math.cos((2 * Math.PI / 365) * (doy + 10));
   if (Math.abs(dec) < 0.5) dec = dec < 0 ? -0.5 : 0.5;
-  const utc = ((c.hour ?? 0) - SITE19.lon / 15 + 24) % 24 - 0;   // Site-19 keeps local solar time
+  const utc = ((c.hour ?? 0) - siteOf19(c).lon / 15 + 24) % 24 - 0;   // Site-19 keeps local solar time
   const sunLon = (12 - utc) * 15, rad = Math.PI / 180, pts: [number, number][] = [];
   for (let lon = -180; lon <= 180; lon += 4) {
     const H = (lon - sunLon) * rad;

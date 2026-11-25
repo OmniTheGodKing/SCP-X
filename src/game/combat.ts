@@ -1,4 +1,5 @@
 // Gunfire, cover, damage and movement.
+import { afterReaction, corrosionSafe, leaveTrail, pinnable, suppressRounds } from "./squadtech";
 import { rnd, fxRnd } from "../core/rng";
 import { BOND_AIM } from "../campaign/condition";
 import { charmTurns, officerNear } from "./ciTactics";
@@ -275,7 +276,8 @@ export function kill(u: Unit, by173 = false) {
 /** XCOM 2 suppression (Tactical overhaul T4.6), for the team's ability and the enemy AI alike: 2 rounds, and each
  *  target is pinned through its next turn (−30 aim, no overwatch); if it moves, the suppressor gets a shot at it. */
 export function suppress(by: Unit, targets: Unit[]) {
-  if (by.gun) by.gun.ammo = Math.max(0, by.gun.ammo - 2);
+  if (by.gun) by.gun.ammo = Math.max(0, by.gun.ammo - suppressRounds(by));
+  targets = targets.filter(pinnable);
   by.firedTurn = S.turn;
   for (const r of targets) { r.suppressedUntil = S.turn + 1; r.suppressedBy = by.id; r.overwatch = false; }
   emitNoise(by.x, by.y, "gunfire", by);
@@ -311,6 +313,7 @@ async function reactTo(u: Unit, firstStep: boolean) {
     if (w.overwatchShots <= 0) w.overwatch = false;
     if (!isTeam(w) && seen(w.x, w.y)) log(`${w.name} fires from overwatch.`, "bad");
     await fire(w, u, true);
+    afterReaction(w, u);
   }
 }
 
@@ -322,12 +325,13 @@ export async function moveUnit(u: Unit, path: Pt[]) {
     if (!u.alive) return;
     // a shut door opens as someone walks through it, and stays open
     if (openDoor(x, y)) { emitNoise(x, y, "door", u); if (isTeam(u)) computeVis(); }
-    if (u.x !== x || u.y !== y) u.facing = facingTo(x - u.x, y - u.y);
+    if (u.x !== x || u.y !== y) { leaveTrail(u, u.x, u.y, x, y); u.facing = facingTo(x - u.x, y - u.y); }
     u.x = x; u.y = y; u.movedTurn = S.turn;
     if (!hasPerk(u, "quiet_steps") && u.side !== "anomaly") emitNoise(x, y, "footsteps", u);
     if (u.carrying) { const c = S.units.find(v => v.id === u.carrying); if (c) { c.x = x; c.y = y; } }
+    u.observing = false;
     // SCP-106's rot eats at anyone who walks through it
-    if (S.corroded.has(y * L.W + x) && u.side !== "anomaly" && u.armorKind !== "hazmat") { log(`${full(u)} steps in the black rot (1 damage).`, "bad"); damage(u, 1); }
+    if (S.corroded.has(y * L.W + x) && u.side !== "anomaly" && u.armorKind !== "hazmat" && !corrosionSafe(u)) { log(`${full(u)} steps in the black rot (1 damage).`, "bad"); damage(u, 1); }
     if (isTeam(u)) computeVis();
     // Tactical overhaul T4.5/T4.6: anyone watching reacts to hostile movement they can make out
     await reactTo(u, first);

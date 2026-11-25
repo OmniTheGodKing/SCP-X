@@ -1,10 +1,11 @@
 // Player actions and the turn cycle: your move, SCP-173, the Insurgency, then loose D-Class.
+import { bleedGrace, observe, place, placeCheck, placeOptions, sharedKitFor } from "./squadtech";
 import { blast, blastArea } from "./explosive";
 import { DETECTED, perceive, setHaze } from "./perception";
 import { settleFacing, facingTo, facingName, emitNoise } from "./noise";
 import { hazardDealt } from "./mission";
 import { reinforcementsTick } from "./ciTactics";
-import { blastStructure, DRUM, FLOOR, HALF, L, STEEL, TS, area, area as area_, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, tileAt, DIRS, type Pt } from "../core/grid";
+import { blastStructure, DRUM, FLOOR, HALF, PART, WALL, L, STEEL, TS, area, area as area_, cheb, inContainer, nearContainer, pathTo, bfs, canStep, passable, tileAt, DIRS, type Pt } from "../core/grid";
 import { setSmoke, sightFrom } from "../core/sight";
 import { canShoot, activeGun, damage, fire, kill, moveUnit } from "./combat";
 import { TYPES } from "../data/weapons";
@@ -22,7 +23,7 @@ import {
   S, alive, banner, breakConcealment, canAct, canSee, computeVis, full, fx, highlight, hooks, humans, isPanicked, isTeam, label, log, loseSanity,
   occupied, reveal, seen, sleep, starers, team, teamPerception, unitAt,
 } from "./state";
-import { RAID_TURNS, THROWN, type ScpId, type Unit } from "./types";
+import { PLACED, RAID_TURNS, THROWN, type ScpId, type Unit } from "./types";
 import { moveCost, moveOf, reachOf } from "./movement";
 import { fireCheck, overwatchCheck, payFire, payItem, payMove, payOverwatch, payReload, payStrike, reloadCheck } from "./actions";
 import { carryPhase, checkQuiet, convoyPhase, rivalPhase } from "./rivals";
@@ -143,11 +144,12 @@ export function startPlayerTurn(first: boolean) {
   syncSmoke();
   if (smokeBefore && !S.smoke.length) log("The smoke clears.");
   for (const u of S.units) if (u.alive && u.downed && !u.stabilized && !first) {
-    u.bleed = (u.bleed ?? 3) - 1;
+    u.bleed = bleedGrace(u) ? (u.bleed ?? 3) : (u.bleed ?? 3) - 1;
     if (u.bleed <= 0) { log(`${full(u)} bled out.`, "bad"); kill(u); }
     else log(`${full(u)} is bleeding out: ${u.bleed} turn${u.bleed > 1 ? "s" : ""} left.`, "bad");
   }
   arrivals(first);
+  observe();
   if (!first) turnInfected();
   for (const m of team()) {
     m.overwatch = false;
@@ -173,7 +175,7 @@ function arrivals(first: boolean) {
     for (const m of r.members) {
       const t = free.shift();
       if (!t) { S.reinforce.push({ turn: S.turn + 1, members: [m], road: r.road, station: r.station }); continue; }
-      S.units.push(spawnMember(m, t[0], t[1], S.setup.mods));
+      S.units.push(spawnMember(m, t[0], t[1], S.setup.mods, sharedKitFor(S.setup)));
       came.push(m.name);
     }
     if (came.length) banner(r.members[0].guard ? "SITE SECURITY ARRIVES" : "EPSILON-11 ON SCENE", "#86c193");
@@ -421,6 +423,8 @@ export const throwRange = (u: Unit) => S.throwing?.id === "bazooka" ? 10 : S.thr
 /** Tiles the unit can throw to: within range and in sight. */
 export function throwOptions(u: Unit) {
   const out = new Set<number>();
+  // squad kit placed beside the operative (Version 12): the squad rules say where it can go
+  if (S.throwing && PLACED.includes(S.throwing.id)) return placeOptions(u, S.throwing.id);
   for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++)
     if ((x - u.x) ** 2 + (y - u.y) ** 2 <= throwRange(u) ** 2 && passable(x, y) && canSee(u, x, y)) out.add(y * L.W + x);
   return out;
@@ -432,6 +436,7 @@ export function throwCheck(u: Unit | null, idx: number) {
   const it = u.items?.[idx];
   if (!it || !THROWN.includes(it.id)) return "Nothing to throw in that slot.";
   if (it.uses < 1) return "Used up.";
+  if (PLACED.includes(it.id)) return placeCheck(u, it.id);
   if (u.ap < 1) return "No actions left this turn.";
   if (u.eyesDown) return "They're looking at the floor: look up first (E).";
   return null;
@@ -483,6 +488,11 @@ export function useItem(idx: number, flash: (t: string) => void) {
 }
 
 function doThrow(u: Unit, item: NonNullable<Unit["items"]>[number], x: number, y: number) {
+  if (PLACED.includes(item.id)) {
+    S.mode = null; S.throwing = null; S.pending = null;
+    if (item.id === "breach_charge" || item.id === "demo_charge") { fx({ type: "blast", x: x * TS + TS / 2, y: y * TS + TS / 2, r: item.id === "demo_charge" ? 1.6 : 1.2, dur: 600 }); highlight(5, "#ff9a50"); breakConcealment("an explosion"); }
+    place(u, item, x, y); afterAction(); return;
+  }
   item.uses--; payItem(u, true);
   breakConcealment(item.id === "smoke" ? "a smoke canister hissing" : item.id === "flare" ? "a flare lighting up the area" : item.id === "noisemaker" ? "a noisemaker playing" : "an explosion");
   S.mode = null; S.throwing = null; S.pending = null;

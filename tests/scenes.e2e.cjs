@@ -3,7 +3,7 @@
 // completion stamp; a wing shows its experiment; the workshop's bench carries its order.
 const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path');
-const { GAME_URL, ROOT, OUT, close, reporter, openTarget } = require('./lib.cjs');
+const { GAME_URL, ROOT, OUT, close, reporter, openTarget, openRoomTab } = require('./lib.cjs');
 const { check, done } = reporter();
 
 (async () => {
@@ -16,21 +16,21 @@ const { check, done } = reporter();
   const E = (f, a) => p.evaluate(f, a);
 
   // Command: the map's pins are the open incidents; the teletype prints the critical item
-  await p.click('[data-tab="command"]'); await p.waitForTimeout(150);
+  await openRoomTab(p, 'command'); await p.waitForTimeout(150);
   const cmd = await E(() => ({ pins: document.querySelectorAll('.rv-stage circle[stroke="#14181c"]').length, incidents: window.__site19.campaign.incidents.length, tele: document.querySelector('.rv-stage')?.textContent ?? '' }));
   check('scenes: Command\'s map shows a pin for each open incident', cmd.pins === cmd.incidents, cmd.pins + ' / ' + cmd.incidents);
   const crit = await E(() => window.__site19.briefing().find(b => b.sev === 'critical')?.title?.toUpperCase());
   if (crit) check('scenes: the teletype prints the critical item', cmd.tele.includes(crit.slice(0, 20)), crit);
 
   // the lab: a project chosen on the board is written on it; a finished one is stamped
-  await p.click('[data-tab="research"]'); await p.waitForTimeout(150);
+  await openRoomTab(p, 'research'); await p.waitForTimeout(150);
   await openTarget(p, 'board');
   const pid = await E(() => document.querySelector('.ctxpanel [data-resfocus]')?.dataset.resfocus);
   await p.click(`.ctxpanel [data-resfocus="${pid}"]`); await p.waitForTimeout(100);
   const pname = await E(id => window.__site19.campaign && document.querySelector(`[data-resfocus="${id}"]`)?.textContent.trim(), pid);
   check('scenes: a project chosen on the board is written on it', (await E(() => document.querySelector('.rv-stage').textContent)).includes((pname ?? '').slice(0, 20)), pname);
   await E(id => window.__site19.campaign.research.done.push(id), pid);
-  await p.click('[data-tab="command"]'); await p.waitForTimeout(60); await p.click('[data-tab="research"]'); await p.waitForTimeout(150);
+  await openRoomTab(p, 'command'); await p.waitForTimeout(60); await openRoomTab(p, 'research'); await p.waitForTimeout(150);
   check('scenes: a finished project is stamped COMPLETE on the board', /COMPLETE/.test(await E(() => document.querySelector('.rv-stage').textContent)));
   await p.screenshot({ path: `${OUT}/scene-lab.png` });
 
@@ -48,7 +48,7 @@ const { check, done } = reporter();
   const ws = await E(() => { const c = window.__site19.campaign; let f = c.base.facilities.find(x => x.type === 'workshop');
     if (!f) { for (let l = 0; l < c.base.levels && !f; l++) for (let s = 0; s < 6 && !f; s++) if (!c.base.facilities.some(x => x.level === l && x.slot === s)) { f = { id: 'fws', type: 'workshop', level: l, slot: s, daysLeft: 0, disabled: false, repairDays: 0 }; c.base.facilities.push(f); } }
     c.orders = [{ attachment: 'scope', daysLeft: 1 }]; return `${f.level},${f.slot}`; });
-  await p.click('[data-tab="command"]'); await p.waitForTimeout(60); await p.click('[data-tab="site"]'); await p.waitForTimeout(100);
+  await openRoomTab(p, 'command'); await p.waitForTimeout(60); await p.click('[data-tab="site"]'); await p.waitForTimeout(100);
   await p.click(`[data-slot="${ws}"]`); await p.waitForTimeout(600);
   check('scenes: the workshop bench carries its order', await E(() => /Telescopic sight/.test(document.querySelector('.rv-stage')?.textContent ?? '')));
   check('scenes ran without errors', !errs.length, errs);

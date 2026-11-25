@@ -6,7 +6,7 @@
 // 16 save and reload · 17 continue the campaign.
 // The tactical fight itself is covered by the tactical suites; here it is ended with the debug "Win now" control.
 const { chromium } = require('playwright');
-const { fresh, close, dbg, reporter, OUT, openTarget } = require('./lib.cjs');
+const { fresh, close, dbg, reporter, OUT, openTarget, openRoomTab } = require('./lib.cjs');
 const { check, done } = reporter();
 
 (async () => {
@@ -14,7 +14,7 @@ const { check, done } = reporter();
   const { p, errs, E } = await fresh(b, { width: 1440, height: 900 });
   await p.waitForTimeout(300); await close(p);
   const C = (f, a) => E(f, a);
-  const tab = async t => { await p.click(`[data-tab="${t}"]`); await p.waitForTimeout(80); };
+  const tab = async t => { await openRoomTab(p, t); await p.waitForTimeout(20); };
   const inv = () => E(() => window.__site19.invariants());
   /** Run the World clock at 4× until cond() is true (closing notices as they come), up to `ms` of real time. */
   async function runUntil(cond, ms = 30000) {

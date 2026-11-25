@@ -3,7 +3,7 @@
 // Objects are clicked in the scene itself (not the shortcut bar) wherever the test is about the environment.
 const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path');
-const { GAME_URL, ROOT, OUT, close, dbg, reporter } = require('./lib.cjs');
+const { GAME_URL, ROOT, OUT, close, dbg, reporter, openRoomTab } = require('./lib.cjs');
 const { check, done } = reporter();
 
 (async () => {
@@ -14,7 +14,7 @@ const { check, done } = reporter();
   await p.goto(GAME_URL); await p.evaluate(s => { localStorage.clear(); localStorage.setItem('site19-campaign-v2', s); }, save); await p.reload(); await p.waitForTimeout(300);
   await close(p);
   const E = (f, a) => p.evaluate(f, a);
-  const tab = async t => { await p.click(`[data-tab="${t}"]`); await p.waitForTimeout(120); };
+  const tab = async t => { await openRoomTab(p, t); await p.waitForTimeout(20); };
   // click the object where people standing at it are least likely to be: its upper-left part
   const obj = async id => { const h = await p.$(`.rv-stage [data-target="${id}"] .hit`); const bb = await h.boundingBox(); await h.click({ position: { x: bb.width * 0.15, y: bb.height * 0.15 } }); await p.waitForTimeout(120); };
   const room = () => E(() => document.querySelector('.roomview')?.dataset.room ?? null);

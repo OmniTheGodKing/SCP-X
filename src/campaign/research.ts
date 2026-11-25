@@ -1,4 +1,5 @@
 // Research projects, SCP-173 tests and the equipment they unlock.
+import { eligibleKit } from "./org";
 import { rnd } from "../core/rng";
 import { earn, spend } from "./ledger";
 import { announceHire, fieldBoost, hasTrade, hirePerson, TRADE_CHANCE } from "./people";
@@ -92,6 +93,8 @@ export const PROJECTS: Record<string, ProjectDef> = {
   powered_jack:       { name: "Powered pallet jack", branch: "Equipment", days: 25, cost: 50, needsTest: "material", desc: "Operatives can drag SCP-173 2 tiles instead of 1." },
   reinforced_doors:   { name: "Reinforced cell doors", branch: "Site", days: 40, cost: 100, needs: ["containment_rev"], desc: "Breach risk −20% in every containment wing." },
   early_warning:      { name: "Early warning sensors", branch: "Site", days: 30, cost: 80, needs: ["movement_study"], desc: "A hatch lockdown holds for 8 turns instead of 5." },
+  doctrine_6:         { name: "Expanded team doctrine", branch: "Personnel", days: 45, cost: 150, from: 1953, afterWon: 6, desc: "Foundation-wide: every MTF's squads deploy 6 operatives instead of 4." },
+  doctrine_8:         { name: "Full section doctrine", branch: "Personnel", days: 80, cost: 300, from: 1960, needs: ["doctrine_6"], afterWon: 15, desc: "Foundation-wide: every MTF's squads deploy 8 operatives." },
   c119:               { name: "C-119 Flying Boxcar", branch: "Site", days: 40, cost: 120, desc: "A faster transport for Epsilon-11. Travel to other regions takes a quarter less time." },
   c130:               { name: "C-130 Hercules", branch: "Site", days: 60, cost: 180, from: 1954, needs: ["c119"], desc: "A long-range turboprop transport. Travel to other regions takes half the time a C-47 would." },
   pestilence_theory:  { name: "Pestilence theory", branch: "SCP-049", days: 30, cost: 60, needsScp: "049", desc: "Interviews with SCP-049 about the \"Pestilence\" it claims to see. Calming it holds for two turns instead of one." },
@@ -258,6 +261,16 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   folder:    { name: "Lined folder", cost: 0, days: 0, uses: 1, desc: "Issued for SCP-012: closes over the score, by someone looking at the floor." },
   noisemaker: { name: "Noisemaker", cost: 0, days: 0, uses: 2, desc: "Issued for SCP-939: a wind-up tape player that plays voices at the tile it lands on for 3 enemy turns." },
   case:      { name: "Lead-lined case", cost: 0, days: 0, uses: 1, desc: "Issued for SCP-035: the mask goes in it from the floor." },
+  breach_charge: { name: "Breaching charge", cost: 20, days: 1, uses: 1, desc: "Breach Response kit. Set against an adjacent door, partition, barricade or ordinary wall and it's gone; the blast hits whoever is behind it for 2." },
+  barricade: { name: "Portable barricade", cost: 15, days: 1, uses: 1, desc: "Containment Security kit. Set up on an adjacent clear floor tile, it's half cover for the rest of the mission." },
+  stretcher: { name: "Stretcher", cost: 10, days: 1, uses: null, desc: "Recovery kit. Folding litter and rescue straps: lets two of a Recovery squad carry someone without slowing down." },
+  cordon_kit: { name: "Cordon kit", cost: 15, days: 1, uses: 1, desc: "Quarantine kit. Wire, stakes and tape for a three-tile isolation line SCP-610's flesh can't spread through." },
+  firebreak_kit: { name: "Firebreak kit", cost: 15, days: 1, uses: 1, desc: "Incendiary kit. Extinguishers and wet sacking: clears a 2×2 strip of fire and keeps flesh and flame out of it for a while." },
+  decon_agent: { name: "Decon agent", cost: 15, days: 1, uses: 1, desc: "Decontamination kit. Wash rig and neutralizer: clears SCP-106's corrosion and fire from a 2×2 area." },
+  sample_case: { name: "Sample case", cost: 20, days: 2, uses: 1, desc: "Hazardous Recovery kit. Seals an SCP-610 sample for research at the site." },
+  demo_charge: { name: "Demolition charge", cost: 30, days: 2, uses: 1, desc: "Demolitions kit. Opens walls, reinforced ones too, but never a containment cell's steel." },
+  sandbags: { name: "Sandbags", cost: 10, days: 1, uses: 1, desc: "Combat Engineering kit. Builds full cover on a tile, or rehangs a blown-out door." },
+  field_tags: { name: "Field tags", cost: 5, days: 1, uses: 2, desc: "Tracking and Forward Recon kit. Marks a trail so it doesn't fade, or an extraction point." },
   tracker:   { name: "Seismic sensor", cost: 50, days: 3, uses: null, desc: "Detects anything within 6 tiles, through walls." },
 };
 /** Vest protection by researched tier. */
@@ -305,7 +318,7 @@ export const researchGrant = (id: string) => { const p = PROJECTS[id]; return p.
 export const researcherCapacity = (c: Campaign) => countOperational(c, "lab") * 4;
 export const researchersAssigned = (c: Campaign) => Object.values(c.research.assigned).reduce((a, n) => a + n, 0);
 export const researchersFree = (c: Campaign) => c.researchers - researchersAssigned(c);
-export const unlockedItems = (c: Campaign) => Object.entries(PROJECTS).filter(([id, p]) => p.unlocks && has(c, id)).map(([, p]) => p.unlocks!);
+export const unlockedItems = (c: Campaign) => [...Object.entries(PROJECTS).filter(([id, p]) => p.unlocks && has(c, id)).map(([, p]) => p.unlocks!), ...eligibleKit(c)];
 
 /** Researcher-days a project needs: halved while inspired, or once started under an inspiration. */
 export const testKey = (t: TestId) => `test_${t}`;

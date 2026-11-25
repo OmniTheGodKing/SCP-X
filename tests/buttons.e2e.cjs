@@ -4,13 +4,15 @@
 // disabled button, which is quieter by design). Intentionally bare controls (tabs, text links, the surface hotspots,
 // the cross-section's illustrated room tiles) are left out: they have no face to begin with.
 const { chromium } = require('playwright');
-const { OUT, close, dbg, fresh, reporter, openTarget, planIncident } = require('./lib.cjs');
+const { GAME_URL, OUT, close, dbg, fresh, reporter, openTarget, planIncident } = require('./lib.cjs');
 
 const SIZES = [{ width: 1280, height: 800 }, { width: 1920, height: 1080 }, { width: 1024, height: 768 }];
 
 /** Runs in the page: every visible button-like control that fails a check, with the reason. */
 function auditButtons() {
-  const BARE = '.tab, .linkbtn, .hotspot, .slot, [data-dbg]';
+  // bare by design: tabs, text links, menu entries, and the clickable objects of the illustrated rooms (doors, lockers,
+  // figures, the notice board, wall screens, the hotspots on the dummy and the surface), which are the art itself
+  const BARE = '.tab, .linkbtn, .hotspot, .slot, [data-dbg], .mitem, .fixture > button, .door, .plaque, .board, .frame, .soldier, .dept .display, .bodyspot, .sq, .rackgun';
   // computed colours come back as rgb()/rgba() or, from color-mix(), as color(srgb r g b [/ a]) with channels 0 to 1
   const rgba = s => {
     let m = s.match(/^rgba?\(([^)]+)\)/);
@@ -29,10 +31,13 @@ function auditButtons() {
     const cs = getComputedStyle(el); if (cs.visibility === 'hidden') continue;
     n++;
     const name = (el.id ? '#' + el.id + ' ' : '') + el.className + ' "' + (el.textContent || '').trim().slice(0, 30) + '"';
+    let hidden = false;
     for (let a = el; a && a.nodeType === 1; a = a.parentElement) {
       const o = parseFloat(getComputedStyle(a).opacity);
+      if (o === 0) { hidden = true; break; }   // faded out on purpose (the tactical HUD during deployment and after the end)
       if (o < 0.999) { bad.push(`${name}: opacity ${o} on ${a === el ? 'itself' : a.tagName.toLowerCase() + '.' + a.className}`); break; }
     }
+    if (hidden) { n--; continue; }
     const bg = rgba(cs.backgroundColor), fg = rgba(cs.color);
     if (!bg || bg.a < 0.999) { bad.push(`${name}: translucent face ${cs.backgroundColor}`); continue; }
     const need = el.disabled || el.classList.contains('disabled') ? 3 : 4.5;
@@ -97,10 +102,37 @@ function auditButtons() {
     await p.click('#launchBtn'); await p.waitForTimeout(300);
     if (await E(() => !!window.__site19.campaign.outbound)) { await dbg(p, 'land'); await p.waitForTimeout(400); }
     await close(p);
+    // the HUD fades in once the deployment intro has played
+    await p.waitForSelector('main.tac:not(.deploying) #actionBar', { timeout: 8000 }).catch(() => {});
+    await p.waitForTimeout(900);
+    const bar = await E(() => { const a = document.querySelector('#actionBar'); return a ? parseFloat(getComputedStyle(a).opacity) : null; });
+    check(`${tag} tactical: the action bar is on screen to check`, bar === 1, bar);
     await audit('tactical', true);
     const dis = await E(() => [...document.querySelectorAll('#actionBar button.act:disabled')].length);
     check(`${tag} tactical: disabled actions are present to check`, dis >= 0, dis);
     check(`${tag} no page errors`, !errs.length, errs);
+    await p.close();
+  }
+  // the title screen and the founding of the site (the real start, without ?legacy)
+  {
+    const p = await b.newPage({ viewport: { width: 1440, height: 900 } });
+    const errs = []; p.on('pageerror', e => errs.push(e.message));
+    const url = GAME_URL.replace('?legacy', '');
+    await p.goto(url); await p.evaluate(() => localStorage.clear()); await p.reload(); await p.waitForTimeout(400);
+    // the title screen's entries are text on the scene (bare by design), so it may have no faced buttons at all
+    const audit = async (screen, min = 1) => { await p.waitForTimeout(550); await p.mouse.move(1, 1); const r = await p.evaluate(auditButtons);
+      check(`1440x900 ${screen}: ${r.n} buttons are solid and readable`, r.n >= min && !r.bad.length, r.bad.slice(0, 8));
+      await p.screenshot({ path: `${OUT}/buttons-${screen.replace(/\W+/g, '-')}.png` }); };
+    await audit('title menu', 0);
+    await p.click('[data-view="new"]'); await audit('new game');
+    await p.click('#mBegin'); await p.waitForTimeout(600);
+    await p.evaluate(() => document.activeElement?.blur?.()); await p.keyboard.press('`'); await p.click('[data-dbg="win"]'); await p.waitForTimeout(600);
+    await p.click('#returnBtn'); await p.waitForTimeout(400); await audit('founding debrief');
+    await p.click('#fNext'); await p.waitForTimeout(400); await audit('site placement');
+    await p.click('#fRandom'); await p.waitForTimeout(200);
+    await p.fill('#fDesig', 'Site-41'); await p.fill('#fName', 'Test Annex'); await p.click('#fConfirm'); await p.waitForTimeout(400);
+    await audit('first task force');
+    check('1440x900 founding: no page errors', !errs.length, errs);
     await p.close();
   }
   await b.close();

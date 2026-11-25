@@ -3,7 +3,7 @@ const { chromium } = require('playwright');
 (async () => {
   const b = await chromium.launch(); const p = await (await b.newContext({ viewport: { width: 1300, height: 1400 } })).newPage();
   const errs = []; p.on('pageerror', e => errs.push(e.message));
-  await p.goto('file://' + require('path').resolve(__dirname, '../dist/index.html')); await p.waitForTimeout(300);
+  await p.goto('file://' + require('path').resolve(__dirname, '../dist/index.html?legacy')); await p.waitForTimeout(300);
   await p.evaluate(() => { localStorage.clear(); }); await p.reload(); await p.waitForTimeout(300);
   await p.evaluate(() => { const c = window.__site19.campaign; c.inventory = { frag: 2 };
     c.scps[0].status = 'breach'; c.incidents.push({ id: 'incX', kind: 'breach', scpId: '173', title: 'Incident 900: SCP-173 breach, test', appeared: c.day, expires: c.day, insurgents: 3, region: 'east_us', map: 'wingC' }); });
@@ -25,7 +25,7 @@ const { chromium } = require('playwright');
     return id;
   });
   console.log('operatives on the map:', JSON.stringify(ids));
-  const box = await (await p.$('#cv')).boundingBox(); const at = (x, y) => p.mouse.click(box.x + (x + .5) * box.width / 28, box.y + (y + .5) * box.height / 18);
+  const at = (x, y) => require('./lib.cjs').clickTile(p, x, y);
   const sel = id => p.click(`.op[data-id=${id}]`);
   await sel(ids.op4); await at(8, 12); await p.waitForTimeout(400);
   await sel(ids.op2); await at(6, 12); await p.waitForTimeout(700);

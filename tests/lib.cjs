@@ -3,7 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const ROOT = path.resolve(__dirname, '..');
-const GAME_URL = 'file://' + path.join(ROOT, 'dist', 'index.html');
+const GAME_URL = 'file://' + path.join(ROOT, 'dist', 'index.html') + '?legacy';
 const OUT = path.join(__dirname, 'out');
 fs.mkdirSync(OUT, { recursive: true });
 /** Dismiss every notice dialog that's showing. */
@@ -13,7 +13,7 @@ const dbg = async (p, k) => { await p.evaluate(() => document.activeElement?.blu
 /** A fresh game in a new page, local storage cleared. */
 async function fresh(b, viewport = { width: 1300, height: 1000 }) {
   const p = await b.newPage({ viewport });
-  const errs = []; p.on('pageerror', e => errs.push(e.message + ' ' + (e.stack || '').split('\n')[1]));
+  const errs = []; p.on('pageerror', e => errs.push(e.message + ' ' + (e.stack || '').split('\n').slice(1, 4).join(' | ')));
   await p.goto(GAME_URL); await p.evaluate(() => localStorage.clear()); await p.reload();
   return { p, errs, E: (f, a) => p.evaluate(f, a) };
 }
@@ -31,4 +31,21 @@ async function planIncident(p, id) {
   if (!(await p.$(`[data-plan="${id}"]`))) await openTarget(p, 'comms');
   await p.click(`[data-plan="${id}"]`);
 }
-module.exports = { ROOT, GAME_URL, OUT, close, dbg, fresh, reporter, openTarget, planIncident };
+/** Open a tab and go into its room: Command and Research through the department room's entry button, the
+ *  quarters through the Site-19 surface (the Barracks and Armory tabs show their own rooms). */
+async function openRoomTab(p, t) {
+  if (t === 'personnel') { await p.click('[data-tab="site"]'); await p.waitForTimeout(60); await p.click('[data-enter="surface:quarters"]'); await p.waitForTimeout(120); return; }
+  await p.click(`[data-tab="${t}"]`); await p.waitForTimeout(60);
+  if (t === 'command' || t === 'research') { const b = await p.$('.dept [data-enter]'); if (b) { await b.click(); await p.waitForTimeout(120); } }
+}
+/** Tactical camera: where a tile's centre is on screen (client px), and a click or hover on that tile sent to the
+ *  battlefield canvas itself (the HUD may cover part of the map; the camera conversion is what's under test). */
+const tileXY = (p, x, y) => p.evaluate(([x, y]) => window.__site19.tileToScreen(x, y), [x, y]);
+async function clickTile(p, x, y) {
+  await p.evaluate(([x, y]) => { const [cx, cy] = window.__site19.tileToScreen(x, y), cv = document.querySelector('#cv'), o = { clientX: cx, clientY: cy, bubbles: true, button: 0, pointerType: 'mouse', pointerId: 1 };
+    cv.dispatchEvent(new PointerEvent('pointerdown', o)); cv.dispatchEvent(new PointerEvent('pointerup', o)); cv.dispatchEvent(new MouseEvent('click', o)); }, [x, y]);
+}
+async function hoverTile(p, x, y) {
+  await p.evaluate(([x, y]) => { const [cx, cy] = window.__site19.tileToScreen(x, y); document.querySelector('#cv').dispatchEvent(new PointerEvent('pointermove', { clientX: cx, clientY: cy, bubbles: true, pointerType: 'mouse', pointerId: 1, buttons: 0 })); }, [x, y]);
+}
+module.exports = { tileXY, clickTile, hoverTile, ROOT, GAME_URL, OUT, close, dbg, fresh, reporter, openTarget, planIncident, openRoomTab };

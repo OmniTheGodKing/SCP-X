@@ -1,0 +1,56 @@
+/* Founding: Carter's debrief, the globe, and the MTF charter. Paper files on a dark operations table. */
+.found { position: relative; min-height: 100vh; padding: 40px 48px; display: grid; gap: 28px; isolation: isolate; color: var(--ink); background: radial-gradient(ellipse 60% 70% at 30% 20%, rgba(80, 170, 160, .1), transparent 70%), linear-gradient(#141a1d, #090b0c); }
+.found .fsheet { background: linear-gradient(rgba(255, 255, 255, .04), rgba(0, 0, 0, .06)), repeating-linear-gradient(0deg, transparent 0 23px, rgba(90, 70, 30, .06) 23px 24px), #e2d3ad; color: #2a241a; padding: 24px 28px; box-shadow: 0 24px 60px rgba(0, 0, 0, .7); display: grid; gap: 10px; align-content: start; }
+.found .fsheet h2 { margin: 0; font: 400 32px var(--font-display); }
+.found .fsheet p { margin: 0; font-size: 15px; line-height: 1.5; }
+.found .eyebrow { color: #6d6250; }
+.found .muted { color: #5e5442; font-size: 13.5px; }
+.found .mlabel { font: 600 11px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: #6d6250; margin-top: 6px; }
+.found .frow { display: flex; gap: 8px; margin-top: 6px; }
+.found .fbtn { padding: 11px 18px; background: #e2d3ad; border: 1px solid #2a241a; color: #2a241a; font: 600 13px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+.found .fbtn.primary { background: #6b2a1c; border-color: #6b2a1c; color: #f6ead0; } .found .fbtn:disabled { background: #cbbd99; color: #4a4132; border: 1px dashed #7d6f53; cursor: not-allowed; }
+.found .fwarn { color: #a3301e; font-weight: 600; }
+.found input, .found select { font: inherit; padding: 6px 8px; background: #f4efe0; border: 1px solid rgba(60, 45, 20, .45); color: #2a241a; }
+/* debrief */
+.found.debrief { grid-template-columns: 300px minmax(0, 720px); justify-content: center; align-items: center; }
+.found .carter { display: grid; justify-items: center; }
+.found .carter .advisor-svg { width: 300px; height: 360px; filter: drop-shadow(0 0 30px rgba(0, 0, 0, .8)); }
+.found .carter .who { display: grid; text-align: center; } .found .carter b { font-size: 18px; } .found .carter span { font: 11px var(--font-mono); color: #9aa1a3; text-transform: uppercase; letter-spacing: .1em; }
+/* site pick */
+.found.sitepick { grid-template-columns: minmax(0, 1fr) 380px; grid-template-rows: minmax(0, 1fr); height: 100vh; min-height: 0; padding: 24px; overflow: hidden; }
+.found .mapwrap { position: relative; min-height: 0; border: 1px solid #000; box-shadow: 0 0 0 1px var(--line); background: #0c1a22; }
+.found .globe { width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; }
+.found .globe .sea { fill: #0f2430; } .found .globe .grat { stroke: rgba(160, 200, 210, .12); }
+.found .globe .land { fill: #3a4a3a; stroke: #6f8a6a; }
+.found .globe .hub rect { fill: #d9a441; } .found .globe .hub text { fill: #e9dfb6; font-family: var(--font-mono); opacity: .75; pointer-events: none; }
+.found .globe .pin circle { fill: #e0533f; } .found .globe .pin .ring { fill: none; stroke: #e0533f; stroke-width: .5; opacity: .8; } .found .globe .pin text { fill: #fff; font-family: var(--font-mono); font-weight: 700; paint-order: stroke; stroke: #000; stroke-width: .6; }
+.found .mapctl { position: absolute; right: 12px; top: 12px; display: flex; background: #0a0c0e; border: 1px solid #2a3036; }
+.found .mapctl button { width: 38px; height: 34px; background: #0a0c0e; border: 0; border-right: 1px solid #2a3036; color: #c9c2b0; font-size: 16px; cursor: pointer; }
+.found .mapflash { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); margin: 0; padding: 8px 14px; background: #6b2a1c; color: #f6ead0; font: 600 13px var(--font-mono); }
+.found .fsheet.side { overflow-y: auto; }
+.found .geo { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 13.5px; } .found .geo dt { color: #6d6250; } .found .geo dd { margin: 0; font-weight: 600; }
+.found .geo .good { color: #2f5a35; } .found .geo .bad { color: #8a3a26; }
+.found .travel { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 13px; } .found .travel li { display: flex; justify-content: space-between; border-bottom: 1px dotted rgba(60, 45, 20, .3); } .found .travel li.home { font-weight: 700; }
+.found .names { display: grid; gap: 6px; } .found .names label { display: grid; gap: 2px; font: 12px var(--font-mono); color: #5e5442; }
+/* MTF charter */
+.found.mtf { justify-items: center; }
+.found .fsheet.wide { width: min(1240px, 100%); }
+.found .charter { display: grid; grid-template-columns: auto 1fr 1.4fr; gap: 16px; align-items: start; }
+.found .charter label { display: grid; gap: 4px; font: 12px var(--font-mono); color: #5e5442; }
+.found .desig { display: flex; gap: 4px; align-items: center; font: 600 18px var(--font-mono); } .found .desig input { width: 60px; }
+.found .specbox { display: grid; gap: 2px; padding: 10px 12px; border: 2px solid #2a241a; background: rgba(255, 255, 255, .3); }
+.found .specbox b { font: 400 20px var(--font-display); } .found .specbox small { font-size: 12.5px; } .found .specbox i { font: 11px var(--font-mono); color: #6b2a1c; font-style: normal; }
+.found .squads { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.found .sqcard { display: grid; gap: 6px; padding: 12px; background: rgba(255, 255, 255, .28); border: 1px solid rgba(60, 45, 20, .35); }
+.found .sqcard > input { font: 400 20px var(--font-display); }
+.found .specs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.found .specs button { display: grid; gap: 2px; text-align: left; padding: 8px; background: color-mix(in srgb, #fff 40%, #e2d3ad); border: 1px solid rgba(60, 45, 20, .3); cursor: pointer; color: #2a241a; font: inherit; }
+.found .specs button small { font-size: 11.5px; color: #5e5442; } .found .specs button.on { background: #2a241a; color: #efe4c4; } .found .specs button.on small { color: #c9bd9a; }
+.found .issue { font-size: 12.5px !important; color: #5e5442; }
+.found .people { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 6px; }
+.found .person { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 4px 8px 4px 4px; background: rgba(255, 255, 255, .25); }
+.found .person div > b { display: block; font-size: 14px; } .found .person div > span { font: 11px var(--font-mono); color: #5e5442; }
+.found .asg { display: flex; gap: 2px; } .found .asg button { padding: 5px 8px; background: #e2d3ad; border: 1px solid rgba(60, 45, 20, .35); font: 11px var(--font-mono); cursor: pointer; color: #2a241a; max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.found .asg button.on { background: #2a241a; color: #efe4c4; }
+.found .fbg { display: none; }
+.found .reqbox { display: flex; gap: 8px; align-items: center; font-size: 14px; margin-top: 6px; }

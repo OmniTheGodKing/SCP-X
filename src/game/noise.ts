@@ -3,6 +3,7 @@
 // operative glances toward it and, if nothing is there, turns back to the direction the player set. Insurgents hear
 // by the same rules and go to look. Facing is attention and animation, not a blind cone: anyone can still see an
 // enemy behind them.
+import { footstepScale } from "./squadtech";
 import { obstacleAt, trace } from "../core/geom";
 import { rnd } from "../core/rng";
 import { L, opaque, doorShut, cheb } from "../core/grid";
@@ -39,7 +40,7 @@ export interface HeardNoise { listener: string; kind: NoiseKind; dir: number; co
 /** Something made a noise at (x, y). Everyone who isn't the source and can't already see it may hear it. */
 export function emitNoise(x: number, y: number, kind: NoiseKind, src?: Unit) {
   if (!S) return;
-  const loud = LOUD[kind];
+  const loud = LOUD[kind] * (kind === "footsteps" && src ? footstepScale(src) : 1);
   const fromTeam = !!src && isTeam(src);
   // the team: a direction, and a glance that way (unless they can already see what made it)
   if (!fromTeam && !seen(x, y)) {
