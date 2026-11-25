@@ -4,9 +4,13 @@ A turn-based SCP game, inspired by XCOM. You run Site-19 and send Epsilon-11 (Ni
 
 The idea is that each anomaly plays by its own rules, and guns mostly don't solve anything. SCP-173 is the first one in: it can't move while somebody is looking at it, so the whole fight is about who's watching, who's about to blink, and how you get it into a box before the Chaos Insurgency gets in the way.
 
-![Site-19 world map](docs/screenshots/world.png)
+![Holding SCP-173 with a line of sight while the squad moves up](docs/screenshots/mission.png)
 
-![A raid on the Site-19 surface compound](docs/screenshots/raid.png)
+| | |
+|---|---|
+| ![Site-19 cross-section](docs/screenshots/site.png) | ![The research lab](docs/screenshots/research.png) |
+
+![World map with Insurgency cells and leads](docs/screenshots/world.png)
 
 ## What's in it
 
