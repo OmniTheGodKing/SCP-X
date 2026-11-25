@@ -1527,7 +1527,7 @@ stays as built.
 
 Built in the tactical overhaul session (authorised by the owner to implement without approval between tasks). The full
 record, decisions and remaining work are in `docs/TACTICAL_OVERHAUL_PROGRESS.md`; the audit and plan behind it are
-`SCP_X_COMPREHENSIVE_AUDIT.md` and `SCP_X_XCOM_IMPROVEMENT_ROADMAP.md`.
+`docs/planning/audit.md` and `docs/planning/xcom-roadmap.md`.
 
 - **Test foundation:** a portable test runner (`npm test`), headless rule tests, seeded gameplay randomness with
   cosmetic randomness kept separate, and save fixtures.

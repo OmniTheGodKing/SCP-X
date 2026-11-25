@@ -1,7 +1,7 @@
 # Tactical Overhaul: Progress
 
-The working record for the XCOM-style tactical overhaul. It follows `SCP_X_XCOM_IMPROVEMENT_ROADMAP.md` (task numbers in
-brackets), `SCP_X_COMPREHENSIVE_AUDIT.md` and the 4J plan in `docs/ROADMAP.md`. It is kept up to date as work lands,
+The working record for the XCOM-style tactical overhaul. It follows `planning/xcom-roadmap.md` (task numbers in
+brackets), `planning/audit.md` and the 4J plan in `docs/ROADMAP.md`. It is kept up to date as work lands,
 so a later session can resume from it.
 
 **Rules for this work:**

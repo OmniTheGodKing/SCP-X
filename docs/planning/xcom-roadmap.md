@@ -1,6 +1,6 @@
 # SCP-X: XCOM Improvement Roadmap
 
-Companion to `SCP_X_COMPREHENSIVE_AUDIT.md`. It refines and orders the 4J plan already in `docs/ROADMAP.md`. It
+Companion to `audit.md`. It refines and orders the 4J plan already in `docs/ROADMAP.md`. It
 keeps that roadmap's decisions:
 - vision is all round, as in XCOM 2;
 - hearing stays as built;
