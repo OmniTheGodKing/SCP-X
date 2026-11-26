@@ -6,7 +6,10 @@ const { GAME_URL, ROOT, OUT, close, reporter, openTarget } = require('./lib.cjs'
 const { check, done } = reporter();
 
 /** Every visible .act button: an opaque fill and full opacity (disabled ones too). */
-const solidButtons = p => p.evaluate(() => {
+const solidButtons = async p => {
+  // panels slide and fade in when they change: judge the buttons once those one-off motions have finished
+  await p.waitForFunction(() => document.getAnimations().every(a => a.playState !== 'running' || !(a.effect?.target instanceof HTMLElement)), null, { timeout: 5000 }).catch(() => {});
+  return p.evaluate(() => {
   const bad = [];
   for (const b of document.querySelectorAll('button.act')) {
     const r = b.getBoundingClientRect(); if (!r.width || !r.height) continue;
@@ -16,6 +19,7 @@ const solidButtons = p => p.evaluate(() => {
   }
   return bad;
 });
+};
 
 (async () => {
   const b = await chromium.launch();
@@ -113,7 +117,7 @@ const solidButtons = p => p.evaluate(() => {
   check('F4: unavailable operatives cannot be ticked', unavailable);
   // stand one down, then pick them again
   const gone = st.chosen[0];
-  await p.click(`[data-unpick="${gone}"]`); await p.waitForTimeout(120);
+  await p.click(`[data-unpick="${gone}"]`); await p.waitForTimeout(450);   // they walk off first (260 ms)
   check('F5: standing an operative down removes them from the team', !(await E(id => !!document.querySelector(`.stg-fig[data-stgsel="${id}"]`), gone)));
   await p.click('[data-stgsquad=""]'); await p.waitForTimeout(100);
   await p.click(`[data-pick="${gone}"]`); await p.waitForTimeout(120);
@@ -135,6 +139,21 @@ const solidButtons = p => p.evaluate(() => {
   const launched = await E(() => { const c = window.__site19.campaign, m = window.__site19.mission; const setup = c.outbound?.setup; const ids = (m ? m.units.filter(u => u.side === 'mtf' && u.opId).map(u => u.opId) : setup?.squad.map(s => s.opId) ?? []).sort(); return { inc: m?.setup?.incidentId ?? setup?.incidentId ?? c.outbound?.incId, ids }; });
   check('F9: deployment launches this incident', launched.inc === inc, launched);
   check('F10: with exactly the chosen team', JSON.stringify(launched.ids) === JSON.stringify(team), { launched: launched.ids, team });
+
+  // ---- motion: idle life, a clock that survives re-renders, and the off switch ----
+  await p.goto(GAME_URL); await p.waitForTimeout(400); await close(p);
+  await p.click('[data-tab="personnel"]'); await p.waitForTimeout(700);
+  const clip = { x: 150, y: 420, width: 900, height: 380 };
+  const f1 = await p.screenshot({ clip }); await p.waitForTimeout(1500); const f2 = await p.screenshot({ clip });
+  check('M1: people in the quarters idle (frames change on their own)', !f1.equals(f2));
+  const t1 = await E(() => document.querySelector('svg.interior').getCurrentTime());
+  await openTarget(p, 'roster'); await p.waitForTimeout(100);
+  const t2 = await E(() => document.querySelector('svg.interior').getCurrentTime());
+  check('M2: a re-render resumes the scene\'s clock instead of restarting it', t1 > 1 && t2 >= t1, { t1, t2 });
+  await E(() => localStorage.setItem('site19-scene-motion', 'off')); await p.click('[data-tab="world"]'); await p.click('[data-tab="personnel"]'); await p.waitForTimeout(500);
+  const g1 = await p.screenshot({ clip }); await p.waitForTimeout(1200); const g2 = await p.screenshot({ clip });
+  check('M3: with Scene motion off, the scene holds still', g1.equals(g2));
+  await E(() => localStorage.removeItem('site19-scene-motion'));
 
   // ---- the tactical screen (the sandbox map) ----
   await p.goto(GAME_URL + '#lab'); await p.waitForTimeout(800);

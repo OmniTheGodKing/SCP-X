@@ -5,6 +5,7 @@
 //
 // Provisional art: everything is drawn in code to docs/ART_DIRECTION.md. Each part is a function of the layout, so
 // finished art can replace them one at a time.
+import { dustMotes, flicker } from "./motion";
 import type { RoomLayout, DoorKind } from "../../scene/layout";
 import { anomalyFigure } from "../art";
 import { figureSvg, type FigureSpec } from "./figure";
@@ -31,7 +32,7 @@ export interface SceneExtras {
   /** A highlighted person by key. */
   focus?: string;
   /** The armory's bench: a weapon laid out large, its mounts marked, an attachment previewed on it. */
-  bench?: { model: string; attachment?: string; ghost?: string; highlight?: string; mounts: string[]; zoom: number; owner?: FigureSpec; narrow?: boolean };
+  bench?: { model: string; attachment?: string; ghost?: string; highlight?: string; mounts: string[]; zoom: number; owner?: FigureSpec; narrow?: boolean; /** Just put on the bench: it settles onto the mat. */ fresh?: boolean };
   /** P5, the lab: what the chalkboard shows (the selected project), its progress, and a stamp when it's done. */
   board?: { title: string; lines: string[]; progress?: number; stamp?: string };
   /** P5, a containment wing: an experiment under way in the cell. */
@@ -43,7 +44,7 @@ export interface SceneExtras {
   /** The quarters: the task force's own designation and name on its banner. */
   unit?: { code: string; name: string };
   /** One person brought forward, large, with the room still behind them (the quarters' selected operative). */
-  hero?: { spec: FigureSpec; key: string; x?: number };
+  hero?: { spec: FigureSpec; key: string; x?: number; /** Just chosen: they step forward. */ fresh?: boolean };
   /** The stretch of the scene, in scene units, people stand across (clear of a side panel). */
   span?: [number, number];
   /** Environment-first interface: the room's interactive objects, and the one selected. */
@@ -181,10 +182,12 @@ function lights(L: RoomLayout, dark: boolean) {
   for (let i = 0; i < n; i++) {
     const x = BX0 + (BX1 - BX0) * (i + 0.5) / n;
     out.push(`<line x1="${x}" y1="${BY0 - 60}" x2="${x}" y2="${BY0 + 6}" stroke="#111" stroke-width="3"/><path d="M${x - 30} ${BY0 + 6} h60 l-12 18 h-36z" fill="#2c3237"/>`);
-    if (!dark) out.push(`<ellipse cx="${x}" cy="${BY0 + 90}" rx="230" ry="170" fill="url(#sc-pool)" opacity=".8"/>
+    const flick = i === (L.features.lights + L.id.length) % n;   // one tired lamp per room
+    if (!dark) out.push(`<g>${flick ? flicker(L.id.length + i) : ""}<ellipse cx="${x}" cy="${BY0 + 90}" rx="230" ry="170" fill="url(#sc-pool)" opacity=".8"/>
       <path d="M${x - 20} ${BY0 + 24} L${x - 250} ${BY1 + 210} H${x + 250} L${x + 20} ${BY0 + 24}Z" fill="url(#sc-beam)" filter="url(#sc-soft)"/>
       <ellipse cx="${x}" cy="${BY1 + 110}" rx="300" ry="80" fill="url(#sc-pool)"/>
-      <ellipse cx="${x}" cy="${BY0 + 24}" rx="17" ry="5" fill="#fff6dc"/><ellipse cx="${x}" cy="${BY0 + 26}" rx="40" ry="14" fill="${C.lamp}" opacity=".35" filter="url(#sc-soft)"/>`);
+      <ellipse cx="${x}" cy="${BY0 + 24}" rx="17" ry="5" fill="#fff6dc"/><ellipse cx="${x}" cy="${BY0 + 26}" rx="40" ry="14" fill="${C.lamp}" opacity=".35" filter="url(#sc-soft)"/></g>
+      <g pointer-events="none">${dustMotes(x, BY0 + 60, BY1 + 120, 360, 7, i + L.features.lights * 5 + L.id.length)}</g>`);
   }
   return out.join("");
 }
@@ -325,15 +328,17 @@ function people(L: RoomLayout, x: SceneExtras) {
     // the rest of the squad steps back into the room's shadow; the selected operative stands forward, full height
     const hx = x.hero.x ?? 560, back = (x.people ?? []).filter(p => p.key !== x.hero!.key).slice(0, 6);
     const behind = back.map((p, i) => figureSvg(p.spec, 260 + i * 190 + (i >= 2 ? 520 : 0), BY1 + 40, 0.6)).join("");
-    return `<g opacity=".55">${behind}</g><rect width="${W}" height="${H}" fill="#05080b" opacity=".38" pointer-events="none"/>
+    return `<g opacity=".55" class="${x.hero.fresh ? "back-new" : ""}">${behind}</g><rect width="${W}" height="${H}" fill="#05080b" opacity=".38" pointer-events="none"/>
       <ellipse cx="${hx}" cy="${H - 100}" rx="190" ry="26" fill="${C.lamp}" opacity=".1"/>
-      <g class="hero" data-person="${esc(x.hero.key)}">${figureSvg(x.hero.spec, hx, H - 96, 1.62)}</g>`;
+      <g class="hero ${x.hero.fresh ? "hero-new" : ""}" data-person="${esc(x.hero.key)}"><rect x="${hx - 110 * 1.62}" y="${H - 96 - 410 * 1.62}" width="${220 * 1.62}" height="${450 * 1.62}" fill="transparent"/>${figureSvg(x.hero.spec, hx, H - 96, 1.62)}</g>`;
   }
   if (x.people?.length) {
     const n = x.people.length, slots = x.people.map((p, i) => {
       const [s0, s1] = x.span ?? [260, W - 260], t = n === 1 ? 0.5 : i / (n - 1), px = s0 + t * (s1 - s0), back = i % 2 === 1;
       const sel = x.focus === p.key;
-      return `<g class="scene-person ${sel ? "sel" : ""}" data-person="${esc(p.key)}" tabindex="0" role="button" aria-label="${esc(p.label ?? p.key)}">${figureSvg(p.spec, px, back ? BY1 + 70 : BY1 + 150, back ? 0.78 : 0.9)}${p.label ? `<text x="${px}" y="${(back ? BY1 + 70 : BY1 + 150) + 32}" font-family="IBM Plex Mono,monospace" font-size="16" fill="${C.paper}" text-anchor="middle">${esc(p.label)}</text>` : ""}</g>`;
+      const fy = back ? BY1 + 70 : BY1 + 150, fs = back ? 0.78 : 0.9;
+      // a fixed hit area larger than the figure ever moves, so the person is a steady target while they idle
+      return `<g class="scene-person ${sel ? "sel" : ""}" data-person="${esc(p.key)}" tabindex="0" role="button" aria-label="${esc(p.label ?? p.key)}"><rect x="${px - 110 * fs}" y="${fy - 410 * fs}" width="${220 * fs}" height="${450 * fs}" fill="transparent"/>${figureSvg(p.spec, px, fy, fs)}${p.label ? `<text x="${px}" y="${(back ? BY1 + 70 : BY1 + 150) + 32}" font-family="IBM Plex Mono,monospace" font-size="16" fill="${C.paper}" text-anchor="middle">${esc(p.label)}</text>` : ""}</g>`;
     });
     // the ones further back first, so the near row stands in front
     return slots.filter((_, i) => i % 2 === 1).join("") + slots.filter((_, i) => i % 2 === 0).join("");
@@ -480,7 +485,7 @@ function benchScene(b: NonNullable<SceneExtras["bench"]>) {
     <g opacity=".9"><rect x="${W - 250}" y="${top + 40}" width="46" height="70" rx="6" fill="#5c6a52"/><rect x="${W - 238}" y="${top + 22}" width="22" height="20" fill="#3a4538"/><path d="M${W - 227} ${top + 22} l40 -30" stroke="#8a9198" stroke-width="5"/>
       <path d="M${W - 190} ${top + 120} q60 -20 110 10 q-30 30 -110 20z" fill="#b9ab8a"/><rect x="${W - 320}" y="${top + 128}" width="110" height="10" rx="5" fill="#6b5233"/><rect x="${W - 214}" y="${top + 124}" width="26" height="18" rx="3" fill="#2a2a2a"/></g>
     <g transform="translate(${tx + 12} ${ty + 26}) scale(${s})" opacity=".55" filter="url(#bn-blur)"><g fill="#000">${weaponSide(b.model, b.attachment).replace(/fill="[^"]*"/g, 'fill="#000"').replace(/stroke="[^"]*"/g, 'stroke="#000"')}</g></g>
-    <g class="benchgun" transform="translate(${tx} ${ty}) scale(${s})">${weaponSide(b.model, b.attachment, { ghost: b.ghost as AttachmentId | undefined, highlight: b.highlight as MountId | undefined })}</g>
+    <g class="benchgun-wrap ${b.fresh ? "bench-new" : ""}"><g class="benchgun" transform="translate(${tx} ${ty}) scale(${s})">${weaponSide(b.model, b.attachment, { ghost: b.ghost as AttachmentId | undefined, highlight: b.highlight as MountId | undefined })}</g></g>
     ${marks}`;
 }
 

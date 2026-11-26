@@ -79,6 +79,7 @@ import {
 import { HEAVY, type ScpId } from "../game/types";
 import { esc } from "./util";
 import { assetUrl } from "./assets";
+import { dustMotes, flicker, sceneMotionOn, sceneMotionSetting, setSceneMotion, syncScenes } from "./scene/motion";
 import { figureSvg } from "./scene/figure";
 import { ORG, PRIMARY, SPECS, canCarry, canFormSquad, canRetrainSquad, membersOf, mtfLabel, mtfOf, qualified, reserveOf, squadOf, type SquadSpec } from "../campaign/org";
 
@@ -192,7 +193,9 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let dlg: null | { view: "slots" } | { view: "new"; slot: Slot; difficulty: Difficulty; ironman: boolean; tutorial: boolean } = null;
   /** Which task force is being sent, and the support people and units going with it. */
   let tfPick: TaskForce = "e11";
-  let stgSel: string | null = null, stgSquad: string | null = null, stgNotes = false;   // the staging area: the selected operative and squad
+  let stgSel: string | null = null, stgSquad: string | null = null, stgNotes = false;
+  /** Motion bookkeeping: what the last render showed, so only what changed plays a one-off motion. */
+  const seen = { plan: null as string | null, team: new Set<string>(), sel: null as string | null, hero: null as string | null, panel: null as string | null, geoSel: null as string | null, incs: null as Set<string> | null, bench: "" };   // the staging area: the selected operative and squad
   const extras: Extras = {};
   const watchers = new Set<string>();
   const gear = new Map<string, { armor: ItemId | ""; items: (ItemId | "")[] }>();
@@ -374,6 +377,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       <input type="file" id="importFile" accept=".json,application/json" hidden>
       <button class="act" id="creditsBtn" type="button">Credits and licences</button>
       <button class="act" id="fxToggle" type="button" aria-pressed="${transitionsSetting()}">Room transitions: ${transitionsSetting() ? "on" : "off"}</button>
+      <button class="act" id="motionToggle" type="button" aria-pressed="${sceneMotionSetting()}">Scene motion: ${sceneMotionSetting() ? "on" : "off"}</button>
       ${soundControl()}
     </div></details>
   </header>
@@ -743,6 +747,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     const b = briefing(c, inc), size = squadSize(c), riot = inc.kind === "riot";
     const team = [...chosen].map(id => c.roster.find(o => o.id === id)).filter((o): o is Operative => !!o);
     if (stgSel && !chosen.has(stgSel)) stgSel = null;
+    const opening = seen.plan !== inc.id, entering = new Set(team.filter(o => opening || !seen.team.has(o.id)).map(o => o.id)), selNew = !!stgSel && stgSel !== seen.sel;
+    seen.plan = inc.id; seen.team = new Set(team.map(o => o.id)); seen.sel = stgSel;
     const extraRow = (key: keyof Extras, label: string, why: string | null, desc: string) => why && (key === "nu7" ? !c.tf.nu7 || why.startsWith("Nu-7 only") : !why.startsWith("Needs")) ? "" :
       `<label class="armorpick"><input type="checkbox" data-extra="${key}" ${extras[key] && !why ? "checked" : ""} ${why ? "disabled" : ""}> ${esc(label)} <span class="muted">${esc(why ?? desc)}</span></label>`;
     const scpKnown = !(inc.first && !inc.recon);
@@ -810,14 +816,14 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     </aside>`;
 
     // ---- the scene: the team in the hangar, in the kit they'll take ----
-    const scene = `<div class="stg-scene">${stagingSvg(team, size)}</div>`;
+    const scene = `<div class="stg-scene">${stagingSvg(team, size, entering, selNew)}</div>`;
 
     // ---- one card per slot ----
     const cards = riot ? "" : `<div class="stg-slots" style="--n:${size}">${Array.from({ length: size }, (_, i) => {
       const o = team[i];
       if (!o) return `<div class="slotcard empty"><span class="label">Slot ${i + 1}</span><p class="muted">Open. Pick someone from the roster below.</p></div>`;
       const sq = squadOf(c, o), r = readinessOf(o), g = gearOf(o.id), unq = [g.armor, ...g.items].filter((x): x is ItemId => !!x && !!canCarry(o, x));
-      return `<div class="slotcard ${stgSel === o.id ? "sel" : ""}" data-stgcard="${o.id}">
+      return `<div class="slotcard ${stgSel === o.id ? "sel" : ""} ${entering.has(o.id) ? "enter" : ""}" style="--d:${i * 70}ms" data-stgcard="${o.id}">
         <button class="sc-head" type="button" data-stgsel="${o.id}" aria-pressed="${stgSel === o.id}"><span class="sc-call">${esc(o.call)} · ${RANK_SHORT[o.rank]}</span><b>${esc(fieldName(o))}</b>
           <span class="sc-sub">${o.cls ? esc(CLASSES[o.cls].name) : "No class"} · ${sq ? esc(SPECS[sq.squad.spec].name) : "Reserve"}</span></button>
         <div class="sc-stats"><span title="Health">HP ${o.hp}/${o.maxHp}</span><span title="Sanity">SAN ${o.san}</span><span class="${r.tone}"><span class="lamp ${r.tone}"></span>${r.tone === "ok" ? "Ready" : esc(r.text.split(":")[0])}</span></div>
@@ -850,7 +856,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       ${!ops.length ? `<p class="muted">Nobody is fit to deploy. Wait for the wounded to heal or recruit.</p>` : ""}
     </div>`;
 
-    return `<div class="staging" data-stage-inc="${inc.id}">
+    return `<div class="staging ${opening ? "stg-open" : ""}" data-stage-inc="${inc.id}">
       <header class="stg-head">
         <button class="act" type="button" id="cancelPlan">← World map</button>
         <div class="stg-title"><span class="label">${esc(KIND_NAMES[inc.kind])} · ${esc(b.place.name)}</span><h2>${esc(incidentName(inc))}</h2></div>
@@ -895,7 +901,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
   /** The staging area as a scene: a 1951 hangar, the transport's tail at the open doors, the team in a line in the
    *  kit they will deploy with (unqualified kit left off, as it will be). A finished backdrop in
    *  src/assets/backdrops/staging.* replaces the drawn one. */
-  function stagingSvg(team: Operative[], size: number) {
+  function stagingSvg(team: Operative[], size: number, entering = new Set<string>(), selNew = false) {
     const W = 1600, H = 720, art = assetUrl("backdrops", "staging");
     const hour = Math.floor(c.hour ?? 12), dark = hour < 6 || hour >= 19, dusk = !dark && (hour < 8 || hour >= 17);
     const sky0 = dark ? "#070c16" : dusk ? "#5a5f72" : "#7f97a6", sky1 = dark ? "#1b2433" : dusk ? "#c79a6a" : "#c6cdc3";
@@ -962,16 +968,17 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       ${[[1270, 590, 130, 80, "SCP-F · AMMO"], [1300, 510, 100, 80, ""], [1420, 620, 110, 70, "RATIONS"]].map(([x, y, w, h, lab]) => `<g><rect x="${x}" y="${(y as number) - (h as number)}" width="${w}" height="${h}" fill="#5a4a30"/><rect x="${x}" y="${(y as number) - (h as number)}" width="${w}" height="${h}" fill="url(#hg-corr)" opacity=".3"/><path d="M${x} ${(y as number) - (h as number)} h${w}" stroke="#7a6644" stroke-width="3"/><rect x="${(x as number) + (w as number) - 18}" y="${(y as number) - (h as number)}" width="18" height="${h}" fill="#000" opacity=".25"/>${lab ? `<text x="${(x as number) + 8}" y="${(y as number) - (h as number) / 2 + 5}" fill="#d0c29a" font-family="IBM Plex Mono,monospace" font-size="12">${lab}</text>` : ""}</g>`).join("")}
       ${[0, 1, 2].map(i => `<g><rect x="${90 + i * 46}" y="${610 - (i % 2) * 8}" width="38" height="52" rx="3" fill="#4f5637"/><rect x="${90 + i * 46}" y="${610 - (i % 2) * 8}" width="38" height="52" rx="3" fill="url(#hg-corr)" opacity=".2"/><rect x="${100 + i * 46}" y="${604 - (i % 2) * 8}" width="18" height="8" fill="#3a3f29"/></g>`).join("")}
       <!-- the lamps: shades, beams, pools on the floor -->
-      ${lamps.map(x => `<path d="M${x} 0 V70" stroke="#0d0f10" stroke-width="3"/><path d="M${x - 34} 70 h68 l-14 22 h-40z" fill="#2a2f33"/><ellipse cx="${x}" cy="92" rx="20" ry="5" fill="#fff4d6"/>
+      ${lamps.map((x, li) => `<path d="M${x} 0 V70" stroke="#0d0f10" stroke-width="3"/><path d="M${x - 34} 70 h68 l-14 22 h-40z" fill="#2a2f33"/><g>${li === 2 ? flicker(7) : ""}<ellipse cx="${x}" cy="92" rx="20" ry="5" fill="#fff4d6"/>
         <path d="M${x - 22} 94 L${x - 300} ${H} H${x + 300} L${x + 22} 94Z" fill="url(#hg-beam)" filter="url(#hg-soft)"/>
-        <ellipse cx="${x}" cy="${H - 70}" rx="280" ry="70" fill="url(#hg-pool)"/>`).join("")}`;
+        <ellipse cx="${x}" cy="${H - 70}" rx="280" ry="70" fill="url(#hg-pool)"/></g><g pointer-events="none">${dustMotes(x, 120, H - 60, 420, 9, li + 11)}</g>`).join("")}
+      ${dark ? `<circle cx="1017" cy="${BF - 172}" r="4" fill="#ff5a48"><animate attributeName="opacity" values="1;1;.1;.1" keyTimes="0;.12;.18;1" dur="1.6s" repeatCount="indefinite"/></circle>` : ""}`;
     const n = Math.max(size, 1), half = n <= 4 ? 300 : n <= 6 ? 400 : 470, x0 = 800 - half, x1 = 800 + half, gap = (x1 - x0) / Math.max(1, n - 1), sc = n <= 4 ? 1.25 : n <= 6 ? 1.12 : 0.98;
     const marks = Array.from({ length: n }, (_, i) => { const px = n === 1 ? (x0 + x1) / 2 : x0 + i * gap;
       return `<g><path d="M${px - 44} ${H - 34} h88" stroke="#c9a845" stroke-width="4" opacity=".55"/><text x="${px}" y="${H - 12}" fill="#9a9480" font-family="IBM Plex Mono,monospace" font-size="14" text-anchor="middle">${i + 1}</text></g>`; }).join("");
     const figs = team.map((o, i) => { const px = n === 1 ? (x0 + x1) / 2 : x0 + i * gap;
       const spec = operativeFigure(c, o); if (spec.armor && canCarry(o, spec.armor as ItemId)) spec.armor = "";
       const sl = stgSel === o.id;
-      return `<g class="stg-fig ${sl ? "sel" : ""}" data-stgsel="${o.id}" tabindex="0" role="button" aria-label="${esc(o.name)}">${sl ? `<ellipse cx="${px}" cy="${H - 40}" rx="78" ry="13" fill="#6ea9c8" opacity=".18"/><ellipse cx="${px}" cy="${H - 40}" rx="78" ry="13" fill="none" stroke="#6ea9c8" stroke-width="3"/>` : ""}${figureSvg(spec, px, H - 40, sc)}<rect x="${px - 66}" y="${H - 40 - 360 * sc}" width="132" height="${360 * sc}" fill="transparent"/></g>`; }).join("");
+      return `<g class="stg-fig ${sl ? "sel" : ""} ${entering.has(o.id) ? "enter" : ""} ${sl && selNew ? "sel-new" : ""}" style="--d:${120 + i * 110}ms" data-stgsel="${o.id}" tabindex="0" role="button" aria-label="${esc(o.name)}">${sl ? `<ellipse cx="${px}" cy="${H - 40}" rx="78" ry="13" fill="#6ea9c8" opacity=".18"/><ellipse cx="${px}" cy="${H - 40}" rx="78" ry="13" fill="none" stroke="#6ea9c8" stroke-width="3"/>` : ""}${figureSvg(spec, px, H - 40, sc)}<rect x="${px - 110 * sc}" y="${H - 40 - 410 * sc}" width="${220 * sc}" height="${450 * sc}" fill="transparent"/></g>`; }).join("");
     const light = art ? "" : `<rect width="${W}" height="${H}" fill="url(#hg-vig)" pointer-events="none"/>`;
     return `<svg class="stg-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMax slice" role="img" aria-label="The team at the staging area">${back}${marks}${figs}${light}</svg>`;
   }
@@ -1035,6 +1042,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     const selFac = mapSel?.startsWith("fac:") ? FACILITIES_WORLD.find(f => f.id === mapSel!.slice(4)) ?? null : null;
     const selReg = mapSel === "region";
     if (selInc && planning === selInc.id) return planPanel(selInc);
+    seen.plan = null;
     // zoom: every on-screen size is multiplied by k so markers and text stay the same size at any zoom
     // k: map units per "design pixel", from the zoom and the map's width on screen (bigger on a phone)
     const mapPx = Math.max(300, (document.querySelector(".geomap svg")?.clientWidth ?? (window.innerWidth < 960 ? window.innerWidth - 40 : window.innerWidth * 0.66)));
@@ -1076,10 +1084,12 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       const [ox, oy] = tries.find(([dx, dy]) => busy.every(([bx, by]) => Math.abs(bx - (ax + dx * k)) > 11 * k || Math.abs(by - (ay + dy * k)) > 6 * k)) ?? [0, 0];
       const px = ax + ox * k, py = ay + oy * k;
       return `<g class="rlabel" style="font-size:${3.6 * k}px"><text x="${px}" y="${py}">${esc(label(r))}</text><text x="${px}" y="${py + 4.5 * k}" class="rexp ${st.exposure >= 60 ? "hot" : st.exposure >= 35 ? "warm" : ""}">${st.collapsed ? "LOST" : st.contactDue ? `contact ${dateText(st.contactDue)}` : !isContacted(c, r) ? "no front" : `exposure ${st.exposure}`}${c.chaos.plans.some(p => p.known && p.region === r && p.kind !== "raid" && p.kind !== "sabotage" && p.kind !== "mole" && p.kind !== "agitate") ? `<tspan class="ciop"> · CI op</tspan>` : ""}</text>${(() => { const w = weatherAt(c, r); return mapShow.has("weather") && w !== "clear" ? `<text x="${px}" y="${py + 8.6 * k}" class="rwx ${w}">${WX_ICON[w]} ${WEATHER[w].name.toLowerCase()}<title>${esc(`${WEATHER[w].name} over ${REGIONS[r].name}: ${WEATHER[w].desc}`)}</title></text>` : ""; })()}</g>`; }).join("");
+    // a new incident pings on the map (not on the first look at the map, when everything would)
+    const newIncs = new Set(seen.incs ? c.incidents.filter(i => !seen.incs!.has(i.id)).map(i => i.id) : []); seen.incs = new Set(c.incidents.map(i => i.id));
     const markers = shown.map(({ i, tx, ty, mx, my }) => { const st = incidentState(c, i), b = briefing(c, i), moved = mx !== tx || my !== ty;
       return `<g class="marker ${groupOf(i)} ${st} ${i.dispatch ? "dispatched" : ""} ${mapSel === "inc:" + i.id ? "on" : ""}" data-mapinc="${i.id}" tabindex="0" role="button" aria-label="${esc(incidentName(i))}, ${esc(b.short)}">
         ${moved ? `<line x1="${tx}" y1="${ty}" x2="${mx}" y2="${my}" class="leader" style="stroke-width:${0.4 * k}"/><circle cx="${tx}" cy="${ty}" r="${0.8 * k}" class="truept"/>` : ""}
-        <circle cx="${mx}" cy="${my}" r="${4.2 * k}" class="ring" style="stroke-width:${0.8 * k}"/>${shape(groupOf(i), mx, my)}<svg x="${mx - 1.6 * k}" y="${my - 1.6 * k}" width="${3.2 * k}" height="${3.2 * k}" viewBox="0 0 24 24" class="mico" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">${iconBody(i.kind === "recovery" ? "manhunt" : i.kind)}</svg>
+        ${newIncs.has(i.id) ? `<circle cx="${mx}" cy="${my}" r="${4.2 * k}" class="pingring" style="stroke-width:${0.7 * k}"/>` : ""}        <circle cx="${mx}" cy="${my}" r="${4.2 * k}" class="ring" style="stroke-width:${0.8 * k}"/>${shape(groupOf(i), mx, my)}<svg x="${mx - 1.6 * k}" y="${my - 1.6 * k}" width="${3.2 * k}" height="${3.2 * k}" viewBox="0 0 24 24" class="mico" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">${iconBody(i.kind === "recovery" ? "manhunt" : i.kind)}</svg>
         <text x="${mx}" y="${my + 7.6 * k}" class="mlabel" style="font-size:${3 * k}px">${esc(b.short)}</text><title>${esc(incidentName(i))} · ${esc(b.deadline)}</title></g>`; }).join("");
     const leadMarkers = mapShow.has("lead") ? (c.leads?.list ?? []).map(l => { const pos = TOWN_POS[l.town] ?? [REGIONS[l.region].lon, REGIONS[l.region].lat], [lx, ly] = project(pos[0], pos[1]), m = 2.7 * k;
       return `<g class="marker lead ${l.working ? "active" : l.until - c.day <= 2 ? "urgent" : ""} ${mapSel === "lead:" + l.id ? "on" : ""}" data-maplead="${l.id}" tabindex="0" role="button" aria-label="${esc(l.title)}">
@@ -1190,6 +1200,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
         <p class="muted">Next month: $${councilGrant(c)}k from the O5 Council and $${frontsFunding(c)}k from the fronts, $${monthlyUpkeep(c)}k upkeep and salaries. Global exposure ${c.exposure}; ${collapsedCount(c)} of ${COLLAPSE_LIMIT} fronts lost. Select a region on the map for its front and field operations.</p>
       </div>`;
     const side = selInc ? briefPanel(selInc) : selLead ? leadPanel(selLead) : selFac ? facPanel(selFac) : selReg ? regionPanel() : "";
+    const geoFresh = !!side && mapSel !== seen.geoSel; seen.geoSel = side ? mapSel : null;
     // the wire: the latest things the world did without Site-19 (the Insurgency, the fronts, the Council, other sites)
     const wireItems = (c.history ?? []).filter(h => h.cat === "insurgency" || h.cat === "region" || h.cat === "council").slice(-4).reverse();
     const wire = wireItems.length ? `<div class="card geowire"><div class="label">The wire</div>${wireItems.map(h => `<p><span class="muted">${esc(dateText(h.day))}</span> ${esc(h.text)}</p>`).join("")}<button class="linkbtn" type="button" data-tab="history">Full chronicle →</button></div>` : "";
@@ -1242,7 +1253,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
         </div>
         <div class="geo-top">${clock}</div>
         <aside class="geo-ops" aria-label="Operations">${overview}${forces}${wire}</aside>
-        ${side ? `<aside class="geoside" aria-label="Selected"><button class="act geoclose" type="button" data-mapclear aria-label="Close">×</button>${side}</aside>` : ""}
+        ${side ? `<aside class="geoside ${geoFresh ? "geo-new" : ""}" aria-label="Selected"><button class="act geoclose" type="button" data-mapclear aria-label="Close">×</button>${side}</aside>` : ""}
         <div class="geo-foot"><p class="geohelp">Markers: <span class="dot anomaly"></span>anomaly <span class="dot insurgency"></span>Insurgency <span class="dot coverup"></span>cover-up <span class="dot site"></span>at Site-19 <span class="dot lead"></span>lead (an opportunity). Ring: <span class="urgenttxt">urgent</span>, <span class="newtxt">new</span>, <span class="activetxt">under way</span>. Select a marker or region.</p></div>
     </div>
 `;
@@ -1483,7 +1494,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       extras.focus = opSel ?? undefined;
       { const m = mtfOf(c, "e11"); if (m) extras.unit = { code: m.designation.split("-").map((w, i) => i ? w : w[0]).join("-"), name: m.name }; }
       const hero = target?.startsWith("person:") ? c.roster.find(o => `person:${o.id}` === target && o.alive) : undefined;
-      if (hero) extras.hero = { key: hero.id, spec: operativeFigure(c, hero), x: HERO_X };
+      if (hero) extras.hero = { key: hero.id, spec: operativeFigure(c, hero), x: HERO_X, fresh: seen.hero !== hero.id };
+      seen.hero = hero?.id ?? null;
       extras.span = target ? [200, 1000] : [240, 1160];
     }
     Object.assign(extras, liveExtras(L));
@@ -1491,7 +1503,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     if (L.kind === "armory") {
       extras.racks = [...new Set(Object.values(c.models))];
       const ao = armOp ? c.roster.find(o => o.id === armOp && o.alive) : undefined;
-      if (ao && target === "bench") extras.bench = { model: c.models[weaponOf(ao)], attachment: ao.attachment, ghost: armPreview || undefined, highlight: armMount ?? undefined, mounts: mountsOf(c, ao), zoom: armZoom, narrow: true };
+      if (ao && target === "bench") { const key = `${ao.id}:${c.models[weaponOf(ao)]}`; extras.bench = { model: c.models[weaponOf(ao)], attachment: ao.attachment, ghost: armPreview || undefined, highlight: armMount ?? undefined, mounts: mountsOf(c, ao), zoom: armZoom, narrow: true, fresh: seen.bench !== key }; seen.bench = key; }
+      else seen.bench = "";
     }
     const ts = targetsFor(L, { heroes: ops.map(o => ({ id: o.id, name: o.name })), armOp: !!armOp });
     if (target && !ts.some(t => t.id === target) && !(L.kind === "quarters" && target.startsWith("person:"))) target = null;
@@ -1526,6 +1539,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     const stateText: Record<string, string> = { operational: L.powered ? "Operational" : "No power", building: "Under construction", damaged: "Damaged", wrecked: "Wrecked", repairing: "Under repair", demolishing: "Being torn down", upgrading: "Being refitted" };
     const labs = L.kind === "lab" ? c.base.facilities.filter(f => f.type === "lab") : [];
     const panel = target ? (target.startsWith("person:") ? target : selT?.panel ?? null) : null;
+    const panelFresh = !!panel && panel !== seen.panel; seen.panel = panel;
     const title = target?.startsWith("person:") ? (c.roster.find(o => `person:${o.id}` === target)?.name ?? selT?.label ?? "") : selT?.label ?? "";
     return `<div class="roomview ${panel ? "haspanel" : ""} ${panelLeft ? "panel-left" : ""}" data-room="${esc(L.id)}">
       <div class="rv-stage"><div class="rv-cam" style="${cam}">${interiorSvg(L, extras)}</div></div>
@@ -1539,7 +1553,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       ${L.kind === "command" ? commandStrip() : ""}${heroUi}
       <nav class="objbar" aria-label="In this room">${ts.filter(t => t.kind !== "person" || L.kind !== "quarters").map(t => `<button class="act ${t.id === target ? "on" : ""} k-${t.kind}" type="button" data-target="${esc(t.id)}" aria-pressed="${t.id === target}" title="${esc(t.hint)}">${esc(t.label)}</button>`).join("")}
         ${L.kind === "quarters" ? ops.map(o => `<button class="act ${target === `person:${o.id}` ? "on" : ""} k-person" type="button" data-person="${o.id}">${esc(o.name.split(" ").slice(-1)[0])}</button>`).join("") : ""}</nav>
-      ${panel ? `<aside class="ctxpanel ${ctxWide ? "wide" : ""} ${panelLeft ? "left" : ""}" role="dialog" aria-label="${esc(title)}">
+      ${panel ? `<aside class="ctxpanel ${ctxWide ? "wide" : ""} ${panelLeft ? "left" : ""} ${panelFresh ? "ctx-new" : ""}" role="dialog" aria-label="${esc(title)}">
         <div class="ctx-h"><b>${esc(title)}</b>${selT ? `<span class="muted">${esc(selT.hint)}</span>` : ""}<button class="act" type="button" id="ctxWide" aria-pressed="${ctxWide}" title="Widen">${ctxWide ? "⇥" : "⇤"}</button><button class="act" type="button" id="ctxClose" aria-label="Close (Esc)">×</button></div>
         <div class="ctx-b">${panelFor(panel, L)}</div></aside>` : ""}
     </div>`;
@@ -2471,6 +2485,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     // the room fills the window below the header, whatever the header's height at this width
     { const rv = root.querySelector<HTMLElement>(".roomview"); if (rv) rv.style.setProperty("--rvh", `${Math.max(380, Math.round(window.innerHeight - rv.getBoundingClientRect().top - window.scrollY - 14))}px`); }
     fitGeo();
+    syncScenes(root);
     // environment-first: the room's objects, the panel, the way back
     const pickTarget = (id: string) => {
       const L = currentRoom() ? roomLayout(c, currentRoom()!) : null; if (!L) return;
@@ -2489,6 +2504,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     root.querySelectorAll<HTMLElement>("[data-roomstep]").forEach(b => b.onclick = () => stepRoom(b.dataset.roomstep!));
     root.querySelectorAll<HTMLElement>("[data-person]").forEach(b => { const pick = () => { opSel = b.dataset.person!; target = `person:${opSel}`; render(); }; b.onclick = pick; b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } }; });
     on("fxToggle", () => { setTransitions(!transitionsSetting()); render(); });
+    on("motionToggle", () => { setSceneMotion(!sceneMotionSetting()); render(); });
     root.querySelectorAll<HTMLElement>("[data-opsec]").forEach(b => b.onclick = () => { opSection = b.dataset.opsec as OpSection; render(); });
     on("squadBtn", () => { target = null; heroZoom = 1; render(); });
     root.querySelectorAll<HTMLElement>("[data-renamemtf]").forEach(b => b.onclick = () => run({ type: "renameMtf", tf: b.dataset.renamemtf as TaskForce, designation: root.querySelector<HTMLInputElement>("#mtfDes")!.value, name: root.querySelector<HTMLInputElement>("#mtfName")!.value }));
@@ -2588,7 +2604,12 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     });
     root.querySelectorAll<HTMLDetailsElement>(".stg-notes").forEach(d => d.ontoggle = () => { stgNotes = d.open; });
     root.querySelectorAll<HTMLElement>("[data-stgsel]").forEach(b => { const pick = () => { stgSel = stgSel === b.dataset.stgsel ? null : b.dataset.stgsel!; render(); }; b.onclick = pick; b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } }; });
-    root.querySelectorAll<HTMLElement>("[data-unpick]").forEach(b => b.onclick = () => { chosen.delete(b.dataset.unpick!); if (stgSel === b.dataset.unpick) stgSel = null; render(); });
+    root.querySelectorAll<HTMLElement>("[data-unpick]").forEach(b => b.onclick = () => {
+      const id = b.dataset.unpick!, apply = () => { chosen.delete(id); if (stgSel === id) stgSel = null; render(); };
+      if (!sceneMotionOn()) { apply(); return; }
+      root.querySelector(`.stg-fig[data-stgsel="${id}"]`)?.classList.add("leaving"); root.querySelector(`[data-stgcard="${id}"]`)?.classList.add("leaving");
+      setTimeout(apply, 260);
+    });
     root.querySelectorAll<HTMLElement>("[data-stgsquad]").forEach(b => b.onclick = () => {
       stgSquad = b.dataset.stgsquad || null; const pl = c.incidents.find(i => i.id === planning);
       if (pl && stgSquad) { chosen.clear(); const ready = readyFor(pl); for (const o of ready.filter(o => o.squad === stgSquad).slice(0, squadSize(c))) chosen.add(o.id); }

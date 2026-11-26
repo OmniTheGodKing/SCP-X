@@ -158,3 +158,35 @@ Layout fixes:
 - World Map: the Insurgency flag on a region label no longer runs into the exposure figure.
 
 Screenshots: `docs/screenshots/uiux/v2-*`.
+
+## Motion pass
+
+`src/ui/scene/motion.ts`, with the figure, scene and hub changes it drives. Nothing in the game waits on any of it.
+
+**Idle and ambient** (SVG's own animation timeline, so it runs without script):
+
+- People breathe (the upper body rises and falls), shift their weight from foot to foot, turn their head a little
+  now and then, and blink. Each runs at a phase and pace taken from where they stand, so a squad never moves as one.
+- Every lit room has dust drifting in each lamp's beam, and one tired lamp that dips now and then. The hangar has the
+  same, and at night a red beacon blinks on the transport's tail.
+- The hub rebuilds its HTML on every render, which would restart these. After each render `syncScenes()` sets each
+  scene's clock to the page clock, so the loops carry on where they were (test M2).
+
+**One-off motions** (CSS keyframes on classes the hub adds only to what changed since the last render):
+
+- Staging: opening it eases the camera in on the hangar and slides the intelligence and readiness panels in; the
+  team walks onto their marks one after another; slot cards rise in sequence; selecting an operative brings them up
+  to attention, a little forward; Stand down walks them off before they leave the team (260 ms).
+- Quarters: the chosen operative steps forward out of the line while the rest fall back into shadow.
+- Room panels and the World Map's selection panel slide in when what they show changes.
+- World Map: an incident that wasn't there on the last look pings outward three times.
+- Armory: a weapon put on the bench settles onto the mat.
+
+**Off switch:** System > Scene motion, or the system's reduced-motion setting, holds every scene still and turns
+the one-off motions off (test M3).
+
+**Clickable people stay steady targets:** a fixed, invisible hit area larger than the figure's movement wraps each
+clickable person, so their box doesn't change as they idle (automated clicks wait for a steady target).
+
+Not animated: walking cycles (operatives glide with a step bob rather than moving their legs), the tactical layer,
+and the Geoscape's map itself beyond the existing flight and marker motion.

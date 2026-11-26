@@ -449,3 +449,55 @@ ul.quals { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; fon
   .ro .k { font-size: 8.5px; letter-spacing: .05em; }
   .ro .v { font-size: 12px; }
 }
+
+/* ---- UI/UX overhaul, motion: one-off motions on what changed (see src/ui/scene/motion.ts) ---- */
+.stg-fig, .roomview .hero, .benchgun-wrap { transform-box: fill-box; transform-origin: 50% 100%; }
+/* staging: the team walks onto their marks from the side, with a step in their stride */
+@keyframes stgWalk {
+  0% { transform: translate(-260px, 0); opacity: 0; } 10% { opacity: 1; }
+  15% { transform: translate(-215px, -6px); } 30% { transform: translate(-165px, 0); } 45% { transform: translate(-115px, -6px); }
+  60% { transform: translate(-70px, 0); } 75% { transform: translate(-32px, -5px); } 90% { transform: translate(-8px, 0); } 100% { transform: none; }
+}
+.stg-fig.enter { animation: stgWalk .95s cubic-bezier(.25,.6,.35,1) var(--d, 0ms) both; }
+/* selected: they come up to attention and stay a little forward */
+@keyframes stgAttention { 0% { transform: none; } 45% { transform: translateY(-10px) scale(1.035); } 100% { transform: translateY(-3px) scale(1.015); } }
+.stg-fig.sel { transform: translateY(-3px) scale(1.015); }
+.stg-fig.sel-new { animation: stgAttention .42s ease-out both; }
+/* stood down: they turn and walk off */
+@keyframes stgLeave { to { transform: translate(200px, 0); opacity: 0; } }
+.stg-fig.leaving { animation: stgLeave .26s ease-in forwards; }
+@keyframes cardLeave { to { transform: translateY(12px); opacity: 0; } }
+.slotcard.leaving { animation: cardLeave .26s ease-in forwards; }
+@keyframes cardRise { from { transform: translateY(18px); opacity: 0; } to { transform: none; opacity: 1; } }
+.slotcard.enter { animation: cardRise .45s ease-out calc(var(--d, 0ms) + 200ms) both; }
+/* opening the staging area: the camera eases in on the hangar, the panels slide in from the sides */
+@keyframes stgDolly { from { transform: scale(1.08); filter: brightness(.6); } to { transform: none; filter: none; } }
+@keyframes slideFromL { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes slideFromR { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes dropIn { from { transform: translateY(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
+.stg-open .stg-svg { transform-origin: 50% 70%; animation: stgDolly 1.1s cubic-bezier(.2,.7,.2,1) both; }
+.stg-open .stg-intel { animation: slideFromL .45s ease-out .15s both; }
+.stg-open .stg-ready { animation: slideFromR .45s ease-out .25s both; }
+.stg-open .stg-head { animation: dropIn .35s ease-out both; }
+.stg-open .stg-roster { animation: dropIn .4s ease-out .5s both; }
+/* quarters: the chosen operative steps forward out of the line; the others fall back into the shadow */
+@keyframes heroStep { from { transform: translateY(-60px) scale(.62); opacity: .2; } 60% { opacity: 1; } to { transform: none; opacity: 1; } }
+.roomview .hero.hero-new { animation: heroStep .55s cubic-bezier(.2,.75,.25,1) both; }
+@keyframes backFade { from { opacity: 1; } to { opacity: .55; } }
+.roomview .back-new { animation: backFade .5s ease-out both; }
+/* panels slide in when what they show changes */
+.ctxpanel.ctx-new { animation: slideFromR .28s ease-out both; }
+.ctxpanel.left.ctx-new { animation-name: slideFromL; }
+.geo-full .geoside.geo-new { animation: slideFromR .3s ease-out both; }
+/* the map: a new incident pings outward */
+.worldmap .pingring { fill: none; stroke: #f0c86a; transform-box: fill-box; transform-origin: 50% 50%; animation: ping 1.4s ease-out 3; }
+@keyframes ping { from { transform: scale(1); opacity: .9; } to { transform: scale(3.4); opacity: 0; } }
+/* armory: a weapon put on the bench settles onto the mat */
+@keyframes benchSettle { 0% { transform: translateY(-70px); opacity: 0; } 55% { transform: translateY(4px); opacity: 1; } 75% { transform: translateY(-3px); } 100% { transform: none; } }
+.benchgun-wrap.bench-new { animation: benchSettle .6s cubic-bezier(.3,.7,.3,1) both; }
+/* off: reduced motion or System > Scene motion */
+.motion-off .stg-fig, .motion-off .slotcard, .motion-off .stg-svg, .motion-off .stg-intel, .motion-off .stg-ready, .motion-off .stg-head, .motion-off .stg-roster,
+.motion-off .hero, .motion-off .back-new, .motion-off .ctxpanel, .motion-off .geoside, .motion-off .pingring, .motion-off .benchgun-wrap { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .stg-fig, .slotcard, .stg-svg, .stg-intel, .stg-ready, .stg-head, .stg-roster, .roomview .hero, .back-new, .ctxpanel, .geoside, .pingring, .benchgun-wrap { animation: none !important; }
+}

@@ -38,6 +38,8 @@ export interface FigureSpec {
   /** Rank stripes on the sleeve (0 to 5). */
   rank?: number;
   injured?: boolean;
+  /** Hold still: no idle motion (a figure in a frozen or posed shot). */
+  still?: boolean;
 }
 
 /** Named attachment points on the 340-unit frame, origin at the feet. */
@@ -102,8 +104,9 @@ export function figureSvg(s: FigureSpec, x: number, y: number, scale = 1, face: 
     if (military) L.push(`<rect x="${ax - 13}" y="-22" width="26" height="5" fill="${tone(bt, 0.7)}"/><rect x="${ax + 6}" y="-23" width="5" height="7" fill="#8a8370"/>`);
     L.push(`<path d="M${ax - 14} -1 H${ax + 15}" stroke="#0f0d0b" stroke-width="3"/><ellipse cx="${ax + 2}" cy="-7" rx="7" ry="3" fill="#fff" opacity=".1"/>`);
   }
-  // the crotch shadow between the legs
+  // the crotch shadow between the legs (the last of the lower body: everything after it breathes)
   L.push(`<path d="M-3 -156 L3 -156 L4 -118 L-4 -118Z" fill="#000" opacity=".22"/>`);
+  const legsEnd = L.length;
   // ---- torso ----
   const waist = female ? 27 : 31, hem = d.long ? -64 : military ? -150 : -158;
   const torso = `M${-sh + 2} -276 Q${-sh - 2} -232 ${-waist - 2} -192 L${-hipW - 2} ${hem} L${hipW + 2} ${hem} L${waist + 2} -192 Q${sh + 2} -232 ${sh - 2} -276 Q${sh - 14} -284 14 -286 L-14 -286 Q${-sh + 14} -284 ${-sh + 2} -276Z`;
@@ -139,20 +142,35 @@ export function figureSvg(s: FigureSpec, x: number, y: number, scale = 1, face: 
   }
   // rank chevrons on the left sleeve (Army enlisted, point up)
   if (s.rank && !sealed) for (let i = 0; i < Math.min(5, s.rank); i++) L.push(`<path d="M${-sh - 14} ${-238 + i * 5.5} l10 -6 l10 6" stroke="#c9a45c" stroke-width="2.4" fill="none" stroke-linejoin="round"/>`);
+  const headStart = L.length;
   // ---- neck, head, headgear ----
   if (!sealed) {
     L.push(solid(`M-8 -298 L-9 -282 Q0 -278 9 -282 L8 -298Z`, tone(skin, 0.86)));
     L.push(`<path d="M-9 -286 Q0 -281 9 -286 L9 -282 Q0 -277 -9 -282Z" fill="#000" opacity=".25"/>`);
     if (s.look.accessory === 3) L.push(`<path d="M-15 -288 Q0 -278 15 -288 L17 -280 Q0 -268 -17 -280Z" fill="#6b6a4a"/><path d="M6 -278 l5 24 l-9 -3z" fill="#5c5b3f"/>`);
-    L.push(head(s.look, skin, hair, female));
+    L.push(head(s.look, skin, hair, female, s.still ? -1 : phaseOf(x, y)));
     const hg = s.headgear;
     if (hg === "helmet") L.push(helmet());
     else if (hg === "hardhat") L.push(`<path d="M-22 -326 Q-22 -352 0 -352 Q22 -352 22 -326Z" fill="#d9a441"/><path d="M-22 -326 Q-22 -352 0 -352 Q22 -352 22 -326Z" fill="url(#fg-dome)"/><rect x="-27" y="-328" width="54" height="5" rx="2.5" fill="#b07e28"/>`);
     else if (Array.isArray(hg)) L.push(unitHat(hg));
   }
   if (s.injured && !sealed) L.push(`<path d="M${-sh - 12} -252 l22 4 l-2 12 l-22 -4z" fill="#e8e4d8"/><path d="M${-sh - 4} -250 l3 13" stroke="#a8433a" stroke-width="3"/>`);
-  return `<g class="fig ${cls}" transform="translate(${x} ${y}) scale(${scale * face} ${scale})">${L.join("")}</g>`;
+  // UI/UX overhaul, motion: idle life on SVG's own timeline (so a re-render resumes it rather than restarting it, once
+  // the hub re-syncs the clock): the upper body breathes, the head turns a little now and then, the weight shifts
+  // from foot to foot. Each person runs at their own phase and pace, so a squad never moves as one.
+  if (s.still) return `<g class="fig ${cls}" transform="translate(${x} ${y}) scale(${scale * face} ${scale})">${L.join("")}</g>`;
+  const ph = phaseOf(x, y), lower = L.slice(0, legsEnd).join(""), upper = L.slice(legsEnd, headStart).join(""), top = L.slice(headStart).join("");
+  const headG = `<g transform="translate(0 -290)"><g>${idle("rotate", "0;1.6;0.4;-1.3;0", 6.8 + ph * 2.4, ph)}<g transform="translate(0 290)">${top}</g></g></g>`;
+  return `<g class="fig ${cls}" transform="translate(${x} ${y}) scale(${scale * face} ${scale})"><g>${idle("rotate", "0;0.4;0;-0.35;0", 8.6 + ph * 3, ph * 0.7)}${lower}<g>${idle("scale", "1 1;1.004 1.008;1 1", 3.8 + ph * 0.9, ph)}${upper}${headG}</g></g></g>`;
 }
+
+/** A stable phase (0..1) for a figure from where it stands, so the same person idles the same way every render. */
+const phaseOf = (x: number, y: number) => { const v = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453; return v - Math.floor(v); };
+/** An endless, eased idle loop on the element's own transform, started part-way through by its phase. */
+const idle = (type: "rotate" | "scale", values: string, dur: number, ph: number) => {
+  const n = values.split(";").length, keyTimes = Array.from({ length: n }, (_, i) => (i / (n - 1)).toFixed(3)).join(";");
+  return `<animateTransform attributeName="transform" type="${type}" values="${values}" keyTimes="${keyTimes}" calcMode="spline" keySplines="${Array(n - 1).fill(".45 0 .55 1").join(";")}" dur="${dur.toFixed(2)}s" begin="-${(ph * dur).toFixed(2)}s" repeatCount="indefinite"/>`;
+};
 
 function hand(x: number, y: number, col: string) {
   return `<ellipse cx="${x}" cy="${y}" rx="8.5" ry="9.5" fill="${col}"/><ellipse cx="${x}" cy="${y}" rx="8.5" ry="9.5" fill="url(#fg-dome)"/><path d="M${x - 6} ${y - 3} h11 M${x - 6} ${y + 1} h11 M${x - 5} ${y + 5} h9" stroke="${tone(col, 0.7)}" stroke-width="1" opacity=".7"/>`;
@@ -238,7 +256,7 @@ function vest(kind: ArmorKind, tier: number, sh: number, waist: number) {
 
 /** A head about one seventh of the height: skull and jaw as volumes, a face lit from the upper left, small eyes with
  *  lids and brow shadow rather than cartoon whites, then hair, facial hair, scars and accessories. */
-function head(l: Look, skin: string, hair: string, female: boolean) {
+function head(l: Look, skin: string, hair: string, female: boolean, ph = -1) {
   const shadeC = tone(skin, 0.8), lit = tone(skin, 1.07), lip = mix(skin, "#8a3a30", 0.32);
   const shape = l.face ?? 0, jaw = (female ? 13 : 15) + (shape === 1 ? 2 : shape === 2 ? -1.5 : 0), chin = shape === 2 ? -289 : shape === 1 ? -294 : -292;
   const faceD = `M-16 -322 Q-17 -344 0 -344 Q17 -344 16 -322 Q${jaw + 1} -304 ${shape === 1 ? 6 : 3} ${chin} Q0 ${chin + 1.5} ${shape === 1 ? -6 : -3} ${chin} Q${-jaw - 1} -304 -16 -322Z`;
@@ -270,9 +288,10 @@ function head(l: Look, skin: string, hair: string, female: boolean) {
     <ellipse cx="-7" cy="-334" rx="7" ry="4" fill="${lit}" opacity=".45"/>
     <path d="M-12 -323 Q-6.5 -326 -2 -323.5 M2 -323.5 Q6.5 -326 12 -323" stroke="${tone(hair, 1.05)}" stroke-width="2" stroke-linecap="round" fill="none"/>
     <path d="M-12 -321 Q-6.5 -323 -1.5 -321 L-1.5 -319 Q-6.5 -321 -12 -319Z M1.5 -321 Q6.5 -323 12 -321 L12 -319 Q6.5 -321 1.5 -319Z" fill="${shadeC}" opacity=".8"/>
+    ${ph >= 0 ? `<g transform="translate(0 -318)"><g><animateTransform attributeName="transform" type="scale" values="1 1;1 1;1 .12;1 1" keyTimes="0;.955;.975;1" dur="${(4.2 + ph * 3.1).toFixed(2)}s" begin="-${(ph * 4.2).toFixed(2)}s" repeatCount="indefinite"/><g transform="translate(0 318)">` : ""}
     <path d="M-10.5 -318 Q-6.5 -320.5 -2.5 -318 Q-6.5 -316.2 -10.5 -318Z M2.5 -318 Q6.5 -320.5 10.5 -318 Q6.5 -316.2 2.5 -318Z" fill="#e4dccd"/>
     <circle cx="-6.3" cy="-318.1" r="1.9" fill="#2b2119"/><circle cx="6.7" cy="-318.1" r="1.9" fill="#2b2119"/>
-    <path d="M-10.8 -318.3 Q-6.5 -321 -2.3 -318.3 M2.3 -318.3 Q6.5 -321 10.8 -318.3" stroke="#2b2119" stroke-width="1.1" fill="none"/>
+    <path d="M-10.8 -318.3 Q-6.5 -321 -2.3 -318.3 M2.3 -318.3 Q6.5 -321 10.8 -318.3" stroke="#2b2119" stroke-width="1.1" fill="none"/>${ph >= 0 ? "</g></g></g>" : ""}
     <path d="M0.5 -316 L2.8 -306 Q1 -304.2 -1.8 -305" stroke="${shadeC}" stroke-width="1.5" fill="none" stroke-linecap="round"/>
     <path d="M1 -316 L3.6 -306.5 Q3 -304 1 -304Z" fill="${shadeC}" opacity=".6"/>
     <path d="M-5 -299.2 Q0 -297.4 5 -299.2" stroke="${tone(lip, 0.75)}" stroke-width="1.6" fill="none" stroke-linecap="round"/>
