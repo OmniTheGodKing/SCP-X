@@ -78,7 +78,13 @@ function defs() {
     <linearGradient id="sc-side" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2a2d2a"/><stop offset="1" stop-color="#4b4a40"/></linearGradient>
     <linearGradient id="sc-sideR" x1="1" y1="0" x2="0" y2="0"><stop offset="0" stop-color="#2a2d2a"/><stop offset="1" stop-color="#4b4a40"/></linearGradient>
     <radialGradient id="sc-cone" cx=".5" cy="0" r="1"><stop offset="0" stop-color="${C.lamp}" stop-opacity=".38"/><stop offset="1" stop-color="${C.lamp}" stop-opacity="0"/></radialGradient>
-    <radialGradient id="sc-vig" cx=".5" cy=".5" r=".75"><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".6"/></radialGradient>
+    <radialGradient id="sc-vig" cx=".5" cy=".45" r=".78"><stop offset=".5" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".72"/></radialGradient>
+    <linearGradient id="sc-aoUp" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".55"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>
+    <linearGradient id="sc-aoDown" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".5"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>
+    <linearGradient id="sc-beam" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${C.lamp}" stop-opacity=".34"/><stop offset=".6" stop-color="${C.lamp}" stop-opacity=".1"/><stop offset="1" stop-color="${C.lamp}" stop-opacity="0"/></linearGradient>
+    <radialGradient id="sc-pool" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="${C.lamp}" stop-opacity=".3"/><stop offset=".6" stop-color="${C.lamp}" stop-opacity=".08"/><stop offset="1" stop-color="${C.lamp}" stop-opacity="0"/></radialGradient>
+    <linearGradient id="sc-haze" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3dfae" stop-opacity=".1"/><stop offset=".5" stop-color="#f3dfae" stop-opacity=".03"/><stop offset="1" stop-color="#0a1218" stop-opacity=".18"/></linearGradient>
+    <filter id="sc-soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="14"/></filter>
     <radialGradient id="sc-red" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="${C.red}" stop-opacity=".55"/><stop offset="1" stop-color="${C.red}" stop-opacity="0"/></radialGradient>
     <pattern id="sc-hz" width="28" height="28" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="28" height="28" fill="#1a1a1a"/><rect width="14" height="28" fill="${C.hz}"/></pattern>
     <pattern id="sc-tilesm" width="40" height="40" patternUnits="userSpaceOnUse"><rect width="40" height="40" fill="none" stroke="#7d8078" stroke-opacity=".55" stroke-width="2"/></pattern>
@@ -130,7 +136,10 @@ function shell(L: RoomLayout) {
     <path d="M0 0 L${BX0} ${BY0} V${BY1} L0 ${H}Z" fill="url(#sc-side)"/>
     <path d="M${W} 0 L${BX1} ${BY0} V${BY1} L${W} ${H}Z" fill="url(#sc-sideR)"/>
     <path d="M0 ${H * 0.72} L${BX0} ${dadoY + 30}" stroke="#000" stroke-opacity=".25" stroke-width="3"/><path d="M${W} ${H * 0.72} L${BX1} ${dadoY + 30}" stroke="#000" stroke-opacity=".25" stroke-width="3"/>
-    <rect x="${BX0}" y="${BY1 - 8}" width="${BX1 - BX0}" height="8" fill="#000" opacity=".25"/>`;
+    <rect x="${BX0}" y="${BY1 - 8}" width="${BX1 - BX0}" height="8" fill="#000" opacity=".25"/>
+    <rect x="${BX0}" y="${BY1 - 90}" width="${BX1 - BX0}" height="90" fill="url(#sc-aoUp)" opacity=".6"/>
+    <path d="M${BX0} ${BY1} H${BX1} L${BX1 + 40} ${BY1 + 50} H${BX0 - 40}Z" fill="url(#sc-aoDown)"/>
+    <rect x="${BX0}" y="${BY0}" width="${BX1 - BX0}" height="60" fill="url(#sc-aoDown)" opacity=".7"/>`;
 }
 
 /** A door on a side wall, in the wall's perspective. side −1 is the left wall. */
@@ -172,7 +181,10 @@ function lights(L: RoomLayout, dark: boolean) {
   for (let i = 0; i < n; i++) {
     const x = BX0 + (BX1 - BX0) * (i + 0.5) / n;
     out.push(`<line x1="${x}" y1="${BY0 - 60}" x2="${x}" y2="${BY0 + 6}" stroke="#111" stroke-width="3"/><path d="M${x - 30} ${BY0 + 6} h60 l-12 18 h-36z" fill="#2c3237"/>`);
-    if (!dark) out.push(`<path d="M${x - 18} ${BY0 + 24} L${x - 260} ${BY1 + 200} H${x + 260} L${x + 18} ${BY0 + 24}Z" fill="url(#sc-cone)"/><ellipse cx="${x}" cy="${BY0 + 24}" rx="16" ry="5" fill="${C.lamp}" opacity=".9"/>`);
+    if (!dark) out.push(`<ellipse cx="${x}" cy="${BY0 + 90}" rx="230" ry="170" fill="url(#sc-pool)" opacity=".8"/>
+      <path d="M${x - 20} ${BY0 + 24} L${x - 250} ${BY1 + 210} H${x + 250} L${x + 20} ${BY0 + 24}Z" fill="url(#sc-beam)" filter="url(#sc-soft)"/>
+      <ellipse cx="${x}" cy="${BY1 + 110}" rx="300" ry="80" fill="url(#sc-pool)"/>
+      <ellipse cx="${x}" cy="${BY0 + 24}" rx="17" ry="5" fill="#fff6dc"/><ellipse cx="${x}" cy="${BY0 + 26}" rx="40" ry="14" fill="${C.lamp}" opacity=".35" filter="url(#sc-soft)"/>`);
   }
   return out.join("");
 }
@@ -449,11 +461,25 @@ function benchScene(b: NonNullable<SceneExtras["bench"]>) {
       <circle cx="${px}" cy="${py}" r="6" fill="#6ea9c8"/>
       <text x="${px + LABEL_AT[m as MountId][0]}" y="${py + LABEL_AT[m as MountId][1]}" font-family="IBM Plex Mono,monospace" font-size="17" fill="#d8d3c6" text-anchor="middle" paint-order="stroke" stroke="#05080b" stroke-width="5">${MOUNT_NAMES[m as MountId]}</text></g>`;
   }).join("");
-  return `<rect width="${W}" height="${H}" fill="#05080b" opacity=".5" pointer-events="none"/>
-    <path d="M60 ${H - 230} H${W - 60} L${W} ${H} H0Z" fill="#3b3226"/><path d="M60 ${H - 230} H${W - 60} L${W - 40} ${H - 205} H40Z" fill="#4e4231"/>
-    <rect x="${cx - 640}" y="${cy - 150}" width="1280" height="300" fill="#2d3a2c" opacity=".55" rx="10"/>
-    ${Array.from({ length: 13 }, (_, i) => `<line x1="${cx - 600 + i * 100}" y1="${cy - 140}" x2="${cx - 600 + i * 100}" y2="${cy + 140}" stroke="#d8d3c6" stroke-opacity=".06"/>`).join("")}
-    <ellipse cx="${cx}" cy="${cy + 120}" rx="560" ry="34" fill="#000" opacity=".35"/>
+  // UI/UX overhaul, visual pass: an armourer's bench under a task lamp. Oak top in perspective with its planks and
+  // a lit front edge, a canvas gun mat, the cleaning kit at the side, and the weapon's own shadow on the mat.
+  const top = H - 250, mat = { x: cx - 620, y: cy - 135, w: 1240, h: 270 };
+  return `<defs><linearGradient id="bn-top" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a3a26"/><stop offset="1" stop-color="#6b5233"/></linearGradient>
+      <linearGradient id="bn-edge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a6a42"/><stop offset="1" stop-color="#3a2c1c"/></linearGradient>
+      <radialGradient id="bn-lamp" cx=".45" cy=".4" r=".6"><stop offset="0" stop-color="#f6dca0" stop-opacity=".32"/><stop offset="1" stop-color="#f6dca0" stop-opacity="0"/></radialGradient>
+      <linearGradient id="bn-mat" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b4a37"/><stop offset="1" stop-color="#2c3829"/></linearGradient>
+      <filter id="bn-blur"><feGaussianBlur stdDeviation="10"/></filter></defs>
+    <rect width="${W}" height="${H}" fill="#05080b" opacity=".55" pointer-events="none"/>
+    <path d="M90 ${top} H${W - 90} L${W + 40} ${H - 40} H-40Z" fill="url(#bn-top)"/>
+    ${Array.from({ length: 7 }, (_, i) => { const t = (i + 1) / 8, y = top + (H - 40 - top) * t, xl = 90 - 130 * t, xr = W - 90 + 130 * t; return `<path d="M${xl.toFixed(0)} ${y.toFixed(0)} H${xr.toFixed(0)}" stroke="#2c2116" stroke-width="2" opacity=".55"/>`; }).join("")}
+    <path d="M-40 ${H - 40} H${W + 40} V${H} H-40Z" fill="url(#bn-edge)"/>
+    <path d="M${mat.x} ${mat.y} h${mat.w} l40 ${mat.h} h-${mat.w + 80}z" fill="url(#bn-mat)"/>
+    <path d="M${mat.x} ${mat.y} h${mat.w} l40 ${mat.h} h-${mat.w + 80}z" fill="none" stroke="#c9b98a" stroke-opacity=".25" stroke-width="3" stroke-dasharray="14 10"/>
+    ${Array.from({ length: 11 }, (_, i) => `<line x1="${mat.x + 60 + i * 110}" y1="${mat.y + 10}" x2="${mat.x + 50 + i * 114}" y2="${mat.y + mat.h - 10}" stroke="#d8d3c6" stroke-opacity=".05"/>`).join("")}
+    <ellipse cx="${cx - 40}" cy="${cy + 10}" rx="660" ry="150" fill="url(#bn-lamp)"/>
+    <g opacity=".9"><rect x="${W - 250}" y="${top + 40}" width="46" height="70" rx="6" fill="#5c6a52"/><rect x="${W - 238}" y="${top + 22}" width="22" height="20" fill="#3a4538"/><path d="M${W - 227} ${top + 22} l40 -30" stroke="#8a9198" stroke-width="5"/>
+      <path d="M${W - 190} ${top + 120} q60 -20 110 10 q-30 30 -110 20z" fill="#b9ab8a"/><rect x="${W - 320}" y="${top + 128}" width="110" height="10" rx="5" fill="#6b5233"/><rect x="${W - 214}" y="${top + 124}" width="26" height="18" rx="3" fill="#2a2a2a"/></g>
+    <g transform="translate(${tx + 12} ${ty + 26}) scale(${s})" opacity=".55" filter="url(#bn-blur)"><g fill="#000">${weaponSide(b.model, b.attachment).replace(/fill="[^"]*"/g, 'fill="#000"').replace(/stroke="[^"]*"/g, 'stroke="#000"')}</g></g>
     <g class="benchgun" transform="translate(${tx} ${ty}) scale(${s})">${weaponSide(b.model, b.attachment, { ghost: b.ghost as AttachmentId | undefined, highlight: b.highlight as MountId | undefined })}</g>
     ${marks}`;
 }
@@ -478,6 +504,6 @@ function overlay(L: RoomLayout, dark: boolean) {
   if (L.state === "demolishing") o.push(`<rect x="${BX0}" y="${BY0}" width="${BX1 - BX0}" height="${BY1 - BY0}" fill="#4a4740" opacity=".7"/>${crate(BX0 + 400, BY1 + 100, 160, 100, "SALVAGE")}`);
   if (dark) o.push(`<rect width="${W}" height="${H}" fill="#03060a" opacity=".5"/>${[BX0 + 100, BX1 - 100].map(x => `<circle cx="${x}" cy="${BY0 + 40}" r="10" fill="${C.red}"/><circle cx="${x}" cy="${BY0 + 40}" r="120" fill="url(#sc-red)" opacity=".7"/>`).join("")}`);
   if (L.alarm) o.push(`<g class="alarmglow"><rect width="${W}" height="${H}" fill="${C.red}" opacity=".18"/></g>${[BX0 + 40, BX1 - 40].map(x => `<circle cx="${x}" cy="${BY0 + 60}" r="22" fill="${C.red}" class="blinkdot"/>`).join("")}`);
-  o.push(`<rect width="${W}" height="${H}" fill="url(#sc-vig)"/>`);
+  o.push(`<rect width="${W}" height="${H}" fill="url(#sc-haze)"/><rect width="${W}" height="${H}" fill="url(#sc-vig)"/>`);
   return `<g pointer-events="none">${o.join("")}</g>`;   // state and light never take a click meant for a person
 }

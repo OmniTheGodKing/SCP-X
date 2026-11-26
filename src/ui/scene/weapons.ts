@@ -88,7 +88,22 @@ export function weaponSide(modelId: string, attachment?: string, opts: { ghost?:
   if (attachment) P.push(draw(attachment));
   if (opts.ghost && opts.ghost !== attachment) P.push(draw(opts.ghost, true));
   if (opts.highlight) { const [hx, hy] = mountAt(modelId, opts.highlight); P.push(`<circle cx="${hx}" cy="${-hy}" r="30" fill="none" stroke="#6ea9c8" stroke-width="4" class="mountpulse"/>`); }
-  return `<g class="weapon">${P.join("")}</g>`;
+  // UI/UX overhaul, visual pass: light from above. Wood and steel get a top-lit gradient (a bright edge, the body,
+  // a dark underside), the stock a few lines of grain, and the receiver a specular line. Done on the drawn parts by
+  // fill, so every model and attachment gets it.
+  let out = P.join("");
+  if (!art) {
+    const wid = `wpw${w.slice(1)}`;
+    out = out.split(`fill="${w}"`).join(`fill="url(#${wid})"`)
+      .split(`fill="${BLUED}"`).join(`fill="url(#wps-blued)"`).split(`fill="${STEEL}"`).join(`fill="url(#wps-steel)"`).split(`fill="${STEEL_DK}"`).join(`fill="url(#wps-dk)"`);
+    const grain = f.stock === "rifle" || f.stock === "bar" ? [10, 24, 38].map((yy, i) => `<path d="M${8 + i * 10} ${yy - 30} Q${f.grip * 0.5} ${yy - 26 + i * 4} ${f.grip - 10} ${yy - 40 + i * 6}" stroke="${wdk}" stroke-width="2" fill="none" opacity=".35"/>`).join("") : "";
+    out = `<defs><linearGradient id="${wid}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${wlt}"/><stop offset=".35" stop-color="${w}"/><stop offset="1" stop-color="${wdk}"/></linearGradient>
+      <linearGradient id="wps-blued" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#5d6870"/><stop offset=".25" stop-color="${BLUED}"/><stop offset="1" stop-color="#15191c"/></linearGradient>
+      <linearGradient id="wps-steel" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#8b969e"/><stop offset=".4" stop-color="${STEEL}"/><stop offset="1" stop-color="#1e2327"/></linearGradient>
+      <linearGradient id="wps-dk" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#3a4248"/><stop offset="1" stop-color="#121518"/></linearGradient></defs>${out}${grain}
+      <path d="M${r0 + 4} -16 H${r1 - 4}" stroke="#c9d3da" stroke-width="2" opacity=".35"/><path d="M${r1} -4 H${mz - 2}" stroke="#c9d3da" stroke-width="1.5" opacity=".3"/>`;
+  }
+  return `<g class="weapon">${out}</g>`;
 }
 
 function scope(f: { rx: [number, number] }, kind: "issued" | "fitted") {

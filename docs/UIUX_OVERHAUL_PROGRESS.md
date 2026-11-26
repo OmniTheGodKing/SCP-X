@@ -123,3 +123,38 @@ The squad with the most fit members is picked first. Every id the rules and test
 - Screenshots at 1280×720, 1440×900 and 1920×1080 are in `docs/screenshots/uiux/`. At 1280×720 the header's
   readouts wrap to a second row (unchanged from before), so the staging screen's slot cards sit below the fold and
   the page scrolls to them.
+
+## Visual pass (after review: "still not good enough")
+
+Direction chosen: much richer 2D, plus layout fixes. Still code-drawn and provisional.
+
+- **People** (`src/ui/scene/figure.ts`, rewritten): adult proportions (about 7.5 heads tall instead of about 5);
+  every form shaded as a volume under one key light from the upper left (a cylinder shade across each limb, a
+  falloff down the torso, a dome shade on heads, helmets and hands) and a soft contact shadow; limbs built as tapered
+  segments with rounded joints. The kit is drawn from 1951 parts: the M1 helmet with net cover and loose chinstraps,
+  the M-1950 field jacket's flapped chest and hip pockets and shoulder straps, M1945 suspenders, pistol belt with
+  four ammunition pouches, canteen and first-aid pouch, trousers bloused over buckle boots, chevrons on the sleeve.
+  Faces have lids, brow shadow, a lit and a shaded side, and lips instead of cartoon eyes. The rifle sits at port
+  arms with the right hand on the wrist and the left on the fore-end, placed from each weapon's frame.
+- **Weapons** (`src/ui/scene/weapons.ts`): top-lit gradients on the wood and blued steel, grain on rifle stocks, a
+  specular line on receiver and barrel. Finished art in `src/assets/weapons/` still replaces it.
+- **Rooms** (`src/ui/scene/interior.ts`): one lighting model for every room: soft, blurred lamp beams; light pools on
+  the wall and floor under each lamp; shadow where the walls meet floor and ceiling; a warm haze; a deeper vignette.
+  The armory bench is an oak bench in perspective with a canvas gun mat, a task-lamp pool, the cleaning kit and the
+  weapon's own shadow.
+- **Staging hangar**: rebuilt in one-point perspective: roof trusses, corrugated walls, the open doors with the
+  transport on the apron (sky by local hour), concrete floor with expansion joints and the taxi line, daylight
+  spilling in, hanging lamps with beams and floor pools, the deployment board, ammunition crates and footlockers.
+
+Layout fixes:
+
+- Staging slot cards: the kit is a compact row of three tiles under the weapon line instead of three stacked
+  full-width dropdowns; Stand down is a small solid button.
+- Staging intelligence: the facts table and Confirmed / Estimated / Unknown lines stay up front; the longer
+  explanatory paragraphs (procedure, night, weather, Site Security, travel) fold into "Field notes".
+- Header: the readouts fit on one row down to 1240px (was 1400px), giving every screen back a row at 1280×720.
+- Personnel: wall markers are hidden while an operative is brought forward (they sat on the soldier's face); the
+  object bar still has them.
+- World Map: the Insurgency flag on a region label no longer runs into the exposure figure.
+
+Screenshots: `docs/screenshots/uiux/v2-*`.

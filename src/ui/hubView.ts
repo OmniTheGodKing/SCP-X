@@ -192,7 +192,7 @@ export function mountHub(root: HTMLElement, c: Campaign, act: HubActions) {
   let dlg: null | { view: "slots" } | { view: "new"; slot: Slot; difficulty: Difficulty; ironman: boolean; tutorial: boolean } = null;
   /** Which task force is being sent, and the support people and units going with it. */
   let tfPick: TaskForce = "e11";
-  let stgSel: string | null = null, stgSquad: string | null = null;   // the staging area: the selected operative and squad
+  let stgSel: string | null = null, stgSquad: string | null = null, stgNotes = false;   // the staging area: the selected operative and squad
   const extras: Extras = {};
   const watchers = new Set<string>();
   const gear = new Map<string, { armor: ItemId | ""; items: (ItemId | "")[] }>();
@@ -768,11 +768,13 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       ${b.unknown.length ? `<p><span class="intel unk">Unknown</span> ${b.unknown.map(esc).join(" ")}</p>` : ""}
       ${proc ? `<div class="facpanel"><div class="label">Procedure · ${esc(scpName(procId))}</div><p>${esc(proc.capture)}</p>${proc.bring.length ? `<p class="muted">Bring: ${esc(proc.bring.join("; "))}.</p>` : ""}</div>`
         : !scpKnown ? `<p class="muted">The anomaly hasn't been identified, so there is no procedure for it. Investigating first would tell the team what they're facing.</p>` : ""}
+      <details class="stg-notes" ${stgNotes ? "open" : ""}><summary>Field notes</summary>
       ${nightAt(c, inc) ? `<p class="warn">Night there: deploying now means fighting in the dark (outdoors, figures are only shapes until close). Flares help. Wait for daylight on the World Map if you'd rather.</p>` : ""}
       ${missionWeather(c, inc) !== "clear" ? `<p class="warn">${esc(weatherLine(c, inc))}${nightAt(c, inc) ? ` This stacks with the dark, though nobody's sight drops below ${MIN_RANGE} tiles.` : ""}</p>` : ""}
       ${inc.kind === "breach" ? (() => { const g = breachGuards(c, inc); return `<p>Site Security: <b>${g.first.length}</b> on the scene${g.late.length ? `, ${g.late.length} more on turn 2` : ""}${g.first.length + g.late.length ? ` (${[...g.first, ...g.late].map(m => esc(m.name)).join(", ")})` : ". Nobody is fit to respond"}. Operatives you pick arrive on turn <b>${mtfArrival(c, inc)}</b>; D-Class are on site from the start.</p>`; })() : ""}
       ${t ? `<p class="muted">Time at Site-19 passes while the squad is in the air, and the survivors spend as long again flying home.</p>` : ""}
       ${inc.kind === "coverup" ? `<p class="${c.amnestics < (inc.witnesses ?? 0) ? "warn" : "muted"}">The squad carries all ${c.amnestics} amnestic doses in storage, for ${plural(inc.witnesses ?? 0, "witness")}.</p>` : ""}
+      </details>
       ${hostiles ? `<div class="row"><button class="act" type="button" id="intelBtn" ${canWeaken(c, inc) ? `disabled title="${esc(canWeaken(c, inc)!)}"` : ""}>Spend 1 Intel: intercept one</button>${inc.weakened ? `<span class="muted">${inc.weakened} intercepted</span>` : ""}</div>` : ""}
       ${inc.kind === "raid" ? (() => { const g = guardsReady(c).slice(0, 8); return `<p>Site Security: <b>${g.length}</b> ${g.length === 1 ? "guard holds" : "guards hold"} the compound${g.length ? ` (${g.map(x => esc(x.name)).join(", ")})` : ""}${has(c, "perimeter_alarms") ? ", already on overwatch" : ""}. Insurgents: about <b>${inc.insurgents}</b>. ${esc(raidArrivalText(c))}</p>`; })() : ""}
       ${riot ? (() => { const g = guardsReady(c).slice(0, 8); return `<p>Site Security: <b>${g.length}</b> ${g.length === 1 ? "guard answers" : "guards answer"}${g.length ? ` (${g.map(x => esc(x.name)).join(", ")})` : ". Nobody is fit to respond"}. D-Class left: <b>${c.dclass}</b>.</p>`; })() : ""}
@@ -894,35 +896,84 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
    *  kit they will deploy with (unqualified kit left off, as it will be). A finished backdrop in
    *  src/assets/backdrops/staging.* replaces the drawn one. */
   function stagingSvg(team: Operative[], size: number) {
-    const W = 1600, H = 720, floor = 560, art = assetUrl("backdrops", "staging");
-    const hour = Math.floor(c.hour ?? 12), dark = hour < 6 || hour >= 19;
-    const sky = dark ? "#0b1420" : "#6f8796", skyLow = dark ? "#1a2533" : "#a9b5ae";
+    const W = 1600, H = 720, art = assetUrl("backdrops", "staging");
+    const hour = Math.floor(c.hour ?? 12), dark = hour < 6 || hour >= 19, dusk = !dark && (hour < 8 || hour >= 17);
+    const sky0 = dark ? "#070c16" : dusk ? "#5a5f72" : "#7f97a6", sky1 = dark ? "#1b2433" : dusk ? "#c79a6a" : "#c6cdc3";
+    const day = dark ? "#5d7795" : "#e4ecef";
+    // one-point perspective: the back wall and the vanishing point behind the doors
+    const VX = 800, VY = 360, BW0 = 330, BW1 = 1270, BT = 150, BF = 470;
+    const toV = (x: number, y: number, t: number) => [x + (VX - x) * t, y + (VY - y) * t];
+    const p = (xy: number[]) => `${xy[0].toFixed(0)} ${xy[1].toFixed(0)}`;
+    const lamps = [470, 800, 1130];
     const back = art ? `<image href="${art}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="xMidYMax slice"/>` : `
-      <defs><linearGradient id="stg-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${sky}"/><stop offset="1" stop-color="${skyLow}"/></linearGradient>
-        <linearGradient id="stg-floor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a3b37"/><stop offset="1" stop-color="#1f201d"/></linearGradient>
-        <radialGradient id="stg-lamp" cx=".5" cy="0" r="1"><stop offset="0" stop-color="#f1d79a" stop-opacity=".22"/><stop offset="1" stop-color="#f1d79a" stop-opacity="0"/></radialGradient></defs>
-      <rect width="${W}" height="${H}" fill="#24282b"/>
-      ${Array.from({ length: 33 }, (_, i) => `<rect x="${i * 50}" y="40" width="48" height="${floor - 40}" fill="${i % 2 ? "#2b3034" : "#2f3438"}"/>`).join("")}
-      <path d="M0 40 L${W} 40 L${W} 0 L0 0Z" fill="#1a1d20"/>${Array.from({ length: 9 }, (_, i) => `<path d="M${i * 200} 40 L${i * 200 + 100} 0 L${i * 200 + 200} 40" fill="none" stroke="#3a4046" stroke-width="6"/>`).join("")}
-      <rect x="1060" y="120" width="460" height="${floor - 120}" fill="url(#stg-sky)"/>
-      <path d="M1060 ${floor} L1060 470 L1520 450 L1520 ${floor}Z" fill="${dark ? "#121a14" : "#4a5a43"}"/>
-      <g opacity=".95"><path d="M1180 ${floor - 30} L1260 250 L1300 250 L1310 ${floor - 60} L1520 ${floor - 70} L1520 ${floor - 40} L1180 ${floor - 30}Z" fill="#59605a"/><path d="M1240 330 L1290 330 L1295 300 L1250 300Z" fill="#3c423d"/><text x="1272" y="420" fill="#d8d3c6" font-family="IBM Plex Mono,monospace" font-size="22" text-anchor="middle" transform="rotate(-82 1272 420)">${esc(transportName(c).toUpperCase())}</text></g>
-      <rect x="1040" y="110" width="20" height="${floor - 110}" fill="#1b1f22"/><rect x="1520" y="110" width="20" height="${floor - 110}" fill="#1b1f22"/><rect x="1040" y="100" width="500" height="20" fill="#1b1f22"/>
-      <rect x="285" y="120" width="230" height="190" fill="#1f2a22" stroke="#4b4a3d" stroke-width="8"/>
-      <text x="400" y="160" fill="#d8bf86" font-family="Special Elite,Courier New,monospace" font-size="19" text-anchor="middle">DEPLOYMENT ORDER</text>
-      ${team.slice(0, 6).map((o, i) => `<text x="300" y="${195 + i * 19}" fill="#c9c2b0" font-family="IBM Plex Mono,monospace" font-size="15">${esc(o.call)} ${esc(o.name.split(" ").pop()!.toUpperCase())}</text>`).join("")}
-      <g fill="#4d4a36"><rect x="1080" y="${floor - 70}" width="110" height="70"/><rect x="1100" y="${floor - 120}" width="80" height="50"/></g><text x="1135" y="${floor - 30}" fill="#c9b98a" font-family="IBM Plex Mono,monospace" font-size="13" text-anchor="middle">SCP-F · S19</text>
-      <rect x="0" y="${floor}" width="${W}" height="${H - floor}" fill="url(#stg-floor)"/>
-      <path d="M0 ${floor + 4} H${W}" stroke="#4a4a40" stroke-width="3"/>
-      ${[300, 500, 700, 900].map(x => `<ellipse cx="${x * 1.6 - 160}" cy="44" rx="260" ry="${floor}" fill="url(#stg-lamp)"/>`).join("")}`;
-    const n = Math.max(size, 1), half = n <= 4 ? 300 : n <= 6 ? 400 : 470, x0 = 800 - half, x1 = 800 + half, gap = (x1 - x0) / Math.max(1, n - 1), sc = n <= 4 ? 1.3 : n <= 6 ? 1.15 : 1.0;
+      <defs>
+        <linearGradient id="hg-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${sky0}"/><stop offset="1" stop-color="${sky1}"/></linearGradient>
+        <linearGradient id="hg-floor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2c2d2a"/><stop offset=".5" stop-color="#3b3b36"/><stop offset="1" stop-color="#22231f"/></linearGradient>
+        <linearGradient id="hg-wallL" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#16191b"/><stop offset="1" stop-color="#363b3e"/></linearGradient>
+        <linearGradient id="hg-wallR" x1="1" y1="0" x2="0" y2="0"><stop offset="0" stop-color="#16191b"/><stop offset="1" stop-color="#363b3e"/></linearGradient>
+        <linearGradient id="hg-back" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2f33"/><stop offset="1" stop-color="#3e4245"/></linearGradient>
+        <linearGradient id="hg-spill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${day}" stop-opacity="${dark ? 0.16 : 0.3}"/><stop offset="1" stop-color="${day}" stop-opacity="0"/></linearGradient>
+        <linearGradient id="hg-beam" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6dca0" stop-opacity=".3"/><stop offset=".7" stop-color="#f6dca0" stop-opacity=".06"/><stop offset="1" stop-color="#f6dca0" stop-opacity="0"/></linearGradient>
+        <radialGradient id="hg-pool" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#f6dca0" stop-opacity=".26"/><stop offset="1" stop-color="#f6dca0" stop-opacity="0"/></radialGradient>
+        <radialGradient id="hg-vig" cx=".5" cy=".46" r=".75"><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".7"/></radialGradient>
+        <pattern id="hg-corr" width="16" height="10" patternUnits="userSpaceOnUse"><rect width="8" height="10" fill="#fff" opacity=".05"/><rect x="8" width="2" height="10" fill="#000" opacity=".25"/></pattern>
+        <filter id="hg-soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="16"/></filter>
+      </defs>
+      <rect width="${W}" height="${H}" fill="#121517"/>
+      <!-- roof and trusses converging on the doors -->
+      <path d="M0 0 H${W} L${BW1} ${BT} H${BW0}Z" fill="#191c1f"/>
+      ${Array.from({ length: 9 }, (_, i) => { const x = i * 200; const a = toV(x, 0, 0.42); return `<path d="M${x} 0 L${p(a)}" stroke="#2c3135" stroke-width="7"/>`; }).join("")}
+      ${[0.18, 0.4, 0.62].map(t => { const l = toV(0, 0, t), r = toV(W, 0, t); return `<path d="M${p(l)} L${p(r)}" stroke="#2a2f33" stroke-width="${10 - t * 8}"/><path d="M${p(l)} ${Array.from({ length: 12 }, (_, k) => { const u = (k + 1) / 12, xx = l[0] + (r[0] - l[0]) * u; return `L${xx.toFixed(0)} ${(l[1] + (k % 2 ? 22 : 0) * (1 - t)).toFixed(0)}`; }).join(" ")}" stroke="#24292c" stroke-width="3" fill="none"/>`; }).join("")}
+      <!-- side walls, corrugated, with their light falloff -->
+      <path d="M0 0 L${BW0} ${BT} V${BF} L0 ${H}Z" fill="url(#hg-wallL)"/><path d="M0 0 L${BW0} ${BT} V${BF} L0 ${H}Z" fill="url(#hg-corr)"/>
+      <path d="M${W} 0 L${BW1} ${BT} V${BF} L${W} ${H}Z" fill="url(#hg-wallR)"/><path d="M${W} 0 L${BW1} ${BT} V${BF} L${W} ${H}Z" fill="url(#hg-corr)"/>
+      <!-- back wall and the open doors onto the apron -->
+      <rect x="${BW0}" y="${BT}" width="${BW1 - BW0}" height="${BF - BT}" fill="url(#hg-back)"/><rect x="${BW0}" y="${BT}" width="${BW1 - BW0}" height="${BF - BT}" fill="url(#hg-corr)"/>
+      <rect x="560" y="205" width="480" height="${BF - 205}" fill="url(#hg-sky)"/>
+      ${dark ? Array.from({ length: 14 }, (_, i) => `<circle cx="${575 + (i * 97) % 460}" cy="${215 + (i * 53) % 90}" r="${i % 3 ? 0.9 : 1.4}" fill="#cfd8e0" opacity=".7"/>`).join("") : `<path d="M560 300 q60 -14 130 -4 q50 -12 120 2 q70 -10 230 -6 V320 H560Z" fill="#fff" opacity=".14"/>`}
+      <path d="M560 ${BF - 40} L1040 ${BF - 46} V${BF} H560Z" fill="${dark ? "#0e1410" : "#56604c"}"/>
+      <path d="M560 ${BF - 26} H1040" stroke="${dark ? "#2a3028" : "#7d8470"}" stroke-width="2"/>
+      <!-- the transport on the apron: fuselage, wing root, nose and tail fin -->
+      <g opacity="${dark ? 0.85 : 1}">
+        <path d="M640 ${BF - 62} Q700 ${BF - 98} 820 ${BF - 96} L1010 ${BF - 92} Q1040 ${BF - 90} 1046 ${BF - 80} L1046 ${BF - 58} Q900 ${BF - 50} 660 ${BF - 50} Q630 ${BF - 52} 640 ${BF - 62}Z" fill="${dark ? "#3a4146" : "#8c958f"}"/>
+        <path d="M660 ${BF - 70} Q700 ${BF - 92} 780 ${BF - 92}" stroke="#fff" stroke-opacity=".25" stroke-width="3" fill="none"/>
+        ${[700, 728, 756, 784, 812].map(x => `<rect x="${x}" y="${BF - 86}" width="14" height="9" rx="2" fill="#1f262b"/>`).join("")}
+        <path d="M980 ${BF - 92} L1004 ${BF - 170} L1030 ${BF - 170} L1036 ${BF - 90}Z" fill="${dark ? "#30363a" : "#7e8781"}"/>
+        <path d="M760 ${BF - 60} L880 ${BF - 34} L960 ${BF - 34} L900 ${BF - 62}Z" fill="${dark ? "#2a3034" : "#6f7872"}"/>
+        <circle cx="800" cy="${BF - 30}" r="8" fill="#151515"/><circle cx="910" cy="${BF - 30}" r="8" fill="#151515"/>
+        <text x="900" y="${BF - 66}" fill="${dark ? "#9aa4a8" : "#2a2f33"}" font-family="IBM Plex Mono,monospace" font-size="14" letter-spacing="2">${esc(transportName(c).toUpperCase())}</text>
+      </g>
+      <rect x="548" y="196" width="12" height="${BF - 196}" fill="#1b1f22"/><rect x="1040" y="196" width="12" height="${BF - 196}" fill="#1b1f22"/><rect x="548" y="190" width="504" height="14" fill="#1b1f22"/>
+      ${[0, 1, 2].map(i => `<rect x="${380 + i * 60}" y="205" width="56" height="${BF - 205}" fill="#2b3034" stroke="#1b1f22" stroke-width="3"/><rect x="${380 + i * 60}" y="205" width="56" height="${BF - 205}" fill="url(#hg-corr)"/>`).join("")}
+      ${[0, 1, 2].map(i => `<rect x="${1054 + i * 60}" y="205" width="56" height="${BF - 205}" fill="#2b3034" stroke="#1b1f22" stroke-width="3"/><rect x="${1054 + i * 60}" y="205" width="56" height="${BF - 205}" fill="url(#hg-corr)"/>`).join("")}
+      <text x="800" y="182" fill="#c9b98a" font-family="IBM Plex Mono,monospace" font-size="17" letter-spacing="6" text-anchor="middle" opacity=".8">HANGAR 2 · SITE-19 MOTOR POOL</text>
+      <!-- floor: concrete, expansion joints in perspective, the painted taxi line, oil stains -->
+      <path d="M${BW0} ${BF} H${BW1} L${W} ${H} H0Z" fill="url(#hg-floor)"/>
+      ${[-3, -2, -1, 0, 1, 2, 3].map(k => { const bx = VX + k * 160, fx = VX + k * 520; return `<path d="M${bx} ${BF} L${fx} ${H}" stroke="#000" stroke-opacity=".22" stroke-width="2"/>`; }).join("")}
+      ${[BF + 30, BF + 75, BF + 140, BF + 230].map(y => `<path d="M0 ${y} H${W}" stroke="#000" stroke-opacity=".16" stroke-width="2"/>`).join("")}
+      <path d="M${VX - 6} ${BF} L${VX - 40} ${H} H${VX + 40} L${VX + 6} ${BF}Z" fill="#c9a845" opacity=".28"/>
+      ${[[420, 600, 90, 18], [1180, 640, 120, 22], [700, 520, 60, 10]].map(([x, y, rx, ry]) => `<ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" fill="#000" opacity=".22"/>`).join("")}
+      <!-- daylight spilling in through the doors -->
+      <path d="M560 ${BF} H1040 L1290 ${H} H310Z" fill="url(#hg-spill)"/>
+      <!-- props: the deployment board, footlockers, crates, jerrycans -->
+      <g><rect x="150" y="250" width="220" height="160" fill="#1f2a22" stroke="#4b4a3d" stroke-width="7"/><path d="M180 410 L160 560 M340 410 L360 560" stroke="#3a3326" stroke-width="7"/>
+        <text x="260" y="282" fill="#d8bf86" font-family="Special Elite,Courier New,monospace" font-size="17" text-anchor="middle">DEPLOYMENT ORDER</text>
+        ${team.slice(0, 7).map((o, i) => `<text x="168" y="${306 + i * 15}" fill="#c9c2b0" font-family="IBM Plex Mono,monospace" font-size="12">${esc(o.call)} ${esc(o.name.split(" ").pop()!.toUpperCase())}</text>`).join("")}</g>
+      ${[[1270, 590, 130, 80, "SCP-F · AMMO"], [1300, 510, 100, 80, ""], [1420, 620, 110, 70, "RATIONS"]].map(([x, y, w, h, lab]) => `<g><rect x="${x}" y="${(y as number) - (h as number)}" width="${w}" height="${h}" fill="#5a4a30"/><rect x="${x}" y="${(y as number) - (h as number)}" width="${w}" height="${h}" fill="url(#hg-corr)" opacity=".3"/><path d="M${x} ${(y as number) - (h as number)} h${w}" stroke="#7a6644" stroke-width="3"/><rect x="${(x as number) + (w as number) - 18}" y="${(y as number) - (h as number)}" width="18" height="${h}" fill="#000" opacity=".25"/>${lab ? `<text x="${(x as number) + 8}" y="${(y as number) - (h as number) / 2 + 5}" fill="#d0c29a" font-family="IBM Plex Mono,monospace" font-size="12">${lab}</text>` : ""}</g>`).join("")}
+      ${[0, 1, 2].map(i => `<g><rect x="${90 + i * 46}" y="${610 - (i % 2) * 8}" width="38" height="52" rx="3" fill="#4f5637"/><rect x="${90 + i * 46}" y="${610 - (i % 2) * 8}" width="38" height="52" rx="3" fill="url(#hg-corr)" opacity=".2"/><rect x="${100 + i * 46}" y="${604 - (i % 2) * 8}" width="18" height="8" fill="#3a3f29"/></g>`).join("")}
+      <!-- the lamps: shades, beams, pools on the floor -->
+      ${lamps.map(x => `<path d="M${x} 0 V70" stroke="#0d0f10" stroke-width="3"/><path d="M${x - 34} 70 h68 l-14 22 h-40z" fill="#2a2f33"/><ellipse cx="${x}" cy="92" rx="20" ry="5" fill="#fff4d6"/>
+        <path d="M${x - 22} 94 L${x - 300} ${H} H${x + 300} L${x + 22} 94Z" fill="url(#hg-beam)" filter="url(#hg-soft)"/>
+        <ellipse cx="${x}" cy="${H - 70}" rx="280" ry="70" fill="url(#hg-pool)"/>`).join("")}`;
+    const n = Math.max(size, 1), half = n <= 4 ? 300 : n <= 6 ? 400 : 470, x0 = 800 - half, x1 = 800 + half, gap = (x1 - x0) / Math.max(1, n - 1), sc = n <= 4 ? 1.25 : n <= 6 ? 1.12 : 0.98;
     const marks = Array.from({ length: n }, (_, i) => { const px = n === 1 ? (x0 + x1) / 2 : x0 + i * gap;
-      return `<g><path d="M${px - 46} ${H - 34} h92" stroke="#c9a845" stroke-width="5" opacity=".55"/><text x="${px}" y="${H - 10}" fill="#9a9480" font-family="IBM Plex Mono,monospace" font-size="15" text-anchor="middle">${i + 1}</text></g>`; }).join("");
+      return `<g><path d="M${px - 44} ${H - 34} h88" stroke="#c9a845" stroke-width="4" opacity=".55"/><text x="${px}" y="${H - 12}" fill="#9a9480" font-family="IBM Plex Mono,monospace" font-size="14" text-anchor="middle">${i + 1}</text></g>`; }).join("");
     const figs = team.map((o, i) => { const px = n === 1 ? (x0 + x1) / 2 : x0 + i * gap;
       const spec = operativeFigure(c, o); if (spec.armor && canCarry(o, spec.armor as ItemId)) spec.armor = "";
-      const s = stgSel === o.id;
-      return `<g class="stg-fig ${s ? "sel" : ""}" data-stgsel="${o.id}" tabindex="0" role="button" aria-label="${esc(o.name)}">${s ? `<ellipse cx="${px}" cy="${H - 40}" rx="80" ry="14" fill="none" stroke="#6ea9c8" stroke-width="4"/>` : ""}${figureSvg(spec, px, H - 40, sc)}<rect x="${px - 70}" y="${H - 40 - 340 * sc}" width="140" height="${340 * sc}" fill="transparent"/></g>`; }).join("");
-    return `<svg class="stg-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMax slice" role="img" aria-label="The team at the staging area">${back}${marks}${figs}</svg>`;
+      const sl = stgSel === o.id;
+      return `<g class="stg-fig ${sl ? "sel" : ""}" data-stgsel="${o.id}" tabindex="0" role="button" aria-label="${esc(o.name)}">${sl ? `<ellipse cx="${px}" cy="${H - 40}" rx="78" ry="13" fill="#6ea9c8" opacity=".18"/><ellipse cx="${px}" cy="${H - 40}" rx="78" ry="13" fill="none" stroke="#6ea9c8" stroke-width="3"/>` : ""}${figureSvg(spec, px, H - 40, sc)}<rect x="${px - 66}" y="${H - 40 - 360 * sc}" width="132" height="${360 * sc}" fill="transparent"/></g>`; }).join("");
+    const light = art ? "" : `<rect width="${W}" height="${H}" fill="url(#hg-vig)" pointer-events="none"/>`;
+    return `<svg class="stg-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMax slice" role="img" aria-label="The team at the staging area">${back}${marks}${figs}${light}</svg>`;
   }
 
   /** Why this operative can't take this item (specialist kit needs the qualification), or null. */
@@ -968,7 +1019,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       <span class="specs">${esc(gunFor(c, o).name)}${o.attachment ? ` + ${ATTACHMENTS[o.attachment].name}` : ""}${o.ammoType ? ` · ${AMMO[o.ammoType].name}` : ""}${uniformOf(c).id ? ` · ${esc(uniformOf(c).name)} (+${uniformOf(c).hp} HP${uniformOf(c).points ? `, +${uniformOf(c).points} armor` : ""})` : ""}</span>
       ${weaponOptions(o).length > 1 ? `<select id="wpn-${o.id}" data-weapon="${o.id}" aria-label="${esc(o.name)} weapon">${weaponOptions(o).map(t => `<option value="${t}" ${weaponOf(o) === t ? "selected" : ""}>${TYPES[t].name}: ${model(c.models[t]).name}</option>`).join("")}</select>` : ""}
       <select id="armor-${o.id}" data-armor="${o.id}" aria-label="${esc(o.name)} armor">
-        <option value="">${kinds.length ? "No armor" : c.armorTier ? "No armor (none built)" : "No armor (research a vest first)"}</option>
+        <option value="" title="${kinds.length ? "" : c.armorTier ? "None built" : "Research a vest first"}">${kinds.length || compact ? "No armor" : c.armorTier ? "No armor (none built)" : "No armor (research a vest first)"}</option>
         ${kinds.map(k => { const left = spare(k, o.id), st = armorStats(k, c.armorTier), q = canCarry(o, k); return `<option value="${k}" ${g.armor === k ? "selected" : ""} ${(left < 1 || q) && g.armor !== k ? "disabled" : ""}>${q ? "[not qualified] " : ""}${k === "armor" ? ARMOR_TIERS[Math.max(1, c.armorTier)].name : ITEMS[k].name}: +${st.hp} HP, ${st.points} armor${st.move ? `, ${st.move > 0 ? "+" : ""}${st.move} move` : ""} (${Math.max(0, left - (g.armor === k ? 1 : 0))} spare)</option>`; }).join("")}
       </select>
       ${slot(0)}${slot(1)}${o.perks.includes("field_kit") ? slot(2) : ""}</div>`;
@@ -1024,7 +1075,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       const tries: [number, number][] = [[0, 0], [0, 9], [0, -9], [14, 0], [-14, 0], [0, 16], [0, -16]];
       const [ox, oy] = tries.find(([dx, dy]) => busy.every(([bx, by]) => Math.abs(bx - (ax + dx * k)) > 11 * k || Math.abs(by - (ay + dy * k)) > 6 * k)) ?? [0, 0];
       const px = ax + ox * k, py = ay + oy * k;
-      return `<g class="rlabel" style="font-size:${3.6 * k}px"><text x="${px}" y="${py}">${esc(label(r))}</text><text x="${px}" y="${py + 4.5 * k}" class="rexp ${st.exposure >= 60 ? "hot" : st.exposure >= 35 ? "warm" : ""}">${c.chaos.plans.some(p => p.known && p.region === r && p.kind !== "raid" && p.kind !== "sabotage" && p.kind !== "mole" && p.kind !== "agitate") ? `<tspan class="ciop"> · CI op</tspan>` : ""}${st.collapsed ? "LOST" : st.contactDue ? `contact ${dateText(st.contactDue)}` : !isContacted(c, r) ? "no front" : `exposure ${st.exposure}`}</text>${(() => { const w = weatherAt(c, r); return mapShow.has("weather") && w !== "clear" ? `<text x="${px}" y="${py + 8.6 * k}" class="rwx ${w}">${WX_ICON[w]} ${WEATHER[w].name.toLowerCase()}<title>${esc(`${WEATHER[w].name} over ${REGIONS[r].name}: ${WEATHER[w].desc}`)}</title></text>` : ""; })()}</g>`; }).join("");
+      return `<g class="rlabel" style="font-size:${3.6 * k}px"><text x="${px}" y="${py}">${esc(label(r))}</text><text x="${px}" y="${py + 4.5 * k}" class="rexp ${st.exposure >= 60 ? "hot" : st.exposure >= 35 ? "warm" : ""}">${st.collapsed ? "LOST" : st.contactDue ? `contact ${dateText(st.contactDue)}` : !isContacted(c, r) ? "no front" : `exposure ${st.exposure}`}${c.chaos.plans.some(p => p.known && p.region === r && p.kind !== "raid" && p.kind !== "sabotage" && p.kind !== "mole" && p.kind !== "agitate") ? `<tspan class="ciop"> · CI op</tspan>` : ""}</text>${(() => { const w = weatherAt(c, r); return mapShow.has("weather") && w !== "clear" ? `<text x="${px}" y="${py + 8.6 * k}" class="rwx ${w}">${WX_ICON[w]} ${WEATHER[w].name.toLowerCase()}<title>${esc(`${WEATHER[w].name} over ${REGIONS[r].name}: ${WEATHER[w].desc}`)}</title></text>` : ""; })()}</g>`; }).join("");
     const markers = shown.map(({ i, tx, ty, mx, my }) => { const st = incidentState(c, i), b = briefing(c, i), moved = mx !== tx || my !== ty;
       return `<g class="marker ${groupOf(i)} ${st} ${i.dispatch ? "dispatched" : ""} ${mapSel === "inc:" + i.id ? "on" : ""}" data-mapinc="${i.id}" tabindex="0" role="button" aria-label="${esc(incidentName(i))}, ${esc(b.short)}">
         ${moved ? `<line x1="${tx}" y1="${ty}" x2="${mx}" y2="${my}" class="leader" style="stroke-width:${0.4 * k}"/><circle cx="${tx}" cy="${ty}" r="${0.8 * k}" class="truept"/>` : ""}
@@ -1444,7 +1495,8 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
     }
     const ts = targetsFor(L, { heroes: ops.map(o => ({ id: o.id, name: o.name })), armOp: !!armOp });
     if (target && !ts.some(t => t.id === target) && !(L.kind === "quarters" && target.startsWith("person:"))) target = null;
-    extras.targets = extras.bench ? ts.filter(t => t.id !== "bench" && t.id !== "racks") : ts;
+    // with an operative brought forward, the wall markers would sit on them; the object bar still has every target
+    extras.targets = extras.bench ? ts.filter(t => t.id !== "bench" && t.id !== "racks") : extras.hero ? [] : ts;
     extras.selected = target ?? undefined;
     const selT = ts.find(t => t.id === target);
     // the camera: the selected object comes to the left third, a little closer, with its panel on the right
@@ -2534,6 +2586,7 @@ const mapShow = new Set<string>(["anomaly", "insurgency", "coverup", "site", "le
       if (b.checked && chosen.size < squadSize(c)) chosen.add(id); else chosen.delete(id);
       render();
     });
+    root.querySelectorAll<HTMLDetailsElement>(".stg-notes").forEach(d => d.ontoggle = () => { stgNotes = d.open; });
     root.querySelectorAll<HTMLElement>("[data-stgsel]").forEach(b => { const pick = () => { stgSel = stgSel === b.dataset.stgsel ? null : b.dataset.stgsel!; render(); }; b.onclick = pick; b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } }; });
     root.querySelectorAll<HTMLElement>("[data-unpick]").forEach(b => b.onclick = () => { chosen.delete(b.dataset.unpick!); if (stgSel === b.dataset.unpick) stgSel = null; render(); });
     root.querySelectorAll<HTMLElement>("[data-stgsquad]").forEach(b => b.onclick = () => {
